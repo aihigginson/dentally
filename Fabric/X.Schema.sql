@@ -1,0 +1,3 @@
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'X')
+    EXEC('CREATE SCHEMA [X]')
+GO

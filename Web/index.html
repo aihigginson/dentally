@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dentally Analytics</title>
+    <style>
+        :root {
+            --navy:       #1A527A;
+            --teal:       #8AB5B2;
+            --green-dark: #2D6B40;
+            --lavender:   #A894D8;
+            --amber:      #8A5018;
+            --sand:       #C8A070;
+            --rust:       #6A3828;
+            --sky:        #8ABCCE;
+            --green-mid:  #3D6A48;
+            --terra:      #C87858;
+            --steel:      #3A5C7A;
+            --sage:       #90C4A8;
+
+            --bg-page:    #F0F4F8;
+            --bg-card:    #FFFFFF;
+            --bg-subtle:  #F8FAFC;
+            --border:     #E4E8EE;
+            --text:       #1F2937;
+            --text-2:     #6B7280;
+            --text-3:     #9CA3AF;
+            --good:       #3A7A40;
+            --bad:        #B04848;
+
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            --radius: 8px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg-page);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--navy);
+            color: white;
+            padding: 0 24px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        .header-brand { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; }
+        .header-brand span { opacity: 0.65; font-weight: 400; }
+        .header-right { display: flex; align-items: center; gap: 20px; }
+        .header-org { font-size: 13px; opacity: 0.8; }
+        .header-user {
+            font-size: 12px;
+            background: rgba(255,255,255,0.15);
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        /* ── Nav tabs ── */
+        .nav {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            display: flex;
+            overflow-x: auto;
+        }
+        .nav-tab {
+            padding: 13px 16px;
+            font-size: 13px;
+            color: var(--text-2);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -1px;
+            white-space: nowrap;
+            user-select: none;
+            transition: color 0.12s, border-color 0.12s;
+        }
+        .nav-tab:hover { color: var(--navy); }
+        .nav-tab.active {
+            color: var(--navy);
+            border-bottom-color: var(--navy);
+            font-weight: 500;
+        }
+
+        /* ── Filter bar ── */
+        .filter-bar {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 9px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .filter-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+        .filter-field {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .filter-field label {
+            font-size: 12px;
+            color: var(--text-2);
+            white-space: nowrap;
+        }
+        .filter-select {
+            font-family: var(--font);
+            font-size: 13px;
+            color: var(--text);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 26px 4px 9px;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 7px center;
+            cursor: pointer;
+        }
+        .filter-select:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(26,82,122,0.12); }
+        .filter-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+        .filter-badge {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #EBF3F9;
+            color: var(--navy);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        /* ── Main ── */
+        .main { padding: 24px; max-width: 1400px; }
+
+        /* ── Sections ── */
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .section-header { margin-bottom: 18px; }
+        .section-title { font-size: 17px; font-weight: 400; color: var(--text); margin-bottom: 3px; }
+        .section-sub { font-size: 13px; color: var(--text-2); }
+
+        /* ── KPI row ── */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .kpi {
+            background: white;
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            border: 1px solid var(--border);
+        }
+        .kpi-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--navy);
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+        .kpi-delta { font-size: 12px; color: var(--text-3); }
+        .kpi-delta.up   { color: var(--good); }
+        .kpi-delta.down { color: var(--bad); }
+
+        /* ── Cards ── */
+        .card-grid { display: grid; gap: 16px; }
+        .card-grid.col-2    { grid-template-columns: 1fr 1fr; }
+        .card-grid.col-3-1  { grid-template-columns: 3fr 1fr; }
+        .card-grid.col-2-1  { grid-template-columns: 2fr 1fr; }
+
+        .card {
+            background: white;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--text);
+            padding: 16px 20px 0;
+        }
+        .card-body { padding: 14px 20px 20px; }
+
+        /* placeholder for future PBI embed */
+        .embed-slot {
+            background: var(--bg-subtle);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-3);
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            border: 1px dashed var(--border);
+        }
+
+        /* ── SVG chart helpers ── */
+        svg text { font-family: var(--font); }
+
+        /* ── Responsive ── */
+        @media (max-width: 860px) {
+            .card-grid.col-2,
+            .card-grid.col-3-1,
+            .card-grid.col-2-1 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header class="header">
+    <div class="header-brand">Dentally <span>Analytics</span></div>
+    <div class="header-right">
+        <span class="header-org">Smile Group Practice</span>
+        <span class="header-user">Dr A. Higginson</span>
+    </div>
+</header>
+
+<!-- ════════════════ NAVIGATION ════════════════ -->
+<nav class="nav">
+    <div class="nav-tab active"  data-section="revenue">Revenue Reporting</div>
+    <div class="nav-tab"         data-section="cashflow">Cash Flow</div>
+    <div class="nav-tab"         data-section="patients">Patient Acquisition &amp; Retention</div>
+    <div class="nav-tab"         data-section="treatment">Treatment Acceptance</div>
+    <div class="nav-tab"         data-section="scheduling">Scheduling &amp; Utilisation</div>
+    <div class="nav-tab"         data-section="costs">Cost &amp; Overhead</div>
+</nav>
+
+<!-- ════════════════ FILTER BAR ════════════════ -->
+<!--
+    These three selectors represent filters that will persist as you move between sections.
+    In the final product, changing a filter regenerates the Power BI embed token and
+    re-embeds every report with the new context applied — no page reload needed.
+-->
+<div class="filter-bar">
+    <span class="filter-label">Filters</span>
+
+    <div class="filter-field">
+        <label for="f-period">Period</label>
+        <select class="filter-select" id="f-period">
+            <option value="fy2526">FY 2025/26</option>
+            <option value="fy2425">FY 2024/25</option>
+            <option value="l12m">Last 12 months</option>
+            <option value="l3m">Last 3 months</option>
+            <option value="ytd">Year to date</option>
+        </select>
+    </div>
+
+    <div class="filter-sep"></div>
+
+    <div class="filter-field">
+        <label for="f-site">Site</label>
+        <select class="filter-select" id="f-site">
+            <option value="all">All sites</option>
+            <option value="s1">High Street</option>
+            <option value="s2">Riverside</option>
+            <option value="s3">Northgate</option>
+        </select>
+    </div>
+
+    <div class="filter-sep"></div>
+
+    <div class="filter-field">
+        <label for="f-pract">Practitioner</label>
+        <select class="filter-select" id="f-pract">
+            <option value="all">All practitioners</option>
+            <option value="p1">Dr. Ahmed</option>
+            <option value="p2">Dr. Chen</option>
+            <option value="p3">Dr. Patel</option>
+        </select>
+    </div>
+
+    <div class="filter-badge" id="filter-badge">FY 2025/26 &middot; All sites &middot; All practitioners</div>
+</div>
+
+<!-- ════════════════ MAIN CONTENT ════════════════ -->
+<main class="main">
+
+
+    <!-- ── REVENUE REPORTING ── -->
+    <section class="section active" id="section-revenue">
+        <div class="section-header">
+            <div class="section-title">Revenue Reporting</div>
+            <div class="section-sub">NHS and private revenue by period, site, and practitioner</div>
+        </div>
+
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Total Revenue</div>
+                <div class="kpi-value">£842k</div>
+                <div class="kpi-delta up">↑ 6.2% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">NHS Revenue</div>
+                <div class="kpi-value">£314k</div>
+                <div class="kpi-delta up">↑ 1.8% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Private Revenue</div>
+                <div class="kpi-value">£528k</div>
+                <div class="kpi-delta up">↑ 9.1% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Revenue / Patient</div>
+                <div class="kpi-value">£187</div>
+                <div class="kpi-delta down">↓ 1.4% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">UDAs Delivered</div>
+                <div class="kpi-value">4,821</div>
+                <div class="kpi-delta up">↑ 3.0% vs prior year</div>
+            </div>
+        </div>
+
+        <div class="card-grid col-3-1">
+            <!-- Grouped bar chart: NHS vs Private by month -->
+            <div class="card">
+                <div class="card-title">Monthly Revenue — NHS vs Private</div>
+                <div class="card-body">
+                    <svg viewBox="0 0 600 240" width="100%" xmlns="http://www.w3.org/2000/svg">
+                        <!-- gridlines -->
+                        <line x1="44" y1="20"  x2="590" y2="20"  stroke="#E4E8EE" stroke-width="1"/>
+                        <line x1="44" y1="65"  x2="590" y2="65"  stroke="#E4E8EE" stroke-width="1"/>
+                        <line x1="44" y1="110" x2="590" y2="110" stroke="#E4E8EE" stroke-width="1"/>
+                        <line x1="44" y1="155" x2="590" y2="155" stroke="#E4E8EE" stroke-width="1"/>
+                        <line x1="44" y1="192" x2="590" y2="192" stroke="#E4E8EE" stroke-width="1"/>
+                        <!-- y-axis labels -->
+                        <text x="40" y="195" text-anchor="end" font-size="10" fill="#6B7280">£0</text>
+                        <text x="40" y="158" text-anchor="end" font-size="10" fill="#6B7280">20k</text>
+                        <text x="40" y="113" text-anchor="end" font-size="10" fill="#6B7280">40k</text>
+                        <text x="40" y="68"  text-anchor="end" font-size="10" fill="#6B7280">60k</text>
+                        <text x="40" y="23"  text-anchor="end" font-size="10" fill="#6B7280">80k</text>
+                        <!-- NHS bars (navy) -->
+                        <rect x="50"  y="133" width="17" height="59" fill="#1A527A" rx="2"/>
+                        <rect x="95"  y="127" width="17" height="65" fill="#1A527A" rx="2"/>
+                        <rect x="140" y="121" width="17" height="71" fill="#1A527A" rx="2"/>
+                        <rect x="185" y="129" width="17" height="63" fill="#1A527A" rx="2"/>
+                        <rect x="230" y="124" width="17" height="68" fill="#1A527A" rx="2"/>
+                        <rect x="275" y="116" width="17" height="76" fill="#1A527A" rx="2"/>
+                        <rect x="320" y="119" width="17" height="73" fill="#1A527A" rx="2"/>
+                        <rect x="365" y="113" width="17" height="79" fill="#1A527A" rx="2"/>
+                        <rect x="410" y="126" width="17" height="66" fill="#1A527A" rx="2"/>
+                        <rect x="455" y="121" width="17" height="71" fill="#1A527A" rx="2"/>
+                        <rect x="500" y="109" width="17" height="83" fill="#1A527A" rx="2"/>
+                        <rect x="545" y="116" width="17" height="76" fill="#1A527A" rx="2"/>
+                        <!-- Private bars (teal) -->
+                        <rect x="70"  y="103" width="17" height="89" fill="#8AB5B2" rx="2"/>
+                        <rect x="115" y="93"  width="17" height="99" fill="#8AB5B2" rx="2"/>
+                        <rect x="160" y="88"  width="17" height="104" fill="#8AB5B2" rx="2"/>
+                        <rect x="205" y="98"  width="17" height="94"  fill="#8AB5B2" rx="2"/>
+                        <rect x="250" y="83"  width="17" height="109" fill="#8AB5B2" rx="2"/>
+                        <rect x="295" y="78"  width="17" height="114" fill="#8AB5B2" rx="2"/>
+                        <rect x="340" y="73"  width="17" height="119" fill="#8AB5B2" rx="2"/>
+                        <rect x="385" y="68"  width="17" height="124" fill="#8AB5B2" rx="2"/>
+                        <rect x="430" y="81"  width="17" height="111" fill="#8AB5B2" rx="2"/>
+                        <rect x="475" y="75"  width="17" height="117" fill="#8AB5B2" rx="2"/>
+                        <rect x="520" y="63"  width="17" height="129" fill="#8AB5B2" rx="2"/>
+                        <rect x="565" y="71"  width="17" height="121" fill="#8AB5B2" rx="2"/>
+                        <!-- x-axis labels -->
+                        <text x="68"  y="207" text-anchor="middle" font-size="10" fill="#6B7280">Apr</text>
+                        <text x="113" y="207" text-anchor="middle" font-size="10" fill="#6B7280">May</text>
+                        <text x="158" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Jun</text>
+                        <text x="203" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Jul</text>
+                        <text x="248" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Aug</text>
+                        <text x="293" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Sep</text>
+                        <text x="338" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Oct</text>
+                        <text x="383" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Nov</text>
+                        <text x="428" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Dec</text>
+                        <text x="473" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Jan</text>
+                        <text x="518" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Feb</text>
+                        <text x="563" y="207" text-anchor="middle" font-size="10" fill="#6B7280">Mar</text>
+                        <!-- legend -->
+                        <rect x="44" y="220" width="10" height="10" fill="#1A527A" rx="1"/>
+                        <text x="58" y="229" font-size="10" fill="#6B7280">NHS</text>
+                        <rect x="95" y="220" width="10" height="10" fill="#8AB5B2" rx="1"/>
+                        <text x="109" y="229" font-size="10" fill="#6B7280">Private</text>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Horizontal bar: revenue by site -->
+            <div class="card">
+                <div class="card-title">Revenue by Site</div>
+                <div class="card-body">
+                    <svg viewBox="0 0 230 160" width="100%" xmlns="http://www.w3.org/2000/svg">
+                        <text x="0" y="16" font-size="11" fill="#6B7280">High Street</text>
+                        <rect x="0" y="22" width="170" height="20" fill="#1A527A" rx="3"/>
+                        <text x="174" y="36" font-size="11" fill="#1F2937">£384k</text>
+
+                        <text x="0" y="72" font-size="11" fill="#6B7280">Riverside</text>
+                        <rect x="0" y="78" width="123" height="20" fill="#3D6A48" rx="3"/>
+                        <text x="127" y="92" font-size="11" fill="#1F2937">£278k</text>
+
+                        <text x="0" y="122" font-size="11" fill="#6B7280">Northgate</text>
+                        <rect x="0" y="128" width="80" height="20" fill="#8ABCCE" rx="3"/>
+                        <text x="84" y="142" font-size="11" fill="#1F2937">£180k</text>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ── CASH FLOW ── -->
+    <section class="section" id="section-cashflow">
+        <div class="section-header">
+            <div class="section-title">Cash Flow</div>
+            <div class="section-sub">Invoiced, collected, and outstanding balances by period</div>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Total Invoiced</div>
+                <div class="kpi-value">£912k</div>
+                <div class="kpi-delta up">↑ 5.4% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Total Collected</div>
+                <div class="kpi-value">£842k</div>
+                <div class="kpi-delta up">↑ 6.2% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Outstanding</div>
+                <div class="kpi-value">£70k</div>
+                <div class="kpi-delta down">↑ 12% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Collection Rate</div>
+                <div class="kpi-value">92.3%</div>
+                <div class="kpi-delta down">↓ 0.6pp vs prior year</div>
+            </div>
+        </div>
+        <div class="card-grid col-2">
+            <div class="card">
+                <div class="card-title">Invoiced vs Collected — Monthly</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Aged Outstanding by Site</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ── PATIENT ACQUISITION AND RETENTION ── -->
+    <section class="section" id="section-patients">
+        <div class="section-header">
+            <div class="section-title">Patient Acquisition &amp; Retention</div>
+            <div class="section-sub">New patients, recalls, and retention rates over time</div>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Active Patients</div>
+                <div class="kpi-value">4,502</div>
+                <div class="kpi-delta up">↑ 3.1% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">New Patients YTD</div>
+                <div class="kpi-value">318</div>
+                <div class="kpi-delta up">↑ 8.5% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Recall Compliance</div>
+                <div class="kpi-value">74.2%</div>
+                <div class="kpi-delta up">↑ 1.2pp vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Overdue Recalls</div>
+                <div class="kpi-value">621</div>
+                <div class="kpi-delta down">↑ 4.3% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Avg Recall Interval</div>
+                <div class="kpi-value">7.4 mo</div>
+                <div class="kpi-delta">vs 7.1 prior year</div>
+            </div>
+        </div>
+        <div class="card-grid col-2">
+            <div class="card">
+                <div class="card-title">New vs Lost Patients — Monthly</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Recall Compliance by Practitioner</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ── TREATMENT ACCEPTANCE ── -->
+    <section class="section" id="section-treatment">
+        <div class="section-header">
+            <div class="section-title">Treatment Acceptance</div>
+            <div class="section-sub">Treatment plan conversion rates and value by practitioner and category</div>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Plans Presented</div>
+                <div class="kpi-value">2,841</div>
+                <div class="kpi-delta up">↑ 7.2% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Acceptance Rate</div>
+                <div class="kpi-value">68.4%</div>
+                <div class="kpi-delta up">↑ 2.1pp vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Avg Accepted Value</div>
+                <div class="kpi-value">£412</div>
+                <div class="kpi-delta up">↑ 4.8% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Declined Value YTD</div>
+                <div class="kpi-value">£186k</div>
+                <div class="kpi-delta down">↑ 3.1% vs prior year</div>
+            </div>
+        </div>
+        <div class="card-grid col-2">
+            <div class="card">
+                <div class="card-title">Acceptance Rate by Treatment Category</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Conversion Trend — Monthly</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ── SCHEDULING AND UTILISATION ── -->
+    <section class="section" id="section-scheduling">
+        <div class="section-header">
+            <div class="section-title">Scheduling &amp; Utilisation</div>
+            <div class="section-sub">Chair utilisation, appointment fill rates, and did-not-attends</div>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Utilisation Rate</div>
+                <div class="kpi-value">81.3%</div>
+                <div class="kpi-delta up">↑ 1.8pp vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">DNA Rate</div>
+                <div class="kpi-value">4.2%</div>
+                <div class="kpi-delta down">↑ 0.3pp vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Available Hours</div>
+                <div class="kpi-value">6,840</div>
+                <div class="kpi-delta">hrs this period</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Avg Wait (Days)</div>
+                <div class="kpi-value">8.4</div>
+                <div class="kpi-delta up">↓ 1.2 days vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Cancellations</div>
+                <div class="kpi-value">312</div>
+                <div class="kpi-delta down">↑ 5.1% vs prior year</div>
+            </div>
+        </div>
+        <div class="card-grid col-2">
+            <div class="card">
+                <div class="card-title">Utilisation by Practitioner</div>
+                <div class="card-body">
+                    <!-- inline static chart for illustration -->
+                    <svg viewBox="0 0 440 200" width="100%" xmlns="http://www.w3.org/2000/svg">
+                        <!-- target line at 85% -->
+                        <line x1="0" y1="30" x2="374" y2="30" stroke="#E4E8EE" stroke-width="1" stroke-dasharray="4,3"/>
+                        <text x="378" y="34" font-size="10" fill="#9CA3AF">85% target</text>
+
+                        <text x="0"   y="16" font-size="11" fill="#6B7280">Dr. Patel</text>
+                        <rect x="0"   y="22" width="358" height="16" fill="#1A527A" rx="2"/>
+                        <text x="362" y="34" font-size="10" fill="#1F2937">95.4%</text>
+
+                        <text x="0"   y="62" font-size="11" fill="#6B7280">Dr. Ahmed</text>
+                        <rect x="0"   y="68" width="318" height="16" fill="#3D6A48" rx="2"/>
+                        <text x="322" y="80" font-size="10" fill="#1F2937">84.8%</text>
+
+                        <text x="0"   y="108" font-size="11" fill="#6B7280">Dr. Chen</text>
+                        <rect x="0"   y="114" width="285" height="16" fill="#8ABCCE" rx="2"/>
+                        <text x="289" y="126" font-size="10" fill="#1F2937">76.1%</text>
+
+                        <text x="0"   y="154" font-size="11" fill="#6B7280">Hygienist</text>
+                        <rect x="0"   y="160" width="264" height="16" fill="#90C4A8" rx="2"/>
+                        <text x="268" y="172" font-size="10" fill="#1F2937">70.4%</text>
+                    </svg>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">DNA &amp; Cancellation Trend</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:200px;">Power BI report will embed here</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ── COST AND OVERHEAD ── -->
+    <section class="section" id="section-costs">
+        <div class="section-header">
+            <div class="section-title">Cost &amp; Overhead Reporting</div>
+            <div class="section-sub">Operating cost breakdown and revenue-to-cost ratios by site</div>
+        </div>
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Total Costs YTD</div>
+                <div class="kpi-value">£614k</div>
+                <div class="kpi-delta down">↑ 8.1% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Cost / Patient</div>
+                <div class="kpi-value">£136</div>
+                <div class="kpi-delta down">↑ 4.8% vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Operating Margin</div>
+                <div class="kpi-value">27.1%</div>
+                <div class="kpi-delta down">↓ 1.4pp vs prior year</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Staff Cost Ratio</div>
+                <div class="kpi-value">48.3%</div>
+                <div class="kpi-delta down">↑ 0.9pp vs prior year</div>
+            </div>
+        </div>
+        <div class="card-grid col-2">
+            <div class="card">
+                <div class="card-title">Cost by Category — YTD</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Margin Trend — Monthly</div>
+                <div class="card-body">
+                    <div class="embed-slot" style="height:260px;">Power BI report will embed here</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+</main>
+
+<script>
+    /*
+     * Filter state — a plain JS object that lives in memory as long as the page is open.
+     *
+     * In the final product this object will be read by the embed token request:
+     *   POST /api/embed-token  { userId, siteId, period }
+     * The backend validates the JWT, confirms the user has access to that site,
+     * then calls Power BI's REST API to generate an embed token that includes
+     * an effectiveIdentity — which triggers your RLS roles in the semantic model.
+     *
+     * For now it just updates the badge and logs to the browser console
+     * (open DevTools with F12 to watch it).
+     */
+    const filterState = {
+        period: 'fy2526',
+        site:   'all',
+        pract:  'all',
+    };
+
+    const selPeriod = document.getElementById('f-period');
+    const selSite   = document.getElementById('f-site');
+    const selPract  = document.getElementById('f-pract');
+    const badge     = document.getElementById('filter-badge');
+
+    function refreshBadge() {
+        const period = selPeriod.options[selPeriod.selectedIndex].text;
+        const site   = selSite.options[selSite.selectedIndex].text;
+        const pract  = selPract.options[selPract.selectedIndex].text;
+        badge.textContent = `${period} · ${site} · ${pract}`;
+    }
+
+    function onFilterChange() {
+        filterState.period = selPeriod.value;
+        filterState.site   = selSite.value;
+        filterState.pract  = selPract.value;
+        refreshBadge();
+        console.log('[Dentally] Filter state updated:', filterState);
+        // TODO: call refreshEmbeds(filterState) once Power BI Embedded is wired in
+    }
+
+    selPeriod.addEventListener('change', onFilterChange);
+    selSite.addEventListener('change', onFilterChange);
+    selPract.addEventListener('change', onFilterChange);
+
+    /*
+     * Section navigation — hides/shows sections without any page reload.
+     * The filter state object is untouched when the user switches tabs,
+     * so filters persist automatically across all subject areas.
+     */
+    const tabs     = document.querySelectorAll('.nav-tab');
+    const sections = document.querySelectorAll('.section');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            sections.forEach(s => s.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById('section-' + tab.dataset.section).classList.add('active');
+        });
+    });
+</script>
+
+</body>
+</html>

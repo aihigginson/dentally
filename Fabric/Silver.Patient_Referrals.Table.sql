@@ -1,0 +1,25 @@
+/****** Object:  Table [Silver].[Patient_Referrals]    Script Date: 20/04/2026 10:15:06 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+DROP TABLE IF EXISTS [Silver].[Patient_Referrals]
+GO
+CREATE TABLE [Silver].[Patient_Referrals](
+	[Patient_Referral_Id] [int] NOT NULL,
+	[Patient_Id] [int] NULL,
+	[Site_Id] [VARCHAR](50) NULL,
+	[User_Id] [int] NULL,
+	[Reference] [VARCHAR](50) NULL,
+	[Status] [VARCHAR](50) NULL,
+	[Referrable_Type] [VARCHAR](100) NULL,
+	[Services_Appointment_Id] [VARCHAR](50) NULL,
+	[Additional_Information] [VARCHAR](max) NULL,
+	[Consented_By_Patient] [bit] NULL,
+	[Referred_Practitioner_Id] [int] NULL,
+	[Referred_Site_Id] [VARCHAR](50) NULL,
+	[DW_Created_At] [datetime2](6) NOT NULL,
+	[DW_Updated_At] [datetime2](6) NOT NULL,
+	[_Row_Hash] [varbinary](32) NULL
+)
+GO

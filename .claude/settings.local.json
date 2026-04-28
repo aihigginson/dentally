@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(sqlcmd *)",
+      "PowerShell(sqlcmd *)",
+      "Bash(sed -i 's/CAST\\(s\\\\.default_payment_plan_id AS INT\\)/TRY_CAST\\(s.default_payment_plan_id AS INT\\)/' Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql)",
+      "Bash(sed -i 's/CAST\\(s\\\\.\\\\\\(monday\\\\|tuesday\\\\|wednesday\\\\|thursday\\\\|friday\\\\\\)_\\\\\\(open\\\\|close\\\\\\) AS TIME\\)/TRY_CAST\\(s.\\\\1_\\\\2 AS TIME\\)/g' Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql)",
+      "PowerShell(& powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\aihig\\\\onedrive\\\\Dentally\\\\SQL\\\\Fabric\\\\Deploy_Build_Review_Fixes.ps1\")",
+      "Bash(powershell -Command ' *)"
+    ]
+  }
+}

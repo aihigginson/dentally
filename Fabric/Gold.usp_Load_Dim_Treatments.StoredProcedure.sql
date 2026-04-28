@@ -1,0 +1,134 @@
+/****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatments]    Script Date: 20/04/2026 10:15:06 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+DROP PROCEDURE IF EXISTS [Gold].[usp_Load_Dim_Treatments]
+GO
+CREATE PROCEDURE [Gold].[usp_Load_Dim_Treatments]
+(
+      @Mode          VARCHAR(100) = 'TEST'
+    , @Logging       smallint      = 1
+    , @Run_UUID      UNIQUEIDENTIFIER = NULL
+    , @Run_Inserts   BIGINT OUT
+    , @Run_Updates   BIGINT OUT
+    , @Run_Deletes   BIGINT OUT
+)
+AS
+BEGIN
+    DECLARE @My_Inserts BIGINT = 0;
+    DECLARE @My_Updates BIGINT = 0;
+    DECLARE @My_Deletes BIGINT = 0;
+    SET NOCOUNT ON;
+    BEGIN TRY
+        --*********************************
+        --**** Procedure logic starts  ****
+        --*********************************
+
+        SELECT
+            CAST(t.Id AS INT)                               AS Treatment_ID,
+            CAST(t.Code AS INT)                             AS Treatment_Code,
+            NULLIF(TRIM(t.Nomenclature),'')                 AS Nomenclature,
+            NULLIF(TRIM(t.Patient_Nomenclature),'')         AS Patient_Nomenclature,
+            NULLIF(TRIM(t.Description),'')                  AS Description,
+            NULLIF(TRIM(t.Patient_Description),'')          AS Patient_Description,
+            NULLIF(TRIM(t.Notes),'')                        AS Notes,
+            NULLIF(TRIM(t.Region),'')                       AS Region,
+            CAST(t.UDA_Band AS INT)                         AS UDA_Band,
+            CAST(t.NHS_Treatment_Cat AS INT)                AS NHS_Treatment_Cat,
+            CAST(t.Treatment_Category_ID AS INT)            AS Treatment_Category_ID,
+            NULLIF(TRIM(tc.Name),'')                        AS Treatment_Category_Name,
+            TRY_CAST(NULLIF(TRIM(t.Created_At),'') AS datetime2(3)) AS Created_Date,
+            TRY_CAST(NULLIF(TRIM(t.Updated_At),'') AS datetime2(3)) AS Updated_Date
+        INTO #src
+        FROM Silver.Treatments t
+        LEFT JOIN Silver.Treatment_Categories tc ON tc.Id = t.Treatment_Category_ID
+        WHERE t.Id IS NOT NULL;
+
+        -- Remove rows no longer in source
+        DELETE tgt
+        FROM Gold.Dim_Treatments tgt
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_ID = tgt.Treatment_ID);
+        SET @My_Deletes = @@ROWCOUNT;
+
+        -- Update changed rows
+        UPDATE tgt SET
+            Treatment_Code          = src.Treatment_Code,
+            Nomenclature            = src.Nomenclature,
+            Patient_Nomenclature    = src.Patient_Nomenclature,
+            Description             = src.Description,
+            Patient_Description     = src.Patient_Description,
+            Notes                   = src.Notes,
+            Region                  = src.Region,
+            UDA_Band                = src.UDA_Band,
+            NHS_Treatment_Cat       = src.NHS_Treatment_Cat,
+            Treatment_Category_ID   = src.Treatment_Category_ID,
+            Treatment_Category_Name = src.Treatment_Category_Name,
+            Updated_Date            = src.Updated_Date,
+            DW_Updated_At           = SYSUTCDATETIME()
+        FROM Gold.Dim_Treatments tgt
+        INNER JOIN #src src ON tgt.Treatment_ID = src.Treatment_ID
+        WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
+           ISNULL(CAST(tgt.[Treatment_Code] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Nomenclature] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Patient_Nomenclature] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Description] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Patient_Description] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Notes] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Region] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[UDA_Band] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[NHS_Treatment_Cat] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Treatment_Category_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Treatment_Category_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Updated_Date] AS VARCHAR(500)), '')
+           ))
+           <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
+           ISNULL(CAST(src.[Treatment_Code] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Nomenclature] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Patient_Nomenclature] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Description] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Patient_Description] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Notes] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Region] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[UDA_Band] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[NHS_Treatment_Cat] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Treatment_Category_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Treatment_Category_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Updated_Date] AS VARCHAR(500)), '')
+           ));
+        SET @My_Updates = @@ROWCOUNT;
+
+        -- Insert new rows
+        INSERT INTO Gold.Dim_Treatments (
+            Treatment_ID, Treatment_Code, Nomenclature, Patient_Nomenclature, Description,
+            Patient_Description, Notes, Region, UDA_Band, NHS_Treatment_Cat,
+            Treatment_Category_ID, Treatment_Category_Name, Created_Date, Updated_Date,
+            DW_Created_At, DW_Updated_At
+        )
+        SELECT
+            src.Treatment_ID, src.Treatment_Code, src.Nomenclature, src.Patient_Nomenclature, src.Description,
+            src.Patient_Description, src.Notes, src.Region, src.UDA_Band, src.NHS_Treatment_Cat,
+            src.Treatment_Category_ID, src.Treatment_Category_Name, src.Created_Date, src.Updated_Date,
+            SYSUTCDATETIME(), SYSUTCDATETIME()
+        FROM #src src
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments tgt WHERE tgt.Treatment_ID = src.Treatment_ID);
+        SET @My_Inserts = @@ROWCOUNT;
+
+        DROP TABLE #src;
+        --*********************************
+        --**** Procedure logic ends    ****
+        --*********************************
+
+    END TRY
+
+    BEGIN CATCH
+        THROW;
+    END CATCH;
+
+    SET @Run_Inserts = @My_Inserts
+    SET @Run_Updates = @My_Updates
+    SET @Run_Deletes = @My_Deletes
+
+END
+GO

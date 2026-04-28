@@ -1,0 +1,130 @@
+﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Payments]    Script Date: 20/04/2026 10:15:06 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+DROP PROCEDURE IF EXISTS [Silver].[usp_Load_Payments]
+GO
+CREATE PROCEDURE [Silver].[usp_Load_Payments]
+(
+      @Mode          VARCHAR(100) = 'TEST'
+    , @Logging       smallint      = 1
+    , @Run_UUID      UNIQUEIDENTIFIER = NULL
+    , @Run_Inserts   BIGINT OUT
+    , @Run_Updates   BIGINT OUT
+    , @Run_Deletes   BIGINT OUT
+)
+AS
+BEGIN
+    DECLARE @My_Inserts BIGINT = 0;
+    DECLARE @My_Updates BIGINT = 0;
+    DECLARE @My_Deletes BIGINT = 0;
+    SET NOCOUNT ON;
+    BEGIN TRY
+        --*********************************
+        --**** Procedure logic starts  ****
+        --*********************************
+
+        SELECT
+            staged.*,
+            CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
+        ISNULL(CAST(staged.[Account_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Patient_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Practitioner_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Payment_Plan_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[User_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Reference] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Transaction_Number] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Amount] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Amount_Unexplained] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Method] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Fully_Explained] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Deleted] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Status] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Dated_On] AS VARCHAR(500)), '')
+        ))) AS _Hash
+        INTO #src
+        FROM (
+            SELECT
+                TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int)  AS [Payment_Id],
+                TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)  AS [Account_Id],
+                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
+                Practitioner_ID  AS [Practitioner_Id],
+                Payment_Plan_ID  AS [Payment_Plan_Id],
+                LEFT(Site_ID, 50)  AS [Site_Id],
+                User_ID  AS [User_Id],
+                -- Bronze Reference is decimal; convert to string
+        LEFT(CAST(TRY_CAST(ROUND(CAST(Reference AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Reference],
+                LEFT(CAST(TRY_CAST(ROUND(CAST(Transaction_Number AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Transaction_Number],
+                Amount  AS [Amount],
+                Amount_Unexplained  AS [Amount_Unexplained],
+                LEFT(Method, 100)  AS [Method],
+                CASE WHEN Fully_Explained = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Fully_Explained],
+                CASE WHEN Deleted         = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Deleted],
+                LEFT(Status, 50)  AS [Status],
+                TRY_CAST(Dated_On AS date)  AS [Dated_On]
+            FROM Bronze.Payments
+            WHERE TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int) IS NOT NULL
+        ) AS staged;
+
+        UPDATE tgt
+        SET
+            [Account_Id] = src.[Account_Id],
+            [Patient_Id] = src.[Patient_Id],
+            [Practitioner_Id] = src.[Practitioner_Id],
+            [Payment_Plan_Id] = src.[Payment_Plan_Id],
+            [Site_Id] = src.[Site_Id],
+            [User_Id] = src.[User_Id],
+            [Reference] = src.[Reference],
+            [Transaction_Number] = src.[Transaction_Number],
+            [Amount] = src.[Amount],
+            [Amount_Unexplained] = src.[Amount_Unexplained],
+            [Method] = src.[Method],
+            [Fully_Explained] = src.[Fully_Explained],
+            [Deleted] = src.[Deleted],
+            [Status] = src.[Status],
+            [Dated_On] = src.[Dated_On],
+            [DW_Updated_At] = SYSUTCDATETIME(),
+            [_Row_Hash]     = src._Hash
+        FROM [Silver].[Payments] AS tgt
+        INNER JOIN #src AS src ON tgt.[Payment_Id] = src.[Payment_Id]
+        WHERE tgt.[_Row_Hash] <> src._Hash;
+        SET @My_Updates = @@ROWCOUNT;
+
+        INSERT INTO [Silver].[Payments] ([Payment_Id], [Account_Id], [Patient_Id], [Practitioner_Id], [Payment_Plan_Id], [Site_Id], [User_Id], [Reference], [Transaction_Number], [Amount], [Amount_Unexplained], [Method], [Fully_Explained], [Deleted], [Status], [Dated_On],
+                [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Payment_Id], src.[Account_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Payment_Plan_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Transaction_Number], src.[Amount], src.[Amount_Unexplained], src.[Method], src.[Fully_Explained], src.[Deleted], src.[Status], src.[Dated_On],
+                SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        FROM #src AS src
+        WHERE NOT EXISTS (
+            SELECT 1 FROM [Silver].[Payments] AS tgt WHERE tgt.[Payment_Id] = src.[Payment_Id]
+        );
+        SET @My_Inserts = @@ROWCOUNT;
+
+        DELETE tgt
+        FROM [Silver].[Payments] AS tgt
+        WHERE NOT EXISTS (
+            SELECT 1 FROM #src AS src WHERE src.[Payment_Id] = tgt.[Payment_Id]
+        );
+        SET @My_Deletes = @@ROWCOUNT;
+
+        DROP TABLE IF EXISTS #src;
+
+        --*********************************
+        --**** Procedure logic ends    ****
+        --*********************************
+
+    END TRY
+
+    BEGIN CATCH
+        THROW;
+    END CATCH;
+
+    SET @Run_Inserts = @My_Inserts
+    SET @Run_Updates = @My_Updates
+    SET @Run_Deletes = @My_Deletes
+
+END
+GO
