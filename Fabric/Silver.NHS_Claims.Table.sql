@@ -1,11 +1,11 @@
-/****** Object:  Table [Silver].[Nhs_Claims]    Script Date: 20/04/2026 10:15:06 ******/
+/****** Object:  Table [Silver].[NHS_Claims]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-DROP TABLE IF EXISTS [Silver].[Nhs_Claims]
+DROP TABLE IF EXISTS [Silver].[NHS_Claims]
 GO
-CREATE TABLE [Silver].[Nhs_Claims](
+CREATE TABLE [Silver].[NHS_Claims](
 	[Tenant_ID] [int] NOT NULL,
 	[Nhs_Claim_Id] [VARCHAR](50) NOT NULL,
 	[Patient_Id] [int] NULL,
