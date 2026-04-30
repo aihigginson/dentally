@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Users]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Users
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Users @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Users]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -47,6 +55,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 TRY_CAST(ROUND(CAST(ID AS float),0) AS int)  AS [Id],
                 Email  AS [Email],
                 NULL  AS [Title],
@@ -86,24 +95,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Users] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Users] ([Id], [Email], [Title], [First_Name], [Middle_Name], [Last_Name], [Mobile_Phone], [Role], [Permission_Level], [Practice_Id], [Site_Id], [Image_URL], [Last_Login], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Users] ([Tenant_ID], [Id], [Email], [Title], [First_Name], [Middle_Name], [Last_Name], [Mobile_Phone], [Role], [Permission_Level], [Practice_Id], [Site_Id], [Image_URL], [Last_Login], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Id], src.[Email], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Mobile_Phone], src.[Role], src.[Permission_Level], src.[Practice_Id], src.[Site_Id], src.[Image_URL], src.[Last_Login], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Email], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Mobile_Phone], src.[Role], src.[Permission_Level], src.[Practice_Id], src.[Site_Id], src.[Image_URL], src.[Last_Login], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Users] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Users] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Users] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

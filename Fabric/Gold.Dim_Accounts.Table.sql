@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS [Gold].[Dim_Accounts]
 GO
 CREATE TABLE [Gold].[Dim_Accounts](
 	[pk_Account] [bigint] IDENTITY NOT NULL,
+	[Tenant_ID] [int] NOT NULL,
 	[Account_ID] [int] NOT NULL,
 	[Patient_ID] [int] NULL,
 	[Patient_Name] [VARCHAR](255) NULL,

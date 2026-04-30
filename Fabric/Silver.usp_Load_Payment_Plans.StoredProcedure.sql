@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Payment_Plans
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -45,6 +53,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 Payment_Plan_ID  AS [Payment_Plan_Id],
                 LEFT(Payment_Plan_Site_ID, 50)  AS [Payment_Plan_Site_Id],
                 CASE WHEN TRY_CAST(Payment_Plan_Active AS decimal(18,4)) = 1
@@ -79,24 +88,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Payment_Plans] AS tgt
-        INNER JOIN #src AS src ON tgt.[Payment_Plan_Id] = src.[Payment_Plan_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Plan_Id] = src.[Payment_Plan_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Payment_Plans] ([Payment_Plan_Id], [Payment_Plan_Site_Id], [Payment_Plan_Active], [Payment_Plan_Colour], [Dentist_Recall_Interval], [Emergency_Duration], [Exam_Duration], [Exam_Scale_And_Polish_Duration], [Hygienist_Recall_Interval], [Payment_Plan_Name], [Payment_Plan_Patient_Friendly_Name], [Scale_And_Polish_Duration], [Payment_Plan_Created_At],
+        INSERT INTO [Silver].[Payment_Plans] ([Tenant_ID], [Payment_Plan_Id], [Payment_Plan_Site_Id], [Payment_Plan_Active], [Payment_Plan_Colour], [Dentist_Recall_Interval], [Emergency_Duration], [Exam_Duration], [Exam_Scale_And_Polish_Duration], [Hygienist_Recall_Interval], [Payment_Plan_Name], [Payment_Plan_Patient_Friendly_Name], [Scale_And_Polish_Duration], [Payment_Plan_Created_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Payment_Plan_Id], src.[Payment_Plan_Site_Id], src.[Payment_Plan_Active], src.[Payment_Plan_Colour], src.[Dentist_Recall_Interval], src.[Emergency_Duration], src.[Exam_Duration], src.[Exam_Scale_And_Polish_Duration], src.[Hygienist_Recall_Interval], src.[Payment_Plan_Name], src.[Payment_Plan_Patient_Friendly_Name], src.[Scale_And_Polish_Duration], src.[Payment_Plan_Created_At],
+        SELECT src.[Tenant_ID], src.[Payment_Plan_Id], src.[Payment_Plan_Site_Id], src.[Payment_Plan_Active], src.[Payment_Plan_Colour], src.[Dentist_Recall_Interval], src.[Emergency_Duration], src.[Exam_Duration], src.[Exam_Scale_And_Polish_Duration], src.[Hygienist_Recall_Interval], src.[Payment_Plan_Name], src.[Payment_Plan_Patient_Friendly_Name], src.[Scale_And_Polish_Duration], src.[Payment_Plan_Created_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Payment_Plans] AS tgt WHERE tgt.[Payment_Plan_Id] = src.[Payment_Plan_Id]
+            SELECT 1 FROM [Silver].[Payment_Plans] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Plan_Id] = src.[Payment_Plan_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Payment_Plans] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Payment_Plan_Id] = tgt.[Payment_Plan_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Payment_Plan_Id] = tgt.[Payment_Plan_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

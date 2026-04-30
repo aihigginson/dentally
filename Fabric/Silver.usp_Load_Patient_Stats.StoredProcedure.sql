@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Patient_Stats]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Patient_Stats
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patient_Stats @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Patient_Stats]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -48,6 +56,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 -- Bronze Patient_ID is decimal(18,4); Silver is int
         TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
                 LEFT(First_Appointment_Date,            50)  AS [First_Appointment_Date],
@@ -91,24 +100,24 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Patient_Stats] AS tgt
-        INNER JOIN #src AS src ON tgt.[Patient_Id] = src.[Patient_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Patient_Id] = src.[Patient_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Patient_Stats] ([Patient_Id], [First_Appointment_Date], [First_Exam_Date], [Last_Appointment_Date], [Last_Exam_Date], [Last_Scale_And_Polish_Date], [Last_Fta_Appointment_Date], [Last_Cancelled_Appointment_Date], [Next_Appointment_Date], [Next_Exam_Date], [Next_Scale_And_Polish_Date], [Total_Paid], [Total_Invoiced], [Nhs_Exemption_Code], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Patient_Stats] ([Tenant_ID], [Patient_Id], [First_Appointment_Date], [First_Exam_Date], [Last_Appointment_Date], [Last_Exam_Date], [Last_Scale_And_Polish_Date], [Last_Fta_Appointment_Date], [Last_Cancelled_Appointment_Date], [Next_Appointment_Date], [Next_Exam_Date], [Next_Scale_And_Polish_Date], [Total_Paid], [Total_Invoiced], [Nhs_Exemption_Code], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Patient_Id], src.[First_Appointment_Date], src.[First_Exam_Date], src.[Last_Appointment_Date], src.[Last_Exam_Date], src.[Last_Scale_And_Polish_Date], src.[Last_Fta_Appointment_Date], src.[Last_Cancelled_Appointment_Date], src.[Next_Appointment_Date], src.[Next_Exam_Date], src.[Next_Scale_And_Polish_Date], src.[Total_Paid], src.[Total_Invoiced], src.[Nhs_Exemption_Code], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Patient_Id], src.[First_Appointment_Date], src.[First_Exam_Date], src.[Last_Appointment_Date], src.[Last_Exam_Date], src.[Last_Scale_And_Polish_Date], src.[Last_Fta_Appointment_Date], src.[Last_Cancelled_Appointment_Date], src.[Next_Appointment_Date], src.[Next_Exam_Date], src.[Next_Scale_And_Polish_Date], src.[Total_Paid], src.[Total_Invoiced], src.[Nhs_Exemption_Code], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Patient_Stats] AS tgt WHERE tgt.[Patient_Id] = src.[Patient_Id]
+            SELECT 1 FROM [Silver].[Patient_Stats] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Patient_Id] = src.[Patient_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Patient_Stats] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Patient_Id] = tgt.[Patient_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Patient_Id] = tgt.[Patient_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

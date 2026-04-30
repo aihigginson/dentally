@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Dim_Payment_Plans
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            Tenant_ID AS Tenant_ID,
             CAST(Payment_Plan_Id AS INT)                                    AS Payment_Plan_ID,
             NULLIF(TRIM(Payment_Plan_Name),'')                              AS Payment_Plan_Name,
             NULLIF(TRIM(Payment_Plan_Patient_Friendly_Name),'')             AS Patient_Friendly_Name,
@@ -47,7 +56,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Payment_Plans tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Payment_Plan_ID = tgt.Payment_Plan_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Payment_Plan_ID = tgt.Payment_Plan_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -65,7 +74,7 @@ BEGIN
             Scale_Polish_Duration_Mins      = src.Scale_Polish_Duration_Mins,
             DW_Updated_At                   = SYSUTCDATETIME()
         FROM Gold.Dim_Payment_Plans tgt
-        INNER JOIN #src src ON tgt.Payment_Plan_ID = src.Payment_Plan_ID
+        INNER JOIN #src src ON tgt.Payment_Plan_ID = src.Payment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Payment_Plan_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Patient_Friendly_Name] AS VARCHAR(500)), ''),

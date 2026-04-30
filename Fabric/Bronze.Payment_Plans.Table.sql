@@ -18,6 +18,8 @@ CREATE TABLE [Bronze].[Payment_Plans](
 	[Payment_Plan_Name] [VARCHAR](255) NULL,
 	[Payment_Plan_Patient_Friendly_Name] [VARCHAR](255) NULL,
 	[Scale_And_Polish_Duration] [decimal](18, 4) NULL,
-	[Payment_Plan_Site_ID] [VARCHAR](255) NULL
+	[Payment_Plan_Site_ID] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

@@ -28,6 +28,8 @@ CREATE TABLE [Bronze].[Sites](
 	[Thursday_Open] [VARCHAR](255) NULL,
 	[Thursday_Close] [VARCHAR](255) NULL,
 	[Friday_Open] [VARCHAR](255) NULL,
-	[Friday_Close] [VARCHAR](255) NULL
+	[Friday_Close] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

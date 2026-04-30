@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Recalls
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -54,6 +62,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Id],
                 TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
                 NULL  AS [Practitioner_Id],
@@ -111,22 +120,22 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Recalls] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Recalls] ([Id], [Patient_Id], [Practitioner_Id], [Appointment_ID], [Recall_Method], [Workflow_Status], [Workflow_Stage_ID], [First_Reminder_Type], [Second_Reminder_Type], [First_Reminder_Sent_At], [Second_Reminder_Sent_At], [Latest_Reminder_Type], [Last_Reminded_At], [Times_Contacted], [Run_Date], [Site_Id], [Recall_Type], [Due_Date], [Interval_Months], [Status], [Sent_At], [Booked_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Id], src.[Patient_Id], src.[Practitioner_Id], src.[Appointment_ID], src.[Recall_Method], src.[Workflow_Status], src.[Workflow_Stage_ID], src.[First_Reminder_Type], src.[Second_Reminder_Type], src.[First_Reminder_Sent_At], src.[Second_Reminder_Sent_At], src.[Latest_Reminder_Type], src.[Last_Reminded_At], src.[Times_Contacted], src.[Run_Date], src.[Site_Id], src.[Recall_Type], src.[Due_Date], src.[Interval_Months], src.[Status], src.[Sent_At], src.[Booked_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Recalls] ([Tenant_ID], [Id], [Patient_Id], [Practitioner_Id], [Appointment_ID], [Recall_Method], [Workflow_Status], [Workflow_Stage_ID], [First_Reminder_Type], [Second_Reminder_Type], [First_Reminder_Sent_At], [Second_Reminder_Sent_At], [Latest_Reminder_Type], [Last_Reminded_At], [Times_Contacted], [Run_Date], [Site_Id], [Recall_Type], [Due_Date], [Interval_Months], [Status], [Sent_At], [Booked_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Patient_Id], src.[Practitioner_Id], src.[Appointment_ID], src.[Recall_Method], src.[Workflow_Status], src.[Workflow_Stage_ID], src.[First_Reminder_Type], src.[Second_Reminder_Type], src.[First_Reminder_Sent_At], src.[Second_Reminder_Sent_At], src.[Latest_Reminder_Type], src.[Last_Reminded_At], src.[Times_Contacted], src.[Run_Date], src.[Site_Id], src.[Recall_Type], src.[Due_Date], src.[Interval_Months], src.[Status], src.[Sent_At], src.[Booked_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Recalls] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Recalls] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Recalls] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

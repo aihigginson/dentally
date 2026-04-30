@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -65,6 +73,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 ID  AS [Appointment_Id],
                 LEFT(UUID, 50)  AS [Appointment_Uuid],
                 -- Bronze stores cancellation reason as int; Silver is VARCHAR(50)
@@ -145,24 +154,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Appointments] AS tgt
-        INNER JOIN #src AS src ON tgt.[Appointment_Id] = src.[Appointment_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Appointment_Id] = src.[Appointment_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Appointments] ([Appointment_Id], [Appointment_Uuid], [Appointment_Cancellation_Reason_Id], [Patient_Id], [Patient_Name], [Patient_Image_Url], [Practitioner_Id], [User_Id], [Payment_Plan_Id], [Room_Id], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Notes], [Treatment_Description], [Booked_Via_Api], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_Id], [Appointment_Uuid], [Appointment_Cancellation_Reason_Id], [Patient_Id], [Patient_Name], [Patient_Image_Url], [Practitioner_Id], [User_Id], [Payment_Plan_Id], [Room_Id], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Notes], [Treatment_Description], [Booked_Via_Api], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Appointment_Id], src.[Appointment_Uuid], src.[Appointment_Cancellation_Reason_Id], src.[Patient_Id], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_Id], src.[User_Id], src.[Payment_Plan_Id], src.[Room_Id], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Notes], src.[Treatment_Description], src.[Booked_Via_Api], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Appointment_Id], src.[Appointment_Uuid], src.[Appointment_Cancellation_Reason_Id], src.[Patient_Id], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_Id], src.[User_Id], src.[Payment_Plan_Id], src.[Room_Id], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Notes], src.[Treatment_Description], src.[Booked_Via_Api], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Appointments] AS tgt WHERE tgt.[Appointment_Id] = src.[Appointment_Id]
+            SELECT 1 FROM [Silver].[Appointments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Appointment_Id] = src.[Appointment_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Appointments] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Appointment_Id] = tgt.[Appointment_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Appointment_Id] = tgt.[Appointment_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

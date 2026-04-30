@@ -9,6 +9,8 @@ CREATE TABLE [Bronze].[Practitioner_Diary_Breaks](
 	[Practitioner_Diary_ID] [VARCHAR](255) NULL,
 	[Break_Name] [varchar](255) NULL,
 	[Start_Time] [VARCHAR](255) NULL,
-	[End_Time] [VARCHAR](255) NULL
+	[End_Time] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

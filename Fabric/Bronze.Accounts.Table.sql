@@ -12,6 +12,8 @@ CREATE TABLE [Bronze].[Accounts](
 	[Patient_ID] [int] NULL,
 	[Patient_Name] [VARCHAR](255) NULL,
 	[Planned_NHS_Treatment_Value] [VARCHAR](255) NULL,
-	[Planned_Private_Treatment_Value] [VARCHAR](255) NULL
+	[Planned_Private_Treatment_Value] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

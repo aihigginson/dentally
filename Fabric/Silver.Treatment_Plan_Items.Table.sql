@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Treatment_Plan_Items]
 GO
 CREATE TABLE [Silver].[Treatment_Plan_Items](
+	[Tenant_ID] [int] NOT NULL,
 	[Id] [VARCHAR](50) NOT NULL,
 	[Treatment_Plan_Id] [int] NULL,
 	[Payment_Plan_Id] [int] NULL,

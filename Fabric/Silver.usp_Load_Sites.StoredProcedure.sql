@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Sites]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Sites
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Sites]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -54,6 +62,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(Site_ID,       50)  AS [Site_Id],
                 LEFT(Practice_ID,   50)  AS [Practice_Id],
                 Name  AS [Name],
@@ -106,22 +115,22 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Sites] AS tgt
-        INNER JOIN #src AS src ON tgt.[Site_Id] = src.[Site_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Site_Id] = src.[Site_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Sites] ([Site_Id], [Practice_Id], [Name], [active], [address_line_1], [address_line_2], [town], [postcode], [phone_number], [website], [logo_url], [default_payment_plan_id], [monday_open], [monday_close], [tuesday_open], [tuesday_close], [wednesday_open], [wednesday_close], [thursday_open], [thursday_close], [friday_open], [friday_close], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Site_Id], src.[Practice_Id], src.[Name], src.[active], src.[address_line_1], src.[address_line_2], src.[town], src.[postcode], src.[phone_number], src.[website], src.[logo_url], src.[default_payment_plan_id], src.[monday_open], src.[monday_close], src.[tuesday_open], src.[tuesday_close], src.[wednesday_open], src.[wednesday_close], src.[thursday_open], src.[thursday_close], src.[friday_open], src.[friday_close], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        INSERT INTO [Silver].[Sites] ([Tenant_ID], [Site_Id], [Practice_Id], [Name], [active], [address_line_1], [address_line_2], [town], [postcode], [phone_number], [website], [logo_url], [default_payment_plan_id], [monday_open], [monday_close], [tuesday_open], [tuesday_close], [wednesday_open], [wednesday_close], [thursday_open], [thursday_close], [friday_open], [friday_close], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Tenant_ID], src.[Site_Id], src.[Practice_Id], src.[Name], src.[active], src.[address_line_1], src.[address_line_2], src.[town], src.[postcode], src.[phone_number], src.[website], src.[logo_url], src.[default_payment_plan_id], src.[monday_open], src.[monday_close], src.[tuesday_open], src.[tuesday_close], src.[wednesday_open], src.[wednesday_close], src.[thursday_open], src.[thursday_close], src.[friday_open], src.[friday_close], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Sites] AS tgt WHERE tgt.[Site_Id] = src.[Site_Id]
+            SELECT 1 FROM [Silver].[Sites] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Site_Id] = src.[Site_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Sites] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Site_Id] = tgt.[Site_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Site_Id] = tgt.[Site_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

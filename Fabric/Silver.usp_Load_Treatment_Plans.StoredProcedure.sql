@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Treatment_Plans
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -49,6 +57,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 TRY_CAST(ROUND(CAST(ID AS float),0) AS int)  AS [Id],
                 LEFT(Nickname, 50)  AS [Nickname],
                 TRY_CAST(ROUND(CAST(Patient_ID AS float),0) AS int)  AS [Patient_Id],
@@ -94,24 +103,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Treatment_Plans] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Plans] ([Id], [Nickname], [Patient_Id], [Practitioner_Id], [Site_Id], [Completed], [Nhs_Course_Part], [Accepted_At], [Completed_At], [Last_Completed_At], [NHS_UDA_Value], [NHS_Completed_UDA_Value], [Private_treatment_value], [Start_Date], [End_Date], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Treatment_Plans] ([Tenant_ID], [Id], [Nickname], [Patient_Id], [Practitioner_Id], [Site_Id], [Completed], [Nhs_Course_Part], [Accepted_At], [Completed_At], [Last_Completed_At], [NHS_UDA_Value], [NHS_Completed_UDA_Value], [Private_treatment_value], [Start_Date], [End_Date], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Id], src.[Nickname], src.[Patient_Id], src.[Practitioner_Id], src.[Site_Id], src.[Completed], src.[Nhs_Course_Part], src.[Accepted_At], src.[Completed_At], src.[Last_Completed_At], src.[NHS_UDA_Value], src.[NHS_Completed_UDA_Value], src.[Private_treatment_value], src.[Start_Date], src.[End_Date], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Nickname], src.[Patient_Id], src.[Practitioner_Id], src.[Site_Id], src.[Completed], src.[Nhs_Course_Part], src.[Accepted_At], src.[Completed_At], src.[Last_Completed_At], src.[NHS_UDA_Value], src.[NHS_Completed_UDA_Value], src.[Private_treatment_value], src.[Start_Date], src.[End_Date], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Treatment_Plans] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Treatment_Plans] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Treatment_Plans] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

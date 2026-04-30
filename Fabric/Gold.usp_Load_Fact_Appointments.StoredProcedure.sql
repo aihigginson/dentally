@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            a.Tenant_ID                                                 AS Tenant_ID,
             CAST(a.Appointment_Id AS INT)                               AS bk_Appointment_ID,
 
             dpat.pk_Patient                                             AS fk_Patient,
@@ -77,11 +86,11 @@ BEGIN
             END                                                         AS In_Surgery_Mins
         INTO #src
         FROM Silver.Appointments a
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_Id
-        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_Id AS INT)
-        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_Id AS INT)
-        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Room_Id),'')
-        LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_Id AS INT)
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_Id          AND dpat.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_Id AS INT) AND dpr.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_Id AS INT) AND dpp.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Room_Id),'') AND dps.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_Id AS INT) AND du.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
@@ -90,7 +99,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Appointments tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Appointment_ID = tgt.bk_Appointment_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Appointment_ID = tgt.bk_Appointment_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -127,7 +136,7 @@ BEGIN
             In_Surgery_Mins         = src.In_Surgery_Mins,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Appointments tgt
-        INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID
+        INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Patient] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practitioner] AS VARCHAR(500)), ''),
@@ -196,6 +205,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Appointments (
+            Tenant_ID,
             bk_Appointment_ID,
             fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Practice_Site, fk_User,
             fk_Date_Start, fk_Date_Pending, fk_Date_Created,
@@ -207,6 +217,7 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Appointment_ID,
             src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Practice_Site, src.fk_User,
             src.fk_Date_Start, src.fk_Date_Pending, src.fk_Date_Created,
@@ -217,7 +228,7 @@ BEGIN
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

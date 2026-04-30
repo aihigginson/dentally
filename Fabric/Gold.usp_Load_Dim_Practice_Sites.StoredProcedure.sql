@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Dim_Practice_Sites
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            s.Tenant_ID                                             AS Tenant_ID,
             s.Site_Id                                               AS Site_ID,
             NULLIF(TRIM(s.Name),'')                                 AS Site_Name,
             CAST(ISNULL(s.active,0) AS BIT)                         AS Site_Active,
@@ -61,13 +70,13 @@ BEGIN
             NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone
         INTO #src
         FROM Silver.Sites s
-        LEFT JOIN Silver.Practice p ON p.Practice_Id = s.Practice_Id
+        LEFT JOIN Silver.Practice p ON p.Practice_Id = s.Practice_Id AND p.Tenant_ID = s.Tenant_ID
         WHERE s.Site_Id IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Practice_Sites tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Site_ID = tgt.Site_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Site_ID = tgt.Site_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -105,7 +114,7 @@ BEGIN
             Practice_Time_Zone          = src.Practice_Time_Zone,
             DW_Updated_At               = SYSUTCDATETIME()
         FROM Gold.Dim_Practice_Sites tgt
-        INNER JOIN #src src ON tgt.Site_ID = src.Site_ID
+        INNER JOIN #src src ON tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Site_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Site_Active] AS VARCHAR(500)), ''),
@@ -174,6 +183,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Dim_Practice_Sites (
+            Tenant_ID,
             Site_ID, Site_Name, Site_Active, Site_Address_Line_1, Site_Address_Line_2,
             Site_Town, Site_Postcode, Site_Phone, Site_Website, Site_Logo_URL, Site_Default_Payment_Plan_ID,
             Mon_Open, Mon_Close, Tue_Open, Tue_Close, Wed_Open, Wed_Close,
@@ -183,6 +193,7 @@ BEGIN
             Practice_Website, Practice_NHS, Practice_Time_Zone, DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.Site_ID, src.Site_Name, src.Site_Active, src.Site_Address_Line_1, src.Site_Address_Line_2,
             src.Site_Town, src.Site_Postcode, src.Site_Phone, src.Site_Website, src.Site_Logo_URL, src.Site_Default_Payment_Plan_ID,
             src.Mon_Open, src.Mon_Close, src.Tue_Open, src.Tue_Close, src.Wed_Open, src.Wed_Close,
@@ -191,7 +202,7 @@ BEGIN
             src.Practice_Town, src.Practice_Postcode, src.Practice_Phone, src.Practice_Email,
             src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites tgt WHERE tgt.Site_ID = src.Site_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites tgt WHERE tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

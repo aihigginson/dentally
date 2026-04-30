@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Practitioner_Diaries
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            pd.Tenant_ID                                                AS Tenant_ID,
             pd.Id                                                       AS bk_Practitioner_Diary_ID,
             dpr.pk_Practitioner                                         AS fk_Practitioner,
             dd.pk_Date                                                  AS fk_Date_Day,
@@ -50,7 +59,7 @@ BEGIN
                  ELSE 0 END                                             AS Available_Clinical_Mins
         INTO #src
         FROM Silver.Practitioner_Diary pd
-        LEFT JOIN Gold.Dim_Practitioners dpr ON dpr.Practitioner_ID = CAST(pd.Practitioner_Id AS INT)
+        LEFT JOIN Gold.Dim_Practitioners dpr ON dpr.Practitioner_ID = CAST(pd.Practitioner_Id AS INT) AND dpr.Tenant_ID = pd.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd           ON dd.Full_Date        = pd.Day
         LEFT JOIN (
             SELECT
@@ -67,7 +76,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Practitioner_Diaries tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Practitioner_Diary_ID = tgt.bk_Practitioner_Diary_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Practitioner_Diary_ID = tgt.bk_Practitioner_Diary_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -84,7 +93,7 @@ BEGIN
             Break_Count             = src.Break_Count,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Practitioner_Diaries tgt
-        INNER JOIN #src src ON tgt.bk_Practitioner_Diary_ID = src.bk_Practitioner_Diary_ID
+        INNER JOIN #src src ON tgt.bk_Practitioner_Diary_ID = src.bk_Practitioner_Diary_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Practitioner] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Day] AS VARCHAR(500)), ''),
@@ -113,6 +122,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Practitioner_Diaries (
+            Tenant_ID,
             bk_Practitioner_Diary_ID,
             fk_Practitioner, fk_Date_Day,
             Day_Date, Start_Time, end_time, Unavailable,
@@ -120,13 +130,14 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Practitioner_Diary_ID,
             src.fk_Practitioner, src.fk_Date_Day,
             src.Day_Date, src.Start_Time, src.end_time, src.Unavailable,
             src.Session_Duration_Mins, src.Total_Break_Mins, src.Available_Clinical_Mins, src.Break_Count,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Practitioner_Diaries tgt WHERE tgt.bk_Practitioner_Diary_ID = src.bk_Practitioner_Diary_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Practitioner_Diaries tgt WHERE tgt.bk_Practitioner_Diary_ID = src.bk_Practitioner_Diary_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

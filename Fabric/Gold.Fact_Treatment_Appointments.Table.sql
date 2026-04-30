@@ -7,11 +7,12 @@ DROP TABLE IF EXISTS [Gold].[Fact_Treatment_Appointments]
 GO
 CREATE TABLE [Gold].[Fact_Treatment_Appointments](
 	[pk_Treatment_Appointment] [bigint] IDENTITY NOT NULL,
+	[Tenant_ID] [int] NOT NULL,
 	[bk_Treatment_Appointment_ID] [VARCHAR](50) NOT NULL,
-	[fk_Patient] [int] NULL,
-	[fk_Treatment_Plan] [int] NULL,
-	[fk_Date_Appointment] [int] NULL,
-	[fk_Date_Created] [int] NULL,
+	[fk_Patient] [bigint] NULL,
+	[fk_Treatment_Plan] [bigint] NULL,
+	[fk_Date_Appointment] [bigint] NULL,
+	[fk_Date_Created] [bigint] NULL,
 	[Appointment_ID] [int] NULL,
 	[Treatment_Plan_ID] [int] NULL,
 	[Position] [int] NULL,

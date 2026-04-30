@@ -1,3 +1,12 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Meta.usp_Create_Gold_Views
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--    *02     29/04/2026  AIH Add PBI.[Security Users] view for RLS anchor
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Meta.usp_Create_Gold_Views @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Meta].[usp_Create_Gold_Views]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -81,6 +90,13 @@ FROM Gold.' + QUOTENAME(@TableName) + N';';
     END;
 
     DROP TABLE #Gold_Tables;
+
+    -- Security lookup view (used as RLS anchor in Power BI)
+    SET @SQL = N'CREATE VIEW PBI.[Application Users] AS
+SELECT [User_UPN] AS [User UPN], [Tenant_ID] AS [Tenant ID]
+FROM Security.Application_Users;';
+    EXEC (@SQL);
+
 END;
 
 GO

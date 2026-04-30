@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Dim_Accounts]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Dim_Accounts
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Dim_Accounts
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Accounts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Accounts]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Dim_Accounts]
@@ -34,7 +33,8 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Dim_Accounts;
 
     CREATE TABLE Gold.Dim_Accounts (
-        pk_Account                         INT             NOT NULL IDENTITY,
+        pk_Account                         BIGINT          NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         Account_ID                         INT             NOT NULL,
         Patient_ID                         INT             NULL,
         Patient_Name                       VARCHAR(255)   NULL,

@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Treatment_Plan_Items
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -66,6 +74,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 -- Bronze ID is decimal(18,4); Silver is VARCHAR(50)
         LEFT(CAST(TRY_CAST(ROUND(CAST(ID AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Id],
                 -- Bronze Treatment_Plan_ID is VARCHAR(255); Silver is int
@@ -156,24 +165,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Treatment_Plan_Items] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Plan_Items] ([Id], [Treatment_Plan_Id], [Payment_Plan_Id], [Treatment_Id], [Patient_Id], [Practitioner_Id], [Fee_Id], [Name], [Description], [Quantity], [Price], [Total_Price], [Nhs_Charge], [Status], [Tooth], [Surface], [Region], [Invoice_ID], [Treatment_Appointment_ID], [Referrer_ID], [Nomenclature], [Patient_Nomenclature], [NHS_Treatment_Cat], [UDA_Band], [Notes], [Position], [Base_Chart], [Completed], [Charged], [Appear_On_Invoice], [Duration], [Completed_At], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Treatment_Plan_Items] ([Tenant_ID], [Id], [Treatment_Plan_Id], [Payment_Plan_Id], [Treatment_Id], [Patient_Id], [Practitioner_Id], [Fee_Id], [Name], [Description], [Quantity], [Price], [Total_Price], [Nhs_Charge], [Status], [Tooth], [Surface], [Region], [Invoice_ID], [Treatment_Appointment_ID], [Referrer_ID], [Nomenclature], [Patient_Nomenclature], [NHS_Treatment_Cat], [UDA_Band], [Notes], [Position], [Base_Chart], [Completed], [Charged], [Appear_On_Invoice], [Duration], [Completed_At], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Id], src.[Treatment_Plan_Id], src.[Payment_Plan_Id], src.[Treatment_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Fee_Id], src.[Name], src.[Description], src.[Quantity], src.[Price], src.[Total_Price], src.[Nhs_Charge], src.[Status], src.[Tooth], src.[Surface], src.[Region], src.[Invoice_ID], src.[Treatment_Appointment_ID], src.[Referrer_ID], src.[Nomenclature], src.[Patient_Nomenclature], src.[NHS_Treatment_Cat], src.[UDA_Band], src.[Notes], src.[Position], src.[Base_Chart], src.[Completed], src.[Charged], src.[Appear_On_Invoice], src.[Duration], src.[Completed_At], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Treatment_Plan_Id], src.[Payment_Plan_Id], src.[Treatment_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Fee_Id], src.[Name], src.[Description], src.[Quantity], src.[Price], src.[Total_Price], src.[Nhs_Charge], src.[Status], src.[Tooth], src.[Surface], src.[Region], src.[Invoice_ID], src.[Treatment_Appointment_ID], src.[Referrer_ID], src.[Nomenclature], src.[Patient_Nomenclature], src.[NHS_Treatment_Cat], src.[UDA_Band], src.[Notes], src.[Position], src.[Base_Chart], src.[Completed], src.[Charged], src.[Appear_On_Invoice], src.[Duration], src.[Completed_At], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Treatment_Plan_Items] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Treatment_Plan_Items] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Treatment_Plan_Items] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

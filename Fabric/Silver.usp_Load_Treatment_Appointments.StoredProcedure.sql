@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Treatment_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -43,6 +51,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Id],
                 Appointment_ID  AS [Appointment_Id],
                 NULL  AS [Treatment_Plan_Item_Id],
@@ -77,22 +86,22 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Treatment_Appointments] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Appointments] ([Id], [Appointment_Id], [Treatment_Plan_Item_Id], [Treatment_Plan_Id], [Patient_Id], [Practitioner_Id], [Site_Id], [Status], [Position], [Bookable], [Notes], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Id], src.[Appointment_Id], src.[Treatment_Plan_Item_Id], src.[Treatment_Plan_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Site_Id], src.[Status], src.[Position], src.[Bookable], src.[Notes], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Treatment_Appointments] ([Tenant_ID], [Id], [Appointment_Id], [Treatment_Plan_Item_Id], [Treatment_Plan_Id], [Patient_Id], [Practitioner_Id], [Site_Id], [Status], [Position], [Bookable], [Notes], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Appointment_Id], src.[Treatment_Plan_Item_Id], src.[Treatment_Plan_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Site_Id], src.[Status], src.[Position], src.[Bookable], src.[Notes], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Treatment_Appointments] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Treatment_Appointments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Treatment_Appointments] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

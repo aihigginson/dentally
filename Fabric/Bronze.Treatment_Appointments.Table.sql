@@ -14,6 +14,8 @@ CREATE TABLE [Bronze].[Treatment_Appointments](
 	[Updated_At] [VARCHAR](255) NULL,
 	[Appointment_ID] [int] NULL,
 	[Patient_ID] [int] NULL,
-	[Treatment_Plan_ID] [int] NULL
+	[Treatment_Plan_ID] [int] NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

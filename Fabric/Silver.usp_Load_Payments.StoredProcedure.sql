@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Payments]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Payments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Payments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Payments]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -48,6 +56,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int)  AS [Payment_Id],
                 TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)  AS [Account_Id],
                 TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
@@ -89,24 +98,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Payments] AS tgt
-        INNER JOIN #src AS src ON tgt.[Payment_Id] = src.[Payment_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Id] = src.[Payment_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Payments] ([Payment_Id], [Account_Id], [Patient_Id], [Practitioner_Id], [Payment_Plan_Id], [Site_Id], [User_Id], [Reference], [Transaction_Number], [Amount], [Amount_Unexplained], [Method], [Fully_Explained], [Deleted], [Status], [Dated_On],
+        INSERT INTO [Silver].[Payments] ([Tenant_ID], [Payment_Id], [Account_Id], [Patient_Id], [Practitioner_Id], [Payment_Plan_Id], [Site_Id], [User_Id], [Reference], [Transaction_Number], [Amount], [Amount_Unexplained], [Method], [Fully_Explained], [Deleted], [Status], [Dated_On],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Payment_Id], src.[Account_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Payment_Plan_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Transaction_Number], src.[Amount], src.[Amount_Unexplained], src.[Method], src.[Fully_Explained], src.[Deleted], src.[Status], src.[Dated_On],
+        SELECT src.[Tenant_ID], src.[Payment_Id], src.[Account_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Payment_Plan_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Transaction_Number], src.[Amount], src.[Amount_Unexplained], src.[Method], src.[Fully_Explained], src.[Deleted], src.[Status], src.[Dated_On],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Payments] AS tgt WHERE tgt.[Payment_Id] = src.[Payment_Id]
+            SELECT 1 FROM [Silver].[Payments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Id] = src.[Payment_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Payments] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Payment_Id] = tgt.[Payment_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Payment_Id] = tgt.[Payment_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

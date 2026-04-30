@@ -11,6 +11,8 @@ CREATE TABLE [Bronze].[Practitioner_Diary](
 	[End_Time] [VARCHAR](255) NULL,
 	[Start_Time] [VARCHAR](255) NULL,
 	[Unavailable] [decimal](18, 4) NULL,
-	[Practitioner_ID] [int] NULL
+	[Practitioner_ID] [int] NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

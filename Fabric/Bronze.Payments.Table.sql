@@ -28,6 +28,8 @@ CREATE TABLE [Bronze].[Payments](
 	[Explanation_Invoice_ID] [decimal](18, 4) NULL,
 	[Explanation_Invoice_Reference] [decimal](18, 4) NULL,
 	[Explanation_Payment_Reference] [decimal](18, 4) NULL,
-	[Explanation_User_ID] [decimal](18, 4) NULL
+	[Explanation_User_ID] [decimal](18, 4) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

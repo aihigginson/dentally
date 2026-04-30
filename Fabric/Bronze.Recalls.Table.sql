@@ -24,6 +24,8 @@ CREATE TABLE [Bronze].[Recalls](
 	[Times_Contacted] [decimal](18, 4) NULL,
 	[Run_Date] [VARCHAR](255) NULL,
 	[Workflow_Stage_ID] [VARCHAR](255) NULL,
-	[Workflow_Status] [VARCHAR](255) NULL
+	[Workflow_Status] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

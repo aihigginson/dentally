@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Fact_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Fact_Treatment_Appointments
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Fact_Treatment_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Treatment_Appointments]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Fact_Treatment_Appointments]
@@ -32,14 +31,15 @@ BEGIN
 
     DROP TABLE IF EXISTS Gold.Fact_Treatment_Appointments;
     CREATE TABLE Gold.Fact_Treatment_Appointments (
-        pk_Treatment_Appointment     INT                 NOT NULL IDENTITY,
+        pk_Treatment_Appointment     BIGINT              NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         bk_Treatment_Appointment_ID  VARCHAR(50)        NOT NULL,   -- Natural key
 
-        fk_Patient                   INT                 NULL,
-        fk_Treatment_Plan            INT                 NULL,
+        fk_Patient                   BIGINT              NULL,
+        fk_Treatment_Plan            BIGINT              NULL,
 
-        fk_Date_Appointment          INT                 NULL,
-        fk_Date_Created              INT                 NULL,
+        fk_Date_Appointment          BIGINT              NULL,
+        fk_Date_Created              BIGINT              NULL,
 
         Appointment_ID               INT                 NULL,
         Treatment_Plan_ID            INT                 NULL,

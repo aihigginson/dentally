@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Accounts]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Accounts
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Accounts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Accounts]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -39,6 +47,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
             Account_ID  AS [Account_Id],
                 -- int → int (direct)
         Patient_ID  AS [Patient_Id],
@@ -63,24 +72,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Accounts] AS tgt
-        INNER JOIN #src AS src ON tgt.[Account_Id] = src.[Account_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Account_Id] = src.[Account_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Accounts] ([Account_Id], [Patient_Id], [Patient_Name], [Current_Balance], [Opening_Balance], [Planned_Nhs_Treatment_Value], [Planned_Private_Treatment_Value],
+        INSERT INTO [Silver].[Accounts] ([Tenant_ID], [Account_Id], [Patient_Id], [Patient_Name], [Current_Balance], [Opening_Balance], [Planned_Nhs_Treatment_Value], [Planned_Private_Treatment_Value],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Account_Id], src.[Patient_Id], src.[Patient_Name], src.[Current_Balance], src.[Opening_Balance], src.[Planned_Nhs_Treatment_Value], src.[Planned_Private_Treatment_Value],
+        SELECT src.[Tenant_ID], src.[Account_Id], src.[Patient_Id], src.[Patient_Name], src.[Current_Balance], src.[Opening_Balance], src.[Planned_Nhs_Treatment_Value], src.[Planned_Private_Treatment_Value],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Accounts] AS tgt WHERE tgt.[Account_Id] = src.[Account_Id]
+            SELECT 1 FROM [Silver].[Accounts] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Account_Id] = src.[Account_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Accounts] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Account_Id] = tgt.[Account_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Account_Id] = tgt.[Account_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

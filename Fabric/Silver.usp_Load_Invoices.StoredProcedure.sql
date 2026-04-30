@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Invoices]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Invoices
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Invoices @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Invoices]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -49,6 +57,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 ID  AS [Id],
                 Account_ID  AS [Account_Id],
                 Patient_ID  AS [Patient_Id],
@@ -97,22 +106,22 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Invoices] AS tgt
-        INNER JOIN #src AS src ON tgt.[Id] = src.[Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Invoices] ([Id], [Account_Id], [Patient_Id], [Site_Id], [User_Id], [Reference], [Amount], [Amount_Outstanding], [Nhs_Amount], [Paid], [Dated_On], [Due_On], [Paid_On], [Payment_Terms], [Footnote], [Sent_At], [Status], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Id], src.[Account_Id], src.[Patient_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Amount], src.[Amount_Outstanding], src.[Nhs_Amount], src.[Paid], src.[Dated_On], src.[Due_On], src.[Paid_On], src.[Payment_Terms], src.[Footnote], src.[Sent_At], src.[Status], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        INSERT INTO [Silver].[Invoices] ([Tenant_ID], [Id], [Account_Id], [Patient_Id], [Site_Id], [User_Id], [Reference], [Amount], [Amount_Outstanding], [Nhs_Amount], [Paid], [Dated_On], [Due_On], [Paid_On], [Payment_Terms], [Footnote], [Sent_At], [Status], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Tenant_ID], src.[Id], src.[Account_Id], src.[Patient_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Amount], src.[Amount_Outstanding], src.[Nhs_Amount], src.[Paid], src.[Dated_On], src.[Due_On], src.[Paid_On], src.[Payment_Terms], src.[Footnote], src.[Sent_At], src.[Status], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Invoices] AS tgt WHERE tgt.[Id] = src.[Id]
+            SELECT 1 FROM [Silver].[Invoices] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Invoices] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Id] = tgt.[Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Id] = tgt.[Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

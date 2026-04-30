@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Fees]
 GO
 CREATE TABLE [Silver].[Fees](
+	[Tenant_ID] [int] NOT NULL,
 	[Fee_Id] [uniqueidentifier] NOT NULL,
 	[Treatment_Id] [int] NULL,
 	[Payment_Plan_Id] [int] NULL,

@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Practice]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Practice
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practice @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Practice]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -45,6 +53,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(Practice_ID, 50)  AS [Practice_Id],
                 Practice_Name  AS [Practice_Name],
                 Email_Address  AS [Email_Address],
@@ -81,24 +90,24 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Practice] AS tgt
-        INNER JOIN #src AS src ON tgt.[Practice_Id] = src.[Practice_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_Id] = src.[Practice_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Practice] ([Practice_Id], [Practice_Name], [Email_Address], [Phone_Number], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Country], [NHS], [Time_Zone], [Website],
+        INSERT INTO [Silver].[Practice] ([Tenant_ID], [Practice_Id], [Practice_Name], [Email_Address], [Phone_Number], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Country], [NHS], [Time_Zone], [Website],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Practice_Id], src.[Practice_Name], src.[Email_Address], src.[Phone_Number], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Country], src.[NHS], src.[Time_Zone], src.[Website],
+        SELECT src.[Tenant_ID], src.[Practice_Id], src.[Practice_Name], src.[Email_Address], src.[Phone_Number], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Country], src.[NHS], src.[Time_Zone], src.[Website],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Practice] AS tgt WHERE tgt.[Practice_Id] = src.[Practice_Id]
+            SELECT 1 FROM [Silver].[Practice] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_Id] = src.[Practice_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Practice] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Practice_Id] = tgt.[Practice_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Practice_Id] = tgt.[Practice_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

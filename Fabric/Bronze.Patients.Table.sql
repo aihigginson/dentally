@@ -54,6 +54,8 @@ CREATE TABLE [Bronze].[Patients](
 	[Use_Email] [decimal](18, 4) NULL,
 	[Use_Sms] [decimal](18, 4) NULL,
 	[Work_Phone] [VARCHAR](255) NULL,
-	[Work_Phone_Country] [VARCHAR](255) NULL
+	[Work_Phone_Country] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

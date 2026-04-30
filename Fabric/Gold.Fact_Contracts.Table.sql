@@ -7,10 +7,11 @@ DROP TABLE IF EXISTS [Gold].[Fact_Contracts]
 GO
 CREATE TABLE [Gold].[Fact_Contracts](
 	[pk_Contract] [bigint] IDENTITY NOT NULL,
+	[Tenant_ID] [int] NOT NULL,
 	[bk_Contract_ID] [VARCHAR](50) NOT NULL,
-	[fk_Practice_Site] [int] NULL,
-	[fk_Date_Start] [int] NULL,
-	[fk_Date_End] [int] NULL,
+	[fk_Practice_Site] [bigint] NULL,
+	[fk_Date_Start] [bigint] NULL,
+	[fk_Date_End] [bigint] NULL,
 	[Contract_Number] [int] NULL,
 	[NHS_Location_ID] [int] NULL,
 	[NHS_Site_ID] [int] NULL,

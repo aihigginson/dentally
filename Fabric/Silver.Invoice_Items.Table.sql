@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Invoice_Items]
 GO
 CREATE TABLE [Silver].[Invoice_Items](
+	[Tenant_ID] [int] NOT NULL,
 	[Id] [VARCHAR](50) NOT NULL,
 	[Invoice_Id] [int] NULL,
 	[Practitioner_Id] [int] NULL,

@@ -36,6 +36,8 @@ CREATE TABLE [Bronze].[Practice](
 	[Slug] [VARCHAR](255) NULL,
 	[Time_Zone] [VARCHAR](255) NULL,
 	[Town] [VARCHAR](255) NULL,
-	[Website] [VARCHAR](255) NULL
+	[Website] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

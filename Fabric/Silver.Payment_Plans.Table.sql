@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Payment_Plans]
 GO
 CREATE TABLE [Silver].[Payment_Plans](
+	[Tenant_ID] [int] NOT NULL,
 	[Payment_Plan_Id] [int] NOT NULL,
 	[Payment_Plan_Site_Id] [VARCHAR](50) NULL,
 	[Payment_Plan_Active] [bit] NULL,

@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Practitioner_Diary_Breaks]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Practitioner_Diary_Breaks
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practitioner_Diary_Breaks @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Practitioner_Diary_Breaks]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -35,6 +43,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(Practitioner_Diary_ID, 255)  AS [Practitioner_Diary_ID],
                 LEFT(Break_Name,            255)  AS [Break_Name],
                 LEFT(Start_Time,            255)  AS [Start_Time],
@@ -52,19 +61,21 @@ BEGIN
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Practitioner_Diary_Breaks] AS tgt
         INNER JOIN #src AS src
-            ON tgt.[Practitioner_Diary_ID] = src.[Practitioner_Diary_ID]
+            ON tgt.[Tenant_ID]             = src.[Tenant_ID]
+           AND tgt.[Practitioner_Diary_ID] = src.[Practitioner_Diary_ID]
            AND tgt.[Start_Time]            = src.[Start_Time]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Practitioner_Diary_Breaks] ([Practitioner_Diary_ID], [Break_Name], [Start_Time], [End_Time],
+        INSERT INTO [Silver].[Practitioner_Diary_Breaks] ([Tenant_ID], [Practitioner_Diary_ID], [Break_Name], [Start_Time], [End_Time],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Practitioner_Diary_ID], src.[Break_Name], src.[Start_Time], src.[End_Time],
+        SELECT src.[Tenant_ID], src.[Practitioner_Diary_ID], src.[Break_Name], src.[Start_Time], src.[End_Time],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Practitioner_Diary_Breaks] AS tgt
-            WHERE tgt.[Practitioner_Diary_ID] = src.[Practitioner_Diary_ID]
+            WHERE tgt.[Tenant_ID]             = src.[Tenant_ID]
+              AND tgt.[Practitioner_Diary_ID] = src.[Practitioner_Diary_ID]
               AND tgt.[Start_Time]            = src.[Start_Time]
         );
         SET @My_Inserts = @@ROWCOUNT;
@@ -73,7 +84,8 @@ BEGIN
         FROM [Silver].[Practitioner_Diary_Breaks] AS tgt
         WHERE NOT EXISTS (
             SELECT 1 FROM #src AS src
-            WHERE src.[Practitioner_Diary_ID] = tgt.[Practitioner_Diary_ID]
+            WHERE src.[Tenant_ID]             = tgt.[Tenant_ID]
+              AND src.[Practitioner_Diary_ID] = tgt.[Practitioner_Diary_ID]
               AND src.[Start_Time]            = tgt.[Start_Time]
         );
         SET @My_Deletes = @@ROWCOUNT;

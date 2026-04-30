@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Payment_Allocations]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Payment_Allocations
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Payment_Allocations @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Payment_Allocations]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -43,6 +51,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Payment_Allocation_Id],
                 TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
                 TRY_CAST(ROUND(CAST(Payment_Explanation_ID AS float), 0) AS int)  AS [Payment_Explanation_Id],
@@ -73,22 +82,22 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Payment_Allocations] AS tgt
-        INNER JOIN #src AS src ON tgt.[Payment_Allocation_Id] = src.[Payment_Allocation_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Allocation_Id] = src.[Payment_Allocation_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Payment_Allocations] ([Payment_Allocation_Id], [Patient_Id], [Payment_Explanation_Id], [Invoice_Item_Id], [Reversal_Of_Id], [Amount], [Description], [Transfer_From_Id], [Transfer_From_Type], [Transfer_To_Id], [Transfer_To_Type], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Payment_Allocation_Id], src.[Patient_Id], src.[Payment_Explanation_Id], src.[Invoice_Item_Id], src.[Reversal_Of_Id], src.[Amount], src.[Description], src.[Transfer_From_Id], src.[Transfer_From_Type], src.[Transfer_To_Id], src.[Transfer_To_Type], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Payment_Allocations] ([Tenant_ID], [Payment_Allocation_Id], [Patient_Id], [Payment_Explanation_Id], [Invoice_Item_Id], [Reversal_Of_Id], [Amount], [Description], [Transfer_From_Id], [Transfer_From_Type], [Transfer_To_Id], [Transfer_To_Type], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Payment_Allocation_Id], src.[Patient_Id], src.[Payment_Explanation_Id], src.[Invoice_Item_Id], src.[Reversal_Of_Id], src.[Amount], src.[Description], src.[Transfer_From_Id], src.[Transfer_From_Type], src.[Transfer_To_Id], src.[Transfer_To_Type], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Payment_Allocations] AS tgt WHERE tgt.[Payment_Allocation_Id] = src.[Payment_Allocation_Id]
+            SELECT 1 FROM [Silver].[Payment_Allocations] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Allocation_Id] = src.[Payment_Allocation_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Payment_Allocations] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Payment_Allocation_Id] = tgt.[Payment_Allocation_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Payment_Allocation_Id] = tgt.[Payment_Allocation_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

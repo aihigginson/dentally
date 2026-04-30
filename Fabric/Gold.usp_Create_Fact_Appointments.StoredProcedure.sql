@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Fact_Appointments
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Fact_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Appointments]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Fact_Appointments]
@@ -32,18 +31,19 @@ BEGIN
 
     DROP TABLE IF EXISTS Gold.Fact_Appointments;
     CREATE TABLE Gold.Fact_Appointments (
-        pk_Appointment              INT                 NOT NULL IDENTITY,
+        pk_Appointment              BIGINT              NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         bk_Appointment_ID           INT                 NOT NULL,   -- Natural key
 
-        fk_Patient                  INT                 NULL,
-        fk_Practitioner             INT                 NULL,
-        fk_Payment_Plan             INT                 NULL,
-        fk_Practice_Site            INT                 NULL,
-        fk_User                     INT                 NULL,
+        fk_Patient                  BIGINT              NULL,
+        fk_Practitioner             BIGINT              NULL,
+        fk_Payment_Plan             BIGINT              NULL,
+        fk_Practice_Site            BIGINT              NULL,
+        fk_User                     BIGINT              NULL,
 
-        fk_Date_Start               INT                 NULL,
-        fk_Date_Pending             INT                 NULL,
-        fk_Date_Created             INT                 NULL,
+        fk_Date_Start               BIGINT              NULL,
+        fk_Date_Pending             BIGINT              NULL,
+        fk_Date_Created             BIGINT              NULL,
 
         Room_ID                     VARCHAR(50)        NULL,
         State                       VARCHAR(50)        NULL,

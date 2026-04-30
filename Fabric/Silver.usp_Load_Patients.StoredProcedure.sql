@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Patients
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -83,6 +91,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                    Tenant_ID  AS [Tenant_ID],
                     TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)    AS Patient_Id,
                     TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)    AS Account_Id,
                     LEFT(Site_ID, 50)                                        AS Site_Id,
@@ -213,24 +222,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Patients] AS tgt
-        INNER JOIN #src AS src ON tgt.[Patient_Id] = src.[Patient_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Patient_Id] = src.[Patient_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Patients] ([Patient_Id], [Account_Id], [Site_Id], [Active], [Title], [First_Name], [Middle_Name], [Last_Name], [Preferred_Name], [Preferred_Phone_Number], [Date_Of_Birth], [Gender], [Ethnicity], [NHS_Number], [NI_Number], [PPS_Number], [Email_Address], [Mobile_Phone], [Mobile_Phone_Country], [Home_Phone], [Home_Phone_Country], [Work_Phone], [Work_Phone_Country], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Custom_Field_1], [Custom_Field_2], [Status], [Recalls], [Medical_Alert], [Medical_Alert_Text], [Sms_Communication], [Email_Communication], [Marketing_Opt_In], [Dentist_Practitioner_Id], [Hygienist_Practitioner_Id], [Payment_Plan_Id], [Acquisition_Source_Id], [Archived_Reason], [Consent_To_Share_Accounts], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Family_Id], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Patients] ([Tenant_ID], [Patient_Id], [Account_Id], [Site_Id], [Active], [Title], [First_Name], [Middle_Name], [Last_Name], [Preferred_Name], [Preferred_Phone_Number], [Date_Of_Birth], [Gender], [Ethnicity], [NHS_Number], [NI_Number], [PPS_Number], [Email_Address], [Mobile_Phone], [Mobile_Phone_Country], [Home_Phone], [Home_Phone_Country], [Work_Phone], [Work_Phone_Country], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Custom_Field_1], [Custom_Field_2], [Status], [Recalls], [Medical_Alert], [Medical_Alert_Text], [Sms_Communication], [Email_Communication], [Marketing_Opt_In], [Dentist_Practitioner_Id], [Hygienist_Practitioner_Id], [Payment_Plan_Id], [Acquisition_Source_Id], [Archived_Reason], [Consent_To_Share_Accounts], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Family_Id], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Patient_Id], src.[Account_Id], src.[Site_Id], src.[Active], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Preferred_Name], src.[Preferred_Phone_Number], src.[Date_Of_Birth], src.[Gender], src.[Ethnicity], src.[NHS_Number], src.[NI_Number], src.[PPS_Number], src.[Email_Address], src.[Mobile_Phone], src.[Mobile_Phone_Country], src.[Home_Phone], src.[Home_Phone_Country], src.[Work_Phone], src.[Work_Phone_Country], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Custom_Field_1], src.[Custom_Field_2], src.[Status], src.[Recalls], src.[Medical_Alert], src.[Medical_Alert_Text], src.[Sms_Communication], src.[Email_Communication], src.[Marketing_Opt_In], src.[Dentist_Practitioner_Id], src.[Hygienist_Practitioner_Id], src.[Payment_Plan_Id], src.[Acquisition_Source_Id], src.[Archived_Reason], src.[Consent_To_Share_Accounts], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Family_Id], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Patient_Id], src.[Account_Id], src.[Site_Id], src.[Active], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Preferred_Name], src.[Preferred_Phone_Number], src.[Date_Of_Birth], src.[Gender], src.[Ethnicity], src.[NHS_Number], src.[NI_Number], src.[PPS_Number], src.[Email_Address], src.[Mobile_Phone], src.[Mobile_Phone_Country], src.[Home_Phone], src.[Home_Phone_Country], src.[Work_Phone], src.[Work_Phone_Country], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Custom_Field_1], src.[Custom_Field_2], src.[Status], src.[Recalls], src.[Medical_Alert], src.[Medical_Alert_Text], src.[Sms_Communication], src.[Email_Communication], src.[Marketing_Opt_In], src.[Dentist_Practitioner_Id], src.[Hygienist_Practitioner_Id], src.[Payment_Plan_Id], src.[Acquisition_Source_Id], src.[Archived_Reason], src.[Consent_To_Share_Accounts], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Family_Id], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Patients] AS tgt WHERE tgt.[Patient_Id] = src.[Patient_Id]
+            SELECT 1 FROM [Silver].[Patients] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Patient_Id] = src.[Patient_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Patients] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Patient_Id] = tgt.[Patient_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Patient_Id] = tgt.[Patient_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Dim_Practice_Sites
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Dim_Practice_Sites
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Practice_Sites]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Dim_Practice_Sites]
@@ -33,7 +32,8 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Dim_Practice_Sites;
 
     CREATE TABLE Gold.Dim_Practice_Sites (
-        pk_Practice_Site              INT             NOT NULL IDENTITY,
+        pk_Practice_Site              BIGINT          NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         Site_ID                       VARCHAR(50)    NOT NULL,
         Site_Name                     VARCHAR(255)   NULL,
         Site_Active                   BIT             NULL,

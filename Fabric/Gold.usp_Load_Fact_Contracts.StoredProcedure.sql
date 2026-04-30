@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Contracts
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            c.Tenant_ID                                                 AS Tenant_ID,
             c.Id                                                        AS bk_Contract_ID,
             dps.pk_Practice_Site                                        AS fk_Practice_Site,
             dd_s.pk_Date                                                AS fk_Date_Start,
@@ -45,7 +54,7 @@ BEGIN
             CAST(ISNULL(c.Uoa_Value,0) AS DECIMAL(12,4))                AS UOA_Value
         INTO #src
         FROM Silver.Contracts c
-        LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = NULLIF(TRIM(c.Site_Id),'')
+        LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = NULLIF(TRIM(c.Site_Id),'') AND dps.Tenant_ID = c.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s          ON dd_s.Full_Date = CAST(c.Start_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_e          ON dd_e.Full_Date = CAST(c.End_Date AS DATE)
         WHERE c.Id IS NOT NULL;
@@ -53,7 +62,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Contracts tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Contract_ID = tgt.bk_Contract_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Contract_ID = tgt.bk_Contract_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -74,7 +83,7 @@ BEGIN
             UOA_Value        = src.UOA_Value,
             DW_Updated_At    = SYSUTCDATETIME()
         FROM Gold.Fact_Contracts tgt
-        INNER JOIN #src src ON tgt.bk_Contract_ID = src.bk_Contract_ID
+        INNER JOIN #src src ON tgt.bk_Contract_ID = src.bk_Contract_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Practice_Site] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Start] AS VARCHAR(500)), ''),
@@ -111,6 +120,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Contracts (
+            Tenant_ID,
             bk_Contract_ID,
             fk_Practice_Site, fk_Date_Start, fk_Date_End,
             Contract_Number, NHS_Location_ID, NHS_Site_ID, Site_ID,
@@ -119,6 +129,7 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Contract_ID,
             src.fk_Practice_Site, src.fk_Date_Start, src.fk_Date_End,
             src.Contract_Number, src.NHS_Location_ID, src.NHS_Site_ID, src.Site_ID,
@@ -126,7 +137,7 @@ BEGIN
             src.UDA_Target, src.UDA_Value, src.UOA_Target, src.UOA_Value,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Contracts tgt WHERE tgt.bk_Contract_ID = src.bk_Contract_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Contracts tgt WHERE tgt.bk_Contract_ID = src.bk_Contract_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

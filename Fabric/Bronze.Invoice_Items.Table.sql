@@ -19,6 +19,8 @@ CREATE TABLE [Bronze].[Invoice_Items](
 	[Sundry_ID] [VARCHAR](255) NULL,
 	[Treatment_Plan_ID] [int] NULL,
 	[Treatment_Plan_Item_ID] [int] NULL,
-	[User_ID] [int] NULL
+	[User_ID] [int] NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS [Gold].[Dim_Practitioners]
 GO
 CREATE TABLE [Gold].[Dim_Practitioners](
 	[pk_Practitioner] [bigint] IDENTITY NOT NULL,
+	[Tenant_ID] [int] NOT NULL,
 	[Practitioner_ID] [int] NOT NULL,
 	[User_ID] [int] NULL,
 	[Title] [VARCHAR](50) NULL,

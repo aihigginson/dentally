@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Fact_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Fact_Invoice_Items
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Fact_Invoice_Items
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Invoice_Items]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Fact_Invoice_Items]
@@ -33,21 +32,22 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Fact_Invoice_Items;
 
       CREATE TABLE Gold.Fact_Invoice_Items (
-        pk_Invoice_Item             INT                 NOT NULL IDENTITY,
+        pk_Invoice_Item             BIGINT              NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         bk_Invoice_Item_ID          VARCHAR(50)        NOT NULL,   -- Natural key
 
-        fk_Patient                  INT                 NULL,
-        fk_Practitioner             INT                 NULL,
-        fk_Payment_Plan             INT                 NULL,
-        fk_Treatment_Plan           INT                 NULL,
-        fk_Account                  INT                 NULL,
-        fk_Practice_Site            INT                 NULL,
-        fk_User                     INT                 NULL,
+        fk_Patient                  BIGINT              NULL,
+        fk_Practitioner             BIGINT              NULL,
+        fk_Payment_Plan             BIGINT              NULL,
+        fk_Treatment_Plan           BIGINT              NULL,
+        fk_Account                  BIGINT              NULL,
+        fk_Practice_Site            BIGINT              NULL,
+        fk_User                     BIGINT              NULL,
 
-        fk_Date_Invoice             INT                 NULL,
-        fk_Date_Due                 INT                 NULL,
-        fk_Date_Paid                INT                 NULL,
-        fk_Date_Created             INT                 NULL,
+        fk_Date_Invoice             BIGINT              NULL,
+        fk_Date_Due                 BIGINT              NULL,
+        fk_Date_Paid                BIGINT              NULL,
+        fk_Date_Created             BIGINT              NULL,
 
         Invoice_ID                  INT                 NULL,
         Treatment_Plan_Item_ID      VARCHAR(50)        NULL,

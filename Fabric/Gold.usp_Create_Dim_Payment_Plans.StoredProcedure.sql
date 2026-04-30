@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Dim_Payment_Plans
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Dim_Payment_Plans
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Payment_Plans]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Dim_Payment_Plans]
@@ -34,7 +33,8 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Dim_Payment_Plans;
 
     CREATE TABLE Gold.Dim_Payment_Plans (
-        pk_Payment_Plan        INT             NOT NULL IDENTITY,
+        pk_Payment_Plan        BIGINT          NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         Payment_Plan_ID        INT             NOT NULL,
         Payment_Plan_Name      VARCHAR(255)   NULL,
         Patient_Friendly_Name  VARCHAR(255)   NULL,

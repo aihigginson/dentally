@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Sundries]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Sundries
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Sundries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Sundries]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -37,6 +45,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 TRY_CAST(ID AS int)  AS [Sundry_Id],
                 LEFT(Site_ID, 50)  AS [Site_Id],
                 Name  AS [Name],
@@ -57,22 +66,22 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Sundries] AS tgt
-        INNER JOIN #src AS src ON tgt.[Sundry_Id] = src.[Sundry_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_Id] = src.[Sundry_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Sundries] ([Sundry_Id], [Site_Id], [Name], [Price], [Active], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Sundry_Id], src.[Site_Id], src.[Name], src.[Price], src.[Active], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Sundries] ([Tenant_ID], [Sundry_Id], [Site_Id], [Name], [Price], [Active], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Sundry_Id], src.[Site_Id], src.[Name], src.[Price], src.[Active], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Sundries] AS tgt WHERE tgt.[Sundry_Id] = src.[Sundry_Id]
+            SELECT 1 FROM [Silver].[Sundries] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_Id] = src.[Sundry_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Sundries] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Sundry_Id] = tgt.[Sundry_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Sundry_Id] = tgt.[Sundry_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

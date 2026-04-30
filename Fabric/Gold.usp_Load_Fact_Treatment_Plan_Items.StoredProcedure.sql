@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Treatment_Plan_Items
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            tpi.Tenant_ID                                                   AS Tenant_ID,
             TRY_CAST(tpi.Id AS INT)                                         AS bk_Treatment_Plan_Item_ID,
             dp.pk_Treatment_Plan                                            AS fk_Treatment_Plan,
             dpat.pk_Patient                                                 AS fk_Patient,
@@ -55,11 +64,11 @@ BEGIN
             CAST(tpi.Duration AS INT)                                       AS Duration_Mins
         INTO #src
         FROM Silver.Treatment_Plan_Items tpi
-        LEFT JOIN Gold.Dim_Treatment_Plans dp   ON dp.Treatment_Plan_ID  = TRY_CAST(tpi.Treatment_Plan_Id AS INT)
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID       = TRY_CAST(tpi.Patient_Id AS INT)
-        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID   = TRY_CAST(tpi.Practitioner_Id AS INT)
-        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID   = TRY_CAST(tpi.Payment_Plan_Id AS INT)
-        LEFT JOIN Gold.Dim_Treatments dt        ON dt.Treatment_ID       = TRY_CAST(tpi.Treatment_Id AS INT)
+        LEFT JOIN Gold.Dim_Treatment_Plans dp   ON dp.Treatment_Plan_ID  = TRY_CAST(tpi.Treatment_Plan_Id AS INT) AND dp.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID       = TRY_CAST(tpi.Patient_Id AS INT)        AND dpat.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID   = TRY_CAST(tpi.Practitioner_Id AS INT)   AND dpr.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID   = TRY_CAST(tpi.Payment_Plan_Id AS INT)   AND dpp.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatments dt        ON dt.Treatment_ID       = TRY_CAST(tpi.Treatment_Id AS INT)      AND dt.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Created_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_comp         ON dd_comp.Full_Date     = TRY_CAST(NULLIF(TRIM(tpi.Completed_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_u            ON dd_u.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Updated_At),'') AS DATE)
@@ -68,7 +77,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Treatment_Plan_Items tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Treatment_Plan_Item_ID = tgt.bk_Treatment_Plan_Item_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Treatment_Plan_Item_ID = tgt.bk_Treatment_Plan_Item_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -96,7 +105,7 @@ BEGIN
             Duration_Mins            = src.Duration_Mins,
             DW_Updated_At            = SYSUTCDATETIME()
         FROM Gold.Fact_Treatment_Plan_Items tgt
-        INNER JOIN #src src ON tgt.bk_Treatment_Plan_Item_ID = src.bk_Treatment_Plan_Item_ID
+        INNER JOIN #src src ON tgt.bk_Treatment_Plan_Item_ID = src.bk_Treatment_Plan_Item_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Treatment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Patient] AS VARCHAR(500)), ''),
@@ -147,6 +156,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Treatment_Plan_Items (
+            Tenant_ID,
             bk_Treatment_Plan_Item_ID,
             fk_Treatment_Plan, fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Treatment,
             fk_Date_Created, fk_Date_Completed, fk_Date_Updated,
@@ -156,6 +166,7 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Treatment_Plan_Item_ID,
             src.fk_Treatment_Plan, src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Treatment,
             src.fk_Date_Created, src.fk_Date_Completed, src.fk_Date_Updated,
@@ -164,7 +175,7 @@ BEGIN
             src.Position, src.Base_Chart, src.Completed, src.Charged, src.Appear_On_Invoice, src.Price, src.Duration_Mins,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Plan_Items tgt WHERE tgt.bk_Treatment_Plan_Item_ID = src.bk_Treatment_Plan_Item_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Plan_Items tgt WHERE tgt.bk_Treatment_Plan_Item_ID = src.bk_Treatment_Plan_Item_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

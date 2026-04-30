@@ -22,6 +22,8 @@ CREATE TABLE [Bronze].[Invoices](
 	[Account_ID] [int] NULL,
 	[Patient_ID] [int] NULL,
 	[Site_ID] [VARCHAR](255) NULL,
-	[User_ID] [int] NULL
+	[User_ID] [int] NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

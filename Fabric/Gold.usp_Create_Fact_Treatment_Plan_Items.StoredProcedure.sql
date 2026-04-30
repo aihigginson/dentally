@@ -1,11 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-------------------------------------------------------------
--- Gold.usp_Create_Fact_Treatment_Plan_Items
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Fact_Treatment_Plan_Items
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Treatment_Plan_Items]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Fact_Treatment_Plan_Items]
@@ -31,18 +31,19 @@ BEGIN
 
     DROP TABLE IF EXISTS Gold.Fact_Treatment_Plan_Items;
     CREATE TABLE Gold.Fact_Treatment_Plan_Items (
-        pk_Treatment_Plan_Item      INT                 NOT NULL IDENTITY,
+        pk_Treatment_Plan_Item      BIGINT              NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         bk_Treatment_Plan_Item_ID   VARCHAR(50)        NOT NULL,   -- Natural key
 
-        fk_Treatment_Plan           INT                 NULL,
-        fk_Patient                  INT                 NULL,
-        fk_Practitioner             INT                 NULL,
-        fk_Payment_Plan             INT                 NULL,
-        fk_Treatment                INT                 NULL,
+        fk_Treatment_Plan           BIGINT              NULL,
+        fk_Patient                  BIGINT              NULL,
+        fk_Practitioner             BIGINT              NULL,
+        fk_Payment_Plan             BIGINT              NULL,
+        fk_Treatment                BIGINT              NULL,
 
-        fk_Date_Created             INT                 NULL,
-        fk_Date_Completed           INT                 NULL,
-        fk_Date_Updated             INT                 NULL,
+        fk_Date_Created             BIGINT              NULL,
+        fk_Date_Completed           BIGINT              NULL,
+        fk_Date_Updated             BIGINT              NULL,
 
         Treatment_Plan_ID           INT                 NULL,
         Invoice_ID                  INT                 NULL,

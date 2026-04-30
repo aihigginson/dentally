@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Recalls
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            r.Tenant_ID                                                     AS Tenant_ID,
             r.Id                                                            AS bk_Recall_ID,
             dpat.pk_Patient                                                 AS fk_Patient,
             dd_due.pk_Date                                                  AS fk_Date_Due,
@@ -52,7 +61,7 @@ BEGIN
             END                                                             AS Days_Overdue
         INTO #src
         FROM Silver.Recalls r
-        LEFT JOIN Gold.Dim_Patients dpat  ON dpat.Patient_ID  = CAST(r.Patient_Id AS INT)
+        LEFT JOIN Gold.Dim_Patients dpat  ON dpat.Patient_ID  = CAST(r.Patient_Id AS INT) AND dpat.Tenant_ID = r.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_due    ON dd_due.Full_Date = CAST(r.Due_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_run    ON dd_run.Full_Date = TRY_CAST(r.Run_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_fr     ON dd_fr.Full_Date  = TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE)
@@ -63,7 +72,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Recalls tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Recall_ID = tgt.bk_Recall_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Recall_ID = tgt.bk_Recall_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -89,7 +98,7 @@ BEGIN
             Days_Overdue             = src.Days_Overdue,
             DW_Updated_At            = SYSUTCDATETIME()
         FROM Gold.Fact_Recalls tgt
-        INNER JOIN #src src ON tgt.bk_Recall_ID = src.bk_Recall_ID
+        INNER JOIN #src src ON tgt.bk_Recall_ID = src.bk_Recall_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Patient] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Due] AS VARCHAR(500)), ''),
@@ -136,6 +145,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Recalls (
+            Tenant_ID,
             bk_Recall_ID,
             fk_Patient, fk_Date_Due, fk_Date_Run,
             fk_Date_First_Reminder, fk_Date_Second_Reminder, fk_Date_Last_Reminded,
@@ -145,6 +155,7 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Recall_ID,
             src.fk_Patient, src.fk_Date_Due, src.fk_Date_Run,
             src.fk_Date_First_Reminder, src.fk_Date_Second_Reminder, src.fk_Date_Last_Reminded,
@@ -153,7 +164,7 @@ BEGIN
             src.Times_Contacted, src.Due_Date, src.Run_Date, src.Days_Overdue,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Recalls tgt WHERE tgt.bk_Recall_ID = src.bk_Recall_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Recalls tgt WHERE tgt.bk_Recall_ID = src.bk_Recall_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

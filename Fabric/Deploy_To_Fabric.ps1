@@ -32,14 +32,14 @@ $Groups = [ordered]@{
 
     '1. Schemas' = @(
         'Audit.Schema.sql'
+        'Stage.Schema.sql'
         'Bronze.Schema.sql'
         'Silver.Schema.sql'
         'Gold.Schema.sql'
         'Meta.Schema.sql'
         'PBI.Schema.sql'
         'dentally.Schema.sql'
-        'X.Schema.sql'
-        'Y.Schema.sql'
+        'Security.Schema.sql'
     )
 
     '2. Audit tables' = @(
@@ -55,9 +55,21 @@ $Groups = [ordered]@{
         'Audit.Record_Count_Log.Table.sql'
         'Audit.Meta_Table_Profile.Table.sql'
         'Audit.Meta_Column_Profile.Table.sql'
+        'Audit.Tenants.Table.sql'
     )
 
-    '3. Audit functions & procedures' = @(
+    '2b. Security tables' = @(
+        'Security.Application_Users.Table.sql'
+    )
+
+    '3. Audit seed data' = @(
+        'Audit.Process_Category.Data.sql'
+        'Audit.Process_Type.Data.sql'
+        'Audit.Process_Config.Data.sql'
+        'Audit.Tenants.Data.sql'
+    )
+
+    '4. Audit functions & procedures' = @(
         'Audit.ETL_Error_Handler.UserDefinedFunction.sql'
         'Audit.ETL_Start_Run.StoredProcedure.sql'
         'Audit.ETL_Finish_Run.StoredProcedure.sql'
@@ -68,7 +80,7 @@ $Groups = [ordered]@{
         'Audit.Meta_Refresh_Record_Count.StoredProcedure.sql'
     )
 
-    '4. Audit views' = @(
+    '5. Audit views' = @(
         'Audit.v_24Hr_Processes.View.sql'
         'Audit.v_48Hr_Processes.View.sql'
         'Audit.v_Custom_Messages.View.sql'
@@ -81,11 +93,11 @@ $Groups = [ordered]@{
         'Audit.v_Warn_Messages.View.sql'
     )
 
-    '5. dbo functions' = @(
+    '6. dbo functions' = @(
         'dbo.CapitaliseSnakeCase.UserDefinedFunction.sql'
     )
 
-    '6. Bronze tables' = @(
+    '7. Bronze tables' = @(
         'Bronze.Accounts.Table.sql'
         'Bronze.Acquisition_Sources.Table.sql'
         'Bronze.Appointments.Table.sql'
@@ -119,7 +131,42 @@ $Groups = [ordered]@{
         'Bronze.Waiting_Lists.Table.sql'
     )
 
-    '7. Silver tables' = @(
+    '8. Stage views' = @(
+        'Stage.Views.sql'
+    )
+
+    '9. Bronze procedures' = @(
+        'Bronze.usp_Load_Practice.StoredProcedure.sql'
+        'Bronze.usp_Load_Sites.StoredProcedure.sql'
+        'Bronze.usp_Load_Users.StoredProcedure.sql'
+        'Bronze.usp_Load_Practitioners.StoredProcedure.sql'
+        'Bronze.usp_Load_Payment_Plans.StoredProcedure.sql'
+        'Bronze.usp_Load_Treatments.StoredProcedure.sql'
+        'Bronze.usp_Load_Patients.StoredProcedure.sql'
+        'Bronze.usp_Load_Accounts.StoredProcedure.sql'
+        'Bronze.usp_Load_Appointments.StoredProcedure.sql'
+        'Bronze.usp_Load_Invoices.StoredProcedure.sql'
+        'Bronze.usp_Load_Invoice_Items.StoredProcedure.sql'
+        'Bronze.usp_Load_Payments.StoredProcedure.sql'
+        'Bronze.usp_Load_Treatment_Plans.StoredProcedure.sql'
+        'Bronze.usp_Load_Treatment_Plan_Items.StoredProcedure.sql'
+        'Bronze.usp_Load_Recalls.StoredProcedure.sql'
+        'Bronze.usp_Load_Practitioner_Diary_Entries.StoredProcedure.sql'
+        'Bronze.usp_Load_Treatment_Categories.StoredProcedure.sql'
+        'Bronze.usp_Load_Acquisition_Sources.StoredProcedure.sql'
+        'Bronze.usp_Load_Sundries.StoredProcedure.sql'
+        'Bronze.usp_Load_Contracts.StoredProcedure.sql'
+        'Bronze.usp_Load_Fees.StoredProcedure.sql'
+        'Bronze.usp_Load_Practitioner_Diary_Breaks.StoredProcedure.sql'
+        'Bronze.usp_Load_NHS_Claims.StoredProcedure.sql'
+        'Bronze.usp_Load_Patient_Stats.StoredProcedure.sql'
+        'Bronze.usp_Load_Payment_Allocations.StoredProcedure.sql'
+        'Bronze.usp_Load_Payment_Explanations.StoredProcedure.sql'
+        'Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql'
+        'Bronze.usp_Load_All.StoredProcedure.sql'
+    )
+
+    '10. Silver tables' = @(
         'Silver.Accounts.Table.sql'
         'Silver.Acquisition_Sources.Table.sql'
         'Silver.Appointment_Cancellation_Reasons.Table.sql'
@@ -154,7 +201,7 @@ $Groups = [ordered]@{
         'Silver.Waiting_List_Entries.Table.sql'
     )
 
-    '8. Gold tables & functions' = @(
+    '11. Gold tables & functions' = @(
         'Gold.Dim_Accounts.Table.sql'
         'Gold.Dim_Date.Table.sql'
         'Gold.Dim_Patients.Table.sql'
@@ -172,9 +219,10 @@ $Groups = [ordered]@{
         'Gold.Fact_Treatment_Appointments.Table.sql'
         'Gold.Fact_Treatment_Plan_Items.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
+        'Gold.Dim_Tenants.Table.sql'
     )
 
-    '9. Silver procedures' = @(
+    '12. Silver procedures' = @(
         'Silver.usp_Load_Accounts.StoredProcedure.sql'
         'Silver.usp_Load_Acquisition_Sources.StoredProcedure.sql'
         'Silver.usp_Load_Appointments.StoredProcedure.sql'
@@ -204,7 +252,7 @@ $Groups = [ordered]@{
         'Silver.usp_Load_Users.StoredProcedure.sql'
     )
 
-    '10. Gold usp_Create procedures' = @(
+    '13. Gold usp_Create procedures' = @(
         'Gold.usp_Create_Dim_Accounts.StoredProcedure.sql'
         'Gold.usp_Create_Dim_Patients.StoredProcedure.sql'
         'Gold.usp_Create_Dim_Payment_Plans.StoredProcedure.sql'
@@ -220,9 +268,10 @@ $Groups = [ordered]@{
         'Gold.usp_Create_Fact_Recalls.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Treatment_Plan_Items.StoredProcedure.sql'
+        'Gold.usp_Create_Dim_Tenants.StoredProcedure.sql'
     )
 
-    '11. Gold usp_Load procedures' = @(
+    '14. Gold usp_Load procedures' = @(
         'Gold.usp_Load_Dim_Accounts.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Date.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Patients.StoredProcedure.sql'
@@ -239,13 +288,14 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Recalls.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
     )
 
-    '12. Meta procedures' = @(
+    '15. Meta procedures' = @(
         'Meta.usp_Create_Gold_Views.StoredProcedure.sql'
     )
 
-    '13. PBI views' = @(
+    '16. PBI views' = @(
         'PBI._Appointments.View.sql'
         'PBI._Contracts.View.sql'
         'PBI._Invoice Items.View.sql'

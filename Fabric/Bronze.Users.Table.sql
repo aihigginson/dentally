@@ -20,6 +20,8 @@ CREATE TABLE [Bronze].[Users](
 	[Role] [VARCHAR](255) NULL,
 	[Site_ID] [VARCHAR](255) NULL,
 	[Title] [VARCHAR](255) NULL,
-	[Updated_At] [VARCHAR](255) NULL
+	[Updated_At] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

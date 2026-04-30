@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Dim_Patients
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            p.Tenant_ID AS Tenant_ID,
             CAST(p.Patient_Id AS INT)                                                               AS Patient_ID,
             CAST(p.Account_Id AS INT)                                                               AS Account_ID,
             NULLIF(TRIM(p.Title), '')                                                               AS Title,
@@ -93,13 +102,13 @@ BEGIN
             TRY_CAST(p.Updated_At AS DATE)                                                          AS Patient_Updated_Date
         INTO #src
         FROM Silver.Patients p
-        LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_Id = p.Patient_Id
+        LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_Id = p.Patient_Id AND ps.Tenant_ID = p.Tenant_ID
         WHERE p.Patient_Id IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Patients tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Patient_ID = tgt.Patient_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Patient_ID = tgt.Patient_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -153,7 +162,7 @@ BEGIN
             Patient_Updated_Date                = src.Patient_Updated_Date,
             DW_Updated_At                       = SYSUTCDATETIME()
         FROM Gold.Dim_Patients tgt
-        INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID
+        INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Account_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Title] AS VARCHAR(500)), ''),
@@ -256,7 +265,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Dim_Patients (
-            Patient_ID, Account_ID, Title, First_Name, Middle_Name, Last_Name, Preferred_Name, Full_Name,
+            Tenant_ID, Patient_ID, Account_ID, Title, First_Name, Middle_Name, Last_Name, Preferred_Name, Full_Name,
             Date_Of_Birth, Age_Years, Gender_Description, Ethnicity_Code,
             NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone,
             Address_Line_1, Address_Line_2, Town, County, Postcode,
@@ -273,7 +282,7 @@ BEGIN
             Patient_Created_Date, Patient_Updated_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
-            src.Patient_ID, src.Account_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name,
+            src.Tenant_ID, src.Patient_ID, src.Account_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name,
             src.Preferred_Name, src.Full_Name, src.Date_Of_Birth, src.Age_Years,
             src.Gender_Description, src.Ethnicity_Code, src.NHS_Number, src.NI_Number, src.Email_Address,
             src.Home_Phone, src.Mobile_Phone, src.Work_Phone,
@@ -290,7 +299,7 @@ BEGIN
             src.Total_Paid, src.Total_Invoiced, src.NHS_Exemption_Code,
             src.Patient_Created_Date, src.Patient_Updated_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

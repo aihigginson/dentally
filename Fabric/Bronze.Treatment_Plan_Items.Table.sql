@@ -30,6 +30,8 @@ CREATE TABLE [Bronze].[Treatment_Plan_Items](
 	[Referrer_ID] [decimal](18, 4) NULL,
 	[Treatment_Appointment_ID] [VARCHAR](255) NULL,
 	[Treatment_ID] [decimal](18, 4) NULL,
-	[Treatment_Plan_ID] [VARCHAR](255) NULL
+	[Treatment_Plan_ID] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

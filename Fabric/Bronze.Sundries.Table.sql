@@ -10,6 +10,8 @@ CREATE TABLE [Bronze].[Sundries](
 	[Name] [VARCHAR](255) NULL,
 	[Nickname] [VARCHAR](255) NULL,
 	[Price] [decimal](18, 4) NULL,
-	[Site_ID] [VARCHAR](255) NULL
+	[Site_ID] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

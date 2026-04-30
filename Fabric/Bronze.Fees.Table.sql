@@ -19,6 +19,8 @@ CREATE TABLE [Bronze].[Fees](
 	[Price_Two] [VARCHAR](255) NULL,
 	[Price_Three] [VARCHAR](255) NULL,
 	[Price_Four] [VARCHAR](255) NULL,
-	[Price_Five] [VARCHAR](255) NULL
+	[Price_Five] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

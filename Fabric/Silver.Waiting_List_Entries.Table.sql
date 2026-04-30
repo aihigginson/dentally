@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Waiting_List_Entries]
 GO
 CREATE TABLE [Silver].[Waiting_List_Entries](
+	[Tenant_ID] [int] NOT NULL,
 	[Waiting_List_Entry_Id] [VARCHAR](50) NOT NULL,
 	[Patient_Id] [int] NULL,
 	[Practitioner_Id] [int] NULL,

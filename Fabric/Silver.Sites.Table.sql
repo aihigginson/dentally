@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Sites]
 GO
 CREATE TABLE [Silver].[Sites](
+	[Tenant_ID] [int] NOT NULL,
 	[Site_Id] [VARCHAR](50) NOT NULL,
 	[Practice_Id] [VARCHAR](50) NOT NULL,
 	[Name] [VARCHAR](255) NULL,

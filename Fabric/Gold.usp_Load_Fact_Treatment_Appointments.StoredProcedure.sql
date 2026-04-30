@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Fact_Treatment_Appointments
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            ta.Tenant_ID                                                AS Tenant_ID,
             ta.Id                                                       AS bk_Treatment_Appointment_ID,
             dpat.pk_Patient                                             AS fk_Patient,
             dtp.pk_Treatment_Plan                                       AS fk_Treatment_Plan,
@@ -41,8 +50,8 @@ BEGIN
             CAST(NULL AS datetime2(3))                                  AS Updated_At
         INTO #src
         FROM Silver.Treatment_Appointments ta
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID        = ta.Patient_Id
-        LEFT JOIN Gold.Dim_Treatment_Plans dtp  ON dtp.Treatment_Plan_ID  = ta.Treatment_Plan_Id
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID        = ta.Patient_Id        AND dpat.Tenant_ID = ta.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatment_Plans dtp  ON dtp.Treatment_Plan_ID  = ta.Treatment_Plan_Id AND dtp.Tenant_ID = ta.Tenant_ID
         LEFT JOIN Silver.Appointments ba        ON ba.Appointment_Id      = ta.Appointment_Id
         LEFT JOIN Gold.Dim_Date dd_a            ON dd_a.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
@@ -51,7 +60,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Fact_Treatment_Appointments tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Treatment_Appointment_ID = tgt.bk_Treatment_Appointment_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Treatment_Appointment_ID = tgt.bk_Treatment_Appointment_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -68,7 +77,7 @@ BEGIN
             Updated_At              = src.Updated_At,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Treatment_Appointments tgt
-        INNER JOIN #src src ON tgt.bk_Treatment_Appointment_ID = src.bk_Treatment_Appointment_ID
+        INNER JOIN #src src ON tgt.bk_Treatment_Appointment_ID = src.bk_Treatment_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Patient] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Treatment_Plan] AS VARCHAR(500)), ''),
@@ -97,6 +106,7 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Treatment_Appointments (
+            Tenant_ID,
             bk_Treatment_Appointment_ID,
             fk_Patient, fk_Treatment_Plan,
             fk_Date_Appointment, fk_Date_Created,
@@ -104,13 +114,14 @@ BEGIN
             Created_At, Updated_At, DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.bk_Treatment_Appointment_ID,
             src.fk_Patient, src.fk_Treatment_Plan,
             src.fk_Date_Appointment, src.fk_Date_Created,
             src.Appointment_ID, src.Treatment_Plan_ID, src.Position, src.Bookable, src.Notes,
             src.Created_At, src.Updated_At, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Appointments tgt WHERE tgt.bk_Treatment_Appointment_ID = src.bk_Treatment_Appointment_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Appointments tgt WHERE tgt.bk_Treatment_Appointment_ID = src.bk_Treatment_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

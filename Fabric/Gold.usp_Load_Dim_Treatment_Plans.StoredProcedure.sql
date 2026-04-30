@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Load_Dim_Treatment_Plans
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -27,6 +35,7 @@ BEGIN
         --*********************************
 
         SELECT
+            Tenant_ID                                                           AS Tenant_ID,
             CAST(Id AS INT)                                                     AS Treatment_Plan_ID,
             NULLIF(TRIM(Nickname),'')                                           AS Nickname,
             CAST(Patient_Id AS INT)                                             AS Patient_ID,
@@ -48,7 +57,7 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Treatment_Plans tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_Plan_ID = tgt.Treatment_Plan_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_Plan_ID = tgt.Treatment_Plan_ID AND Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -67,7 +76,7 @@ BEGIN
             Updated_Date            = src.Updated_Date,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Dim_Treatment_Plans tgt
-        INNER JOIN #src src ON tgt.Treatment_Plan_ID = src.Treatment_Plan_ID
+        INNER JOIN #src src ON tgt.Treatment_Plan_ID = src.Treatment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Nickname] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Patient_ID] AS VARCHAR(500)), ''),
@@ -100,18 +109,20 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Dim_Treatment_Plans (
+            Tenant_ID,
             Treatment_Plan_ID, Nickname, Patient_ID, Practitioner_ID, Completed,
             Start_Date, End_Date, Completed_Date, Last_Completed_Date,
             NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value,
             Created_Date, Updated_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
+            src.Tenant_ID,
             src.Treatment_Plan_ID, src.Nickname, src.Patient_ID, src.Practitioner_ID, src.Completed,
             src.Start_Date, src.End_Date, src.Completed_Date, src.Last_Completed_Date,
             src.NHS_UDA_Value, src.NHS_Completed_UDA_Value, src.Private_Treatment_Value,
             src.Created_Date, src.Updated_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatment_Plans tgt WHERE tgt.Treatment_Plan_ID = src.Treatment_Plan_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatment_Plans tgt WHERE tgt.Treatment_Plan_ID = src.Treatment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;

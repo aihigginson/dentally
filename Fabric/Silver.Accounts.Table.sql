@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Accounts]
 GO
 CREATE TABLE [Silver].[Accounts](
+	[Tenant_ID] [int] NOT NULL,
 	[Account_Id] [int] NOT NULL,
 	[Patient_Id] [int] NULL,
 	[Patient_Name] [VARCHAR](255) NULL,

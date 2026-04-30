@@ -21,6 +21,8 @@ CREATE TABLE [Bronze].[Patient_Stats](
 	[First_Exam_Date] [VARCHAR](255) NULL,
 	[NHS_Exemption_Code] [decimal](18, 4) NULL,
 	[Patient_ID] [decimal](18, 4) NULL,
-	[Last_Cancelled_Appointment_Date] [VARCHAR](255) NULL
+	[Last_Cancelled_Appointment_Date] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_NHS_Claims]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_NHS_Claims
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_NHS_Claims @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_NHS_Claims]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -57,6 +65,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Nhs_Claim_Id],
                 -- Bronze Patient_ID is decimal(18,4); Silver is int
         TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
@@ -123,22 +132,22 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[NHS_Claims] AS tgt
-        INNER JOIN #src AS src ON tgt.[Nhs_Claim_Id] = src.[Nhs_Claim_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Nhs_Claim_Id] = src.[Nhs_Claim_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[NHS_Claims] ([Nhs_Claim_Id], [Patient_Id], [Practitioner_Id], [Treatment_Plan_Id], [Site_Id], [Contract_Id], [Claim_Status], [Sequence_Number], [Uda_Band], [Expected_Uda], [Awarded_Uda], [Patient_Charge], [Dentist_Charge], [Awarded_Dentist_Charge], [Ni_Calculated_Dentist_Fee], [Ni_Calculated_Patient_Fee], [Scot_Amount_Authorised], [Scot_Amount_Expected], [Ortho], [Continuation_Part_Number], [Status_Comments], [Approval_Date], [Submitted_Date], [Nhs_Updated_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Nhs_Claim_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Treatment_Plan_Id], src.[Site_Id], src.[Contract_Id], src.[Claim_Status], src.[Sequence_Number], src.[Uda_Band], src.[Expected_Uda], src.[Awarded_Uda], src.[Patient_Charge], src.[Dentist_Charge], src.[Awarded_Dentist_Charge], src.[Ni_Calculated_Dentist_Fee], src.[Ni_Calculated_Patient_Fee], src.[Scot_Amount_Authorised], src.[Scot_Amount_Expected], src.[Ortho], src.[Continuation_Part_Number], src.[Status_Comments], src.[Approval_Date], src.[Submitted_Date], src.[Nhs_Updated_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        INSERT INTO [Silver].[NHS_Claims] ([Tenant_ID], [Nhs_Claim_Id], [Patient_Id], [Practitioner_Id], [Treatment_Plan_Id], [Site_Id], [Contract_Id], [Claim_Status], [Sequence_Number], [Uda_Band], [Expected_Uda], [Awarded_Uda], [Patient_Charge], [Dentist_Charge], [Awarded_Dentist_Charge], [Ni_Calculated_Dentist_Fee], [Ni_Calculated_Patient_Fee], [Scot_Amount_Authorised], [Scot_Amount_Expected], [Ortho], [Continuation_Part_Number], [Status_Comments], [Approval_Date], [Submitted_Date], [Nhs_Updated_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Tenant_ID], src.[Nhs_Claim_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Treatment_Plan_Id], src.[Site_Id], src.[Contract_Id], src.[Claim_Status], src.[Sequence_Number], src.[Uda_Band], src.[Expected_Uda], src.[Awarded_Uda], src.[Patient_Charge], src.[Dentist_Charge], src.[Awarded_Dentist_Charge], src.[Ni_Calculated_Dentist_Fee], src.[Ni_Calculated_Patient_Fee], src.[Scot_Amount_Authorised], src.[Scot_Amount_Expected], src.[Ortho], src.[Continuation_Part_Number], src.[Status_Comments], src.[Approval_Date], src.[Submitted_Date], src.[Nhs_Updated_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[NHS_Claims] AS tgt WHERE tgt.[Nhs_Claim_Id] = src.[Nhs_Claim_Id]
+            SELECT 1 FROM [Silver].[NHS_Claims] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Nhs_Claim_Id] = src.[Nhs_Claim_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[NHS_Claims] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Nhs_Claim_Id] = tgt.[Nhs_Claim_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Nhs_Claim_Id] = tgt.[Nhs_Claim_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

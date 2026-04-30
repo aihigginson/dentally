@@ -19,6 +19,8 @@ CREATE TABLE [Bronze].[Treatment_Plans](
 	[Practitioner_ID] [int] NULL,
 	[Private_Treatment_Value] [decimal](18, 4) NULL,
 	[Start_Date] [VARCHAR](255) NULL,
-	[Updated_At] [VARCHAR](255) NULL
+	[Updated_At] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

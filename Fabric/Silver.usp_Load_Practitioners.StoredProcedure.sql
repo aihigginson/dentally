@@ -1,4 +1,12 @@
-﻿/****** Object:  StoredProcedure [Silver].[usp_Load_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
+--------------------------------------------------------------------
+--  Stored Procedure :  Silver.usp_Load_Practitioners
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
+/****** Object:  StoredProcedure [Silver].[usp_Load_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -56,6 +64,7 @@ BEGIN
         INTO #src
         FROM (
             SELECT
+                Tenant_ID  AS [Tenant_ID],
                 Practitioner_ID  AS [Practitioner_Id],
                 User_ID  AS [User_Id],
                 LEFT(Practitioner_Site_ID, 50)  AS [Site_Id],
@@ -113,22 +122,22 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Practitioners] AS tgt
-        INNER JOIN #src AS src ON tgt.[Practitioner_Id] = src.[Practitioner_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practitioner_Id] = src.[Practitioner_Id]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Practitioners] ([Practitioner_Id], [User_Id], [Site_Id], [User_Title], [User_First_Name], [User_Middle_Name], [User_Last_Name], [User_Email], [User_Mobile_Phone], [User_Role], [User_Permission_Level], [Practitioner_Active], [Practitioner_Colour], [Practitioner_GDC_Number], [Practitioner_NHS_Number], [Practitioner_Site_Id], [Practitioner_Default_Contract_Id], [Contract_Targets_String], [User_Image_URL], [User_Last_Login], [User_Created_At], [User_Updated_At], [Performer_Id], [Dentist_Type], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Practitioner_Id], src.[User_Id], src.[Site_Id], src.[User_Title], src.[User_First_Name], src.[User_Middle_Name], src.[User_Last_Name], src.[User_Email], src.[User_Mobile_Phone], src.[User_Role], src.[User_Permission_Level], src.[Practitioner_Active], src.[Practitioner_Colour], src.[Practitioner_GDC_Number], src.[Practitioner_NHS_Number], src.[Practitioner_Site_Id], src.[Practitioner_Default_Contract_Id], src.[Contract_Targets_String], src.[User_Image_URL], src.[User_Last_Login], src.[User_Created_At], src.[User_Updated_At], src.[Performer_Id], src.[Dentist_Type], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        INSERT INTO [Silver].[Practitioners] ([Tenant_ID], [Practitioner_Id], [User_Id], [Site_Id], [User_Title], [User_First_Name], [User_Middle_Name], [User_Last_Name], [User_Email], [User_Mobile_Phone], [User_Role], [User_Permission_Level], [Practitioner_Active], [Practitioner_Colour], [Practitioner_GDC_Number], [Practitioner_NHS_Number], [Practitioner_Site_Id], [Practitioner_Default_Contract_Id], [Contract_Targets_String], [User_Image_URL], [User_Last_Login], [User_Created_At], [User_Updated_At], [Performer_Id], [Dentist_Type], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Tenant_ID], src.[Practitioner_Id], src.[User_Id], src.[Site_Id], src.[User_Title], src.[User_First_Name], src.[User_Middle_Name], src.[User_Last_Name], src.[User_Email], src.[User_Mobile_Phone], src.[User_Role], src.[User_Permission_Level], src.[Practitioner_Active], src.[Practitioner_Colour], src.[Practitioner_GDC_Number], src.[Practitioner_NHS_Number], src.[Practitioner_Site_Id], src.[Practitioner_Default_Contract_Id], src.[Contract_Targets_String], src.[User_Image_URL], src.[User_Last_Login], src.[User_Created_At], src.[User_Updated_At], src.[Performer_Id], src.[Dentist_Type], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Practitioners] AS tgt WHERE tgt.[Practitioner_Id] = src.[Practitioner_Id]
+            SELECT 1 FROM [Silver].[Practitioners] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practitioner_Id] = src.[Practitioner_Id]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Practitioners] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Practitioner_Id] = tgt.[Practitioner_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Practitioner_Id] = tgt.[Practitioner_Id]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

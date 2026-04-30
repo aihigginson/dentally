@@ -7,9 +7,10 @@ DROP TABLE IF EXISTS [Gold].[Fact_Practitioner_Diaries]
 GO
 CREATE TABLE [Gold].[Fact_Practitioner_Diaries](
 	[pk_Practitioner_Diary] [bigint] IDENTITY NOT NULL,
+	[Tenant_ID] [int] NOT NULL,
 	[bk_Practitioner_Diary_ID] [VARCHAR](50) NOT NULL,
-	[fk_Practitioner] [int] NULL,
-	[fk_Date_Day] [int] NULL,
+	[fk_Practitioner] [bigint] NULL,
+	[fk_Date_Day] [bigint] NULL,
 	[Day_Date] [date] NULL,
 	[Start_Time] [time](0) NULL,
 	[End_Time] [time](0) NULL,

@@ -18,6 +18,8 @@ CREATE TABLE [Bronze].[Treatments](
 	[Region] [VARCHAR](255) NULL,
 	[Treatment_Category_ID] [decimal](18, 4) NULL,
 	[UDA_Band] [decimal](18, 4) NULL,
-	[Updated_At] [VARCHAR](255) NULL
+	[Updated_At] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Payment_Allocations]
 GO
 CREATE TABLE [Silver].[Payment_Allocations](
+	[Tenant_ID] [int] NOT NULL,
 	[Payment_Allocation_Id] [VARCHAR](50) NOT NULL,
 	[Patient_Id] [int] NULL,
 	[Payment_Explanation_Id] [int] NULL,

@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Recalls]
 GO
 CREATE TABLE [Silver].[Recalls](
+	[Tenant_ID] [int] NOT NULL,
 	[Id] [VARCHAR](50) NOT NULL,
 	[Patient_Id] [int] NULL,
 	[Practitioner_Id] [int] NULL,

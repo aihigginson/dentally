@@ -13,6 +13,8 @@ CREATE TABLE [Bronze].[Payment_Explanations](
 	[Invoice_Reference] [varchar](4000) NULL,
 	[Payment_ID] [int] NULL,
 	[Payment_Reference] [varchar](4000) NULL,
-	[User_ID] [int] NULL
+	[User_ID] [int] NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

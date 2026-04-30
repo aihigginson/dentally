@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS [Security].[Application_Users]
+GO
+CREATE TABLE [Security].[Application_Users](
+	[User_UPN]   [varchar](255) NOT NULL,
+	[Tenant_ID]  [int]          NOT NULL
+)
+GO

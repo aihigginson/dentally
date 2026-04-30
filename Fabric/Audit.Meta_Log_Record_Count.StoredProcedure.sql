@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Audit.Meta_Log_Record_Count
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Audit.Meta_Log_Record_Count @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Audit].[Meta_Log_Record_Count]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO

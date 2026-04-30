@@ -32,6 +32,8 @@ CREATE TABLE [Bronze].[Appointments](
 	[User_ID] [int] NULL,
 	[UUID] [VARCHAR](255) NULL,
 	[Created_At] [VARCHAR](255) NULL,
-	[Updated_At] [VARCHAR](255) NULL
+	[Updated_At] [VARCHAR](255) NULL,
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

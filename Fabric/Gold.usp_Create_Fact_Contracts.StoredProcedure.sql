@@ -1,12 +1,11 @@
-﻿/****** Object:  StoredProcedure [Gold].[usp_Create_Fact_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-------------------------------------------------------------
--- Gold.usp_Create_Fact_Contracts
-------------------------------------------------------------
+﻿--------------------------------------------------------------------
+--  Stored Procedure :  Gold.usp_Create_Fact_Contracts
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Contracts]
 GO
 CREATE PROCEDURE [Gold].[usp_Create_Fact_Contracts]
@@ -33,12 +32,13 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Fact_Contracts;
 
     CREATE TABLE Gold.Fact_Contracts (
-        pk_Contract                 INT               NOT NULL IDENTITY,
+        pk_Contract                 BIGINT            NOT NULL IDENTITY,
+        Tenant_ID                      INT             NOT NULL,
         bk_Contract_ID              VARCHAR(50)      NOT NULL,   -- Natural key from Silver.Nhs_Claims
 
-        fk_Practice_Site            INT               NULL,
-        fk_Date_Start               INT               NULL,
-        fk_Date_End                 INT               NULL,
+        fk_Practice_Site            BIGINT            NULL,
+        fk_Date_Start               BIGINT            NULL,
+        fk_Date_End                 BIGINT            NULL,
 
         Contract_Number             INT               NULL,
         NHS_Location_ID             INT               NULL,

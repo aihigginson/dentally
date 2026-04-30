@@ -6,6 +6,7 @@ GO
 DROP TABLE IF EXISTS [Silver].[Practitioner_Diary_Breaks]
 GO
 CREATE TABLE [Silver].[Practitioner_Diary_Breaks](
+	[Tenant_ID] [int] NOT NULL,
 	[Practitioner_Diary_ID] [VARCHAR](255) NULL,
 	[Break_Name] [varchar](255) NULL,
 	[Start_Time] [VARCHAR](255) NULL,

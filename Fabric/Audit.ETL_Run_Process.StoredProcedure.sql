@@ -1,3 +1,11 @@
+--------------------------------------------------------------------
+--  Stored Procedure :  Audit.ETL_Run_Process
+--  Author           :  AIH
+--  Initital Date    :  29/04/2026
+--  History          :
+--    *01     29/04/2026  AIH Initial Release
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Audit.ETL_Run_Process @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
+---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Audit].[ETL_Run_Process]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
@@ -47,9 +55,9 @@ BEGIN
                 @Parent_Run_UUID     = @Parent_Run_UUID,
                 @Process_Type        = @My_Proc_Type;
 
-        IF @My_Proc_Type = 'PROCEDURE'
+        IF UPPER(@My_Proc_Type) = 'PROCEDURE'
         BEGIN
-            SELECT @Proc_ID = OBJECT_ID(@My_Proc_Name, @My_Proc_Type);
+            SELECT @Proc_ID = OBJECT_ID(@My_Proc_Name, 'P');
 
             IF @Proc_ID IS NULL
             BEGIN
