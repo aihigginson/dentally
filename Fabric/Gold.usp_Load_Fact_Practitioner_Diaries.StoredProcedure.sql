@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     30/04/2026  AIH Replace CAST AS DATETIME with datetime2(3) — bare datetime unsupported in Fabric
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -45,16 +46,16 @@ BEGIN
             1-CAST(ISNULL(pd.Available,0) AS BIT)                       AS Unavailable,
             CASE WHEN pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
                  THEN DATEDIFF(MINUTE,
-                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS DATETIME),
-                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS DATETIME))
+                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS datetime2(3)),
+                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS datetime2(3)))
             END                                                         AS Session_Duration_Mins,
             COALESCE(brk.Total_Break_Mins, 0)                           AS Total_Break_Mins,
             COALESCE(brk.Break_Count, 0)                                AS Break_Count,
             CASE WHEN CAST(ISNULL(pd.Available,0) AS BIT) = 1
                       AND pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
                  THEN DATEDIFF(MINUTE,
-                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS DATETIME),
-                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS DATETIME))
+                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS datetime2(3)),
+                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS datetime2(3)))
                       - COALESCE(brk.Total_Break_Mins, 0)
                  ELSE 0 END                                             AS Available_Clinical_Mins
         INTO #src
@@ -65,8 +66,8 @@ BEGIN
             SELECT
                 Practitioner_Diary_ID,
                 SUM(DATEDIFF(MINUTE,
-                    TRY_CAST(NULLIF(TRIM(Start_Time),'') AS DATETIME),
-                    TRY_CAST(NULLIF(TRIM(End_Time),'') AS DATETIME)))  AS Total_Break_Mins,
+                    TRY_CAST(NULLIF(TRIM(Start_Time),'') AS datetime2(3)),
+                    TRY_CAST(NULLIF(TRIM(End_Time),'') AS datetime2(3))))  AS Total_Break_Mins,
                 COUNT(*)                                                AS Break_Count
             FROM Silver.Practitioner_Diary_Breaks
             GROUP BY Practitioner_Diary_ID

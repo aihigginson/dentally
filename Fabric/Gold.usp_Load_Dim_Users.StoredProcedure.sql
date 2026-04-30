@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     30/04/2026  AIH Add Is_Current to INSERT (NOT NULL column omitted from column list)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Users @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Users]    Script Date: 20/04/2026 10:15:06 ******/
@@ -128,14 +129,14 @@ BEGIN
             bk_User_ID, Title, First_Name, Middle_Name, Last_Name, Full_Name,
             Email, Mobile_Phone, Role, Permission_Level, Practice_ID, Site_ID,
             Image_URL, Last_Login_Date, Created_Date, Updated_Date,
-            DW_Created_At, DW_Updated_At
+            DW_Created_At, DW_Updated_At, Is_Current
         )
         SELECT
             src.Tenant_ID,
             src.bk_User_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name, src.Full_Name,
             src.Email, src.Mobile_Phone, src.Role, src.Permission_Level, src.Practice_ID, src.Site_ID,
             src.Image_URL, src.Last_Login_Date, src.Created_Date, src.Updated_Date,
-            SYSUTCDATETIME(), SYSUTCDATETIME()
+            SYSUTCDATETIME(), SYSUTCDATETIME(), 1
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Users tgt WHERE tgt.bk_User_ID = src.bk_User_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;

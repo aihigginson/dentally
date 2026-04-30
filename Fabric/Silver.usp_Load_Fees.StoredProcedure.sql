@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     30/04/2026  AIH Fee_Id changed from uniqueidentifier to VARCHAR(255) — mock IDs are not UUIDs
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Fees @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Fees]    Script Date: 20/04/2026 10:15:06 ******/
@@ -45,7 +46,7 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(Fee_ID AS uniqueidentifier)  AS [Fee_Id],
+                LEFT(Fee_ID, 255)                      AS [Fee_Id],
                 -- Bronze Treatment_ID is decimal(18,4); Silver is int
         TRY_CAST(ROUND(CAST(Treatment_ID AS float), 0) AS int)  AS [Treatment_Id],
                 Payment_Plan_ID  AS [Payment_Plan_Id],

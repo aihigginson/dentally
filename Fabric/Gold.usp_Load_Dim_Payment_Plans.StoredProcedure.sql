@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     30/04/2026  AIH Add Tenant_ID to INSERT (NOT NULL column omitted); fix NOT EXISTS to include Tenant_ID
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -103,18 +104,18 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Dim_Payment_Plans (
-            Payment_Plan_ID, Payment_Plan_Name, Patient_Friendly_Name, Active, Colour, Site_ID,
+            Tenant_ID, Payment_Plan_ID, Payment_Plan_Name, Patient_Friendly_Name, Active, Colour, Site_ID,
             Dentist_Recall_Interval_Months, Hygienist_Recall_Interval_Months,
             Emergency_Duration_Mins, Exam_Duration_Mins, Exam_Scale_Polish_Duration_Mins,
             Scale_Polish_Duration_Mins, Created_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
-            src.Payment_Plan_ID, src.Payment_Plan_Name, src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
+            src.Tenant_ID, src.Payment_Plan_ID, src.Payment_Plan_Name, src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
             src.Dentist_Recall_Interval_Months, src.Hygienist_Recall_Interval_Months,
             src.Emergency_Duration_Mins, src.Exam_Duration_Mins, src.Exam_Scale_Polish_Duration_Mins,
             src.Scale_Polish_Duration_Mins, src.Created_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
-        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Payment_Plans tgt WHERE tgt.Payment_Plan_ID = src.Payment_Plan_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Payment_Plans tgt WHERE tgt.Payment_Plan_ID = src.Payment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
