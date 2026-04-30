@@ -4,7 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
---    *02     30/04/2026  AIH Replace CAST AS DATETIME with datetime2(3) — bare datetime unsupported in Fabric
+--    *02     30/04/2026  AIH Replace CAST AS DATETIME with datetime2(3); TIME -> TIME(0) — Fabric requires explicit precision
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -41,8 +41,8 @@ BEGIN
             dpr.pk_Practitioner                                         AS fk_Practitioner,
             dd.pk_Date                                                  AS fk_Date_Day,
             CAST(pd.Day AS DATE)                                        AS Day_Date,
-            TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS TIME)            AS Start_Time,
-            TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS TIME)           AS End_time,
+            TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS TIME(0))            AS Start_Time,
+            TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS TIME(0))           AS End_time,
             1-CAST(ISNULL(pd.Available,0) AS BIT)                       AS Unavailable,
             CASE WHEN pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
                  THEN DATEDIFF(MINUTE,
