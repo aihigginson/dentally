@@ -92,74 +92,131 @@ CREATE VIEW [Stage].[Practitioner_Diary_Entries] AS
 SELECT * FROM LH_Dentally.dbo.stage_practitioner_diary_entries
 GO
 
-DROP VIEW IF EXISTS [Stage].[Practice]
-GO
-CREATE VIEW [Stage].[Practice] AS
-SELECT * FROM LH_Dentally.dbo.stage_practice
+-- -----------------------------------------------------------------------
+-- The views below reference LH_Dentally Delta tables that are created by
+-- Stage_Ingest.  On a fresh environment those tables do not exist until
+-- Stage_Ingest has run at least once, so each CREATE VIEW is wrapped in
+-- TRY/CATCH and executed via EXEC() (which puts CREATE VIEW first in its
+-- own sub-batch).  A warning is printed for any that are skipped.
+-- Re-running Deploy_To_Fabric.ps1 after Stage_Ingest will create them.
+-- -----------------------------------------------------------------------
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Practice]', 'V') IS NOT NULL DROP VIEW [Stage].[Practice];
+    EXEC('CREATE VIEW [Stage].[Practice] AS SELECT * FROM LH_Dentally.dbo.stage_practice');
+    PRINT 'Created Stage.Practice';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Practice skipped — stage_practice not yet in LH_Dentally (run Stage_Ingest first)';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[Treatment_Categories]
-GO
-CREATE VIEW [Stage].[Treatment_Categories] AS
-SELECT * FROM LH_Dentally.dbo.stage_treatment_categories
-GO
-
-DROP VIEW IF EXISTS [Stage].[Acquisition_Sources]
-GO
-CREATE VIEW [Stage].[Acquisition_Sources] AS
-SELECT * FROM LH_Dentally.dbo.stage_acquisition_sources
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Treatment_Categories]', 'V') IS NOT NULL DROP VIEW [Stage].[Treatment_Categories];
+    EXEC('CREATE VIEW [Stage].[Treatment_Categories] AS SELECT * FROM LH_Dentally.dbo.stage_treatment_categories');
+    PRINT 'Created Stage.Treatment_Categories';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Treatment_Categories skipped — run Stage_Ingest first';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[Sundries]
-GO
-CREATE VIEW [Stage].[Sundries] AS
-SELECT * FROM LH_Dentally.dbo.stage_sundries
-GO
-
-DROP VIEW IF EXISTS [Stage].[Contracts]
-GO
-CREATE VIEW [Stage].[Contracts] AS
-SELECT * FROM LH_Dentally.dbo.stage_contracts
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Acquisition_Sources]', 'V') IS NOT NULL DROP VIEW [Stage].[Acquisition_Sources];
+    EXEC('CREATE VIEW [Stage].[Acquisition_Sources] AS SELECT * FROM LH_Dentally.dbo.stage_acquisition_sources');
+    PRINT 'Created Stage.Acquisition_Sources';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Acquisition_Sources skipped — run Stage_Ingest first';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[Fees]
-GO
-CREATE VIEW [Stage].[Fees] AS
-SELECT * FROM LH_Dentally.dbo.stage_fees
-GO
-
-DROP VIEW IF EXISTS [Stage].[Practitioner_Diary_Breaks]
-GO
-CREATE VIEW [Stage].[Practitioner_Diary_Breaks] AS
-SELECT * FROM LH_Dentally.dbo.stage_practitioner_diary_breaks
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Sundries]', 'V') IS NOT NULL DROP VIEW [Stage].[Sundries];
+    EXEC('CREATE VIEW [Stage].[Sundries] AS SELECT * FROM LH_Dentally.dbo.stage_sundries');
+    PRINT 'Created Stage.Sundries';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Sundries skipped — run Stage_Ingest first';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[NHS_Claims]
-GO
-CREATE VIEW [Stage].[NHS_Claims] AS
-SELECT * FROM LH_Dentally.dbo.stage_nhs_claims
-GO
-
-DROP VIEW IF EXISTS [Stage].[Patient_Stats]
-GO
-CREATE VIEW [Stage].[Patient_Stats] AS
-SELECT * FROM LH_Dentally.dbo.stage_patient_stats
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Contracts]', 'V') IS NOT NULL DROP VIEW [Stage].[Contracts];
+    EXEC('CREATE VIEW [Stage].[Contracts] AS SELECT * FROM LH_Dentally.dbo.stage_contracts');
+    PRINT 'Created Stage.Contracts';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Contracts skipped — run Stage_Ingest first';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[Payment_Allocations]
-GO
-CREATE VIEW [Stage].[Payment_Allocations] AS
-SELECT * FROM LH_Dentally.dbo.stage_payment_allocations
-GO
-
-DROP VIEW IF EXISTS [Stage].[Payment_Explanations]
-GO
-CREATE VIEW [Stage].[Payment_Explanations] AS
-SELECT * FROM LH_Dentally.dbo.stage_payment_explanations
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Fees]', 'V') IS NOT NULL DROP VIEW [Stage].[Fees];
+    EXEC('CREATE VIEW [Stage].[Fees] AS SELECT * FROM LH_Dentally.dbo.stage_fees');
+    PRINT 'Created Stage.Fees';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Fees skipped — run Stage_Ingest first';
+END CATCH;
 GO
 
-DROP VIEW IF EXISTS [Stage].[Treatment_Appointments]
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Practitioner_Diary_Breaks]', 'V') IS NOT NULL DROP VIEW [Stage].[Practitioner_Diary_Breaks];
+    EXEC('CREATE VIEW [Stage].[Practitioner_Diary_Breaks] AS SELECT * FROM LH_Dentally.dbo.stage_practitioner_diary_breaks');
+    PRINT 'Created Stage.Practitioner_Diary_Breaks';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Practitioner_Diary_Breaks skipped — run Stage_Ingest first';
+END CATCH;
 GO
-CREATE VIEW [Stage].[Treatment_Appointments] AS
-SELECT * FROM LH_Dentally.dbo.stage_treatment_appointments
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[NHS_Claims]', 'V') IS NOT NULL DROP VIEW [Stage].[NHS_Claims];
+    EXEC('CREATE VIEW [Stage].[NHS_Claims] AS SELECT * FROM LH_Dentally.dbo.stage_nhs_claims');
+    PRINT 'Created Stage.NHS_Claims';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.NHS_Claims skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Patient_Stats]', 'V') IS NOT NULL DROP VIEW [Stage].[Patient_Stats];
+    EXEC('CREATE VIEW [Stage].[Patient_Stats] AS SELECT * FROM LH_Dentally.dbo.stage_patient_stats');
+    PRINT 'Created Stage.Patient_Stats';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Patient_Stats skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Payment_Allocations]', 'V') IS NOT NULL DROP VIEW [Stage].[Payment_Allocations];
+    EXEC('CREATE VIEW [Stage].[Payment_Allocations] AS SELECT * FROM LH_Dentally.dbo.stage_payment_allocations');
+    PRINT 'Created Stage.Payment_Allocations';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Payment_Allocations skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Payment_Explanations]', 'V') IS NOT NULL DROP VIEW [Stage].[Payment_Explanations];
+    EXEC('CREATE VIEW [Stage].[Payment_Explanations] AS SELECT * FROM LH_Dentally.dbo.stage_payment_explanations');
+    PRINT 'Created Stage.Payment_Explanations';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Payment_Explanations skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Treatment_Appointments]', 'V') IS NOT NULL DROP VIEW [Stage].[Treatment_Appointments];
+    EXEC('CREATE VIEW [Stage].[Treatment_Appointments] AS SELECT * FROM LH_Dentally.dbo.stage_treatment_appointments');
+    PRINT 'Created Stage.Treatment_Appointments';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Treatment_Appointments skipped — run Stage_Ingest first';
+END CATCH;
 GO
