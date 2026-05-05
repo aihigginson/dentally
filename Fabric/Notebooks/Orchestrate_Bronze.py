@@ -30,6 +30,7 @@ warehouse_name         = "WH_Dentally"
 # -----------------------------------------------------------------------------
 
 import pyodbc
+import struct
 from datetime import datetime, timezone
 
 
@@ -40,16 +41,20 @@ from datetime import datetime, timezone
 if not warehouse_sql_endpoint:
     raise ValueError("warehouse_sql_endpoint parameter is required")
 
+# Acquire token using Fabric's built-in mssparkutils credential provider
+token        = mssparkutils.credentials.getToken("https://database.windows.net/")
+token_bytes  = token.encode("UTF-16-LE")
+token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+
 conn_str = (
     "Driver={ODBC Driver 18 for SQL Server};"
     f"Server={warehouse_sql_endpoint},1433;"
     f"Database={warehouse_name};"
-    "Authentication=ActiveDirectoryMsi;"
     "Encrypt=yes;"
     "TrustServerCertificate=no;"
 )
 
-conn   = pyodbc.connect(conn_str)
+conn   = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
 conn.autocommit = True
 cursor = conn.cursor()
 
@@ -98,8 +103,8 @@ for row in tenants:
     print("  [1/2] Stage_Ingest ...")
     mssparkutils.notebook.run(
         "Stage_Ingest",
-        timeout=600,
-        arguments={
+        600,
+        {
             "tenant_id"    : tenant_id,
             "api_base_url" : api_base_url,
             "api_key"      : api_key,
