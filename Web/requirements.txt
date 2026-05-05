@@ -1,0 +1,6 @@
+flask
+flask-cors
+msal
+requests
+pyodbc
+python-dotenv
