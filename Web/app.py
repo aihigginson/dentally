@@ -28,7 +28,6 @@ PBI_BASE      = 'https://api.powerbi.com/v1.0/myorg'
 
 REPORTS = {
     'revenue':    os.environ.get('REPORT_ID_REVENUE',   ''),
-    'cashflow':   os.environ.get('REPORT_ID_CASHFLOW',  ''),
     'patients':   os.environ.get('REPORT_ID_PATIENT',   ''),
     'treatment':  os.environ.get('REPORT_ID_TREATMENT', ''),
     'scheduling': os.environ.get('REPORT_ID_SCHEDULE',  ''),
@@ -376,6 +375,30 @@ def _kpis_treatment(cur, tid, period, site_id, pract_id):
     }
 
 
+def _kpis_nhs(cur, tid, period, site_id, pract_id):
+    params = [tid]
+    date_w = _pw('fc.fk_Date_Start', period, params)
+    cur.execute(f"""
+        SELECT SUM(fc.UDA_Delivered),
+               SUM(fc.UDA_Target),
+               SUM(fc.Contract_Value)
+        FROM   Gold.Fact_Contracts fc
+        WHERE  fc.Tenant_ID = ? {date_w}
+    """, params)
+    row       = cur.fetchone()
+    delivered = float(row[0]) if row[0] else 0
+    target    = float(row[1]) if row[1] else 0
+    value     = float(row[2]) if row[2] else 0
+    achievement = round(delivered / target * 100, 1) if target else None
+    vpu         = round(value / delivered, 2)         if delivered else None
+    return {
+        'uda_delivered':   _kpi(delivered),
+        'uda_target':      _kpi(target),
+        'uda_achievement': _kpi(achievement),
+        'value_per_uda':   _kpi(vpu),
+    }
+
+
 def _kpis_scheduling(cur, tid, period, site_id, pract_id):
     params = [tid]
     date_w = _pw('apt.fk_Date_Start', period, params)
@@ -445,10 +468,10 @@ def kpis():
 
     dispatch = {
         'revenue':    _kpis_revenue,
-        'cashflow':   _kpis_cashflow,
         'patients':   _kpis_patients,
         'treatment':  _kpis_treatment,
         'scheduling': _kpis_scheduling,
+        'nhs':        _kpis_nhs,
     }
     fn = dispatch.get(section)
     if not fn:

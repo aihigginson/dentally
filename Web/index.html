@@ -6,159 +6,69 @@
     <title>Analytically</title>
     <style>
         :root {
-            --navy:       #1A527A;
-            --teal:       #8AB5B2;
-            --teal-bright:#5EC4C0;
-            --green-dark: #2D6B40;
-            --lavender:   #A894D8;
-            --amber:      #8A5018;
-            --sand:       #C8A070;
-            --rust:       #6A3828;
-            --sky:        #8ABCCE;
-            --green-mid:  #3D6A48;
-            --terra:      #C87858;
-            --steel:      #3A5C7A;
-            --sage:       #90C4A8;
-
-            --bg-page:    #F0F4F8;
-            --bg-card:    #FFFFFF;
-            --bg-subtle:  #F8FAFC;
-            --bg-active:  #EBF3F9;
-            --border:     #E4E8EE;
-            --border-active: #C5DDF0;
-            --text:       #1F2937;
-            --text-2:     #6B7280;
-            --text-3:     #9CA3AF;
-            --good:       #3A7A40;
-            --bad:        #B04848;
-
+            --navy:        #1A527A;
+            --teal-bright: #5EC4C0;
+            --bg-page:     #F0F4F8;
+            --bg-subtle:   #F8FAFC;
+            --border:      #E4E8EE;
+            --text:        #1F2937;
+            --text-2:      #6B7280;
+            --text-3:      #9CA3AF;
+            --good:        #3A7A40;
+            --bad:         #B04848;
             --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
             --radius: 8px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: var(--font);
-            background: var(--bg-page);
-            color: var(--text);
-            min-height: 100vh;
-        }
+        body { font-family: var(--font); background: var(--bg-page); color: var(--text); min-height: 100vh; }
 
         /* ── Header ── */
         .header {
-            background: var(--navy);
-            color: white;
-            padding: 0 24px;
-            height: 52px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
-        .header-brand { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
-        .brand-1 { color: #FFFFFF; }
-        .brand-2 { color: var(--teal-bright); }
-        .header-right { display: flex; align-items: center; gap: 20px; }
-        .header-org { font-size: 13px; opacity: 0.8; }
-        .header-user {
-            font-size: 12px;
-            background: rgba(255,255,255,0.15);
-            padding: 4px 12px;
-            border-radius: 20px;
-        }
+        .header-brand  { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
+        .brand-1       { color: #FFFFFF; }
+        .brand-2       { color: var(--teal-bright); }
+        .header-right  { display: flex; align-items: center; gap: 20px; }
+        .header-org    { font-size: 13px; opacity: 0.8; }
+        .header-user   { font-size: 12px; background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; }
 
         /* ── Primary nav ── */
-        .nav {
-            background: white;
-            border-bottom: 1px solid var(--border);
-            padding: 0 24px;
-            display: flex;
-            overflow-x: auto;
-        }
+        .nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; overflow-x: auto; }
         .nav-tab {
-            padding: 13px 18px;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-2);
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -1px;
-            white-space: nowrap;
-            user-select: none;
-            transition: color 0.12s, border-color 0.12s;
+            padding: 13px 18px; font-size: 13px; font-weight: 500; color: var(--text-2);
+            cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
+            white-space: nowrap; user-select: none; transition: color 0.12s, border-color 0.12s;
         }
-        .nav-tab:hover { color: var(--navy); }
-        .nav-tab.active {
-            color: var(--navy);
-            border-bottom-color: var(--navy);
-        }
+        .nav-tab:hover  { color: var(--navy); }
+        .nav-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
 
         /* ── Filter bar ── */
         .filter-bar {
-            background: white;
-            border-bottom: 1px solid var(--border);
-            padding: 9px 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
+            background: white; border-bottom: 1px solid var(--border);
+            padding: 9px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
         }
-        .filter-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-3);
-            text-transform: uppercase;
-            letter-spacing: 0.07em;
-        }
+        .filter-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
         .filter-field { display: flex; align-items: center; gap: 6px; }
         .filter-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
         .filter-select {
-            font-family: var(--font);
-            font-size: 13px;
-            color: var(--text);
-            background: var(--bg-subtle);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 4px 26px 4px 9px;
-            appearance: none;
+            font-family: var(--font); font-size: 13px; color: var(--text);
+            background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+            padding: 4px 26px 4px 9px; appearance: none; cursor: pointer;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 7px center;
-            cursor: pointer;
+            background-repeat: no-repeat; background-position: right 7px center;
         }
         .filter-select:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(26,82,122,0.12); }
-        .filter-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
-        .filter-check {
-            font-size: 12px;
-            color: var(--text-2);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            user-select: none;
-            white-space: nowrap;
-        }
-        .filter-check input[type=checkbox] {
-            accent-color: var(--navy);
-            width: 14px; height: 14px;
-            cursor: pointer;
-        }
+        .filter-sep   { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+        .filter-check { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; white-space: nowrap; }
+        .filter-check input[type=checkbox] { accent-color: var(--navy); width: 14px; height: 14px; cursor: pointer; }
         .filter-badge {
-            margin-left: auto;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: #EBF3F9;
-            color: var(--navy);
-            font-size: 12px;
-            font-weight: 500;
-            padding: 3px 10px;
-            border-radius: 20px;
-            white-space: nowrap;
+            margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+            background: #EBF3F9; color: var(--navy); font-size: 12px; font-weight: 500;
+            padding: 3px 10px; border-radius: 20px; white-space: nowrap;
         }
 
         /* ── Main ── */
@@ -167,116 +77,42 @@
         /* ── Sections ── */
         .section { display: none; }
         .section.active { display: block; }
-
-        .section-header {
-            margin-bottom: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-        }
-        .section-title { font-size: 17px; font-weight: 400; color: var(--text); margin-bottom: 3px; }
-        .section-sub { font-size: 13px; color: var(--text-2); }
+        .section-header { margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .section-title  { font-size: 17px; font-weight: 400; color: var(--text); margin-bottom: 3px; }
+        .section-sub    { font-size: 13px; color: var(--text-2); }
 
         /* ── KPI row ── */
-        .kpi-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-            gap: 14px;
-            margin-bottom: 18px;
-        }
-        .kpi {
-            background: white;
-            border-radius: var(--radius);
-            padding: 18px 20px;
-            border: 1px solid var(--border);
-        }
-        .kpi-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-3);
-            text-transform: uppercase;
-            letter-spacing: 0.07em;
-            margin-bottom: 8px;
-        }
-        .kpi-value {
-            font-size: 26px;
-            font-weight: 600;
-            color: var(--navy);
-            line-height: 1;
-            margin-bottom: 6px;
-        }
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .kpi { background: white; border-radius: var(--radius); padding: 18px 20px; border: 1px solid var(--border); }
+        .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+        .kpi-value { font-size: 26px; font-weight: 600; color: var(--navy); line-height: 1; margin-bottom: 6px; }
         .kpi-delta { font-size: 12px; color: var(--text-3); }
         .kpi-delta.up   { color: var(--good); }
         .kpi-delta.down { color: var(--bad); }
 
-        /* ── Cards ── */
-        .card-grid { display: grid; gap: 16px; }
-        .card-grid.col-2   { grid-template-columns: 1fr 1fr; }
-        .card-grid.col-3-1 { grid-template-columns: 3fr 1fr; }
-        .card-grid.col-2-1 { grid-template-columns: 2fr 1fr; }
-
-        .card {
-            background: white;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-        .card-title {
-            font-size: 13px;
-            font-weight: 400;
-            color: var(--text);
-            padding: 16px 20px 0;
-        }
-        .card-body { padding: 14px 20px 20px; }
-
-        /* ── PBI page sub-navigation ── */
+        /* ── PBI page sub-nav (in section header) ── */
         .report-subnav { display: none; gap: 6px; flex-shrink: 0; }
         .page-tile {
-            width: 38px; height: 38px;
-            display: flex; align-items: center; justify-content: center;
-            background: white;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            cursor: pointer;
-            color: var(--text-2);
-            transition: border-color 0.12s, background 0.12s, color 0.12s;
-            flex-shrink: 0;
+            width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+            background: white; border: 1px solid var(--border); border-radius: var(--radius);
+            cursor: pointer; color: var(--text-2); transition: border-color 0.12s, background 0.12s, color 0.12s; flex-shrink: 0;
         }
         .page-tile:hover  { border-color: var(--navy); color: var(--navy); }
         .page-tile.active { background: var(--navy); border-color: var(--navy); color: white; }
 
         /* ── Embed slot ── */
         .embed-slot {
-            background: var(--bg-subtle);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-3);
-            font-size: 12px;
-            letter-spacing: 0.04em;
+            background: var(--bg-subtle); border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-3); font-size: 12px; letter-spacing: 0.04em;
             border: 1px dashed var(--border);
         }
         .embed-full {
-            width: 100%;
-            height: calc(100vh - 252px);
-            min-height: 500px;
-            border-radius: var(--radius);
-            background: var(--bg-page);
-            border: none;
-            display: block;
+            width: 100%; height: calc(100vh - 252px); min-height: 500px;
+            border-radius: var(--radius); background: var(--bg-page); border: none; display: block;
         }
-        .embed-slot iframe { border: none; display: block; }
 
-        svg text { font-family: var(--font); }
-
-        @media (max-width: 860px) {
-            .card-grid.col-2,
-            .card-grid.col-3-1,
-            .card-grid.col-2-1 { grid-template-columns: 1fr; }
-            .subnav-tile { min-width: 70px; padding: 7px 10px; }
-        }
+        @media (max-width: 860px) { .embed-full { height: calc(100vh - 280px); } }
     </style>
 </head>
 <body>
@@ -292,17 +128,16 @@
 
 <!-- ════════════════ PRIMARY NAVIGATION ════════════════ -->
 <nav class="nav">
-    <div class="nav-tab active" data-parent="treatment">Treatment</div>
-    <div class="nav-tab"        data-parent="customer">Patient</div>
-    <div class="nav-tab"        data-parent="scheduling">Schedule</div>
-    <div class="nav-tab"        data-parent="revenue">Revenue</div>
-    <div class="nav-tab"        data-parent="nhs">NHS</div>
+    <div class="nav-tab active" data-section="treatment">Treatment</div>
+    <div class="nav-tab"        data-section="customer">Patient</div>
+    <div class="nav-tab"        data-section="scheduling">Schedule</div>
+    <div class="nav-tab"        data-section="revenue">Revenue</div>
+    <div class="nav-tab"        data-section="nhs">NHS</div>
 </nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
 <div class="filter-bar">
     <span class="filter-label">Filters</span>
-
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
@@ -314,114 +149,34 @@
             <option value="Last 3 Months">Last 3 Months</option>
         </select>
     </div>
-
     <div class="filter-sep"></div>
-
     <div class="filter-field">
         <label for="f-site">Site</label>
-        <select class="filter-select" id="f-site">
-            <option value="all">All sites</option>
-        </select>
+        <select class="filter-select" id="f-site"><option value="all">All sites</option></select>
     </div>
-
     <div class="filter-sep"></div>
-
     <div class="filter-field">
         <label for="f-pract">Practitioner</label>
-        <select class="filter-select" id="f-pract">
-            <option value="all">All practitioners</option>
-        </select>
+        <select class="filter-select" id="f-pract"><option value="all">All practitioners</option></select>
     </div>
-
     <div class="filter-sep"></div>
-
     <label class="filter-check" for="f-active-only">
-        <input type="checkbox" id="f-active-only" checked>
-        Active only
+        <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-
     <div class="filter-badge" id="filter-badge">FY 2025/26 &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ MAIN CONTENT ════════════════ -->
 <main class="main">
 
-    <!-- ── TREATMENT: PERFORMED ── -->
-    <section class="section active" id="section-treatment-performed">
+    <!-- ── TREATMENT ── -->
+    <section class="section active" id="section-treatment">
         <div class="section-header">
             <div>
-                <div class="section-title">Treatment — Performed</div>
-                <div class="section-sub">Completed treatments by period, practitioner and category</div>
+                <div class="section-title">Treatment</div>
+                <div class="section-sub">Treatment plan conversion and performance by practitioner and category</div>
             </div>
-            <div class="report-subnav" id="subnav-treatment-performed"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Treatments Done</div>
-                <div class="kpi-value" id="kpi-treatments_completed">—</div>
-                <div class="kpi-delta" id="kpi-treatments_completed-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Total Value</div>
-                <div class="kpi-value" id="kpi-treatment_value">—</div>
-                <div class="kpi-delta" id="kpi-treatment_value-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg per Treatment</div>
-                <div class="kpi-value" id="kpi-avg_treatment_value">—</div>
-                <div class="kpi-delta" id="kpi-avg_treatment_value-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">NHS Treatments</div>
-                <div class="kpi-value" id="kpi-nhs_treatments">—</div>
-                <div class="kpi-delta" id="kpi-nhs_treatments-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── TREATMENT: OPEN ── -->
-    <section class="section" id="section-treatment-open">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Treatment — Open Plans</div>
-                <div class="section-sub">Outstanding treatment plans awaiting completion or patient decision</div>
-            </div>
-            <div class="report-subnav" id="subnav-treatment-open"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Open Plans</div>
-                <div class="kpi-value" id="kpi-open_plans">—</div>
-                <div class="kpi-delta" id="kpi-open_plans-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Open Plan Value</div>
-                <div class="kpi-value" id="kpi-open_plan_value">—</div>
-                <div class="kpi-delta" id="kpi-open_plan_value-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Overdue Plans</div>
-                <div class="kpi-value" id="kpi-overdue_plans">—</div>
-                <div class="kpi-delta" id="kpi-overdue_plans-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Age (days)</div>
-                <div class="kpi-value" id="kpi-avg_open_days">—</div>
-                <div class="kpi-delta" id="kpi-avg_open_days-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── TREATMENT: ACCEPTANCE ── -->
-    <section class="section" id="section-treatment-acceptance">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Treatment — Acceptance</div>
-                <div class="section-sub">Treatment plan conversion from presented to accepted</div>
-            </div>
-            <div class="report-subnav" id="subnav-treatment-acceptance"></div>
+            <div class="report-subnav" id="subnav-treatment"></div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -435,9 +190,9 @@
                 <div class="kpi-delta" id="kpi-acceptance_rate-d"></div>
             </div>
             <div class="kpi">
-                <div class="kpi-label">Accepted Value</div>
-                <div class="kpi-value" id="kpi-accepted_value">—</div>
-                <div class="kpi-delta" id="kpi-accepted_value-d"></div>
+                <div class="kpi-label">Avg Accepted Value</div>
+                <div class="kpi-value" id="kpi-avg_accepted_value">—</div>
+                <div class="kpi-delta" id="kpi-avg_accepted_value-d"></div>
             </div>
             <div class="kpi">
                 <div class="kpi-label">Declined Value</div>
@@ -445,57 +200,28 @@
                 <div class="kpi-delta" id="kpi-declined_value-d"></div>
             </div>
         </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
     </section>
 
-    <!-- ── CUSTOMER: ACQUISITION ── -->
-    <section class="section" id="section-customer-acquisition">
+    <!-- ── PATIENT ── -->
+    <section class="section" id="section-customer">
         <div class="section-header">
             <div>
-                <div class="section-title">Patient — Acquisition</div>
-                <div class="section-sub">New patient registrations and referral source breakdown</div>
+                <div class="section-title">Patient</div>
+                <div class="section-sub">Acquisition, retention and value metrics by period and practitioner</div>
             </div>
-            <div class="report-subnav" id="subnav-customer-acquisition"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">New Patients</div>
-                <div class="kpi-value" id="kpi-new_patients">—</div>
-                <div class="kpi-delta" id="kpi-new_patients-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Net Patient Change</div>
-                <div class="kpi-value" id="kpi-net_patients">—</div>
-                <div class="kpi-delta" id="kpi-net_patients-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">New Patient Revenue</div>
-                <div class="kpi-value" id="kpi-new_patient_revenue">—</div>
-                <div class="kpi-delta" id="kpi-new_patient_revenue-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Acquisition Rate</div>
-                <div class="kpi-value" id="kpi-acquisition_rate">—</div>
-                <div class="kpi-delta" id="kpi-acquisition_rate-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── CUSTOMER: RETENTION ── -->
-    <section class="section" id="section-customer-retention">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Patient — Retention</div>
-                <div class="section-sub">Patient recall compliance and activity status</div>
-            </div>
-            <div class="report-subnav" id="subnav-customer-retention"></div>
+            <div class="report-subnav" id="subnav-customer"></div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
                 <div class="kpi-label">Active Patients</div>
                 <div class="kpi-value" id="kpi-active_patients">—</div>
                 <div class="kpi-delta" id="kpi-active_patients-d"></div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">New Patients</div>
+                <div class="kpi-value" id="kpi-new_patients">—</div>
+                <div class="kpi-delta" id="kpi-new_patients-d"></div>
             </div>
             <div class="kpi">
                 <div class="kpi-label">Recall Compliance</div>
@@ -507,63 +233,24 @@
                 <div class="kpi-value" id="kpi-overdue_recalls">—</div>
                 <div class="kpi-delta" id="kpi-overdue_recalls-d"></div>
             </div>
-            <div class="kpi">
-                <div class="kpi-label">Retention Rate</div>
-                <div class="kpi-value" id="kpi-retention_rate">—</div>
-                <div class="kpi-delta" id="kpi-retention_rate-d"></div>
-            </div>
         </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
     </section>
 
-    <!-- ── CUSTOMER: VALUE ── -->
-    <section class="section" id="section-customer-value">
+    <!-- ── SCHEDULE ── -->
+    <section class="section" id="section-scheduling">
         <div class="section-header">
             <div>
-                <div class="section-title">Patient — Value</div>
-                <div class="section-sub">Patient value segmentation and lifetime contribution</div>
+                <div class="section-title">Schedule</div>
+                <div class="section-sub">Diary utilisation, forward planning and appointment performance</div>
             </div>
-            <div class="report-subnav" id="subnav-customer-value"></div>
+            <div class="report-subnav" id="subnav-scheduling"></div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
-                <div class="kpi-label">Revenue / Patient</div>
-                <div class="kpi-value" id="kpi-revenue_per_patient">—</div>
-                <div class="kpi-delta" id="kpi-revenue_per_patient-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Patient Spend</div>
-                <div class="kpi-value" id="kpi-avg_patient_spend">—</div>
-                <div class="kpi-delta" id="kpi-avg_patient_spend-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Treatments / Patient</div>
-                <div class="kpi-value" id="kpi-avg_treatments_per_patient">—</div>
-                <div class="kpi-delta" id="kpi-avg_treatments_per_patient-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">12-Month LTV</div>
-                <div class="kpi-value" id="kpi-patient_ltv">—</div>
-                <div class="kpi-delta" id="kpi-patient_ltv-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── SCHEDULING: UTILISATION ── -->
-    <section class="section" id="section-scheduling-utilisation">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Schedule — Utilisation</div>
-                <div class="section-sub">Chair time utilisation and appointment attendance by practitioner</div>
-            </div>
-            <div class="report-subnav" id="subnav-scheduling-utilisation"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Chair Utilisation</div>
-                <div class="kpi-value" id="kpi-chair_utilisation">—</div>
-                <div class="kpi-delta" id="kpi-chair_utilisation-d"></div>
+                <div class="kpi-label">Total Appointments</div>
+                <div class="kpi-value" id="kpi-total_appointments">—</div>
+                <div class="kpi-delta" id="kpi-total_appointments-d"></div>
             </div>
             <div class="kpi">
                 <div class="kpi-label">DNA Rate</div>
@@ -576,90 +263,22 @@
                 <div class="kpi-delta" id="kpi-cancellations-d"></div>
             </div>
             <div class="kpi">
-                <div class="kpi-label">Available Hours</div>
-                <div class="kpi-value" id="kpi-available_hours">—</div>
-                <div class="kpi-delta" id="kpi-available_hours-d"></div>
+                <div class="kpi-label">Chair Utilisation</div>
+                <div class="kpi-value" id="kpi-chair_utilisation">—</div>
+                <div class="kpi-delta" id="kpi-chair_utilisation-d"></div>
             </div>
         </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
     </section>
 
-    <!-- ── SCHEDULING: PLANNING ── -->
-    <section class="section" id="section-scheduling-planning">
+    <!-- ── REVENUE ── -->
+    <section class="section" id="section-revenue">
         <div class="section-header">
             <div>
-                <div class="section-title">Schedule — Planning</div>
-                <div class="section-sub">Forward diary fill rate and upcoming availability</div>
+                <div class="section-title">Revenue</div>
+                <div class="section-sub">NHS and private revenue, cashflow and discounts by period and site</div>
             </div>
-            <div class="report-subnav" id="subnav-scheduling-planning"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">4-Week Fill Rate</div>
-                <div class="kpi-value" id="kpi-forward_fill_rate">—</div>
-                <div class="kpi-delta" id="kpi-forward_fill_rate-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Empty Slots</div>
-                <div class="kpi-value" id="kpi-empty_slots">—</div>
-                <div class="kpi-delta" id="kpi-empty_slots-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Lead Time (days)</div>
-                <div class="kpi-value" id="kpi-avg_lead_time">—</div>
-                <div class="kpi-delta" id="kpi-avg_lead_time-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Booked Forward</div>
-                <div class="kpi-value" id="kpi-booked_forward">—</div>
-                <div class="kpi-delta" id="kpi-booked_forward-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── SCHEDULING: PERFORMANCE ── -->
-    <section class="section" id="section-scheduling-performance">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Schedule — Performance</div>
-                <div class="section-sub">Appointment productivity and timing metrics</div>
-            </div>
-            <div class="report-subnav" id="subnav-scheduling-performance"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Total Appointments</div>
-                <div class="kpi-value" id="kpi-total_appointments">—</div>
-                <div class="kpi-delta" id="kpi-total_appointments-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Appt Value</div>
-                <div class="kpi-value" id="kpi-avg_appointment_value">—</div>
-                <div class="kpi-delta" id="kpi-avg_appointment_value-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Duration (mins)</div>
-                <div class="kpi-value" id="kpi-avg_duration">—</div>
-                <div class="kpi-delta" id="kpi-avg_duration-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">On-time Rate</div>
-                <div class="kpi-value" id="kpi-ontime_rate">—</div>
-                <div class="kpi-delta" id="kpi-ontime_rate-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── REVENUE: VALUE ── -->
-    <section class="section" id="section-revenue-value">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Revenue — Value</div>
-                <div class="section-sub">NHS and private revenue by period, site and practitioner</div>
-            </div>
-            <div class="report-subnav" id="subnav-revenue-value"></div>
+            <div class="report-subnav" id="subnav-revenue"></div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -679,79 +298,11 @@
             </div>
             <div class="kpi">
                 <div class="kpi-label">Revenue / Patient</div>
-                <div class="kpi-value" id="kpi-revenue_per_patient_rev">—</div>
-                <div class="kpi-delta" id="kpi-revenue_per_patient_rev-d"></div>
+                <div class="kpi-value" id="kpi-revenue_per_patient">—</div>
+                <div class="kpi-delta" id="kpi-revenue_per_patient-d"></div>
             </div>
         </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── REVENUE: CASHFLOW ── -->
-    <section class="section" id="section-revenue-cashflow">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Revenue — Cashflow</div>
-                <div class="section-sub">Invoiced, collected and outstanding balances by period</div>
-            </div>
-            <div class="report-subnav" id="subnav-revenue-cashflow"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Total Invoiced</div>
-                <div class="kpi-value" id="kpi-total_invoiced">—</div>
-                <div class="kpi-delta" id="kpi-total_invoiced-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Total Collected</div>
-                <div class="kpi-value" id="kpi-total_collected">—</div>
-                <div class="kpi-delta" id="kpi-total_collected-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Outstanding</div>
-                <div class="kpi-value" id="kpi-outstanding">—</div>
-                <div class="kpi-delta" id="kpi-outstanding-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Collection Rate</div>
-                <div class="kpi-value" id="kpi-collection_rate">—</div>
-                <div class="kpi-delta" id="kpi-collection_rate-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
-    </section>
-
-    <!-- ── REVENUE: DISCOUNTS ── -->
-    <section class="section" id="section-revenue-discounts">
-        <div class="section-header">
-            <div>
-                <div class="section-title">Revenue — Discounts</div>
-                <div class="section-sub">Discount applied by practitioner, treatment type and period</div>
-            </div>
-            <div class="report-subnav" id="subnav-revenue-discounts"></div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Total Discounts</div>
-                <div class="kpi-value" id="kpi-total_discounts">—</div>
-                <div class="kpi-delta" id="kpi-total_discounts-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Discount Rate</div>
-                <div class="kpi-value" id="kpi-discount_rate">—</div>
-                <div class="kpi-delta" id="kpi-discount_rate-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Discount</div>
-                <div class="kpi-value" id="kpi-avg_discount">—</div>
-                <div class="kpi-delta" id="kpi-avg_discount-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Net Revenue</div>
-                <div class="kpi-value" id="kpi-net_revenue">—</div>
-                <div class="kpi-delta" id="kpi-net_revenue-d"></div>
-            </div>
-        </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
     </section>
 
     <!-- ── NHS ── -->
@@ -785,7 +336,7 @@
                 <div class="kpi-delta" id="kpi-value_per_uda-d"></div>
             </div>
         </div>
-        <div class="embed-slot embed-full">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
     </section>
 
 </main>
@@ -793,61 +344,29 @@
 <script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.23.1/dist/powerbi.min.js"></script>
 <script>
 
-    // ── Navigation structure ────────────────────────────────────────────────
-    const NAV = {
-        treatment: {
-            label: 'Treatment',
-            subs: [
-                { key: 'treatment-performed',  label: 'Performed',         icon: 'chart-bar'  },
-                { key: 'treatment-open',        label: 'Open',              icon: 'clipboard'  },
-                { key: 'treatment-acceptance',  label: 'Acceptance',        icon: 'trend-up'   },
-            ]
-        },
-        customer: {
-            label: 'Patient',
-            subs: [
-                { key: 'customer-acquisition',  label: 'Acquisition',       icon: 'person-add' },
-                { key: 'customer-retention',    label: 'Retention',         icon: 'refresh'    },
-                { key: 'customer-value',        label: 'Value',             icon: 'currency'   },
-            ]
-        },
-        scheduling: {
-            label: 'Schedule',
-            subs: [
-                { key: 'scheduling-utilisation',label: 'Utilisation',       icon: 'calendar'   },
-                { key: 'scheduling-planning',   label: 'Planning',          icon: 'forward'    },
-                { key: 'scheduling-performance',label: 'Performance',       icon: 'chart-line' },
-            ]
-        },
-        revenue: {
-            label: 'Revenue',
-            subs: [
-                { key: 'revenue-value',         label: 'Value',             icon: 'chart-bar'  },
-                { key: 'revenue-cashflow',       label: 'Cashflow',          icon: 'chart-line' },
-                { key: 'revenue-discounts',      label: 'Discounts',         icon: 'percent'    },
-            ]
-        },
-        nhs: {
-            label: 'NHS',
-            subs: []
-        },
+    // ── Report map: section key → report name for /api/embed-token and /api/kpis ──
+    const SECTION_REPORT = {
+        'treatment': 'treatment',
+        'customer':  'patients',
+        'scheduling':'scheduling',
+        'revenue':   'revenue',
+        'nhs':       'nhs',
     };
 
-    // Map section key → report name for /api/embed-token
-    const SECTION_REPORT = {
-        'treatment-performed':    'treatment',
-        'treatment-open':         'treatment',
-        'treatment-acceptance':   'treatment',
-        'customer-acquisition':   'patients',
-        'customer-retention':     'patients',
-        'customer-value':         'patients',
-        'scheduling-utilisation': 'scheduling',
-        'scheduling-planning':    'scheduling',
-        'scheduling-performance': 'scheduling',
-        'revenue-value':          'revenue',
-        'revenue-cashflow':       'cashflow',
-        'revenue-discounts':      'revenue',
-        'nhs':                    'nhs',
+    // ── Icon map: PBI page display name → icon key ──────────────────────────
+    const PAGE_ICON_MAP = {
+        'Performed':   'chart-bar',
+        'Open':        'clipboard',
+        'Acceptance':  'trend-up',
+        'Acquisition': 'person-add',
+        'Retention':   'refresh',
+        'Value':       'currency',
+        'Utilisation': 'calendar',
+        'Planning':    'forward',
+        'Performance': 'chart-line',
+        'Cashflow':    'chart-line',
+        'Discount':    'percent',
+        '_default':    'chart-bar',
     };
 
     // ── SVG icons ────────────────────────────────────────────────────────────
@@ -862,78 +381,129 @@
         'calendar':   '<rect x="3" y="5" width="18" height="17" rx="1"/><path d="M3 11h18M8 3v4M16 3v4" stroke-linecap="round"/>',
         'forward':    '<polyline points="5 12 19 12" stroke-linecap="round" stroke-linejoin="round"/><polyline points="13 6 19 12 13 18" stroke-linecap="round" stroke-linejoin="round"/>',
         'percent':    '<line x1="19" y1="5" x2="5" y2="19" stroke-linecap="round"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
-        'table':      '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18" stroke-linecap="round"/>',
-        'person':     '<circle cx="12" cy="8" r="3.5"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke-linecap="round"/>',
     };
 
     function svgIcon(key, size) {
-        size = size || 20;
-        const paths = ICONS[key] || ICONS['chart-bar'];
-        return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8">${paths}</svg>`;
+        size = size || 18;
+        return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8">${ICONS[key] || ICONS['chart-bar']}</svg>`;
     }
 
     // ── State ────────────────────────────────────────────────────────────────
-    let activeParent  = 'treatment';
-    let activeSection = 'treatment-performed';
+    let activeSection = 'treatment';
 
-    // ── Section header icon tiles (sibling sub-sections) ────────────────────
-    function renderSectionSubnav(parentKey, sectionKey) {
-        const subs = NAV[parentKey] ? NAV[parentKey].subs : [];
-        if (subs.length <= 1) return;
-        const el = document.getElementById('subnav-' + sectionKey);
-        if (!el) return;
-        el.innerHTML = '';
-        el.style.display = 'flex';
-        subs.forEach(sub => {
-            const btn = document.createElement('button');
-            btn.className = 'page-tile' + (sub.key === sectionKey ? ' active' : '');
-            btn.title = sub.label;
-            btn.innerHTML = svgIcon(sub.icon, 18);
-            btn.addEventListener('click', () => activateSection(sub.key));
-            el.appendChild(btn);
-        });
-    }
-
-    // ── Section activation ───────────────────────────────────────────────────
-    function activateSection(sectionKey) {
-        activeSection = sectionKey;
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-        const el = document.getElementById('section-' + sectionKey);
-        if (el) {
-            el.classList.add('active');
-            loadEmbedsInSection(el);
-        }
-        renderSectionSubnav(activeParent, sectionKey);
-        refreshKPIs();
-    }
-
-    // ── Primary tab clicks ───────────────────────────────────────────────────
+    // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            activeParent = tab.dataset.parent;
-            const subs = NAV[activeParent] ? NAV[activeParent].subs : [];
-            activateSection(subs.length > 0 ? subs[0].key : activeParent);
+            activateSection(tab.dataset.section);
         });
     });
 
-    // Initial section header sub-nav
-    renderSectionSubnav('treatment', 'treatment-performed');
+    function activateSection(key) {
+        activeSection = key;
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        const el = document.getElementById('section-' + key);
+        if (el) {
+            el.classList.add('active');
+            loadEmbedsInSection(key);
+        }
+        refreshKPIs();
+    }
 
-    // ── Filter state ────────────────────────────────────────────────────────
+    // ── PBI page sub-nav (built after report loads) ──────────────────────────
+    function buildSubnav(sectionKey, pages, report) {
+        const el = document.getElementById('subnav-' + sectionKey);
+        if (!el || pages.length <= 1) { if (el) el.style.display = 'none'; return; }
+
+        el.innerHTML = '';
+        el.style.display = 'flex';
+
+        pages.forEach((page, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'page-tile' + (i === 0 ? ' active' : '');
+            btn.title = page.displayName;
+            btn.innerHTML = svgIcon(PAGE_ICON_MAP[page.displayName] || PAGE_ICON_MAP['_default']);
+            btn.addEventListener('click', () => {
+                el.querySelectorAll('.page-tile').forEach(t => t.classList.remove('active'));
+                btn.classList.add('active');
+                report.setPage(page.name);
+            });
+            el.appendChild(btn);
+        });
+
+        report.off('pageChanged');
+        report.on('pageChanged', e => {
+            const active = e.detail.newPage.name;
+            el.querySelectorAll('.page-tile').forEach((t, i) => {
+                t.classList.toggle('active', pages[i] && pages[i].name === active);
+            });
+        });
+    }
+
+    // ── Power BI embedding ───────────────────────────────────────────────────
+    const embeddedReports = {};
+    const tokenCache      = {};
+
+    async function getEmbedConfig(reportName) {
+        const cached = tokenCache[reportName];
+        if (cached && cached.expiry > Date.now()) return cached.config;
+
+        const res = await fetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        const { token, embedUrl, reportId } = await res.json();
+        const config = {
+            type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
+            settings: { navContentPaneEnabled: false, filterPaneEnabled: false },
+        };
+        tokenCache[reportName] = { config, expiry: Date.now() + 55 * 60 * 1000 };
+        return config;
+    }
+
+    async function loadEmbedsInSection(sectionKey) {
+        const reportName = SECTION_REPORT[sectionKey];
+        if (!reportName) return;
+        if (embeddedReports[sectionKey]) return;  // already embedded
+
+        const slot = document.getElementById('embed-' + sectionKey);
+        if (!slot) return;
+
+        let config;
+        try {
+            config = await getEmbedConfig(reportName);
+        } catch (e) {
+            slot.style.cssText += ';display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:13px;';
+            slot.textContent = 'Report not yet configured';
+            return;
+        }
+
+        const report = window.powerbi.embed(slot, config);
+        embeddedReports[sectionKey] = report;
+
+        report.on('loaded', async () => {
+            try {
+                const pages = await report.getPages();
+                buildSubnav(sectionKey, pages, report);
+            } catch (_) {}
+        });
+    }
+
+    // ── Filters ──────────────────────────────────────────────────────────────
     const filterState = { period: 'all', site: 'all', pract: 'all' };
-
-    const selPeriod = document.getElementById('f-period');
-    const selSite   = document.getElementById('f-site');
-    const selPract  = document.getElementById('f-pract');
-    const badge     = document.getElementById('filter-badge');
+    const selPeriod   = document.getElementById('f-period');
+    const selSite     = document.getElementById('f-site');
+    const selPract    = document.getElementById('f-pract');
+    const badge       = document.getElementById('filter-badge');
 
     function refreshBadge() {
-        const period = selPeriod.options[selPeriod.selectedIndex].text;
-        const site   = selSite.options[selSite.selectedIndex].text;
-        const pract  = selPract.options[selPract.selectedIndex].text;
-        badge.textContent = `${period} · ${site} · ${pract}`;
+        badge.textContent = [
+            selPeriod.options[selPeriod.selectedIndex].text,
+            selSite.options[selSite.selectedIndex].text,
+            selPract.options[selPract.selectedIndex].text,
+        ].join(' · ');
     }
 
     function onFilterChange() {
@@ -949,183 +519,54 @@
     selSite.addEventListener('change', onFilterChange);
     selPract.addEventListener('change', onFilterChange);
 
-    const chkActive = document.getElementById('f-active-only');
-
     function loadFilters(sitesAlreadyLoaded) {
-        const activeOnly = chkActive.checked ? '1' : '0';
+        const activeOnly = document.getElementById('f-active-only').checked ? '1' : '0';
         fetch('/api/filters?active_only=' + activeOnly)
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
                     data.sites.forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s.id; opt.textContent = s.name;
-                        selSite.appendChild(opt);
+                        const o = document.createElement('option');
+                        o.value = s.id; o.textContent = s.name;
+                        selSite.appendChild(o);
                     });
                 }
                 while (selPract.options.length > 1) selPract.remove(1);
                 data.practitioners.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.id; opt.textContent = p.name;
-                    selPract.appendChild(opt);
+                    const o = document.createElement('option');
+                    o.value = p.id; o.textContent = p.name;
+                    selPract.appendChild(o);
                 });
-                if (selPract.value !== 'all') {
-                    selPract.value = 'all';
-                    filterState.pract = 'all';
-                    refreshBadge();
-                    refreshKPIs();
-                }
             })
             .catch(() => {});
     }
 
-    chkActive.addEventListener('change', () => loadFilters(true));
+    document.getElementById('f-active-only').addEventListener('change', () => loadFilters(true));
     loadFilters(false);
-
-    // ── Power BI icons for report page sub-nav ───────────────────────────────
-    const PAGE_ICON_MAP = { '_default': 'chart-bar' };
-
-    function buildPbiSubnav(sectionKey, pages, report) {
-        const el = document.getElementById('subnav-' + sectionKey);
-        if (!el) return;
-        if (pages.length <= 1) { el.style.display = 'none'; return; }
-
-        el.innerHTML = '';
-        el.style.display = 'flex';
-
-        pages.forEach((page, i) => {
-            const btn = document.createElement('button');
-            btn.className = 'page-tile' + (i === 0 ? ' active' : '');
-            btn.title = page.displayName;
-            btn.innerHTML = svgIcon(PAGE_ICON_MAP[page.displayName] || PAGE_ICON_MAP['_default'], 18);
-            btn.addEventListener('click', () => {
-                el.querySelectorAll('.page-tile').forEach(t => t.classList.remove('active'));
-                btn.classList.add('active');
-                report.setPage(page.name);
-            });
-            el.appendChild(btn);
-        });
-
-        report.off('pageChanged');
-        report.on('pageChanged', e => {
-            const active = e.detail.newPage.name;
-            el.querySelectorAll('.page-tile').forEach((t, i) => {
-                t.classList.toggle('active', pages[i].name === active);
-            });
-        });
-    }
-
-    // ── Power BI embedding ───────────────────────────────────────────────────
-    const embeddedReports = {};
-    const tokenCache = {};
-
-    async function getEmbedConfig(reportName) {
-        const cached = tokenCache[reportName];
-        if (cached && cached.expiry > Date.now()) return cached.config;
-
-        const res = await fetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || `HTTP ${res.status}`);
-        }
-        const { token, embedUrl, reportId } = await res.json();
-
-        const config = {
-            type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
-            settings: { navContentPaneEnabled: false, filterPaneEnabled: false },
-        };
-        tokenCache[reportName] = { config, expiry: Date.now() + 55 * 60 * 1000 };
-        return config;
-    }
-
-    async function loadEmbedsInSection(sectionEl) {
-        const sectionKey = sectionEl.id.replace('section-', '');
-        const reportName = SECTION_REPORT[sectionKey];
-        if (!reportName) return;
-
-        const slots = sectionEl.querySelectorAll('.embed-slot:not([data-loaded])');
-        if (!slots.length) return;
-
-        let config;
-        try {
-            config = await getEmbedConfig(reportName);
-        } catch (e) {
-            slots.forEach(slot => showSlotError(slot, 'Report not yet configured'));
-            return;
-        }
-
-        slots.forEach(slot => {
-            const report = window.powerbi.embed(slot, config);
-            embeddedReports[sectionKey] = report;
-            slot.dataset.loaded = 'true';
-            report.on('loaded', () => {});
-        });
-    }
 
     function applyFilters() {
         const filters = [];
-
         if (filterState.site !== 'all') {
-            filters.push({
-                $schema: 'http://powerbi.com/product/schema#basic',
-                target: { table: 'List Practice Sites', column: 'Site Name' },
-                operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1,
-            });
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
         }
         if (filterState.pract !== 'all') {
-            filters.push({
-                $schema: 'http://powerbi.com/product/schema#basic',
-                target: { table: 'List Practitioners', column: 'Full Name' },
-                operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1,
-            });
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });
         }
         if (filterState.period !== 'all') {
-            filters.push({
-                $schema: 'http://powerbi.com/product/schema#basic',
-                target: { table: 'List Date Grouping', column: 'Date Grouping' },
-                operator: 'In', values: [filterState.period], filterType: 1,
-            });
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Date Grouping', column: 'Date Grouping' }, operator: 'In', values: [filterState.period], filterType: 1 });
         }
-
-        Object.values(embeddedReports).forEach(report => {
-            report.setFilters(filters).catch(e => console.warn('[Analiticaly] setFilters:', e));
-        });
+        Object.values(embeddedReports).forEach(r => r.setFilters(filters).catch(() => {}));
     }
 
     // ── KPI formatting ───────────────────────────────────────────────────────
     const KPI_FORMAT = {
-        treatment_value:          'currency',
-        avg_treatment_value:      'currency',
-        open_plan_value:          'currency',
-        accepted_value:           'currency',
-        declined_value:           'currency',
-        new_patient_revenue:      'currency',
-        revenue_per_patient:      'currency',
-        avg_patient_spend:        'currency',
-        patient_ltv:              'currency',
-        avg_appointment_value:    'currency',
-        total_revenue:            'currency',
-        nhs_revenue:              'currency',
-        private_revenue:          'currency',
-        revenue_per_patient_rev:  'currency',
-        total_invoiced:           'currency',
-        total_collected:          'currency',
-        outstanding:              'currency',
-        total_discounts:          'currency',
-        avg_discount:             'currency',
-        net_revenue:              'currency',
-        value_per_uda:            'currency',
-        acceptance_rate:          'percent',
-        acquisition_rate:         'percent',
-        recall_compliance:        'percent',
-        retention_rate:           'percent',
-        chair_utilisation:        'percent',
-        dna_rate:                 'percent',
-        forward_fill_rate:        'percent',
-        ontime_rate:              'percent',
-        collection_rate:          'percent',
-        discount_rate:            'percent',
-        uda_achievement:          'percent',
+        avg_accepted_value: 'currency', declined_value:     'currency',
+        total_revenue:      'currency', nhs_revenue:        'currency',
+        private_revenue:    'currency', revenue_per_patient:'currency',
+        value_per_uda:      'currency',
+        acceptance_rate:    'percent',  recall_compliance:  'percent',
+        dna_rate:           'percent',  chair_utilisation:  'percent',
+        uda_achievement:    'percent',
     };
 
     function fmtCurrency(v) {
@@ -1136,64 +577,53 @@
     }
     function fmtPct(v)   { return v == null ? '—' : v.toFixed(1) + '%'; }
     function fmtCount(v) { return v == null ? '—' : Math.round(v).toLocaleString(); }
-
     function fmtValue(key, v) {
-        const fmt = KPI_FORMAT[key];
-        if (fmt === 'currency') return fmtCurrency(v);
-        if (fmt === 'percent')  return fmtPct(v);
+        const f = KPI_FORMAT[key];
+        if (f === 'currency') return fmtCurrency(v);
+        if (f === 'percent')  return fmtPct(v);
         return fmtCount(v);
     }
     function fmtDelta(d) {
         if (d == null) return { text: '', cls: '' };
         const abs = Math.abs(d).toFixed(1);
-        return d >= 0
-            ? { text: `↑ ${abs}% vs prior year`, cls: 'up' }
-            : { text: `↓ ${abs}% vs prior year`, cls: 'down' };
+        return d >= 0 ? { text: `↑ ${abs}% vs prior year`, cls: 'up' }
+                      : { text: `↓ ${abs}% vs prior year`, cls: 'down' };
     }
 
     // ── /api/me ──────────────────────────────────────────────────────────────
     async function loadMe() {
         try {
             const data = await fetch('/api/me').then(r => r.json());
-            const userEl = document.getElementById('header-user');
-            const orgEl  = document.getElementById('header-org');
-            if (userEl && data.display_name)  userEl.textContent = data.display_name;
-            if (orgEl  && data.practice_name) orgEl.textContent  = data.practice_name;
+            const u = document.getElementById('header-user');
+            const o = document.getElementById('header-org');
+            if (u && data.display_name)  u.textContent = data.display_name;
+            if (o && data.practice_name) o.textContent = data.practice_name;
         } catch (_) {}
     }
 
     // ── /api/kpis ────────────────────────────────────────────────────────────
     async function refreshKPIs() {
-        const qs = new URLSearchParams({
-            section: activeSection,
-            period:  filterState.period,
-            site:    filterState.site,
-            pract:   filterState.pract,
-        });
+        const reportKey = SECTION_REPORT[activeSection];
+        if (!reportKey) return;
+        const qs = new URLSearchParams({ section: reportKey, period: filterState.period, site: filterState.site, pract: filterState.pract });
         try {
             const data = await fetch('/api/kpis?' + qs).then(r => r.json());
-            if (data._error) { console.warn('[KPI]', data._error); return; }
+            if (data._error) return;
             Object.entries(data).forEach(([key, kpi]) => {
-                const valEl = document.getElementById('kpi-' + key);
-                const dltEl = document.getElementById('kpi-' + key + '-d');
-                if (valEl) valEl.textContent = fmtValue(key, kpi.value);
-                if (dltEl) {
+                const vEl = document.getElementById('kpi-' + key);
+                const dEl = document.getElementById('kpi-' + key + '-d');
+                if (vEl) vEl.textContent = fmtValue(key, kpi.value);
+                if (dEl) {
                     const d = fmtDelta(kpi.delta_pct);
-                    dltEl.textContent = d.text;
-                    dltEl.className   = 'kpi-delta' + (d.cls ? ' ' + d.cls : '');
+                    dEl.textContent = d.text;
+                    dEl.className   = 'kpi-delta' + (d.cls ? ' ' + d.cls : '');
                 }
             });
-        } catch (e) { console.warn('[KPI fetch]', e); }
+        } catch (_) {}
     }
 
-    function showSlotError(slot, msg) {
-        slot.style.cssText += ';display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:13px;';
-        slot.textContent = msg;
-    }
-
-    // Initial load
-    const initialSection = document.querySelector('.section.active');
-    if (initialSection) loadEmbedsInSection(initialSection);
+    // ── Init ─────────────────────────────────────────────────────────────────
+    loadEmbedsInSection('treatment');
     loadMe();
     refreshKPIs();
 
