@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     30/04/2026  AIH Replace CAST AS DATETIME with datetime2(3); TIME -> TIME(0) — Fabric requires explicit precision
+--    *03     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -38,11 +39,11 @@ BEGIN
         SELECT
             pd.Tenant_ID                                                AS Tenant_ID,
             pd.Id                                                       AS bk_Practitioner_Diary_ID,
-            dpr.pk_Practitioner                                         AS fk_Practitioner,
+            ISNULL(dpr.pk_Practitioner, -1)                             AS fk_Practitioner,
             dd.pk_Date                                                  AS fk_Date_Day,
             CAST(pd.Day AS DATE)                                        AS Day_Date,
             TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS TIME(0))            AS Start_Time,
-            TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS TIME(0))           AS End_time,
+            TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS TIME(0))           AS End_Time,
             1-CAST(ISNULL(pd.Available,0) AS BIT)                       AS Unavailable,
             CASE WHEN pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
                  THEN DATEDIFF(MINUTE,
@@ -86,7 +87,7 @@ BEGIN
             fk_Date_Day             = src.fk_Date_Day,
             Day_Date                = src.Day_Date,
             Start_Time              = src.Start_Time,
-            end_time                = src.end_time,
+            End_Time                = src.End_Time,
             Unavailable             = src.Unavailable,
             Session_Duration_Mins   = src.Session_Duration_Mins,
             Total_Break_Mins        = src.Total_Break_Mins,
@@ -100,7 +101,7 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Date_Day] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Day_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Start_Time] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[end_time] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[End_Time] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Unavailable] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Session_Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Break_Mins] AS VARCHAR(500)), ''),
@@ -112,7 +113,7 @@ BEGIN
            ISNULL(CAST(src.[fk_Date_Day] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Day_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Start_Time] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[end_time] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[End_Time] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Unavailable] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Session_Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Break_Mins] AS VARCHAR(500)), ''),
@@ -126,7 +127,7 @@ BEGIN
             Tenant_ID,
             bk_Practitioner_Diary_ID,
             fk_Practitioner, fk_Date_Day,
-            Day_Date, Start_Time, end_time, Unavailable,
+            Day_Date, Start_Time, End_Time, Unavailable,
             Session_Duration_Mins, Total_Break_Mins, Available_Clinical_Mins, Break_Count,
             DW_Created_At, DW_Updated_At
         )
@@ -134,7 +135,7 @@ BEGIN
             src.Tenant_ID,
             src.bk_Practitioner_Diary_ID,
             src.fk_Practitioner, src.fk_Date_Day,
-            src.Day_Date, src.Start_Time, src.end_time, src.Unavailable,
+            src.Day_Date, src.Start_Time, src.End_Time, src.Unavailable,
             src.Session_Duration_Mins, src.Total_Break_Mins, src.Available_Clinical_Mins, src.Break_Count,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src

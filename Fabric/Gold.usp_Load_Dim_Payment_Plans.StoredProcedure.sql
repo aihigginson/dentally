@@ -5,6 +5,8 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     30/04/2026  AIH Add Tenant_ID to INSERT (NOT NULL column omitted); fix NOT EXISTS to include Tenant_ID
+--    *03     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -57,7 +59,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Payment_Plans tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Payment_Plan_ID = tgt.Payment_Plan_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Payment_Plan_ID = tgt.Payment_Plan_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Payment_Plan <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -103,13 +106,16 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Payment_Plan_base BIGINT = ISNULL((SELECT MAX(pk_Payment_Plan) FROM Gold.Dim_Payment_Plans WHERE pk_Payment_Plan > 0), 0);
         INSERT INTO Gold.Dim_Payment_Plans (
+            pk_Payment_Plan,
             Tenant_ID, Payment_Plan_ID, Payment_Plan_Name, Patient_Friendly_Name, Active, Colour, Site_ID,
             Dentist_Recall_Interval_Months, Hygienist_Recall_Interval_Months,
             Emergency_Duration_Mins, Exam_Duration_Mins, Exam_Scale_Polish_Duration_Mins,
             Scale_Polish_Duration_Mins, Created_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Payment_Plan_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Payment_Plan_ID),
             src.Tenant_ID, src.Payment_Plan_ID, src.Payment_Plan_Name, src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
             src.Dentist_Recall_Interval_Months, src.Hygienist_Recall_Interval_Months,
             src.Emergency_Duration_Mins, src.Exam_Duration_Mins, src.Exam_Scale_Polish_Duration_Mins,
@@ -119,6 +125,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Payment_Plans (pk_Payment_Plan, Tenant_ID, Payment_Plan_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Payment_Plans WHERE pk_Payment_Plan = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

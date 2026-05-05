@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -37,11 +38,11 @@ BEGIN
         SELECT
             tpi.Tenant_ID                                                   AS Tenant_ID,
             TRY_CAST(tpi.Id AS INT)                                         AS bk_Treatment_Plan_Item_ID,
-            dp.pk_Treatment_Plan                                            AS fk_Treatment_Plan,
-            dpat.pk_Patient                                                 AS fk_Patient,
-            dpr.pk_Practitioner                                             AS fk_Practitioner,
-            dpp.pk_Payment_Plan                                             AS fk_Payment_Plan,
-            dt.pk_Treatment                                                 AS fk_Treatment,
+            ISNULL(dp.pk_Treatment_Plan, -1)                                AS fk_Treatment_Plan,
+            ISNULL(dpat.pk_Patient, -1)                                     AS fk_Patient,
+            ISNULL(dpr.pk_Practitioner, -1)                                 AS fk_Practitioner,
+            ISNULL(dpp.pk_Payment_Plan, -1)                                 AS fk_Payment_Plan,
+            ISNULL(dt.pk_Treatment, -1)                                     AS fk_Treatment,
             dd_c.pk_Date                                                    AS fk_Date_Created,
             dd_comp.pk_Date                                                 AS fk_Date_Completed,
             dd_u.pk_Date                                                    AS fk_Date_Updated,

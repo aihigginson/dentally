@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *03     01/05/2026  AIH Fix column names: Dentist_ID/Hygienist_ID -> Dentist_Practitioner_ID/Hygienist_Practitioner_ID
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Patients]
@@ -32,7 +34,7 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Dim_Patients;
 
     CREATE TABLE Gold.Dim_Patients (
-        pk_Patient                     BIGINT          NOT NULL IDENTITY,
+        pk_Patient                     BIGINT          NOT NULL,
         Tenant_ID                      INT             NOT NULL,
         Patient_ID                     INT             NOT NULL,
         Account_ID                     INT             NULL,
@@ -65,8 +67,8 @@ BEGIN
         Site_ID                        VARCHAR(50)    NULL,
         Family_ID                      VARCHAR(255)   NULL,
         Acquisition_Source_ID          VARCHAR(50)    NULL,
-        Dentist_ID                     INT             NULL,
-        Hygienist_ID                   INT             NULL,
+        Dentist_Practitioner_ID        INT             NULL,
+        Hygienist_Practitioner_ID      INT             NULL,
         Dentist_Recall_Date            DATE            NULL,
         Dentist_Recall_Interval_Months INT             NULL,
         Hygienist_Recall_Date          DATE            NULL,
@@ -99,6 +101,10 @@ BEGIN
         DW_Updated_At                  datetime2(6)    NOT NULL
     );
 
+        -- Insert -1 unknown/shared seed row
+        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, DW_Created_At, DW_Updated_At)
+        VALUES (-1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************
@@ -112,7 +118,7 @@ BEGIN
 
     SET @Run_Inserts = @My_Inserts
     SET @Run_Updates = @My_Updates
-    SET @Run_Deletes = @My_Inserts  
+    SET @Run_Deletes = @My_Inserts
 
 END
 

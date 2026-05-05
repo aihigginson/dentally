@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -58,7 +60,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Treatments tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_ID = tgt.Treatment_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_ID = tgt.Treatment_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Treatment <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -109,7 +112,9 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Treatment_base BIGINT = ISNULL((SELECT MAX(pk_Treatment) FROM Gold.Dim_Treatments WHERE pk_Treatment > 0), 0);
         INSERT INTO Gold.Dim_Treatments (
+            pk_Treatment,
             Tenant_ID,
             Treatment_ID, Treatment_Code, Nomenclature, Patient_Nomenclature, Description,
             Patient_Description, Notes, Region, UDA_Band, NHS_Treatment_Cat,
@@ -117,6 +122,7 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Treatment_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Treatment_ID),
             src.Tenant_ID,
             src.Treatment_ID, src.Treatment_Code, src.Nomenclature, src.Patient_Nomenclature, src.Description,
             src.Patient_Description, src.Notes, src.Region, src.UDA_Band, src.NHS_Treatment_Cat,
@@ -127,6 +133,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Treatments (pk_Treatment, Tenant_ID, Treatment_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments WHERE pk_Treatment = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

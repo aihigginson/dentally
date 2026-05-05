@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -108,7 +110,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Patients tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Patient_ID = tgt.Patient_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Patient_ID = tgt.Patient_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Patient <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -264,7 +267,9 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Patient_base BIGINT = ISNULL((SELECT MAX(pk_Patient) FROM Gold.Dim_Patients WHERE pk_Patient > 0), 0);
         INSERT INTO Gold.Dim_Patients (
+            pk_Patient,
             Tenant_ID, Patient_ID, Account_ID, Title, First_Name, Middle_Name, Last_Name, Preferred_Name, Full_Name,
             Date_Of_Birth, Age_Years, Gender_Description, Ethnicity_Code,
             NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone,
@@ -282,6 +287,7 @@ BEGIN
             Patient_Created_Date, Patient_Updated_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
             src.Tenant_ID, src.Patient_ID, src.Account_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name,
             src.Preferred_Name, src.Full_Name, src.Date_Of_Birth, src.Age_Years,
             src.Gender_Description, src.Ethnicity_Code, src.NHS_Number, src.NI_Number, src.Email_Address,
@@ -303,6 +309,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients WHERE pk_Patient = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

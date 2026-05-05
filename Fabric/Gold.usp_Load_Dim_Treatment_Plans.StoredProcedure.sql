@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -57,7 +59,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Treatment_Plans tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_Plan_ID = tgt.Treatment_Plan_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_Plan_ID = tgt.Treatment_Plan_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Treatment_Plan <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -108,7 +111,9 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Treatment_Plan_base BIGINT = ISNULL((SELECT MAX(pk_Treatment_Plan) FROM Gold.Dim_Treatment_Plans WHERE pk_Treatment_Plan > 0), 0);
         INSERT INTO Gold.Dim_Treatment_Plans (
+            pk_Treatment_Plan,
             Tenant_ID,
             Treatment_Plan_ID, Nickname, Patient_ID, Practitioner_ID, Completed,
             Start_Date, End_Date, Completed_Date, Last_Completed_Date,
@@ -116,6 +121,7 @@ BEGIN
             Created_Date, Updated_Date, DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Treatment_Plan_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Treatment_Plan_ID),
             src.Tenant_ID,
             src.Treatment_Plan_ID, src.Nickname, src.Patient_ID, src.Practitioner_ID, src.Completed,
             src.Start_Date, src.End_Date, src.Completed_Date, src.Last_Completed_Date,
@@ -126,6 +132,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Treatment_Plans (pk_Treatment_Plan, Tenant_ID, Treatment_Plan_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatment_Plans WHERE pk_Treatment_Plan = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

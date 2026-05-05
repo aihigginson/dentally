@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Accounts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Accounts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -50,7 +52,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Accounts tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Account_ID = tgt.Account_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Account_ID = tgt.Account_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Account <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -83,11 +86,14 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Account_base BIGINT = ISNULL((SELECT MAX(pk_Account) FROM Gold.Dim_Accounts WHERE pk_Account > 0), 0);
         INSERT INTO Gold.Dim_Accounts (
+            pk_Account,
             Tenant_ID, Account_ID, Patient_ID, Patient_Name, Current_Balance, Opening_Balance,
             Planned_NHS_Treatment_Value, Planned_Private_Treatment_Value, DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Account_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Account_ID),
             src.Tenant_ID, src.Account_ID, src.Patient_ID, src.Patient_Name, src.Current_Balance, src.Opening_Balance,
             src.Planned_NHS_Treatment_Value, src.Planned_Private_Treatment_Value, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
@@ -95,6 +101,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Accounts (pk_Account, Tenant_ID, Account_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Accounts WHERE pk_Account = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

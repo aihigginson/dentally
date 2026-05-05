@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Accounts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Accounts]
@@ -33,7 +34,7 @@ BEGIN
     DROP TABLE IF EXISTS Gold.Dim_Accounts;
 
     CREATE TABLE Gold.Dim_Accounts (
-        pk_Account                         BIGINT          NOT NULL IDENTITY,
+        pk_Account                         BIGINT          NOT NULL,
         Tenant_ID                      INT             NOT NULL,
         Account_ID                         INT             NOT NULL,
         Patient_ID                         INT             NULL,
@@ -45,6 +46,10 @@ BEGIN
         DW_Created_At                      datetime2(6)    NOT NULL,
         DW_Updated_At                      datetime2(6)    NOT NULL
     );
+
+        -- Insert -1 unknown/shared seed row
+        INSERT INTO Gold.Dim_Accounts (pk_Account, Tenant_ID, Account_ID, DW_Created_At, DW_Updated_At)
+        VALUES (-1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME());
 
         --*********************************
         --**** Procedure logic ends    ****
@@ -59,7 +64,7 @@ BEGIN
 
     SET @Run_Inserts = @My_Inserts
     SET @Run_Updates = @My_Updates
-    SET @Run_Deletes = @My_Inserts  
+    SET @Run_Deletes = @My_Inserts
 
 END
 GO

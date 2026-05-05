@@ -4,6 +4,8 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
+--    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
@@ -76,7 +78,8 @@ BEGIN
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Practice_Sites tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Site_ID = tgt.Site_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Site_ID = tgt.Site_ID AND Tenant_ID = tgt.Tenant_ID)
+        AND tgt.pk_Practice_Site <> -1;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -182,7 +185,9 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         -- Insert new rows
+        DECLARE @pk_Practice_Site_base BIGINT = ISNULL((SELECT MAX(pk_Practice_Site) FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site > 0), 0);
         INSERT INTO Gold.Dim_Practice_Sites (
+            pk_Practice_Site,
             Tenant_ID,
             Site_ID, Site_Name, Site_Active, Site_Address_Line_1, Site_Address_Line_2,
             Site_Town, Site_Postcode, Site_Phone, Site_Website, Site_Logo_URL, Site_Default_Payment_Plan_ID,
@@ -193,6 +198,7 @@ BEGIN
             Practice_Website, Practice_NHS, Practice_Time_Zone, DW_Created_At, DW_Updated_At
         )
         SELECT
+            @pk_Practice_Site_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Site_ID),
             src.Tenant_ID,
             src.Site_ID, src.Site_Name, src.Site_Active, src.Site_Address_Line_1, src.Site_Address_Line_2,
             src.Site_Town, src.Site_Postcode, src.Site_Phone, src.Site_Website, src.Site_Logo_URL, src.Site_Default_Payment_Plan_ID,
@@ -206,6 +212,11 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+
+        -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', SYSUTCDATETIME(), SYSUTCDATETIME()
+        WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1);
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

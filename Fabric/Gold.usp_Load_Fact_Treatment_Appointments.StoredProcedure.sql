@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -37,8 +38,8 @@ BEGIN
         SELECT
             ta.Tenant_ID                                                AS Tenant_ID,
             ta.Id                                                       AS bk_Treatment_Appointment_ID,
-            dpat.pk_Patient                                             AS fk_Patient,
-            dtp.pk_Treatment_Plan                                       AS fk_Treatment_Plan,
+            ISNULL(dpat.pk_Patient, -1)                                 AS fk_Patient,
+            ISNULL(dtp.pk_Treatment_Plan, -1)                           AS fk_Treatment_Plan,
             dd_a.pk_Date                                                AS fk_Date_Appointment,
             dd_c.pk_Date                                                AS fk_Date_Created,
             ta.Appointment_Id                                           AS Appointment_ID,
