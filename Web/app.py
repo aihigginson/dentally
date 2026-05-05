@@ -27,12 +27,12 @@ PBI_SCOPE     = ['https://analysis.windows.net/powerbi/api/.default']
 PBI_BASE      = 'https://api.powerbi.com/v1.0/myorg'
 
 REPORTS = {
-    'revenue':    os.environ.get('REPORT_ID_REVENUE',    ''),
-    'cashflow':   os.environ.get('REPORT_ID_CASHFLOW',   ''),
-    'patients':   os.environ.get('REPORT_ID_PATIENTS',   ''),
-    'treatments': os.environ.get('REPORT_ID_TREATMENTS', ''),
-    'scheduling': os.environ.get('REPORT_ID_SCHEDULING', ''),
-    'costs':      os.environ.get('REPORT_ID_COSTS',      ''),
+    'revenue':    os.environ.get('REPORT_ID_REVENUE',   ''),
+    'cashflow':   os.environ.get('REPORT_ID_CASHFLOW',  ''),
+    'patients':   os.environ.get('REPORT_ID_PATIENT',   ''),
+    'treatment':  os.environ.get('REPORT_ID_TREATMENT', ''),
+    'scheduling': os.environ.get('REPORT_ID_SCHEDULE',  ''),
+    'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
 }
 
 
