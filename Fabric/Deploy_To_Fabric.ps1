@@ -274,6 +274,7 @@ $Groups = [ordered]@{
     '14. Gold usp_Load procedures' = @(
         'Gold.usp_Load_Dim_Accounts.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Date.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Patients.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Payment_Plans.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql'
@@ -295,24 +296,6 @@ $Groups = [ordered]@{
         'Meta.usp_Create_Gold_Views.StoredProcedure.sql'
     )
 
-    '16. PBI views' = @(
-        'PBI._Appointments.View.sql'
-        'PBI._Contracts.View.sql'
-        'PBI._Invoice Items.View.sql'
-        'PBI._Practitioner Diaries.View.sql'
-        'PBI._Recalls.View.sql'
-        'PBI._Treatment Appointments.View.sql'
-        'PBI._Treatment Plan Items.View.sql'
-        'PBI.List Accounts.View.sql'
-        'PBI.List Date.View.sql'
-        'PBI.List Patients.View.sql'
-        'PBI.List Payment Plans.View.sql'
-        'PBI.List Practice Sites.View.sql'
-        'PBI.List Practitioners.View.sql'
-        'PBI.List Treatment Plans.View.sql'
-        'PBI.List Treatments.View.sql'
-        'PBI.List Users.View.sql'
-    )
 }
 
 $securePwd = Read-Host "Fabric password for $Username" -AsSecureString

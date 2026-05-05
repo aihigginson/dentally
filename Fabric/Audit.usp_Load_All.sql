@@ -57,189 +57,12 @@ DECLARE @Step       nvarchar(100);
 DECLARE @Start  datetime2(3);
 DECLARE @Msg        nvarchar(500);
 
--- ── Reference / lookup tables ────────────────────────────────────────────────
     EXEC [Audit].[ETL_Start_Run] @Run_Process_Name, @Run_Process_Options, @Run_UUID OUT, @Parent_Run_UUID, @Process_Type
 
     SET @Parent_Run_UUID = @Run_UUID
 
-    
-    SET @Step = 'Bronze_Accounts';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-
-    SET @Step = 'Bronze_Appointments';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-
-    SET @Step = 'Bronze_Invoices';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Invoice_Items';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Patients';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Payments';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Payment_Plans';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Practitioners';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Practitioner_Diary';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Recalls';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Practice';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Sites';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Treatments';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Treatment_Plans';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Treatment_Plan_Items';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-  --  EXEC Silver.usp_Load_Acquisition_Sources @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Users';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Treatment_Categories';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Acquisition_Sources';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Sundries';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Contracts';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Fees';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Practitioner_Diary_Breaks';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Nhs_Claims';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Patient_Stats';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Payment_Allocations';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Payment_Explanations';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
-    SET @Step = 'Bronze_Treatment_Appointments';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
-    IF @Mode='TEST' PRINT @Step + ' completed in '  + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
-
+-- ── Silver ────────────────────────────────────────────────────────────────────
+-- Bronze is loaded per-tenant by Orchestrate_Bronze before this procedure runs.
 
     SET @Step = 'Acquisition_Sources';
     SET @Start = SYSUTCDATETIME();
@@ -481,7 +304,12 @@ DECLARE @Msg        nvarchar(500);
  
     -- ---- DIMENSIONS (load before facts) ----
 
-    SET @Step = 'Dim_Date';           SET @Start = GETDATE();
+    SET @Step = 'Dim_Date';           SET @Start = SYSUTCDATETIME();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Dim_Users @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+   
+    SET @Step = 'Dim_Date_Grouping';           SET @Start = SYSUTCDATETIME();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Dim_Users @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
