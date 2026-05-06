@@ -80,6 +80,7 @@ $Groups = [ordered]@{
         'Audit.Process_Type.Data.sql'
         'Audit.Process_Config.Data.sql'
         'Audit.Tenants.Data.sql'
+        'Security.Application_Users.Data.sql'
     )
 
     '4. Audit functions & procedures' = @(

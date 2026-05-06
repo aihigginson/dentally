@@ -6,7 +6,7 @@ GO
 DROP TABLE IF EXISTS [Gold].[Dim_Users]
 GO
 CREATE TABLE [Gold].[Dim_Users](
-	[pk_User] [bigint] IDENTITY NOT NULL,
+	[pk_User] [bigint] NOT NULL,
 	[Tenant_ID] [int] NOT NULL,
 	[bk_User_ID] [int] NOT NULL,
 	[Title] [VARCHAR](50) NULL,

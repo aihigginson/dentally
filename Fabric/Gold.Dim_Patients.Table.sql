@@ -6,7 +6,7 @@ GO
 DROP TABLE IF EXISTS [Gold].[Dim_Patients]
 GO
 CREATE TABLE [Gold].[Dim_Patients](
-	[pk_Patient] [bigint] IDENTITY NOT NULL,
+	[pk_Patient] [bigint] NOT NULL,
 	[Tenant_ID] [int] NOT NULL,
 	[Patient_ID] [int] NOT NULL,
 	[Account_ID] [int] NULL,
