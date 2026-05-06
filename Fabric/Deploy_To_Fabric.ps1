@@ -41,6 +41,7 @@ $Groups = [ordered]@{
         'dentally.Schema.sql'
         'Security.Schema.sql'
         'Input.Schema.sql'
+        'Config.Schema.sql'
     )
 
     '2. Audit tables' = @(
@@ -67,7 +68,14 @@ $Groups = [ordered]@{
         'Input.Targets.Table.sql'
     )
 
+    '2d. Config tables' = @(
+        'Config.Metric_Definitions.Table.sql'
+        'Config.Metric_Period_Types.Table.sql'
+    )
+
     '3. Audit seed data' = @(
+        'Config.Metric_Definitions.Data.sql'
+        'Config.Metric_Period_Types.Data.sql'
         'Audit.Process_Category.Data.sql'
         'Audit.Process_Type.Data.sql'
         'Audit.Process_Config.Data.sql'
