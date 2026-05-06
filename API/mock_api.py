@@ -208,11 +208,11 @@ TENANT1_REF = {
         {"id": 8, "first_name": "Marcus", "last_name": "Hall",   "email": "m.hall@smilegroup.co.uk",  "role": "receptionist"},
     ],
     "practitioners": [
-        {"id": 2, "first_name": "Amir",  "last_name": "Ahmed",  "role": "dentist",   "site_id": "site-hs-001", "user_id": 2},
-        {"id": 3, "first_name": "Li",    "last_name": "Chen",   "role": "dentist",   "site_id": "site-rv-002", "user_id": 3},
-        {"id": 4, "first_name": "Priya", "last_name": "Patel",  "role": "dentist",   "site_id": "site-hs-001", "user_id": 4},
-        {"id": 5, "first_name": "Sarah", "last_name": "Morris", "role": "hygienist", "site_id": "site-rv-002", "user_id": 5},
-        {"id": 6, "first_name": "James", "last_name": "Wright", "role": "dentist",   "site_id": "site-ng-003", "user_id": 6},
+        {"id": 2, "first_name": "Amir",  "last_name": "Ahmed",  "role": "dentist",   "site_id": "site-hs-001", "user_id": 2, "active": True},
+        {"id": 3, "first_name": "Li",    "last_name": "Chen",   "role": "dentist",   "site_id": "site-rv-002", "user_id": 3, "active": True},
+        {"id": 4, "first_name": "Priya", "last_name": "Patel",  "role": "dentist",   "site_id": "site-hs-001", "user_id": 4, "active": True},
+        {"id": 5, "first_name": "Sarah", "last_name": "Morris", "role": "hygienist", "site_id": "site-rv-002", "user_id": 5, "active": True},
+        {"id": 6, "first_name": "James", "last_name": "Wright", "role": "dentist",   "site_id": "site-ng-003", "user_id": 6, "active": False},
     ],
     "payment_plans": [
         {"id": 1, "name": "NHS",         "nhs": True,  "monthly_charge": "0.00",  "dentist_recall_interval": 6,  "hygienist_recall_interval": 6,  "exam_duration": 20, "scale_polish_duration": 30},
@@ -294,9 +294,9 @@ TENANT2_REF = {
         {"id": 5, "first_name": "Callum",   "last_name": "Reid",     "email": "c.reid@brightdental.co.uk",  "role": "receptionist"},
     ],
     "practitioners": [
-        {"id": 2, "first_name": "Rachel", "last_name": "Green",  "role": "dentist",   "site_id": "site-br-001", "user_id": 2},
-        {"id": 3, "first_name": "Daniel", "last_name": "Foster", "role": "dentist",   "site_id": "site-br-002", "user_id": 3},
-        {"id": 4, "first_name": "Nadia",  "last_name": "Hassan", "role": "hygienist", "site_id": "site-br-001", "user_id": 4},
+        {"id": 2, "first_name": "Rachel", "last_name": "Green",  "role": "dentist",   "site_id": "site-br-001", "user_id": 2, "active": True},
+        {"id": 3, "first_name": "Daniel", "last_name": "Foster", "role": "dentist",   "site_id": "site-br-002", "user_id": 3, "active": True},
+        {"id": 4, "first_name": "Nadia",  "last_name": "Hassan", "role": "hygienist", "site_id": "site-br-001", "user_id": 4, "active": True},
     ],
     "payment_plans": [
         {"id": 1, "name": "NHS",     "nhs": True,  "monthly_charge": "0.00",  "dentist_recall_interval": 6,  "hygienist_recall_interval": 6,  "exam_duration": 20, "scale_polish_duration": 30},
