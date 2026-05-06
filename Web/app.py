@@ -111,18 +111,17 @@ def embed_token():
         embed_url   = report_meta['embedUrl']
         dataset_id  = report_meta['datasetId']
 
-        # Fabric-backed datasets require effectiveIdentity (used for RLS later)
+        token_body = {'accessLevel': 'View'}
+        if REPORT_ROLES:
+            token_body['identities'] = [{
+                'username': USERNAME,
+                'roles':    REPORT_ROLES,
+                'datasets': [dataset_id],
+            }]
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers,
-            json={
-                'accessLevel': 'View',
-                'identities': [{
-                    'username': USERNAME,
-                    'roles':    REPORT_ROLES,
-                    'datasets': [dataset_id],
-                }],
-            },
+            json=token_body,
             timeout=10,
         )
         r2.raise_for_status()
