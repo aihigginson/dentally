@@ -40,6 +40,7 @@ $Groups = [ordered]@{
         'PBI.Schema.sql'
         'dentally.Schema.sql'
         'Security.Schema.sql'
+        'Input.Schema.sql'
     )
 
     '2. Audit tables' = @(
@@ -60,6 +61,10 @@ $Groups = [ordered]@{
 
     '2b. Security tables' = @(
         'Security.Application_Users.Table.sql'
+    )
+
+    '2c. Input tables' = @(
+        'Input.Targets.Table.sql'
     )
 
     '3. Audit seed data' = @(
@@ -218,6 +223,7 @@ $Groups = [ordered]@{
         'Gold.Fact_Recalls.Table.sql'
         'Gold.Fact_Treatment_Appointments.Table.sql'
         'Gold.Fact_Treatment_Plan_Items.Table.sql'
+        'Gold.Fact_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
     )
@@ -290,6 +296,7 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
     )
 
     '15. Meta procedures' = @(
