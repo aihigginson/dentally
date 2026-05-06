@@ -4,3 +4,4 @@ msal
 requests
 pyodbc
 python-dotenv
+gunicorn
