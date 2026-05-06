@@ -28,11 +28,12 @@ PBI_BASE      = 'https://api.powerbi.com/v1.0/myorg'
 
 REPORTS = {
     'revenue':    os.environ.get('REPORT_ID_REVENUE',   ''),
-    'patients':   os.environ.get('REPORT_ID_PATIENT',   ''),
+    'patients':   os.environ.get('REPORT_ID_PATIENT') or os.environ.get('REPORT_ID_PATIENTS', ''),
     'treatment':  os.environ.get('REPORT_ID_TREATMENT', ''),
     'scheduling': os.environ.get('REPORT_ID_SCHEDULE',  ''),
     'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
 }
+print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
 
 def _pbi_token():
