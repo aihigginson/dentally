@@ -60,8 +60,9 @@
         /* ── Filter bar ── */
         .filter-bar {
             background: white; border-bottom: 1px solid var(--border);
-            padding: 9px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
+            padding: 9px 24px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
         }
+        .filter-bar.open { display: flex; }
         .filter-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
         .filter-field { display: flex; align-items: center; gap: 6px; }
         .filter-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
@@ -152,8 +153,7 @@
 
         /* ── Mobile ── */
         @media (max-width: 768px) {
-            .filter-bar { display: none; padding: 10px 16px; }
-            .filter-bar.open { display: flex; }
+            .filter-bar { padding: 10px 16px; }
             .filter-badge { display: none; }
             .header { padding: 0 16px; height: 46px; }
             .header-org { display: none; }
@@ -741,6 +741,10 @@
     }
 
     // ── Init ─────────────────────────────────────────────────────────────────
+    if (window.innerWidth > 768) {
+        filterBar.classList.add('open');
+        filterToggleBtn.classList.add('active');
+    }
     loadEmbedsInSection('treatment');
     loadMe();
     refreshKPIs();
