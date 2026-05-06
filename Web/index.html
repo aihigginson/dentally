@@ -37,7 +37,7 @@
         .header-user   { font-size: 12px; background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; }
 
         /* ── Primary nav ── */
-        .nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; overflow-x: auto; flex-shrink: 0; }
+        .nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; flex-shrink: 0; }
         .nav-tab {
             padding: 13px 18px; font-size: 13px; font-weight: 500; color: var(--text-2);
             cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
@@ -45,6 +45,17 @@
         }
         .nav-tab:hover  { color: var(--navy); }
         .nav-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
+
+        /* ── Filter toggle button (mobile only) ── */
+        .filter-toggle {
+            display: none; margin-left: auto; flex-shrink: 0;
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            padding: 5px 11px; font-size: 12px; font-family: var(--font); color: var(--text-2);
+            cursor: pointer; align-items: center; gap: 6px; white-space: nowrap;
+            transition: border-color 0.12s, color 0.12s;
+        }
+        .filter-toggle:hover  { border-color: var(--navy); color: var(--navy); }
+        .filter-toggle.active { border-color: var(--navy); color: var(--navy); background: #EBF3F9; }
 
         /* ── Filter bar ── */
         .filter-bar {
@@ -81,6 +92,9 @@
         .section-title  { font-size: 17px; font-weight: 400; color: var(--text); margin-bottom: 3px; }
         .section-sub    { font-size: 13px; color: var(--text-2); }
 
+        /* ── Section controls (subnav + fullscreen) ── */
+        .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
         /* ── KPI row ── */
         .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; flex-shrink: 0; }
         .kpi { background: white; border-radius: var(--radius); padding: 18px 20px; border: 1px solid var(--border); }
@@ -91,7 +105,7 @@
         .kpi-delta.down { color: var(--bad); }
 
         /* ── PBI page sub-nav (in section header) ── */
-        .report-subnav { display: none; gap: 6px; flex-shrink: 0; }
+        .report-subnav { display: none; gap: 6px; }
         .page-tile {
             width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
             background: white; border: 1px solid var(--border); border-radius: var(--radius);
@@ -99,6 +113,25 @@
         }
         .page-tile:hover  { border-color: var(--navy); color: var(--navy); }
         .page-tile.active { background: var(--navy); border-color: var(--navy); color: white; }
+
+        /* ── Fullscreen close button ── */
+        .fullscreen-close {
+            position: fixed; top: 14px; right: 14px; z-index: 300;
+            width: 40px; height: 40px; display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.55); border: none; border-radius: 50%;
+            color: white; cursor: pointer; transition: background 0.12s;
+        }
+        .fullscreen-close:hover { background: rgba(0,0,0,0.8); }
+
+        /* ── Fullscreen mode ── */
+        body.is-fullscreen .header,
+        body.is-fullscreen .nav,
+        body.is-fullscreen .filter-bar,
+        body.is-fullscreen .section-header,
+        body.is-fullscreen .kpi-row { display: none !important; }
+        body.is-fullscreen .main { padding: 0; }
+        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
+        body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
         .embed-slot {
@@ -116,6 +149,30 @@
         .embed-full iframe,
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
         iframe { border: none; }
+
+        /* ── Mobile ── */
+        @media (max-width: 768px) {
+            .filter-toggle { display: flex; }
+            .filter-bar { display: none; padding: 10px 16px; }
+            .filter-bar.open { display: flex; }
+            .filter-badge { display: none; }
+            .header { padding: 0 16px; height: 46px; }
+            .header-org { display: none; }
+            .nav { padding: 0 8px; }
+            .nav-tab { padding: 10px 11px; font-size: 12px; }
+            .main { padding: 12px 12px 0; }
+            .section-header { margin-bottom: 10px; }
+            .section-sub { display: none; }
+            .kpi-row {
+                display: flex; overflow-x: auto; gap: 10px;
+                scrollbar-width: none; -ms-overflow-style: none;
+                padding-bottom: 2px; margin-bottom: 10px;
+            }
+            .kpi-row::-webkit-scrollbar { display: none; }
+            .kpi { min-width: 138px; flex-shrink: 0; padding: 12px 14px; }
+            .kpi-value { font-size: 22px; }
+            .embed-full { width: calc(100% + 24px); margin: 0 -12px; }
+        }
     </style>
 </head>
 <body>
@@ -136,10 +193,14 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
+    <button class="filter-toggle" id="filter-toggle">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        Filters
+    </button>
 </nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
-<div class="filter-bar">
+<div class="filter-bar" id="filter-bar">
     <span class="filter-label">Filters</span>
     <div class="filter-field">
         <label for="f-period">Period</label>
@@ -169,6 +230,11 @@
     <div class="filter-badge" id="filter-badge">FY 2025/26 &middot; All sites &middot; All practitioners</div>
 </div>
 
+<!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
+<button class="fullscreen-close" id="fullscreen-close" title="Exit full screen">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+</button>
+
 <!-- ════════════════ MAIN CONTENT ════════════════ -->
 <main class="main">
 
@@ -179,7 +245,12 @@
                 <div class="section-title">Treatment</div>
                 <div class="section-sub">Treatment plan conversion and performance by practitioner and category</div>
             </div>
-            <div class="report-subnav" id="subnav-treatment"></div>
+            <div class="section-controls">
+                <div class="report-subnav" id="subnav-treatment"></div>
+                <button class="page-tile" id="fs-treatment" title="Full screen" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -213,7 +284,12 @@
                 <div class="section-title">Patient</div>
                 <div class="section-sub">Acquisition, retention and value metrics by period and practitioner</div>
             </div>
-            <div class="report-subnav" id="subnav-customer"></div>
+            <div class="section-controls">
+                <div class="report-subnav" id="subnav-customer"></div>
+                <button class="page-tile" id="fs-customer" title="Full screen" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -247,7 +323,12 @@
                 <div class="section-title">Schedule</div>
                 <div class="section-sub">Diary utilisation, forward planning and appointment performance</div>
             </div>
-            <div class="report-subnav" id="subnav-scheduling"></div>
+            <div class="section-controls">
+                <div class="report-subnav" id="subnav-scheduling"></div>
+                <button class="page-tile" id="fs-scheduling" title="Full screen" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -281,7 +362,12 @@
                 <div class="section-title">Revenue</div>
                 <div class="section-sub">NHS and private revenue, cashflow and discounts by period and site</div>
             </div>
-            <div class="report-subnav" id="subnav-revenue"></div>
+            <div class="section-controls">
+                <div class="report-subnav" id="subnav-revenue"></div>
+                <button class="page-tile" id="fs-revenue" title="Full screen" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -315,7 +401,12 @@
                 <div class="section-title">NHS</div>
                 <div class="section-sub">Contract performance — UDA delivery, financial return and claims</div>
             </div>
-            <div class="report-subnav" id="subnav-nhs"></div>
+            <div class="section-controls">
+                <div class="report-subnav" id="subnav-nhs"></div>
+                <button class="page-tile" id="fs-nhs" title="Full screen" onclick="toggleFullscreen()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="kpi-row">
             <div class="kpi">
@@ -414,6 +505,28 @@
         refreshKPIs();
     }
 
+    // ── Filter toggle (mobile) ───────────────────────────────────────────────
+    const filterToggleBtn = document.getElementById('filter-toggle');
+    const filterBar       = document.getElementById('filter-bar');
+
+    filterToggleBtn.addEventListener('click', () => {
+        const open = filterBar.classList.toggle('open');
+        filterToggleBtn.classList.toggle('active', open);
+    });
+
+    // ── Fullscreen ───────────────────────────────────────────────────────────
+    function toggleFullscreen() {
+        document.body.classList.toggle('is-fullscreen');
+    }
+
+    document.getElementById('fullscreen-close').addEventListener('click', toggleFullscreen);
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) {
+            toggleFullscreen();
+        }
+    });
+
     // ── PBI page sub-nav (built after report loads) ──────────────────────────
     function buildSubnav(sectionKey, pages, report) {
         const el = document.getElementById('subnav-' + sectionKey);
@@ -463,9 +576,9 @@
             settings: {
                 navContentPaneEnabled: false,
                 filterPaneEnabled: false,
-                background: 1,        // BackgroundType.Transparent — bars show as page grey not white
+                background: 1,        // BackgroundType.Transparent
                 layoutType: 1,        // LayoutType.Custom
-                customLayout: { displayOption: 1 },  // DisplayOption.FitToWidth — no side bars
+                customLayout: { displayOption: 1 },  // DisplayOption.FitToWidth
             },
         };
         tokenCache[reportName] = { config, expiry: Date.now() + 55 * 60 * 1000 };
