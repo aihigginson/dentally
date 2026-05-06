@@ -4,6 +4,7 @@
 --  Initital Date    :  06/05/2026
 --  History          :
 --    *01     06/05/2026  AIH Initial Release
+--    *02     06/05/2026  AIH Add all_time period type (no date key — fk_Date uses -1 sentinel)
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Targets @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Targets]    Script Date: 06/05/2026 ******/
@@ -67,6 +68,9 @@ BEGIN
                         -- '2026-04' -> 2026-04-01
                         DATEFROMPARTS(CAST(LEFT(t.[Period_Value], 4) AS INT),
                                       CAST(RIGHT(t.[Period_Value], 2) AS INT), 1)
+                    WHEN 'all_time' THEN
+                        -- No specific date; ISNULL resolves to fk_Date = -1 sentinel
+                        NULL
                     END;
 
         -- Remove rows no longer in Input
