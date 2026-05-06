@@ -13,7 +13,7 @@
 .PARAMETER Username
     Your Azure AD email address.
 .EXAMPLE
-    .\Deploy_To_Fabric.ps1 -Server "abc123.datawarehouse.fabric.microsoft.com" -Database "Dentally" -Username "you@example.com"
+   .\Deploy_To_Fabric.ps1 -Server  "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com" -Database "WH_Dentally"   -Username "aihigginson@2rrjxy.onmicrosoft.com"
 #>
 param(
     [Parameter(Mandatory)] [string] $Server,
