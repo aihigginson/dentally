@@ -6,7 +6,7 @@ GO
 DROP TABLE IF EXISTS [Input].[Targets]
 GO
 CREATE TABLE [Input].[Targets] (
-    [pk_target]          INT IDENTITY NOT NULL,
+    [pk_target]          BIGINT IDENTITY NOT NULL,
     [Tenant_ID]          INT          NOT NULL,
     [Site_ID]            VARCHAR(50)  NULL,
     [Practitioner_ID]    INT          NULL,

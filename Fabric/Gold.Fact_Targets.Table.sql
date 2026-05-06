@@ -8,7 +8,7 @@ GO
 CREATE TABLE [Gold].[Fact_Targets] (
     [pk_target]          BIGINT IDENTITY NOT NULL,
     [Tenant_ID]          INT          NOT NULL,
-    [bk_target_id]       INT          NOT NULL,
+    [bk_target_id]       BIGINT       NOT NULL,
     [fk_Practice_Site]   BIGINT       NOT NULL,
     [fk_Practitioner]    BIGINT       NOT NULL,
     [fk_Date]            BIGINT       NOT NULL,
