@@ -215,6 +215,52 @@
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
         iframe { border: none; }
 
+        /* ── Targets section ── */
+        .targets-save-btn {
+            background: var(--navy); color: white; border: none; border-radius: 6px;
+            padding: 7px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+            font-family: var(--font); transition: background 0.12s;
+        }
+        .targets-save-btn:hover:not(:disabled) { background: #163f5e; }
+        .targets-save-btn:disabled { opacity: 0.6; cursor: default; }
+        .targets-status     { font-size: 12px; color: var(--text-2); }
+        .targets-status.ok  { color: var(--good); }
+        .targets-status.err { color: var(--bad); }
+        .targets-loading    { font-size: 13px; color: var(--text-3); padding: 40px; text-align: center; }
+        .targets-wrap       { flex: 1; overflow: auto; min-height: 0; }
+        .targets-table      { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .targets-table th {
+            position: sticky; top: 0; z-index: 2;
+            background: var(--bg-subtle); border-bottom: 2px solid var(--border);
+            padding: 9px 16px; font-size: 11px; font-weight: 600; color: var(--text-3);
+            text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; text-align: left;
+        }
+        .targets-table th:not(:first-child) { text-align: right; min-width: 140px; }
+        .targets-group-row td {
+            background: var(--bg-page); color: var(--text-2); font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            padding: 10px 16px 5px; border-bottom: 1px solid var(--border);
+        }
+        .targets-table td       { border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .targets-metric-cell    { padding: 8px 16px; min-width: 200px; }
+        .targets-metric-name    { font-size: 13px; color: var(--text); }
+        .targets-metric-fmt     { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+        .targets-input-cell     { padding: 5px 8px; text-align: right; }
+        .targets-input-wrap     { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
+        .targets-symbol         { font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+        .targets-input {
+            width: 96px; text-align: right; background: var(--bg-subtle);
+            border: 1px solid var(--border); border-radius: 5px;
+            padding: 5px 8px; font-size: 13px; font-family: var(--font); color: var(--text);
+            outline: none;
+        }
+        .targets-input:focus   { border-color: var(--navy); background: white; box-shadow: 0 0 0 2px rgba(26,82,122,0.1); }
+        .targets-input.changed { border-color: var(--teal-bright); background: #f0fbfb; }
+        /* hide number spinners */
+        .targets-input::-webkit-outer-spin-button,
+        .targets-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .targets-input[type=number] { -moz-appearance: textfield; }
+
         /* ── Mobile ── */
         @media (max-width: 768px) {
             .filter-bar { padding: 10px 16px; }
@@ -291,6 +337,7 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
+    <div class="nav-tab"        data-section="targets">Targets</div>
     <button class="filter-toggle" id="filter-toggle">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
@@ -449,6 +496,21 @@
             <div class="kpi"><div class="kpi-label">Value / UDA</div><div class="kpi-value" id="kpi-value_per_uda">—</div><div class="kpi-delta" id="kpi-value_per_uda-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
+    </section>
+
+    <!-- ── TARGETS ── -->
+    <section class="section" id="section-targets">
+        <div class="section-header">
+            <div class="section-title">Targets</div>
+            <div class="section-controls">
+                <span class="targets-status" id="targets-status"></span>
+                <button class="targets-save-btn" id="targets-save-btn">Save changes</button>
+            </div>
+        </div>
+        <div class="targets-wrap">
+            <div class="targets-loading" id="targets-loading">Loading&hellip;</div>
+            <table class="targets-table" id="targets-table" style="display:none"></table>
+        </div>
     </section>
 
 </main>
@@ -657,11 +719,19 @@
         activeSection = key;
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         const el = document.getElementById('section-' + key);
-        if (el) {
-            el.classList.add('active');
+        if (!el) return;
+        el.classList.add('active');
+
+        if (key === 'targets') {
+            filterBar.classList.remove('open');
+            filterToggleBtn.classList.remove('active');
+            filterToggleBtn.style.visibility = 'hidden';
+            loadTargets();
+        } else {
+            filterToggleBtn.style.visibility = '';
             loadEmbedsInSection(key);
+            refreshKPIs();
         }
-        refreshKPIs();
     }
 
     // ── Filter toggle ────────────────────────────────────────────────────────
@@ -706,6 +776,135 @@
             });
         });
     }
+
+    // ── Targets data entry ───────────────────────────────────────────────────
+    let _targetsLoaded   = false;
+    let _targetsOriginal = {};
+
+    const SECTION_LABELS = {
+        revenue: 'Revenue', patients: 'Patient', treatment: 'Treatment',
+        scheduling: 'Scheduling', nhs: 'NHS',
+    };
+    const FORMAT_HINTS = {
+        currency: '£  —  2 decimal places',
+        percent:  '%  —  1 decimal place',
+        count:    'Whole number',
+    };
+
+    async function loadTargets() {
+        if (_targetsLoaded) return;
+        try {
+            const res = await authFetch('/api/targets');
+            if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+            const data = await res.json();
+            _targetsOriginal = { ...data.targets };
+            _buildTargetsTable(data);
+            _targetsLoaded = true;
+        } catch (e) {
+            document.getElementById('targets-loading').textContent = 'Failed to load: ' + e.message;
+        }
+    }
+
+    function _buildTargetsTable({ metrics, tenants, targets }) {
+        const table = document.getElementById('targets-table');
+        table.innerHTML = '';
+
+        const thead = table.createTHead();
+        const hrow  = thead.insertRow();
+        const addTh = txt => { const th = document.createElement('th'); th.textContent = txt; hrow.appendChild(th); };
+        addTh('Metric');
+        tenants.forEach(t => addTh(t.name));
+
+        const tbody = table.createTBody();
+        const sections = [...new Set(metrics.map(m => m.section))];
+
+        sections.forEach(sec => {
+            const gRow  = tbody.insertRow();
+            gRow.className = 'targets-group-row';
+            const gCell = gRow.insertCell();
+            gCell.colSpan = tenants.length + 1;
+            gCell.textContent = SECTION_LABELS[sec] || sec;
+
+            metrics.filter(m => m.section === sec).forEach(metric => {
+                const row      = tbody.insertRow();
+                const nameCell = row.insertCell();
+                nameCell.className = 'targets-metric-cell';
+                nameCell.innerHTML =
+                    `<div class="targets-metric-name">${metric.display_name}</div>` +
+                    `<div class="targets-metric-fmt">${FORMAT_HINTS[metric.format_type] || ''}</div>`;
+
+                const step = metric.format_type === 'count' ? '1'
+                           : metric.format_type === 'percent' ? '0.1' : '0.01';
+
+                tenants.forEach(tenant => {
+                    const key   = `${tenant.id}|${metric.key}`;
+                    const val   = targets[key] != null ? targets[key] : '';
+                    const cell  = row.insertCell();
+                    cell.className = 'targets-input-cell';
+
+                    const prefix = metric.format_type === 'currency' ? '<span class="targets-symbol">£</span>' : '';
+                    const suffix = metric.format_type === 'percent'  ? '<span class="targets-symbol">%</span>' : '';
+                    cell.innerHTML =
+                        `<div class="targets-input-wrap">${prefix}` +
+                        `<input class="targets-input" type="number" step="${step}" min="0" ` +
+                        `       data-key="${key}" value="${val}">${suffix}</div>`;
+
+                    cell.querySelector('.targets-input').addEventListener('input', function () {
+                        const orig = _targetsOriginal[key] != null ? String(_targetsOriginal[key]) : '';
+                        this.classList.toggle('changed', this.value !== orig && !(this.value === '' && orig === ''));
+                    });
+                });
+            });
+        });
+
+        document.getElementById('targets-loading').style.display = 'none';
+        table.style.display = '';
+    }
+
+    async function saveTargets() {
+        const btn    = document.getElementById('targets-save-btn');
+        const status = document.getElementById('targets-status');
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        status.textContent = '';
+        status.className   = 'targets-status';
+
+        const payload = [];
+        document.querySelectorAll('#targets-table .targets-input').forEach(inp => {
+            const [tid, metric] = inp.dataset.key.split('|');
+            payload.push({
+                tenant_id: parseInt(tid),
+                metric,
+                value: inp.value !== '' ? parseFloat(inp.value) : null,
+            });
+        });
+
+        try {
+            const res = await authFetch('/api/targets', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+
+            document.querySelectorAll('#targets-table .targets-input').forEach(inp => {
+                const raw = inp.value !== '' ? parseFloat(inp.value) : null;
+                _targetsOriginal[inp.dataset.key] = raw;
+                inp.classList.remove('changed');
+            });
+            status.textContent = 'Saved.';
+            status.className   = 'targets-status ok';
+            setTimeout(() => { if (status.textContent === 'Saved.') status.textContent = ''; }, 3000);
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+            status.className   = 'targets-status err';
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Save changes';
+        }
+    }
+
+    document.getElementById('targets-save-btn').addEventListener('click', saveTargets);
 
     // ── Power BI embedding ───────────────────────────────────────────────────
     const embeddedReports = {};

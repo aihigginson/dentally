@@ -521,5 +521,97 @@ def _kpis_scheduling(cur, tids, period, site_id, pract_id):
     }
 
 
+@app.route('/api/targets', methods=['GET'])
+def get_targets():
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+
+        cur.execute(
+            "SELECT Metric_Key, Display_Name, Section, Format_Type "
+            "FROM Config.Metric_Definitions WHERE Is_Active = 1 ORDER BY Display_Order"
+        )
+        metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3]}
+                   for r in cur.fetchall()]
+
+        tenants = []
+        targets = {}
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants "
+                f"WHERE Tenant_ID IN ({ph}) AND Is_Active = 1 ORDER BY Tenant_ID",
+                tids,
+            )
+            tenants = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
+
+            cur.execute(
+                f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+                f"WHERE Tenant_ID IN ({ph}) "
+                f"AND Period_Type = 'all_time' AND Period_Value = 'all' "
+                f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
+                tids,
+            )
+            for r in cur.fetchall():
+                targets[f"{r[0]}|{r[1]}"] = float(r[2])
+
+        conn.close()
+        return jsonify({'metrics': metrics, 'tenants': tenants, 'targets': targets})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/targets', methods=['POST'])
+def save_targets():
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+
+        rows        = request.get_json(force=True) or []
+        allowed_tids = set(tids)
+
+        for row in rows:
+            tid    = int(row['tenant_id'])
+            metric = str(row['metric'])
+            value  = row.get('value')
+            if tid not in allowed_tids:
+                continue
+            cur.execute(
+                "DELETE FROM Input.Targets "
+                "WHERE Tenant_ID = ? AND Metric = ? "
+                "AND Period_Type = 'all_time' AND Period_Value = 'all' "
+                "AND Site_ID IS NULL AND Practitioner_ID IS NULL",
+                tid, metric,
+            )
+            if value is not None:
+                cur.execute(
+                    "INSERT INTO Input.Targets "
+                    "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
+                    " Target_Value, DW_Created_At, DW_Updated_At) "
+                    "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, GETUTCDATE(), GETUTCDATE())",
+                    tid, metric, float(value),
+                )
+
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
