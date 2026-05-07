@@ -337,7 +337,7 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
-    <div class="nav-tab"        data-section="targets">Targets</div>
+    <div class="nav-tab" data-section="targets" id="nav-targets" style="display:none">Targets</div>
     <button class="filter-toggle" id="filter-toggle">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
@@ -641,6 +641,7 @@
         const o = document.getElementById('header-org');
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
+        if (data.maintain_targets) document.getElementById('nav-targets').style.display = '';
 
         document.getElementById('auth-overlay').style.display = 'none';
 

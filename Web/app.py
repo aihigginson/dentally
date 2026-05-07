@@ -179,7 +179,7 @@ def me():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        display_name, client_id, tids = _get_user_info(cur, upn)
+        display_name, client_id, tids, maintain_targets = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
@@ -194,10 +194,11 @@ def me():
             practice_name = prow[0] if prow else None
         conn.close()
         return jsonify({
-            'display_name':  display_name or upn,
-            'client_id':     client_id,
-            'tenant_ids':    tids,
-            'practice_name': practice_name,
+            'display_name':     display_name or upn,
+            'client_id':        client_id,
+            'tenant_ids':       tids,
+            'practice_name':    practice_name,
+            'maintain_targets': maintain_targets,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -213,7 +214,7 @@ def filters():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        _, client_id, tids = _get_user_info(cur, upn)
+        _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
@@ -269,7 +270,7 @@ def kpis():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        _, client_id, tids = _get_user_info(cur, upn)
+        _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
@@ -282,21 +283,22 @@ def kpis():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_info(cur, upn):
-    """Returns (display_name, client_id, tenant_ids) for the given UPN, or (None, None, []) if not found."""
+    """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False)."""
     cur.execute(
-        "SELECT Display_Name, Client_ID FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
+        "SELECT Display_Name, Client_ID, Maintain_Targets "
+        "FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
         upn,
     )
     row = cur.fetchone()
     if not row:
-        return None, None, []
-    display_name, client_id = row[0], row[1]
+        return None, None, [], False
+    display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
     cur.execute(
         "SELECT Tenant_ID FROM Security.User_Tenants WHERE LOWER(User_UPN) = LOWER(?)",
         upn,
     )
     tids = [r[0] for r in cur.fetchall()]
-    return display_name, client_id, tids
+    return display_name, client_id, tids, maintain_targets
 
 
 def _tid_in(tids, params, alias=None):
@@ -529,7 +531,7 @@ def get_targets():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        _, client_id, tids = _get_user_info(cur, upn)
+        _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
@@ -577,7 +579,7 @@ def save_targets():
         conn             = _fabric_conn()
         conn.autocommit  = True   # Fabric Warehouse requires autocommit for DML
         cur              = conn.cursor()
-        _, client_id, tids = _get_user_info(cur, upn)
+        _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
