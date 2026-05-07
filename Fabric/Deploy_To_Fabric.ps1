@@ -61,7 +61,9 @@ $Groups = [ordered]@{
     )
 
     '2b. Security tables' = @(
+        'Security.Clients.Table.sql'
         'Security.Application_Users.Table.sql'
+        'Security.User_Tenants.Table.sql'
     )
 
     '2c. Input tables' = @(
@@ -80,7 +82,9 @@ $Groups = [ordered]@{
         'Audit.Process_Type.Data.sql'
         'Audit.Process_Config.Data.sql'
         'Audit.Tenants.Data.sql'
+        'Security.Clients.Data.sql'
         'Security.Application_Users.Data.sql'
+        'Security.User_Tenants.Data.sql'
     )
 
     '4. Audit functions & procedures' = @(

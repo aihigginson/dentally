@@ -40,12 +40,15 @@ print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in R
 # ── Azure AD token validation ─────────────────────────────────────────────────
 
 _jwks_client = PyJWKClient(
-    f'https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys',
+    'https://login.microsoftonline.com/common/discovery/v2.0/keys',
 )
 
 def _validate_id_token(token):
     signing_key = _jwks_client.get_signing_key_from_jwt(token)
-    return jwt.decode(token, signing_key.key, algorithms=['RS256'], audience=CLIENT_ID)
+    return jwt.decode(
+        token, signing_key.key, algorithms=['RS256'], audience=CLIENT_ID,
+        options={'verify_iss': False},
+    )
 
 def _auth():
     """Validate Bearer ID token. Returns (upn, None) or (None, error_response)."""
@@ -176,27 +179,25 @@ def me():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        cur.execute(
-            "SELECT Display_Name, Tenant_ID "
-            "FROM   Security.Application_Users "
-            "WHERE  LOWER(User_UPN) = LOWER(?)",
-            upn,
-        )
-        row = cur.fetchone()
-        if not row:
+        display_name, client_id, tids = _get_user_info(cur, upn)
+        if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
-        tid = row[1]
-        cur.execute(
-            "SELECT TOP 1 Practice_Name FROM Gold.Dim_Practice_Sites WHERE Tenant_ID = ?",
-            tid,
-        )
-        prow = cur.fetchone()
+        practice_name = None
+        if tids:
+            placeholders = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT TOP 1 Practice_Name FROM Gold.Dim_Practice_Sites WHERE Tenant_ID IN ({placeholders})",
+                tids,
+            )
+            prow = cur.fetchone()
+            practice_name = prow[0] if prow else None
         conn.close()
         return jsonify({
-            'display_name':  row[0] or upn,
-            'tenant_id':     tid,
-            'practice_name': prow[0] if prow else None,
+            'display_name':  display_name or upn,
+            'client_id':     client_id,
+            'tenant_ids':    tids,
+            'practice_name': practice_name,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -212,17 +213,18 @@ def filters():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        tid  = _get_tenant_id(cur, upn)
-        if tid is None:
+        _, client_id, tids = _get_user_info(cur, upn)
+        if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
 
+        placeholders = ','.join(['?'] * len(tids)) if tids else 'NULL'
         cur.execute(
-            "SELECT Site_ID, Site_Name "
-            "FROM   Gold.Dim_Practice_Sites "
-            "WHERE  Tenant_ID = ? AND Site_Active = 1 "
-            "ORDER BY Site_Name",
-            tid,
+            f"SELECT Site_ID, Site_Name "
+            f"FROM   Gold.Dim_Practice_Sites "
+            f"WHERE  Tenant_ID IN ({placeholders}) AND Site_Active = 1 "
+            f"ORDER BY Site_Name",
+            tids,
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
@@ -230,9 +232,9 @@ def filters():
         cur.execute(
             f"SELECT Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
-            f"WHERE  Tenant_ID = ? {active_w} "
+            f"WHERE  Tenant_ID IN ({placeholders}) {active_w} "
             f"ORDER BY Full_Name",
-            tid,
+            tids,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
         conn.close()
@@ -267,11 +269,11 @@ def kpis():
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        tid  = _get_tenant_id(cur, upn)
-        if tid is None:
+        _, client_id, tids = _get_user_info(cur, upn)
+        if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
-        result = fn(cur, tid, period, site_id, pract_id)
+        result = fn(cur, tids, period, site_id, pract_id)
         conn.close()
         return jsonify(result)
     except Exception as e:
@@ -279,13 +281,29 @@ def kpis():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_tenant_id(cur, upn):
+def _get_user_info(cur, upn):
+    """Returns (display_name, client_id, tenant_ids) for the given UPN, or (None, None, []) if not found."""
     cur.execute(
-        "SELECT Tenant_ID FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
+        "SELECT Display_Name, Client_ID FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
         upn,
     )
     row = cur.fetchone()
-    return row[0] if row else None
+    if not row:
+        return None, None, []
+    display_name, client_id = row[0], row[1]
+    cur.execute(
+        "SELECT Tenant_ID FROM Security.User_Tenants WHERE LOWER(User_UPN) = LOWER(?)",
+        upn,
+    )
+    tids = [r[0] for r in cur.fetchall()]
+    return display_name, client_id, tids
+
+
+def _tid_in(tids, params, alias=None):
+    """Appends tids to params; returns SQL IN fragment e.g. 'fi.Tenant_ID IN (?,?)'."""
+    params.extend(tids)
+    field = f"{alias}.Tenant_ID" if alias else "Tenant_ID"
+    return f"{field} IN ({','.join(['?'] * len(tids))})"
 
 
 def _pw(date_col, period, params):
@@ -304,21 +322,23 @@ def _pyw(date_col, period, params):
     return ""
 
 
-def _sw(site_id, tid, params, alias='fi'):
+def _sw(site_id, tids, params, alias='fi'):
     if site_id and site_id != 'all':
-        params.extend([str(site_id), tid])
+        placeholders = ','.join(['?'] * len(tids))
+        params.extend([str(site_id)] + list(tids))
         return (f"AND {alias}.fk_Practice_Site IN "
                 f"(SELECT pk_Practice_Site FROM Gold.Dim_Practice_Sites "
-                f"WHERE Site_ID = ? AND Tenant_ID = ?)")
+                f"WHERE Site_ID = ? AND Tenant_ID IN ({placeholders}))")
     return ""
 
 
-def _prw(pract_id, tid, params, alias='fi'):
+def _prw(pract_id, tids, params, alias='fi'):
     if pract_id and pract_id != 'all':
-        params.extend([str(pract_id), tid])
+        placeholders = ','.join(['?'] * len(tids))
+        params.extend([str(pract_id)] + list(tids))
         return (f"AND {alias}.fk_Practitioner IN "
                 f"(SELECT pk_Practitioner FROM Gold.Dim_Practitioners "
-                f"WHERE CAST(Practitioner_ID AS VARCHAR) = ? AND Tenant_ID = ?)")
+                f"WHERE CAST(Practitioner_ID AS VARCHAR) = ? AND Tenant_ID IN ({placeholders}))")
     return ""
 
 
@@ -332,12 +352,13 @@ def _kpi(value, delta_pct=None):
     return {'value': float(value) if value is not None else None, 'delta_pct': delta_pct}
 
 
-def _invoice_agg(cur, tid, period, site_id, pract_id, prior=False):
-    params = [tid]
+def _invoice_agg(cur, tids, period, site_id, pract_id, prior=False):
+    params = []
+    tid_w  = _tid_in(tids, params, alias='fi')
     date_w = _pyw('fi.fk_Date_Invoice', period, params) if prior \
              else _pw('fi.fk_Date_Invoice', period, params)
-    site_w = _sw(site_id, tid, params)
-    prac_w = _prw(pract_id, tid, params)
+    site_w = _sw(site_id, tids, params)
+    prac_w = _prw(pract_id, tids, params)
     cur.execute(f"""
         SELECT SUM(fi.Invoice_Amount),
                SUM(fi.Invoice_NHS_Amount),
@@ -345,14 +366,14 @@ def _invoice_agg(cur, tid, period, site_id, pract_id, prior=False):
                SUM(fi.Invoice_Amount_Outstanding),
                COUNT(DISTINCT fi.fk_Patient)
         FROM   Gold.Fact_Invoice_Items fi
-        WHERE  fi.Tenant_ID = ? {date_w} {site_w} {prac_w}
+        WHERE  {tid_w} {date_w} {site_w} {prac_w}
     """, params)
     return cur.fetchone()
 
 
-def _kpis_revenue(cur, tid, period, site_id, pract_id):
-    c = _invoice_agg(cur, tid, period, site_id, pract_id)
-    p = _invoice_agg(cur, tid, period, site_id, pract_id, prior=True)
+def _kpis_revenue(cur, tids, period, site_id, pract_id):
+    c = _invoice_agg(cur, tids, period, site_id, pract_id)
+    p = _invoice_agg(cur, tids, period, site_id, pract_id, prior=True)
     total  = float(c[0]) if c[0] else 0
     pts    = int(c[4])   if c[4] else 0
     py_pts = int(p[4])   if p[4] else 0
@@ -366,9 +387,9 @@ def _kpis_revenue(cur, tid, period, site_id, pract_id):
     }
 
 
-def _kpis_cashflow(cur, tid, period, site_id, pract_id):
-    c = _invoice_agg(cur, tid, period, site_id, pract_id)
-    p = _invoice_agg(cur, tid, period, site_id, pract_id, prior=True)
+def _kpis_cashflow(cur, tids, period, site_id, pract_id):
+    c = _invoice_agg(cur, tids, period, site_id, pract_id)
+    p = _invoice_agg(cur, tids, period, site_id, pract_id, prior=True)
     inv     = float(c[0]) if c[0] else 0
     out     = float(c[3]) if c[3] else 0
     coll    = inv - out
@@ -385,29 +406,33 @@ def _kpis_cashflow(cur, tid, period, site_id, pract_id):
     }
 
 
-def _kpis_patients(cur, tid, period, site_id, pract_id):
+def _kpis_patients(cur, tids, period, site_id, pract_id):
+    params_a = []
+    tid_a    = _tid_in(tids, params_a)
     cur.execute(
-        "SELECT COUNT(*) FROM Gold.Dim_Patients "
-        "WHERE Tenant_ID = ? AND Active = 1 AND pk_Patient > 0",
-        tid,
+        f"SELECT COUNT(*) FROM Gold.Dim_Patients "
+        f"WHERE {tid_a} AND Active = 1 AND pk_Patient > 0",
+        params_a,
     )
     active = int(cur.fetchone()[0])
 
-    params = [tid]
+    params = []
+    tid_w  = _tid_in(tids, params, alias='dp')
     date_w = _pw('Gold.fn_Get_Date_Key(CAST(dp.Patient_Created_Date AS DATE))', period, params)
     cur.execute(f"""
         SELECT COUNT(*) FROM Gold.Dim_Patients dp
-        WHERE dp.Tenant_ID = ? {date_w} AND dp.pk_Patient > 0
+        WHERE {tid_w} {date_w} AND dp.pk_Patient > 0
     """, params)
     new_pts = int(cur.fetchone()[0])
 
-    params_r = [tid]
+    params_r = []
+    tid_r    = _tid_in(tids, params_r, alias='r')
     date_r   = _pw('r.fk_Date_Due', period, params_r)
     cur.execute(f"""
         SELECT COUNT(*),
                SUM(CASE WHEN r.Days_Overdue > 0 THEN 1 ELSE 0 END)
         FROM   Gold.Fact_Recalls r
-        WHERE  r.Tenant_ID = ? {date_r}
+        WHERE  {tid_r} {date_r}
     """, params_r)
     row       = cur.fetchone()
     total_r   = int(row[0]) if row[0] else 0
@@ -421,10 +446,11 @@ def _kpis_patients(cur, tid, period, site_id, pract_id):
     }
 
 
-def _kpis_treatment(cur, tid, period, site_id, pract_id):
-    params = [tid]
+def _kpis_treatment(cur, tids, period, site_id, pract_id):
+    params = []
+    tid_w  = _tid_in(tids, params, alias='tpi')
     date_w = _pw('tpi.fk_Date_Created', period, params)
-    prac_w = _prw(pract_id, tid, params, alias='tpi')
+    prac_w = _prw(pract_id, tids, params, alias='tpi')
     cur.execute(f"""
         SELECT COUNT(DISTINCT tpi.Treatment_Plan_ID),
                SUM(CASE WHEN tpi.Completed = 1 THEN 1 ELSE 0 END),
@@ -433,7 +459,7 @@ def _kpis_treatment(cur, tid, period, site_id, pract_id):
                SUM(CASE WHEN tpi.Completed = 0 AND tpi.Charged = 0
                         THEN tpi.Price ELSE 0 END)
         FROM   Gold.Fact_Treatment_Plan_Items tpi
-        WHERE  tpi.Tenant_ID = ? {date_w} {prac_w}
+        WHERE  {tid_w} {date_w} {prac_w}
     """, params)
     row   = cur.fetchone()
     plans = int(row[0]) if row[0] else 0
@@ -448,13 +474,14 @@ def _kpis_treatment(cur, tid, period, site_id, pract_id):
     }
 
 
-def _kpis_nhs(cur, tid, period, site_id, pract_id):
-    params = [tid]
+def _kpis_nhs(cur, tids, period, site_id, pract_id):
+    params = []
+    tid_w  = _tid_in(tids, params, alias='fc')
     date_w = _pw('fc.fk_Date_Start', period, params)
     cur.execute(f"""
         SELECT SUM(fc.UDA_Delivered), SUM(fc.UDA_Target), SUM(fc.Contract_Value)
         FROM   Gold.Fact_Contracts fc
-        WHERE  fc.Tenant_ID = ? {date_w}
+        WHERE  {tid_w} {date_w}
     """, params)
     row         = cur.fetchone()
     delivered   = float(row[0]) if row[0] else 0
@@ -470,17 +497,18 @@ def _kpis_nhs(cur, tid, period, site_id, pract_id):
     }
 
 
-def _kpis_scheduling(cur, tid, period, site_id, pract_id):
-    params = [tid]
+def _kpis_scheduling(cur, tids, period, site_id, pract_id):
+    params = []
+    tid_w  = _tid_in(tids, params, alias='apt')
     date_w = _pw('apt.fk_Date_Start', period, params)
-    site_w = _sw(site_id, tid, params, alias='apt')
-    prac_w = _prw(pract_id, tid, params, alias='apt')
+    site_w = _sw(site_id, tids, params, alias='apt')
+    prac_w = _prw(pract_id, tids, params, alias='apt')
     cur.execute(f"""
         SELECT COUNT(*),
                SUM(CASE WHEN apt.Is_DNA       = 1 THEN 1 ELSE 0 END),
                SUM(CASE WHEN apt.Is_Cancelled = 1 THEN 1 ELSE 0 END)
         FROM   Gold.Fact_Appointments apt
-        WHERE  apt.Tenant_ID = ? {date_w} {site_w} {prac_w}
+        WHERE  {tid_w} {date_w} {site_w} {prac_w}
     """, params)
     row   = cur.fetchone()
     total = int(row[0]) if row[0] else 0
