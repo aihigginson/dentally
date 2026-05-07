@@ -10,7 +10,7 @@ from jwt import PyJWKClient
 
 load_dotenv()
 
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
 TENANT_ID      = os.environ['TENANT_ID']
