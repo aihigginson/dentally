@@ -13,7 +13,7 @@
 .PARAMETER Username
     Your Azure AD email address.
 .EXAMPLE
-    .\Deploy_To_Fabric.ps1 -Server "abc123.datawarehouse.fabric.microsoft.com" -Database "Dentally" -Username "you@example.com"
+   .\Deploy_To_Fabric.ps1 -Server  "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com" -Database "WH_Dentally"   -Username "aihigginson@2rrjxy.onmicrosoft.com"
 #>
 param(
     [Parameter(Mandatory)] [string] $Server,
@@ -40,6 +40,8 @@ $Groups = [ordered]@{
         'PBI.Schema.sql'
         'dentally.Schema.sql'
         'Security.Schema.sql'
+        'Input.Schema.sql'
+        'Config.Schema.sql'
     )
 
     '2. Audit tables' = @(
@@ -62,11 +64,23 @@ $Groups = [ordered]@{
         'Security.Application_Users.Table.sql'
     )
 
+    '2c. Input tables' = @(
+        'Input.Targets.Table.sql'
+    )
+
+    '2d. Config tables' = @(
+        'Config.Metric_Definitions.Table.sql'
+        'Config.Metric_Period_Types.Table.sql'
+    )
+
     '3. Audit seed data' = @(
+        'Config.Metric_Definitions.Data.sql'
+        'Config.Metric_Period_Types.Data.sql'
         'Audit.Process_Category.Data.sql'
         'Audit.Process_Type.Data.sql'
         'Audit.Process_Config.Data.sql'
         'Audit.Tenants.Data.sql'
+        'Security.Application_Users.Data.sql'
     )
 
     '4. Audit functions & procedures' = @(
@@ -218,6 +232,7 @@ $Groups = [ordered]@{
         'Gold.Fact_Recalls.Table.sql'
         'Gold.Fact_Treatment_Appointments.Table.sql'
         'Gold.Fact_Treatment_Plan_Items.Table.sql'
+        'Gold.Fact_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
     )
@@ -290,6 +305,7 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
     )
 
     '15. Meta procedures' = @(

@@ -6,7 +6,7 @@ GO
 DROP TABLE IF EXISTS [Gold].[Dim_Payment_Plans]
 GO
 CREATE TABLE [Gold].[Dim_Payment_Plans](
-	[pk_Payment_Plan] [bigint] IDENTITY NOT NULL,
+	[pk_Payment_Plan] [bigint] NOT NULL,
 	[Tenant_ID] [int] NOT NULL,
 	[Payment_Plan_ID] [int] NOT NULL,
 	[Payment_Plan_Name] [VARCHAR](255) NULL,
