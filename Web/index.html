@@ -720,9 +720,12 @@
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
+        const mobile = isMobile();
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
-            settings: { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, ..._layoutSettings() },
+            settings: mobile
+                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 4 }
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
         };
     }
 
