@@ -488,7 +488,7 @@
             const spinner = document.getElementById('auth-spinner');
             spinner.style.display = 'none';
             document.getElementById('auth-status').textContent = 'Please sign in to continue.';
-            btn.style.display = 'block';
+            btn.style.display = 'inline-block';
             btn.onclick = async () => {
                 btn.disabled = true;
                 spinner.style.display = '';
