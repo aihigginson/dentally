@@ -574,14 +574,15 @@ def save_targets():
     if err:
         return err
     try:
-        conn = _fabric_conn()
-        cur  = conn.cursor()
+        conn             = _fabric_conn()
+        conn.autocommit  = True   # Fabric Warehouse requires autocommit for DML
+        cur              = conn.cursor()
         _, client_id, tids = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
 
-        rows        = request.get_json(force=True) or []
+        rows         = request.get_json(force=True) or []
         allowed_tids = set(tids)
 
         for row in rows:
@@ -595,7 +596,7 @@ def save_targets():
                 "WHERE Tenant_ID = ? AND Metric = ? "
                 "AND Period_Type = 'all_time' AND Period_Value = 'all' "
                 "AND Site_ID IS NULL AND Practitioner_ID IS NULL",
-                tid, metric,
+                [tid, metric],
             )
             if value is not None:
                 cur.execute(
@@ -603,10 +604,9 @@ def save_targets():
                     "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
                     " Target_Value, DW_Created_At, DW_Updated_At) "
                     "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, GETUTCDATE(), GETUTCDATE())",
-                    tid, metric, float(value),
+                    [tid, metric, float(value)],
                 )
 
-        conn.commit()
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
