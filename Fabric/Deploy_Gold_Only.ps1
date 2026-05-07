@@ -13,6 +13,10 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $Groups = [ordered]@{
 
+    '03. Audit seed data' = @(
+        'Audit.Process_Config.Data.sql'
+    )
+
     '11. Gold tables & functions' = @(
         'Gold.Dim_Accounts.Table.sql'
         'Gold.Dim_Date.Table.sql'
@@ -80,6 +84,10 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql'
         'Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql'
         'Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql'
+    )
+
+    '15. Audit orchestrator' = @(
+        'Audit.usp_Load_All.sql'
     )
 }
 
