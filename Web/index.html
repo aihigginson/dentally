@@ -454,7 +454,7 @@
 </main>
 
 <script src="/msal-browser.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.23.1/dist/powerbi.min.js"></script>
+<script src="/powerbi.min.js"></script>
 <script>
 
     // ── MSAL auth state ───────────────────────────────────────────────────────
@@ -715,7 +715,7 @@
 
     function _layoutSettings() {
         return isMobile()
-            ? { layoutType: 4 }
+            ? { layoutType: 2 }
             : { layoutType: 1, customLayout: { displayOption: 1 } };
     }
 
@@ -724,7 +724,7 @@
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
-                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 4 }
+                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
                 : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
         };
     }
@@ -786,7 +786,7 @@
         const report = doEmbed(config);
 
         // Mobile layout fallback: if report hangs or errors, re-embed with desktop layout
-        if (config.settings.layoutType === 4) {
+        if (config.settings.layoutType === 2) {
             let rendered = false;
             report.on('rendered', () => { rendered = true; });
             const fallback = () => {
