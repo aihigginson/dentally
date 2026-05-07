@@ -770,11 +770,31 @@
             return;
         }
 
-        const report = window.powerbi.embed(slot, config);
-        embeddedReports[sectionKey] = report;
-        report.on('loaded', async () => {
-            try { buildSubnav(sectionKey, await report.getPages(), report); } catch (_) {}
-        });
+        function doEmbed(cfg) {
+            window.powerbi.reset(slot);
+            const r = window.powerbi.embed(slot, cfg);
+            embeddedReports[sectionKey] = r;
+            r.on('loaded', async () => {
+                try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {}
+            });
+            return r;
+        }
+
+        const report = doEmbed(config);
+
+        // Mobile layout fallback: if report hangs or errors, re-embed with desktop layout
+        if (config.settings.layoutType === 4) {
+            let rendered = false;
+            report.on('rendered', () => { rendered = true; });
+            const fallback = () => {
+                if (rendered) return;
+                clearTimeout(timer);
+                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
+                doEmbed(desktop);
+            };
+            report.on('error', fallback);
+            const timer = setTimeout(fallback, 12000);
+        }
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
