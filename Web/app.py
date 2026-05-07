@@ -5,6 +5,8 @@ import requests
 import pyodbc
 import os
 from dotenv import load_dotenv
+import jwt
+from jwt import PyJWKClient
 
 load_dotenv()
 
@@ -35,13 +37,37 @@ REPORTS = {
 }
 print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
+# ── Azure AD token validation ─────────────────────────────────────────────────
+
+_jwks_client = PyJWKClient(
+    f'https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys',
+)
+
+def _validate_id_token(token):
+    signing_key = _jwks_client.get_signing_key_from_jwt(token)
+    return jwt.decode(token, signing_key.key, algorithms=['RS256'], audience=CLIENT_ID)
+
+def _auth():
+    """Validate Bearer ID token. Returns (upn, None) or (None, error_response)."""
+    header = request.headers.get('Authorization', '')
+    if not header.startswith('Bearer '):
+        return None, (jsonify({'error': 'Authentication required'}), 401)
+    try:
+        claims = _validate_id_token(header[7:])
+        upn = (claims.get('preferred_username') or claims.get('upn') or claims.get('email', '')).lower()
+        if not upn:
+            return None, (jsonify({'error': 'Authentication required'}), 401)
+        return upn, None
+    except jwt.ExpiredSignatureError:
+        return None, (jsonify({'error': 'Token expired'}), 401)
+    except Exception:
+        return None, (jsonify({'error': 'Authentication required'}), 401)
+
+# ── Service-principal helpers (PBI + Fabric) ──────────────────────────────────
 
 def _pbi_token():
-    """Acquire a service-principal access token for the Power BI REST API."""
     result = msal.ConfidentialClientApplication(
-        CLIENT_ID,
-        authority=PBI_AUTHORITY,
-        client_credential=CLIENT_SECRET,
+        CLIENT_ID, authority=PBI_AUTHORITY, client_credential=CLIENT_SECRET,
     ).acquire_token_for_client(scopes=PBI_SCOPE)
     if 'access_token' not in result:
         raise RuntimeError(result.get('error_description', 'MSAL token acquisition failed'))
@@ -49,24 +75,15 @@ def _pbi_token():
 
 
 def _pbi_delegated_token():
-    """Acquire a delegated token via ROPC — required for executeQueries (Delegated-only API)."""
     result = msal.ConfidentialClientApplication(
-        CLIENT_ID,
-        authority=PBI_AUTHORITY,
-        client_credential=CLIENT_SECRET,
-    ).acquire_token_by_username_password(
-        username=USERNAME,
-        password=PASSWORD,
-        scopes=PBI_SCOPE,
-    )
+        CLIENT_ID, authority=PBI_AUTHORITY, client_credential=CLIENT_SECRET,
+    ).acquire_token_by_username_password(username=USERNAME, password=PASSWORD, scopes=PBI_SCOPE)
     if 'access_token' not in result:
         raise RuntimeError(result.get('error_description', 'MSAL delegated token acquisition failed'))
     return result['access_token']
 
 
-
 def _fabric_conn():
-    """Open a pyodbc connection to Fabric Warehouse using AAD password auth."""
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={FABRIC_SERVER},1433;"
@@ -79,21 +96,28 @@ def _fabric_conn():
     )
     return pyodbc.connect(conn_str)
 
+# ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
 
 
+@app.route('/api/auth-config')
+def auth_config():
+    """Returns MSAL config needed by the frontend — no auth required."""
+    return jsonify({'client_id': CLIENT_ID, 'tenant_id': TENANT_ID})
+
+# ── Protected routes ──────────────────────────────────────────────────────────
+
 @app.route('/api/embed-token')
 def embed_token():
-    """
-    Returns an embed token, embed URL, and report ID for a named report.
-    Query param: ?report=revenue  (defaults to 'revenue')
-    """
+    upn, err = _auth()
+    if err:
+        return err
+
     report_name = request.args.get('report', 'revenue')
     report_id   = REPORTS.get(report_name)
-
     if not report_id:
         return jsonify({'error': f"Report '{report_name}' not configured"}), 404
 
@@ -101,7 +125,6 @@ def embed_token():
         token   = _pbi_token()
         headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
 
-        # Fetch report metadata (gives us the embedUrl)
         r = requests.get(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}',
             headers=headers, timeout=10,
@@ -120,17 +143,10 @@ def embed_token():
             }]
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
-            headers=headers,
-            json=token_body,
-            timeout=10,
+            headers=headers, json=token_body, timeout=10,
         )
         r2.raise_for_status()
-
-        return jsonify({
-            'token':    r2.json()['token'],
-            'embedUrl': embed_url,
-            'reportId': report_id,
-        })
+        return jsonify({'token': r2.json()['token'], 'embedUrl': embed_url, 'reportId': report_id})
 
     except requests.HTTPError as e:
         return jsonify({'error': str(e), 'detail': e.response.text}), 502
@@ -139,32 +155,67 @@ def embed_token():
 
 
 def _dax_query(dax):
-    """Run a DAX query against the semantic model and return rows as a list of dicts."""
     token   = _pbi_delegated_token()
     headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
     r = requests.post(
         f'{PBI_BASE}/groups/{WORKSPACE_ID}/datasets/{DATASET_ID}/executeQueries',
         headers=headers,
-        json={
-            'queries':            [{'query': dax}],
-            'serializerSettings': {'includeNulls': True},
-        },
+        json={'queries': [{'query': dax}], 'serializerSettings': {'includeNulls': True}},
         timeout=15,
     )
     r.raise_for_status()
     rows = r.json()['results'][0]['tables'][0].get('rows', [])
-    # Strip table-prefix from column names ("List Practice Sites[Site Name]" → "Site Name")
     return [{k.split('[')[-1].rstrip(']'): v for k, v in row.items()} for row in rows]
+
+
+@app.route('/api/me')
+def me():
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT Display_Name, Tenant_ID "
+            "FROM   Security.Application_Users "
+            "WHERE  LOWER(User_UPN) = LOWER(?)",
+            upn,
+        )
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        tid = row[1]
+        cur.execute(
+            "SELECT TOP 1 Practice_Name FROM Gold.Dim_Practice_Sites WHERE Tenant_ID = ?",
+            tid,
+        )
+        prow = cur.fetchone()
+        conn.close()
+        return jsonify({
+            'display_name':  row[0] or upn,
+            'tenant_id':     tid,
+            'practice_name': prow[0] if prow else None,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/filters')
 def filters():
-    """Returns active sites and practitioners for the logged-in user's tenant."""
+    upn, err = _auth()
+    if err:
+        return err
+
     active_only = request.args.get('active_only', '1') == '1'
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
-        tid  = _get_tenant_id(cur)
+        tid  = _get_tenant_id(cur, upn)
+        if tid is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
 
         cur.execute(
             "SELECT Site_ID, Site_Name "
@@ -184,7 +235,6 @@ def filters():
             tid,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
-
         conn.close()
         return jsonify({'sites': sites, 'practitioners': practitioners})
 
@@ -192,20 +242,53 @@ def filters():
         return jsonify({'sites': [], 'practitioners': [], '_error': str(e)})
 
 
-# ── KPI helpers ───────────────────────────────────────────────────────────────
+@app.route('/api/kpis')
+def kpis():
+    upn, err = _auth()
+    if err:
+        return err
 
-def _get_tenant_id(cur):
-    """Return Tenant_ID for the master account. Temporary until per-user auth is added."""
+    section  = request.args.get('section',  'revenue')
+    period   = request.args.get('period',   'all')
+    site_id  = request.args.get('site',     'all')
+    pract_id = request.args.get('pract',    'all')
+
+    dispatch = {
+        'revenue':    _kpis_revenue,
+        'patients':   _kpis_patients,
+        'treatment':  _kpis_treatment,
+        'scheduling': _kpis_scheduling,
+        'nhs':        _kpis_nhs,
+    }
+    fn = dispatch.get(section)
+    if not fn:
+        return jsonify({})
+
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        tid  = _get_tenant_id(cur, upn)
+        if tid is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        result = fn(cur, tid, period, site_id, pract_id)
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'_error': str(e)}), 500
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_tenant_id(cur, upn):
     cur.execute(
-        "SELECT Tenant_ID FROM Security.Application_Users WHERE User_UPN = ?",
-        USERNAME,
+        "SELECT Tenant_ID FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
+        upn,
     )
     row = cur.fetchone()
-    return row[0] if row else 1
+    return row[0] if row else None
 
 
 def _pw(date_col, period, params):
-    """Append a period WHERE fragment (current year). Mutates params."""
     if period and period != 'all':
         params.append(period)
         return (f"AND {date_col} IN "
@@ -214,7 +297,6 @@ def _pw(date_col, period, params):
 
 
 def _pyw(date_col, period, params):
-    """Append a period WHERE fragment (prior year). Mutates params."""
     if period and period != 'all':
         params.append(period)
         return (f"AND {date_col} IN "
@@ -223,7 +305,6 @@ def _pyw(date_col, period, params):
 
 
 def _sw(site_id, tid, params, alias='fi'):
-    """Append a site WHERE fragment. Mutates params."""
     if site_id and site_id != 'all':
         params.extend([str(site_id), tid])
         return (f"AND {alias}.fk_Practice_Site IN "
@@ -233,7 +314,6 @@ def _sw(site_id, tid, params, alias='fi'):
 
 
 def _prw(pract_id, tid, params, alias='fi'):
-    """Append a practitioner WHERE fragment. Mutates params."""
     if pract_id and pract_id != 'all':
         params.extend([str(pract_id), tid])
         return (f"AND {alias}.fk_Practitioner IN "
@@ -253,7 +333,6 @@ def _kpi(value, delta_pct=None):
 
 
 def _invoice_agg(cur, tid, period, site_id, pract_id, prior=False):
-    """Run Invoice_Items aggregation for current or prior year."""
     params = [tid]
     date_w = _pyw('fi.fk_Date_Invoice', period, params) if prior \
              else _pw('fi.fk_Date_Invoice', period, params)
@@ -274,29 +353,29 @@ def _invoice_agg(cur, tid, period, site_id, pract_id, prior=False):
 def _kpis_revenue(cur, tid, period, site_id, pract_id):
     c = _invoice_agg(cur, tid, period, site_id, pract_id)
     p = _invoice_agg(cur, tid, period, site_id, pract_id, prior=True)
-    total = float(c[0]) if c[0] else 0
-    pts   = int(c[4])   if c[4] else 0
-    py_pts = int(p[4])  if p[4] else 0
+    total  = float(c[0]) if c[0] else 0
+    pts    = int(c[4])   if c[4] else 0
+    py_pts = int(p[4])   if p[4] else 0
     rpp    = round(total / pts, 2) if pts else None
     py_rpp = round(float(p[0]) / py_pts, 2) if (p[0] and py_pts) else None
     return {
-        'total_revenue':       _kpi(total,        _pct_delta(c[0], p[0])),
-        'nhs_revenue':         _kpi(c[1],         _pct_delta(c[1], p[1])),
-        'private_revenue':     _kpi(c[2],         _pct_delta(c[2], p[2])),
-        'revenue_per_patient': _kpi(rpp,          _pct_delta(rpp,  py_rpp)),
+        'total_revenue':       _kpi(total, _pct_delta(c[0], p[0])),
+        'nhs_revenue':         _kpi(c[1],  _pct_delta(c[1], p[1])),
+        'private_revenue':     _kpi(c[2],  _pct_delta(c[2], p[2])),
+        'revenue_per_patient': _kpi(rpp,   _pct_delta(rpp,  py_rpp)),
     }
 
 
 def _kpis_cashflow(cur, tid, period, site_id, pract_id):
     c = _invoice_agg(cur, tid, period, site_id, pract_id)
     p = _invoice_agg(cur, tid, period, site_id, pract_id, prior=True)
-    inv  = float(c[0]) if c[0] else 0
-    out  = float(c[3]) if c[3] else 0
-    coll = inv - out
+    inv     = float(c[0]) if c[0] else 0
+    out     = float(c[3]) if c[3] else 0
+    coll    = inv - out
     py_inv  = float(p[0]) if p[0] else 0
     py_out  = float(p[3]) if p[3] else 0
     py_coll = py_inv - py_out
-    rate    = round(coll / inv * 100, 1) if inv else None
+    rate    = round(coll / inv * 100, 1)    if inv    else None
     py_rate = round(py_coll / py_inv * 100, 1) if py_inv else None
     return {
         'total_invoiced':  _kpi(inv,  _pct_delta(inv,  py_inv)),
@@ -307,7 +386,6 @@ def _kpis_cashflow(cur, tid, period, site_id, pract_id):
 
 
 def _kpis_patients(cur, tid, period, site_id, pract_id):
-    # Active patients — point-in-time, no date filter
     cur.execute(
         "SELECT COUNT(*) FROM Gold.Dim_Patients "
         "WHERE Tenant_ID = ? AND Active = 1 AND pk_Patient > 0",
@@ -315,31 +393,26 @@ def _kpis_patients(cur, tid, period, site_id, pract_id):
     )
     active = int(cur.fetchone()[0])
 
-    # New patients in period — filter by Patient_Created_Date via date key
     params = [tid]
-    date_w = _pw('Gold.fn_Get_Date_Key(CAST(dp.Patient_Created_Date AS DATE))',
-                 period, params)
+    date_w = _pw('Gold.fn_Get_Date_Key(CAST(dp.Patient_Created_Date AS DATE))', period, params)
     cur.execute(f"""
-        SELECT COUNT(*)
-        FROM   Gold.Dim_Patients dp
-        WHERE  dp.Tenant_ID = ? {date_w} AND dp.pk_Patient > 0
+        SELECT COUNT(*) FROM Gold.Dim_Patients dp
+        WHERE dp.Tenant_ID = ? {date_w} AND dp.pk_Patient > 0
     """, params)
     new_pts = int(cur.fetchone()[0])
 
-    # Recalls in period
     params_r = [tid]
-    date_r = _pw('r.fk_Date_Due', period, params_r)
+    date_r   = _pw('r.fk_Date_Due', period, params_r)
     cur.execute(f"""
         SELECT COUNT(*),
                SUM(CASE WHEN r.Days_Overdue > 0 THEN 1 ELSE 0 END)
         FROM   Gold.Fact_Recalls r
         WHERE  r.Tenant_ID = ? {date_r}
     """, params_r)
-    row = cur.fetchone()
+    row       = cur.fetchone()
     total_r   = int(row[0]) if row[0] else 0
     overdue_r = int(row[1]) if row[1] else 0
     compliance = round((total_r - overdue_r) / total_r * 100, 1) if total_r else None
-
     return {
         'active_patients':   _kpi(active),
         'new_patients':      _kpi(new_pts),
@@ -379,17 +452,15 @@ def _kpis_nhs(cur, tid, period, site_id, pract_id):
     params = [tid]
     date_w = _pw('fc.fk_Date_Start', period, params)
     cur.execute(f"""
-        SELECT SUM(fc.UDA_Delivered),
-               SUM(fc.UDA_Target),
-               SUM(fc.Contract_Value)
+        SELECT SUM(fc.UDA_Delivered), SUM(fc.UDA_Target), SUM(fc.Contract_Value)
         FROM   Gold.Fact_Contracts fc
         WHERE  fc.Tenant_ID = ? {date_w}
     """, params)
-    row       = cur.fetchone()
-    delivered = float(row[0]) if row[0] else 0
-    target    = float(row[1]) if row[1] else 0
-    value     = float(row[2]) if row[2] else 0
-    achievement = round(delivered / target * 100, 1) if target else None
+    row         = cur.fetchone()
+    delivered   = float(row[0]) if row[0] else 0
+    target      = float(row[1]) if row[1] else 0
+    value       = float(row[2]) if row[2] else 0
+    achievement = round(delivered / target * 100, 1) if target    else None
     vpu         = round(value / delivered, 2)         if delivered else None
     return {
         'uda_delivered':   _kpi(delivered),
@@ -417,75 +488,9 @@ def _kpis_scheduling(cur, tid, period, site_id, pract_id):
     canc  = int(row[2]) if row[2] else 0
     return {
         'total_appointments': _kpi(total),
-        'dna_rate':           _kpi(round(dna  / total * 100, 1) if total else None),
+        'dna_rate':           _kpi(round(dna / total * 100, 1) if total else None),
         'cancellations':      _kpi(canc),
     }
-
-
-# ── Routes ────────────────────────────────────────────────────────────────────
-
-@app.route('/api/me')
-def me():
-    """Returns display name, tenant, and practice name for the current master account.
-    Temporary — will use the logged-in user's UPN once MSAL.js auth is added."""
-    try:
-        conn = _fabric_conn()
-        cur  = conn.cursor()
-        cur.execute(
-            "SELECT Display_Name, Tenant_ID "
-            "FROM   Security.Application_Users "
-            "WHERE  User_UPN = ?",
-            USERNAME,
-        )
-        row = cur.fetchone()
-        if not row:
-            conn.close()
-            return jsonify({'display_name': USERNAME, 'tenant_id': 1, 'practice_name': None})
-        tid = row[1]
-        cur.execute(
-            "SELECT TOP 1 Practice_Name "
-            "FROM   Gold.Dim_Practice_Sites "
-            "WHERE  Tenant_ID = ?",
-            tid,
-        )
-        prow = cur.fetchone()
-        conn.close()
-        return jsonify({
-            'display_name':  row[0] or USERNAME,
-            'tenant_id':     tid,
-            'practice_name': prow[0] if prow else None,
-        })
-    except Exception as e:
-        return jsonify({'display_name': USERNAME, 'tenant_id': 1, 'practice_name': None, '_error': str(e)})
-
-
-@app.route('/api/kpis')
-def kpis():
-    section  = request.args.get('section',  'revenue')
-    period   = request.args.get('period',   'all')
-    site_id  = request.args.get('site',     'all')
-    pract_id = request.args.get('pract',    'all')
-
-    dispatch = {
-        'revenue':    _kpis_revenue,
-        'patients':   _kpis_patients,
-        'treatment':  _kpis_treatment,
-        'scheduling': _kpis_scheduling,
-        'nhs':        _kpis_nhs,
-    }
-    fn = dispatch.get(section)
-    if not fn:
-        return jsonify({})
-
-    try:
-        conn = _fabric_conn()
-        cur  = conn.cursor()
-        tid  = _get_tenant_id(cur)
-        result = fn(cur, tid, period, site_id, pract_id)
-        conn.close()
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'_error': str(e)}), 500
 
 
 if __name__ == '__main__':

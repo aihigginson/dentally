@@ -23,6 +23,70 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--font); background: var(--bg-page); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
+        /* ── Auth overlay ── */
+        .auth-overlay {
+            position: fixed; inset: 0; z-index: 900;
+            background: var(--bg-page); display: flex; align-items: center; justify-content: center;
+        }
+        .auth-box {
+            text-align: center; padding: 48px 40px;
+            background: white; border-radius: 12px; border: 1px solid var(--border);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06); max-width: 360px; width: 90%;
+        }
+        .auth-brand { font-size: 28px; font-weight: 700; color: var(--navy); margin-bottom: 32px; letter-spacing: 0.01em; }
+        .auth-brand span { color: var(--teal-bright); }
+        .auth-spinner {
+            width: 32px; height: 32px; border: 3px solid var(--border);
+            border-top-color: var(--navy); border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+        }
+        .auth-status { font-size: 14px; color: var(--text-2); margin-bottom: 24px; min-height: 20px; }
+        .auth-signin-btn {
+            background: var(--navy); color: white; border: none; border-radius: 8px;
+            padding: 12px 28px; font-size: 14px; font-weight: 600; cursor: pointer;
+            font-family: var(--font); transition: background 0.12s; display: none;
+        }
+        .auth-signin-btn:hover:not(:disabled) { background: #163f5e; }
+        .auth-signin-btn:disabled { opacity: 0.6; cursor: default; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Contact overlay ── */
+        .contact-overlay {
+            position: fixed; inset: 0; z-index: 900;
+            background: var(--bg-page); flex-direction: column; display: none;
+        }
+        .contact-header {
+            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            display: flex; align-items: center; flex-shrink: 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        .contact-header-brand { font-size: 18px; font-weight: 700; }
+        .contact-header-brand span { color: var(--teal-bright); }
+        .contact-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .contact-card {
+            background: white; border-radius: 12px; border: 1px solid var(--border);
+            padding: 48px 40px; max-width: 480px; width: 100%; text-align: center;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        }
+        .contact-icon {
+            width: 56px; height: 56px; background: #EBF3F9; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;
+        }
+        .contact-card h1 { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+        .contact-card p  { font-size: 14px; color: var(--text-2); line-height: 1.65; margin-bottom: 32px; }
+        .contact-email {
+            display: inline-block; background: var(--navy); color: white; text-decoration: none;
+            border-radius: 8px; padding: 12px 28px; font-size: 14px; font-weight: 600; margin-bottom: 16px;
+            transition: background 0.12s;
+        }
+        .contact-email:hover { background: #163f5e; }
+        .contact-phone { font-size: 13px; color: var(--text-3); margin-bottom: 24px; }
+        .contact-switch {
+            background: none; border: none; color: var(--text-3); font-size: 12px;
+            cursor: pointer; text-decoration: underline; font-family: var(--font);
+        }
+        .contact-switch:hover { color: var(--text-2); }
+
         /* ── Header ── */
         .header {
             background: var(--navy); color: white; padding: 0 24px; height: 52px;
@@ -168,10 +232,48 @@
             .kpi-row::-webkit-scrollbar { display: none; }
             .kpi { min-width: 138px; flex-shrink: 0; }
             .embed-full { width: calc(100% + 24px); margin: 0 -12px; }
+            .auth-box { padding: 36px 24px; }
+            .contact-card { padding: 36px 24px; }
         }
     </style>
 </head>
 <body>
+
+<!-- ════════════════ AUTH OVERLAY ════════════════ -->
+<div class="auth-overlay" id="auth-overlay">
+    <div class="auth-box">
+        <div class="auth-brand">Analytic<span>ally</span></div>
+        <div class="auth-spinner" id="auth-spinner"></div>
+        <div class="auth-status" id="auth-status">Loading...</div>
+        <button class="auth-signin-btn" id="auth-signin-btn">Sign in with Microsoft</button>
+    </div>
+</div>
+
+<!-- ════════════════ CONTACT OVERLAY ════════════════ -->
+<div class="contact-overlay" id="contact-overlay">
+    <header class="contact-header">
+        <div class="contact-header-brand">Analytic<span>ally</span></div>
+    </header>
+    <div class="contact-body">
+        <div class="contact-card">
+            <div class="contact-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#1A527A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+            </div>
+            <h1>Access Required</h1>
+            <p id="contact-msg">
+                Your account doesn't have access to Analytically. Please get in touch to arrange access or discuss pricing for your dental practice.
+            </p>
+            <div>
+                <a class="contact-email" href="mailto:hello@analytically.io">hello@analytically.io</a>
+            </div>
+            <div class="contact-phone">+44 (0)800 123 456</div>
+            <button class="contact-switch" id="contact-switch-btn">Sign in with a different account</button>
+        </div>
+    </div>
+</div>
 
 <!-- ════════════════ HEADER ════════════════ -->
 <header class="header">
@@ -249,26 +351,10 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Plans Presented</div>
-                <div class="kpi-value" id="kpi-plans_presented">—</div>
-                <div class="kpi-delta" id="kpi-plans_presented-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Acceptance Rate</div>
-                <div class="kpi-value" id="kpi-acceptance_rate">—</div>
-                <div class="kpi-delta" id="kpi-acceptance_rate-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Avg Accepted Value</div>
-                <div class="kpi-value" id="kpi-avg_accepted_value">—</div>
-                <div class="kpi-delta" id="kpi-avg_accepted_value-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Declined Value</div>
-                <div class="kpi-value" id="kpi-declined_value">—</div>
-                <div class="kpi-delta" id="kpi-declined_value-d"></div>
-            </div>
+            <div class="kpi"><div class="kpi-label">Plans Presented</div><div class="kpi-value" id="kpi-plans_presented">—</div><div class="kpi-delta" id="kpi-plans_presented-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Acceptance Rate</div><div class="kpi-value" id="kpi-acceptance_rate">—</div><div class="kpi-delta" id="kpi-acceptance_rate-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Avg Accepted Value</div><div class="kpi-value" id="kpi-avg_accepted_value">—</div><div class="kpi-delta" id="kpi-avg_accepted_value-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Declined Value</div><div class="kpi-value" id="kpi-declined_value">—</div><div class="kpi-delta" id="kpi-declined_value-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
     </section>
@@ -288,26 +374,10 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Active Patients</div>
-                <div class="kpi-value" id="kpi-active_patients">—</div>
-                <div class="kpi-delta" id="kpi-active_patients-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">New Patients</div>
-                <div class="kpi-value" id="kpi-new_patients">—</div>
-                <div class="kpi-delta" id="kpi-new_patients-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Recall Compliance</div>
-                <div class="kpi-value" id="kpi-recall_compliance">—</div>
-                <div class="kpi-delta" id="kpi-recall_compliance-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Overdue Recalls</div>
-                <div class="kpi-value" id="kpi-overdue_recalls">—</div>
-                <div class="kpi-delta" id="kpi-overdue_recalls-d"></div>
-            </div>
+            <div class="kpi"><div class="kpi-label">Active Patients</div><div class="kpi-value" id="kpi-active_patients">—</div><div class="kpi-delta" id="kpi-active_patients-d"></div></div>
+            <div class="kpi"><div class="kpi-label">New Patients</div><div class="kpi-value" id="kpi-new_patients">—</div><div class="kpi-delta" id="kpi-new_patients-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Recall Compliance</div><div class="kpi-value" id="kpi-recall_compliance">—</div><div class="kpi-delta" id="kpi-recall_compliance-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Overdue Recalls</div><div class="kpi-value" id="kpi-overdue_recalls">—</div><div class="kpi-delta" id="kpi-overdue_recalls-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
     </section>
@@ -327,26 +397,10 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Total Appointments</div>
-                <div class="kpi-value" id="kpi-total_appointments">—</div>
-                <div class="kpi-delta" id="kpi-total_appointments-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">DNA Rate</div>
-                <div class="kpi-value" id="kpi-dna_rate">—</div>
-                <div class="kpi-delta" id="kpi-dna_rate-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Cancellations</div>
-                <div class="kpi-value" id="kpi-cancellations">—</div>
-                <div class="kpi-delta" id="kpi-cancellations-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Chair Utilisation</div>
-                <div class="kpi-value" id="kpi-chair_utilisation">—</div>
-                <div class="kpi-delta" id="kpi-chair_utilisation-d"></div>
-            </div>
+            <div class="kpi"><div class="kpi-label">Total Appointments</div><div class="kpi-value" id="kpi-total_appointments">—</div><div class="kpi-delta" id="kpi-total_appointments-d"></div></div>
+            <div class="kpi"><div class="kpi-label">DNA Rate</div><div class="kpi-value" id="kpi-dna_rate">—</div><div class="kpi-delta" id="kpi-dna_rate-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Cancellations</div><div class="kpi-value" id="kpi-cancellations">—</div><div class="kpi-delta" id="kpi-cancellations-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Chair Utilisation</div><div class="kpi-value" id="kpi-chair_utilisation">—</div><div class="kpi-delta" id="kpi-chair_utilisation-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
     </section>
@@ -366,26 +420,10 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Total Revenue</div>
-                <div class="kpi-value" id="kpi-total_revenue">—</div>
-                <div class="kpi-delta" id="kpi-total_revenue-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">NHS Revenue</div>
-                <div class="kpi-value" id="kpi-nhs_revenue">—</div>
-                <div class="kpi-delta" id="kpi-nhs_revenue-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Private Revenue</div>
-                <div class="kpi-value" id="kpi-private_revenue">—</div>
-                <div class="kpi-delta" id="kpi-private_revenue-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Revenue / Patient</div>
-                <div class="kpi-value" id="kpi-revenue_per_patient">—</div>
-                <div class="kpi-delta" id="kpi-revenue_per_patient-d"></div>
-            </div>
+            <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="kpi-total_revenue">—</div><div class="kpi-delta" id="kpi-total_revenue-d"></div></div>
+            <div class="kpi"><div class="kpi-label">NHS Revenue</div><div class="kpi-value" id="kpi-nhs_revenue">—</div><div class="kpi-delta" id="kpi-nhs_revenue-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Private Revenue</div><div class="kpi-value" id="kpi-private_revenue">—</div><div class="kpi-delta" id="kpi-private_revenue-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Revenue / Patient</div><div class="kpi-value" id="kpi-revenue_per_patient">—</div><div class="kpi-delta" id="kpi-revenue_per_patient-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
     </section>
@@ -405,36 +443,169 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">UDAs Delivered</div>
-                <div class="kpi-value" id="kpi-uda_delivered">—</div>
-                <div class="kpi-delta" id="kpi-uda_delivered-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">UDA Target</div>
-                <div class="kpi-value" id="kpi-uda_target">—</div>
-                <div class="kpi-delta" id="kpi-uda_target-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Achievement</div>
-                <div class="kpi-value" id="kpi-uda_achievement">—</div>
-                <div class="kpi-delta" id="kpi-uda_achievement-d"></div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Value / UDA</div>
-                <div class="kpi-value" id="kpi-value_per_uda">—</div>
-                <div class="kpi-delta" id="kpi-value_per_uda-d"></div>
-            </div>
+            <div class="kpi"><div class="kpi-label">UDAs Delivered</div><div class="kpi-value" id="kpi-uda_delivered">—</div><div class="kpi-delta" id="kpi-uda_delivered-d"></div></div>
+            <div class="kpi"><div class="kpi-label">UDA Target</div><div class="kpi-value" id="kpi-uda_target">—</div><div class="kpi-delta" id="kpi-uda_target-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Achievement</div><div class="kpi-value" id="kpi-uda_achievement">—</div><div class="kpi-delta" id="kpi-uda_achievement-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Value / UDA</div><div class="kpi-value" id="kpi-value_per_uda">—</div><div class="kpi-delta" id="kpi-value_per_uda-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
     </section>
 
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.43.0/lib/msal-browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.23.1/dist/powerbi.min.js"></script>
 <script>
 
-    // ── Report map: section key → report name for /api/embed-token and /api/kpis ──
+    // ── MSAL auth state ───────────────────────────────────────────────────────
+    const MSAL_SCOPES   = ['openid', 'profile', 'email'];
+    let msalInstance    = null;
+    let msalAccount     = null;
+
+    async function initAuth() {
+        const config = await fetch('/api/auth-config').then(r => r.json());
+
+        msalInstance = new msal.PublicClientApplication({
+            auth: {
+                clientId:    config.client_id,
+                authority:   `https://login.microsoftonline.com/${config.tenant_id}`,
+                redirectUri: window.location.origin,
+            },
+            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+        });
+
+        await msalInstance.handleRedirectPromise();
+
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+            msalAccount = accounts[0];
+            return;
+        }
+
+        // No cached session — show sign-in button and wait for user interaction
+        return new Promise((resolve) => {
+            const btn = document.getElementById('auth-signin-btn');
+            const spinner = document.getElementById('auth-spinner');
+            spinner.style.display = 'none';
+            document.getElementById('auth-status').textContent = 'Please sign in to continue.';
+            btn.style.display = '';
+            btn.onclick = async () => {
+                btn.disabled = true;
+                spinner.style.display = '';
+                document.getElementById('auth-status').textContent = 'Signing you in...';
+                try {
+                    const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES });
+                    msalAccount  = result.account;
+                    btn.style.display = 'none';
+                    resolve();
+                } catch {
+                    btn.disabled = false;
+                    spinner.style.display = 'none';
+                    document.getElementById('auth-status').textContent = 'Sign in failed. Please try again.';
+                }
+            };
+        });
+    }
+
+    async function getIdToken() {
+        try {
+            const r = await msalInstance.acquireTokenSilent({ scopes: MSAL_SCOPES, account: msalAccount });
+            return r.idToken;
+        } catch (e) {
+            if (e instanceof msal.InteractionRequiredAuthError) {
+                const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
+                msalAccount = r.account;
+                return r.idToken;
+            }
+            throw e;
+        }
+    }
+
+    async function authFetch(url, options) {
+        const token = await getIdToken();
+        const res = await fetch(url, {
+            ...options,
+            headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${token}` },
+        });
+        if (res.status === 403) {
+            showContactPage();
+            throw new Error('Forbidden');
+        }
+        if (res.status === 401) {
+            try {
+                const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
+                msalAccount = r.account;
+                const retry = await fetch(url, {
+                    ...options,
+                    headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${r.idToken}` },
+                });
+                if (retry.status === 403) { showContactPage(); throw new Error('Forbidden'); }
+                return retry;
+            } catch (inner) {
+                if (inner.message === 'Forbidden') throw inner;
+            }
+        }
+        return res;
+    }
+
+    function showContactPage() {
+        document.getElementById('auth-overlay').style.display = 'none';
+        if (msalAccount) {
+            document.getElementById('contact-msg').textContent =
+                `Your account (${msalAccount.username}) doesn't have access to Analytically. ` +
+                `Please get in touch to arrange access or discuss pricing for your dental practice.`;
+        }
+        document.getElementById('contact-overlay').style.display = 'flex';
+    }
+
+    document.getElementById('contact-switch-btn').addEventListener('click', async () => {
+        try {
+            const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES, prompt: 'select_account' });
+            msalAccount  = result.account;
+            document.getElementById('contact-overlay').style.display = 'none';
+            document.getElementById('auth-overlay').style.display = 'flex';
+            document.getElementById('auth-status').textContent = 'Verifying access...';
+            document.getElementById('auth-spinner').style.display = '';
+            verifyAndLaunch();
+        } catch {}
+    });
+
+    async function verifyAndLaunch() {
+        const meRes = await authFetch('/api/me').catch(() => null);
+        if (!meRes || !meRes.ok) return;
+
+        const data = await meRes.json();
+        const u = document.getElementById('header-user');
+        const o = document.getElementById('header-org');
+        if (u && data.display_name)  u.textContent = data.display_name;
+        if (o && data.practice_name) o.textContent = data.practice_name;
+
+        document.getElementById('auth-overlay').style.display = 'none';
+
+        if (window.innerWidth > 768) {
+            filterBar.classList.add('open');
+            filterToggleBtn.classList.add('active');
+        }
+        loadFilters(false);
+        loadEmbedsInSection('treatment');
+        refreshKPIs();
+    }
+
+    async function startApp() {
+        try {
+            await initAuth();
+            document.getElementById('auth-status').textContent = 'Verifying access...';
+            document.getElementById('auth-spinner').style.display = '';
+            await verifyAndLaunch();
+        } catch (e) {
+            if (e.message !== 'Forbidden') {
+                document.getElementById('auth-spinner').style.display = 'none';
+                document.getElementById('auth-status').textContent = 'Failed to connect. Please refresh the page.';
+            }
+        }
+    }
+
+    // ── Report map ───────────────────────────────────────────────────────────
     const SECTION_REPORT = {
         'treatment': 'treatment',
         'customer':  'patients',
@@ -443,23 +614,15 @@
         'nhs':       'nhs',
     };
 
-    // ── Icon map: PBI page display name → icon key ──────────────────────────
     const PAGE_ICON_MAP = {
-        'Performed':   'chart-bar',
-        'Open':        'clipboard',
-        'Acceptance':  'trend-up',
-        'Acquisition': 'person-add',
-        'Retention':   'refresh',
-        'Value':       'currency',
-        'Utilisation': 'calendar',
-        'Planning':    'forward',
-        'Performance': 'chart-line',
-        'Cashflow':    'chart-line',
-        'Discount':    'percent',
-        '_default':    'chart-bar',
+        'Performed':   'chart-bar',  'Open':        'clipboard',
+        'Acceptance':  'trend-up',   'Acquisition': 'person-add',
+        'Retention':   'refresh',    'Value':       'currency',
+        'Utilisation': 'calendar',   'Planning':    'forward',
+        'Performance': 'chart-line', 'Cashflow':    'chart-line',
+        'Discount':    'percent',    '_default':    'chart-bar',
     };
 
-    // ── SVG icons ────────────────────────────────────────────────────────────
     const ICONS = {
         'chart-bar':  '<rect x="4" y="10" width="4" height="11" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="16" y="3" width="4" height="18" rx="1"/>',
         'chart-line': '<polyline points="3 18 9 12 13 16 21 6" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -501,7 +664,7 @@
         refreshKPIs();
     }
 
-    // ── Filter toggle (mobile) ───────────────────────────────────────────────
+    // ── Filter toggle ────────────────────────────────────────────────────────
     const filterToggleBtn = document.getElementById('filter-toggle');
     const filterBar       = document.getElementById('filter-bar');
 
@@ -511,30 +674,22 @@
     });
 
     // ── Fullscreen ───────────────────────────────────────────────────────────
-    function toggleFullscreen() {
-        document.body.classList.toggle('is-fullscreen');
-    }
-
+    function toggleFullscreen() { document.body.classList.toggle('is-fullscreen'); }
     document.getElementById('fullscreen-close').addEventListener('click', toggleFullscreen);
-
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) {
-            toggleFullscreen();
-        }
+        if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
     });
 
-    // ── PBI page sub-nav (built after report loads) ──────────────────────────
+    // ── PBI page sub-nav ─────────────────────────────────────────────────────
     function buildSubnav(sectionKey, pages, report) {
         const el = document.getElementById('subnav-' + sectionKey);
         if (!el || pages.length <= 1) { if (el) el.style.display = 'none'; return; }
-
         el.innerHTML = '';
         el.style.display = 'flex';
-
         pages.forEach((page, i) => {
             const btn = document.createElement('button');
             btn.className = 'page-tile' + (i === 0 ? ' active' : '');
-            btn.title = page.displayName;
+            btn.title     = page.displayName;
             btn.innerHTML = svgIcon(PAGE_ICON_MAP[page.displayName] || PAGE_ICON_MAP['_default']);
             btn.addEventListener('click', () => {
                 el.querySelectorAll('.page-tile').forEach(t => t.classList.remove('active'));
@@ -543,7 +698,6 @@
             });
             el.appendChild(btn);
         });
-
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
@@ -561,7 +715,7 @@
         const cached = tokenCache[reportName];
         if (cached && cached.expiry > Date.now()) return cached.config;
 
-        const res = await fetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
+        const res = await authFetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${res.status}`);
@@ -570,11 +724,8 @@
         const config = {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: {
-                navContentPaneEnabled: false,
-                filterPaneEnabled: false,
-                background: 1,        // BackgroundType.Transparent
-                layoutType: 1,        // LayoutType.Custom
-                customLayout: { displayOption: 1 },  // DisplayOption.FitToWidth
+                navContentPaneEnabled: false, filterPaneEnabled: false,
+                background: 1, layoutType: 1, customLayout: { displayOption: 1 },
             },
         };
         tokenCache[reportName] = { config, expiry: Date.now() + 55 * 60 * 1000 };
@@ -583,8 +734,7 @@
 
     async function loadEmbedsInSection(sectionKey) {
         const reportName = SECTION_REPORT[sectionKey];
-        if (!reportName) return;
-        if (embeddedReports[sectionKey]) return;  // already embedded
+        if (!reportName || embeddedReports[sectionKey]) return;
 
         const slot = document.getElementById('embed-' + sectionKey);
         if (!slot) return;
@@ -593,6 +743,7 @@
         try {
             config = await getEmbedConfig(reportName);
         } catch (e) {
+            if (e.message === 'Forbidden') return;
             slot.style.cssText += ';display:flex;align-items:center;justify-content:center;color:var(--bad);font-size:13px;';
             slot.textContent = `Embed error (${reportName}): ${e.message}`;
             return;
@@ -600,12 +751,8 @@
 
         const report = window.powerbi.embed(slot, config);
         embeddedReports[sectionKey] = report;
-
         report.on('loaded', async () => {
-            try {
-                const pages = await report.getPages();
-                buildSubnav(sectionKey, pages, report);
-            } catch (_) {}
+            try { buildSubnav(sectionKey, await report.getPages(), report); } catch (_) {}
         });
     }
 
@@ -639,7 +786,7 @@
 
     function loadFilters(sitesAlreadyLoaded) {
         const activeOnly = document.getElementById('f-active-only').checked ? '1' : '0';
-        fetch('/api/filters?active_only=' + activeOnly)
+        authFetch('/api/filters?active_only=' + activeOnly)
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
@@ -660,7 +807,6 @@
     }
 
     document.getElementById('f-active-only').addEventListener('change', () => loadFilters(true));
-    loadFilters(false);
 
     function applyFilters() {
         const filters = [];
@@ -678,12 +824,12 @@
 
     // ── KPI formatting ───────────────────────────────────────────────────────
     const KPI_FORMAT = {
-        avg_accepted_value: 'currency', declined_value:     'currency',
-        total_revenue:      'currency', nhs_revenue:        'currency',
-        private_revenue:    'currency', revenue_per_patient:'currency',
+        avg_accepted_value: 'currency', declined_value:      'currency',
+        total_revenue:      'currency', nhs_revenue:         'currency',
+        private_revenue:    'currency', revenue_per_patient: 'currency',
         value_per_uda:      'currency',
-        acceptance_rate:    'percent',  recall_compliance:  'percent',
-        dna_rate:           'percent',  chair_utilisation:  'percent',
+        acceptance_rate:    'percent',  recall_compliance:   'percent',
+        dna_rate:           'percent',  chair_utilisation:   'percent',
         uda_achievement:    'percent',
     };
 
@@ -708,24 +854,13 @@
                       : { text: `↓ ${abs}% vs prior year`, cls: 'down' };
     }
 
-    // ── /api/me ──────────────────────────────────────────────────────────────
-    async function loadMe() {
-        try {
-            const data = await fetch('/api/me').then(r => r.json());
-            const u = document.getElementById('header-user');
-            const o = document.getElementById('header-org');
-            if (u && data.display_name)  u.textContent = data.display_name;
-            if (o && data.practice_name) o.textContent = data.practice_name;
-        } catch (_) {}
-    }
-
-    // ── /api/kpis ────────────────────────────────────────────────────────────
+    // ── KPIs ─────────────────────────────────────────────────────────────────
     async function refreshKPIs() {
         const reportKey = SECTION_REPORT[activeSection];
         if (!reportKey) return;
         const qs = new URLSearchParams({ section: reportKey, period: filterState.period, site: filterState.site, pract: filterState.pract });
         try {
-            const data = await fetch('/api/kpis?' + qs).then(r => r.json());
+            const data = await authFetch('/api/kpis?' + qs).then(r => r.json());
             if (data._error) return;
             Object.entries(data).forEach(([key, kpi]) => {
                 const vEl = document.getElementById('kpi-' + key);
@@ -741,13 +876,7 @@
     }
 
     // ── Init ─────────────────────────────────────────────────────────────────
-    if (window.innerWidth > 768) {
-        filterBar.classList.add('open');
-        filterToggleBtn.classList.add('active');
-    }
-    loadEmbedsInSection('treatment');
-    loadMe();
-    refreshKPIs();
+    startApp();
 
 </script>
 </body>
