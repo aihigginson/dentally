@@ -40,12 +40,15 @@ print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in R
 # ── Azure AD token validation ─────────────────────────────────────────────────
 
 _jwks_client = PyJWKClient(
-    f'https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys',
+    'https://login.microsoftonline.com/common/discovery/v2.0/keys',
 )
 
 def _validate_id_token(token):
     signing_key = _jwks_client.get_signing_key_from_jwt(token)
-    return jwt.decode(token, signing_key.key, algorithms=['RS256'], audience=CLIENT_ID)
+    return jwt.decode(
+        token, signing_key.key, algorithms=['RS256'], audience=CLIENT_ID,
+        options={'verify_iss': False},
+    )
 
 def _auth():
     """Validate Bearer ID token. Returns (upn, None) or (None, error_response)."""
