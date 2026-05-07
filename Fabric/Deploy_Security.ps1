@@ -15,12 +15,14 @@ $Groups = [ordered]@{
 
     'Security tables' = @(
         'Security.Clients.Table.sql'
+        'Audit.Tenants.Table.sql'
         'Security.Application_Users.Table.sql'
         'Security.User_Tenants.Table.sql'
     )
 
     'Security seed data' = @(
         'Security.Clients.Data.sql'
+        'Audit.Tenants.Data.sql'
         'Security.Application_Users.Data.sql'
         'Security.User_Tenants.Data.sql'
     )
