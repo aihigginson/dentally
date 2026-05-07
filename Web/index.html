@@ -711,9 +711,24 @@
     const embeddedReports = {};
     const tokenCache      = {};
 
+    function isMobile() { return window.innerWidth < 768; }
+
+    function _layoutSettings() {
+        return isMobile()
+            ? { layoutType: 4 }
+            : { layoutType: 1, customLayout: { displayOption: 1 } };
+    }
+
+    function _buildConfig({ token, embedUrl, reportId }) {
+        return {
+            type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
+            settings: { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, ..._layoutSettings() },
+        };
+    }
+
     async function getEmbedConfig(reportName) {
         const cached = tokenCache[reportName];
-        if (cached && cached.expiry > Date.now()) return cached.config;
+        if (cached && cached.expiry > Date.now()) return _buildConfig(cached);
 
         const res = await authFetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
         if (!res.ok) {
@@ -721,16 +736,22 @@
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         const { token, embedUrl, reportId } = await res.json();
-        const config = {
-            type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
-            settings: {
-                navContentPaneEnabled: false, filterPaneEnabled: false,
-                background: 1, layoutType: 1, customLayout: { displayOption: 1 },
-            },
-        };
-        tokenCache[reportName] = { config, expiry: Date.now() + 55 * 60 * 1000 };
-        return config;
+        const entry = { token, embedUrl, reportId, expiry: Date.now() + 55 * 60 * 1000 };
+        tokenCache[reportName] = entry;
+        return _buildConfig(entry);
     }
+
+    let _wasMobile = isMobile(), _resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => {
+            const nowMobile = isMobile();
+            if (nowMobile === _wasMobile) return;
+            _wasMobile = nowMobile;
+            const settings = _layoutSettings();
+            Object.values(embeddedReports).forEach(r => { try { r.updateSettings(settings); } catch (_) {} });
+        }, 300);
+    });
 
     async function loadEmbedsInSection(sectionKey) {
         const reportName = SECTION_REPORT[sectionKey];
