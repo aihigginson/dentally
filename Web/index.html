@@ -751,8 +751,20 @@
             const nowMobile = isMobile();
             if (nowMobile === _wasMobile) return;
             _wasMobile = nowMobile;
-            const settings = _layoutSettings();
-            Object.values(embeddedReports).forEach(r => { try { r.updateSettings(settings); } catch (_) {} });
+            // Full re-embed on layout switch — updateSettings alone can't swap mobile/desktop layout
+            Object.keys(embeddedReports).forEach(sectionKey => {
+                const reportName = SECTION_REPORT[sectionKey];
+                if (!reportName) return;
+                const cached = tokenCache[reportName];
+                if (!cached) return;
+                const slot = document.getElementById('embed-' + sectionKey);
+                if (!slot) return;
+                const cfg = _buildConfig(cached);
+                window.powerbi.reset(slot);
+                const r = window.powerbi.embed(slot, cfg);
+                embeddedReports[sectionKey] = r;
+                r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} });
+            });
         }, 300);
     });
 
