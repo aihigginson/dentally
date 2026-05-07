@@ -33,6 +33,9 @@ $Groups = [ordered]@{
         'Gold.Fact_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
+        'Gold.Aggregate_Site_Patient_Practitioner_Daily.Table.sql'
+        'Gold.Aggregate_Site_Patient_Current.Table.sql'
+        'Gold.Aggregate_Site_Practitioner_Current.Table.sql'
     )
 
     '13. Gold usp_Create procedures' = @(
@@ -74,6 +77,9 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql'
     )
 }
 

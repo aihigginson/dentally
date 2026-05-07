@@ -405,8 +405,28 @@ DECLARE @Msg        nvarchar(500);
 
     SET @Step = 'Fact_Recalls';        SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    -- ── Aggregates (built from Gold fact/dim tables — run after all facts) ──────
+
+    SET @Step = 'Aggregate_Site_Patient_Practitioner_Daily'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_AGG_DAILY'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Aggregate_Site_Patient_Current'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_AGG_SITE_PATIENT'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Aggregate_Site_Practitioner_Current'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_AGG_SITE_PRACT'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     PRINT 'Audit.usp_Load_All completed at ' + CONVERT(VARCHAR, GETDATE(), 120);
