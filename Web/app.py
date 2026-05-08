@@ -338,29 +338,29 @@ def _prw(pract_id, tids, params, alias='fi'):
 
 
 def _fetch_targets(cur, tids):
-    """Returns {metric_key: {tenant_id: value}} for all user tenants."""
+    """Returns {metric_key: {tenant_id: {value, variance}}} for all user tenants."""
     if not tids:
         return {}
     ph = ','.join(['?'] * len(tids))
     cur.execute(
-        f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+        f"SELECT Tenant_ID, Metric, Target_Value, Variance FROM Input.Targets "
         f"WHERE Tenant_ID IN ({ph}) AND Period_Type = 'all_time' AND Period_Value = 'all' "
         f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
         tids,
     )
     result = {}
     for r in cur.fetchall():
-        result.setdefault(r[1], {})[r[0]] = float(r[2])
+        result.setdefault(r[1], {})[r[0]] = {
+            'value':    float(r[2]) if r[2] is not None else None,
+            'variance': float(r[3]) if r[3] is not None else None,
+        }
     return result
 
 
 def _fetch_metric_meta(cur):
-    """Returns {metric_key: {range_type, variance}} for all active metrics."""
-    cur.execute("SELECT Metric_Key, Range_Type, Variance FROM Config.Metric_Definitions WHERE Is_Active = 1")
-    return {
-        r[0]: {'range_type': r[1] or 'above', 'variance': float(r[2]) if r[2] is not None else None}
-        for r in cur.fetchall()
-    }
+    """Returns {metric_key: {range_type}} for all active metrics."""
+    cur.execute("SELECT Metric_Key, Range_Type FROM Config.Metric_Definitions WHERE Is_Active = 1")
+    return {r[0]: {'range_type': r[1] or 'above'} for r in cur.fetchall()}
 
 
 def _wrap(key, value, targets, tids, fmt, metric_meta=None):
@@ -368,28 +368,33 @@ def _wrap(key, value, targets, tids, fmt, metric_meta=None):
 
     vs_target_pct > 0 always means beating target (sign accounts for range_type).
     performance_class: strong-green | weak-green | weak-red | strong-red | None.
-    Variance is stored as a % deviation threshold relative to the combined target.
+    Variance is the average of per-tenant variance values from Input.Targets.
     """
-    fval = float(value) if value is not None else None
+    fval    = float(value) if value is not None else None
     tid_set = set(tids)
-    tenant_targets = [v for tid, v in targets.get(key, {}).items() if tid in tid_set]
-    target = None
-    vs_pct = None
+    meta    = (metric_meta or {}).get(key, {})
+    range_t = meta.get('range_type', 'above')
+
+    target_rows = {tid: v for tid, v in targets.get(key, {}).items() if tid in tid_set}
+    target     = None
+    vs_pct     = None
     perf_class = None
 
-    if tenant_targets and fval is not None:
-        combined = sum(tenant_targets) if fmt in ('currency', 'count') else sum(tenant_targets) / len(tenant_targets)
-        target = round(combined, 4)
+    if target_rows and fval is not None:
+        tenant_values    = [v['value']    for v in target_rows.values() if v.get('value')    is not None]
+        tenant_variances = [v['variance'] for v in target_rows.values() if v.get('variance') is not None]
 
-        meta      = (metric_meta or {}).get(key, {})
-        range_t   = meta.get('range_type', 'above')
-        variance  = meta.get('variance')   # % threshold or None
+        if not tenant_values:
+            return {'value': fval, 'target': None, 'vs_target_pct': None, 'performance_class': None}
+
+        combined = sum(tenant_values) if fmt in ('currency', 'count') else sum(tenant_values) / len(tenant_values)
+        target   = round(combined, 4)
+        variance = sum(tenant_variances) / len(tenant_variances) if tenant_variances else None
 
         if combined != 0:
             raw_pct = (fval - combined) / abs(combined) * 100   # positive = above target
 
             if range_t == 'within':
-                # Good = staying near target; bad = drifting outside variance band
                 dev_pct = abs(raw_pct)
                 if variance is not None:
                     vs_pct = round(variance - dev_pct, 1)        # positive = inside band
@@ -401,10 +406,7 @@ def _wrap(key, value, targets, tids, fmt, metric_meta=None):
                         perf_class = 'weak-red'
                     else:
                         perf_class = 'strong-red'
-                # Without variance, within-type can't be meaningfully scored
             else:
-                # above: positive raw_pct = beating target
-                # below: invert sign so positive vs_pct = beating target
                 signed = raw_pct if range_t == 'above' else -raw_pct
                 vs_pct = round(signed, 1)
                 if variance is not None:
@@ -687,12 +689,12 @@ def get_targets():
             return jsonify({'error': 'Forbidden'}), 403
 
         cur.execute(
-            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Variance "
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type "
             "FROM Config.Metric_Definitions WHERE Is_Active = 1 ORDER BY Display_Order"
         )
         metrics = [
             {'key': r[0], 'display_name': r[1], 'section': r[2],
-             'format_type': r[3], 'range_type': r[4], 'variance': float(r[5]) if r[5] is not None else None}
+             'format_type': r[3], 'range_type': r[4]}
             for r in cur.fetchall()
         ]
 
@@ -708,14 +710,17 @@ def get_targets():
             tenants = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
 
             cur.execute(
-                f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+                f"SELECT Tenant_ID, Metric, Target_Value, Variance FROM Input.Targets "
                 f"WHERE Tenant_ID IN ({ph}) "
                 f"AND Period_Type = 'all_time' AND Period_Value = 'all' "
                 f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
                 tids,
             )
             for r in cur.fetchall():
-                targets[f"{r[0]}|{r[1]}"] = float(r[2])
+                targets[f"{r[0]}|{r[1]}"] = {
+                    'value':    float(r[2]) if r[2] is not None else None,
+                    'variance': float(r[3]) if r[3] is not None else None,
+                }
 
         conn.close()
         return jsonify({'metrics': metrics, 'tenants': tenants, 'targets': targets})
@@ -741,9 +746,10 @@ def save_targets():
         allowed_tids = set(tids)
 
         for row in rows:
-            tid    = int(row['tenant_id'])
-            metric = str(row['metric'])
-            value  = row.get('value')
+            tid      = int(row['tenant_id'])
+            metric   = str(row['metric'])
+            value    = row.get('value')
+            variance = row.get('variance')
             if tid not in allowed_tids:
                 continue
             cur.execute(
@@ -757,9 +763,10 @@ def save_targets():
                 cur.execute(
                     "INSERT INTO Input.Targets "
                     "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
-                    " Target_Value, DW_Created_At, DW_Updated_At) "
-                    "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, GETUTCDATE(), GETUTCDATE())",
-                    [tid, metric, float(value)],
+                    " Target_Value, Variance, DW_Created_At, DW_Updated_At) "
+                    "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    [tid, metric, float(value),
+                     float(variance) if variance is not None else None],
                 )
 
         conn.close()
@@ -791,14 +798,11 @@ def update_metric_config():
         for row in rows:
             metric_key = str(row.get('metric_key', ''))
             range_type = str(row.get('range_type', 'above'))
-            variance   = row.get('variance')
             if not metric_key or range_type not in valid_range_types:
                 continue
             cur.execute(
-                "UPDATE Config.Metric_Definitions "
-                "SET Range_Type = ?, Variance = ? "
-                "WHERE Metric_Key = ?",
-                [range_type, float(variance) if variance is not None else None, metric_key],
+                "UPDATE Config.Metric_Definitions SET Range_Type = ? WHERE Metric_Key = ?",
+                [range_type, metric_key],
             )
 
         conn.close()

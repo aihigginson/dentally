@@ -15,7 +15,6 @@ CREATE TABLE [Config].[Metric_Definitions] (
     [Supports_Practitioner]   BIT            NOT NULL,
     [Is_Active]               BIT            NOT NULL,
     [Display_Order]           INT            NOT NULL,
-    [Range_Type]              VARCHAR(10)    NOT NULL,   -- above | below | within
-    [Variance]                DECIMAL(10, 4) NULL        -- % deviation threshold for 4-way colouring; NULL = 2-way
+    [Range_Type]              VARCHAR(10)    NOT NULL    -- above | below | within
 )
 GO

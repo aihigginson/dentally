@@ -240,8 +240,7 @@
             text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; text-align: left;
         }
         .targets-table th:not(:first-child) { text-align: right; min-width: 140px; }
-        .targets-table th.col-range    { text-align: left;  min-width: 160px; }
-        .targets-table th.col-variance { text-align: right; min-width: 110px; }
+        .targets-table th.col-range { text-align: left; min-width: 160px; }
         .targets-group-row td {
             background: var(--bg-page); color: var(--text-2); font-size: 11px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.07em;
@@ -276,6 +275,8 @@
         .targets-range-select:focus   { border-color: var(--navy); background: white; box-shadow: 0 0 0 2px rgba(26,82,122,0.1); }
         .targets-range-select.changed { border-color: var(--teal-bright); background: #f0fbfb; }
         .targets-table caption { caption-side: bottom; font-size: 11px; color: var(--text-3); padding: 8px 16px; text-align: left; }
+        .targets-var-wrap { margin-top: 3px; }
+        .targets-var-wrap .targets-input { width: 60px; font-size: 12px; color: var(--text-2); }
 
         /* ── Mobile ── */
         @media (max-width: 768px) {
@@ -798,9 +799,9 @@
             const res = await authFetch('/api/targets');
             if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
             const data = await res.json();
-            _targetsOriginal = { ...data.targets };
+            _targetsOriginal = { ...data.targets };   // {tid|metric: {value, variance}}
             _metricConfigOriginal = Object.fromEntries(
-                data.metrics.map(m => [m.key, { range_type: m.range_type, variance: m.variance }])
+                data.metrics.map(m => [m.key, { range_type: m.range_type }])
             );
             _buildTargetsTable(data);
             _targetsLoaded = true;
@@ -834,12 +835,11 @@
         };
         addTh('Metric');
         addTh('Range', 'col-range');
-        addTh('Variance', 'col-variance');
         tenants.forEach(t => addTh(t.name));
 
-        const tbody   = table.createTBody();
+        const tbody    = table.createTBody();
         const sections = [...new Set(metrics.map(m => m.section))];
-        const totalCols = tenants.length + 3;   // metric + range + variance + tenants
+        const totalCols = tenants.length + 2;   // metric + range + tenants
 
         sections.forEach(sec => {
             const gRow  = tbody.insertRow();
@@ -874,38 +874,37 @@
                 });
                 rangeCell.appendChild(sel);
 
-                // ── Variance input ────────────────────────────────────────────
-                const varCell  = row.insertCell();
-                varCell.className = 'targets-input-cell';
-                const origVar  = metric.variance != null ? metric.variance : '';
-                varCell.innerHTML =
-                    `<div class="targets-input-wrap">` +
-                    `<input class="targets-input targets-variance-input" type="number" step="0.1" min="0" max="100" ` +
-                    `       data-metric-key="${metric.key}" value="${origVar}">` +
-                    `<span class="targets-symbol">%</span></div>`;
-                varCell.querySelector('.targets-variance-input').addEventListener('input', function () {
-                    const orig = (_metricConfigOriginal[metric.key] || {}).variance;
-                    const origStr = orig != null ? String(orig) : '';
-                    this.classList.toggle('changed', this.value !== origStr && !(this.value === '' && origStr === ''));
-                });
-
-                // ── Per-tenant target inputs ───────────────────────────────────
+                // ── Per-tenant target + variance inputs ───────────────────────
                 const step = metric.format_type === 'count' ? '1'
                            : metric.format_type === 'percent' ? '0.1' : '0.01';
                 tenants.forEach(tenant => {
-                    const key  = `${tenant.id}|${metric.key}`;
-                    const val  = targets[key] != null ? targets[key] : '';
-                    const cell = row.insertCell();
+                    const key    = `${tenant.id}|${metric.key}`;
+                    const stored = targets[key] || {};
+                    const val    = stored.value    != null ? stored.value    : '';
+                    const varVal = stored.variance != null ? stored.variance : '';
+                    const cell   = row.insertCell();
                     cell.className = 'targets-input-cell';
                     const prefix = metric.format_type === 'currency' ? '<span class="targets-symbol">£</span>' : '';
                     const suffix = metric.format_type === 'percent'  ? '<span class="targets-symbol">%</span>' : '';
                     cell.innerHTML =
                         `<div class="targets-input-wrap">${prefix}` +
                         `<input class="targets-input" type="number" step="${step}" min="0" ` +
-                        `       data-key="${key}" value="${val}">${suffix}</div>`;
-                    cell.querySelector('.targets-input').addEventListener('input', function () {
-                        const orig = _targetsOriginal[key] != null ? String(_targetsOriginal[key]) : '';
-                        this.classList.toggle('changed', this.value !== orig && !(this.value === '' && orig === ''));
+                        `       data-key="${key}" value="${val}">${suffix}</div>` +
+                        `<div class="targets-input-wrap targets-var-wrap">` +
+                        `<span class="targets-symbol">±</span>` +
+                        `<input class="targets-input targets-variance-input" type="number" step="0.1" min="0" max="100" ` +
+                        `       data-key="${key}" value="${varVal}">` +
+                        `<span class="targets-symbol">%</span></div>`;
+
+                    cell.querySelector('.targets-input:not(.targets-variance-input)').addEventListener('input', function () {
+                        const origVal = (_targetsOriginal[key] || {}).value;
+                        const origStr = origVal != null ? String(origVal) : '';
+                        this.classList.toggle('changed', this.value !== origStr && !(this.value === '' && origStr === ''));
+                    });
+                    cell.querySelector('.targets-variance-input').addEventListener('input', function () {
+                        const origVar = (_targetsOriginal[key] || {}).variance;
+                        const origStr = origVar != null ? String(origVar) : '';
+                        this.classList.toggle('changed', this.value !== origStr && !(this.value === '' && origStr === ''));
                     });
                 });
             });
@@ -923,27 +922,24 @@
         status.textContent = '';
         status.className   = 'targets-status';
 
-        // Collect target values
+        // Collect target values + variance (per tenant)
         const targetsPayload = [];
         document.querySelectorAll('#targets-table .targets-input:not(.targets-variance-input)').forEach(inp => {
-            const [tid, metric] = inp.dataset.key.split('|');
+            const key = inp.dataset.key;
+            const [tid, metric] = key.split('|');
+            const varInput = inp.closest('td').querySelector('.targets-variance-input');
             targetsPayload.push({
                 tenant_id: parseInt(tid),
                 metric,
-                value: inp.value !== '' ? parseFloat(inp.value) : null,
+                value:    inp.value !== '' ? parseFloat(inp.value) : null,
+                variance: varInput && varInput.value !== '' ? parseFloat(varInput.value) : null,
             });
         });
 
-        // Collect metric config (Range_Type + Variance)
+        // Collect metric config (Range_Type only — Variance lives in Input.Targets)
         const configPayload = [];
         document.querySelectorAll('#targets-table .targets-range-select').forEach(sel => {
-            const key      = sel.dataset.metricKey;
-            const varInput = document.querySelector(`.targets-variance-input[data-metric-key="${key}"]`);
-            configPayload.push({
-                metric_key: key,
-                range_type: sel.value,
-                variance:   varInput && varInput.value !== '' ? parseFloat(varInput.value) : null,
-            });
+            configPayload.push({ metric_key: sel.dataset.metricKey, range_type: sel.value });
         });
 
         try {
@@ -962,7 +958,15 @@
 
             // Update originals and clear changed highlights
             document.querySelectorAll('#targets-table .targets-input:not(.targets-variance-input)').forEach(inp => {
-                _targetsOriginal[inp.dataset.key] = inp.value !== '' ? parseFloat(inp.value) : null;
+                const key = inp.dataset.key;
+                if (!_targetsOriginal[key]) _targetsOriginal[key] = {};
+                _targetsOriginal[key].value = inp.value !== '' ? parseFloat(inp.value) : null;
+                inp.classList.remove('changed');
+            });
+            document.querySelectorAll('#targets-table .targets-variance-input').forEach(inp => {
+                const key = inp.dataset.key;
+                if (!_targetsOriginal[key]) _targetsOriginal[key] = {};
+                _targetsOriginal[key].variance = inp.value !== '' ? parseFloat(inp.value) : null;
                 inp.classList.remove('changed');
             });
             document.querySelectorAll('#targets-table .targets-range-select').forEach(sel => {
@@ -970,12 +974,6 @@
                 if (!_metricConfigOriginal[key]) _metricConfigOriginal[key] = {};
                 _metricConfigOriginal[key].range_type = sel.value;
                 sel.classList.remove('changed');
-            });
-            document.querySelectorAll('#targets-table .targets-variance-input').forEach(inp => {
-                const key = inp.dataset.metricKey;
-                if (!_metricConfigOriginal[key]) _metricConfigOriginal[key] = {};
-                _metricConfigOriginal[key].variance = inp.value !== '' ? parseFloat(inp.value) : null;
-                inp.classList.remove('changed');
             });
 
             status.textContent = 'Saved.';
