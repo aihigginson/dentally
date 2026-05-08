@@ -6,14 +6,16 @@ GO
 DROP TABLE IF EXISTS [Config].[Metric_Definitions]
 GO
 CREATE TABLE [Config].[Metric_Definitions] (
-    [Metric_Key]              VARCHAR(100) NOT NULL,
-    [Display_Name]            VARCHAR(200) NOT NULL,
-    [Section]                 VARCHAR(50)  NOT NULL,
-    [Format_Type]             VARCHAR(20)  NOT NULL,
-    [Description]             VARCHAR(500) NULL,
-    [Supports_Site]           BIT          NOT NULL,
-    [Supports_Practitioner]   BIT          NOT NULL,
-    [Is_Active]               BIT          NOT NULL,
-    [Display_Order]           INT          NOT NULL
+    [Metric_Key]              VARCHAR(100)   NOT NULL,
+    [Display_Name]            VARCHAR(200)   NOT NULL,
+    [Section]                 VARCHAR(50)    NOT NULL,
+    [Format_Type]             VARCHAR(20)    NOT NULL,
+    [Description]             VARCHAR(500)   NULL,
+    [Supports_Site]           BIT            NOT NULL,
+    [Supports_Practitioner]   BIT            NOT NULL,
+    [Is_Active]               BIT            NOT NULL,
+    [Display_Order]           INT            NOT NULL,
+    [Range_Type]              VARCHAR(10)    NOT NULL,   -- above | below | within
+    [Variance]                DECIMAL(10, 4) NULL        -- % deviation threshold for 4-way colouring; NULL = 2-way
 )
 GO

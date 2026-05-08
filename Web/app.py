@@ -37,11 +37,6 @@ REPORTS = {
 }
 print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
-# Metrics where lower = better; vs_target_pct sign is inverted for these
-LOWER_IS_BETTER = frozenset({
-    'dna_rate', 'days_until_30min_free', 'days_until_1hr_free',
-    'open_courses', 'open_courses_without_appt', 'recalls_overdue_not_sent',
-})
 
 # ── Azure AD token validation ─────────────────────────────────────────────────
 
@@ -266,8 +261,9 @@ def kpis():
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
-        targets = _fetch_targets(cur, tids)
-        result  = fn(cur, tids, period, site_id, pract_id, targets)
+        targets     = _fetch_targets(cur, tids)
+        metric_meta = _fetch_metric_meta(cur)
+        result      = fn(cur, tids, period, site_id, pract_id, targets, metric_meta)
         conn.close()
         return jsonify(result)
     except Exception as e:
@@ -358,25 +354,76 @@ def _fetch_targets(cur, tids):
     return result
 
 
-def _wrap(key, value, targets, tids, fmt):
-    """Returns {value, target, vs_target_pct} where vs_target_pct > 0 means beating target."""
+def _fetch_metric_meta(cur):
+    """Returns {metric_key: {range_type, variance}} for all active metrics."""
+    cur.execute("SELECT Metric_Key, Range_Type, Variance FROM Config.Metric_Definitions WHERE Is_Active = 1")
+    return {
+        r[0]: {'range_type': r[1] or 'above', 'variance': float(r[2]) if r[2] is not None else None}
+        for r in cur.fetchall()
+    }
+
+
+def _wrap(key, value, targets, tids, fmt, metric_meta=None):
+    """Returns {value, target, vs_target_pct, performance_class}.
+
+    vs_target_pct > 0 always means beating target (sign accounts for range_type).
+    performance_class: strong-green | weak-green | weak-red | strong-red | None.
+    Variance is stored as a % deviation threshold relative to the combined target.
+    """
     fval = float(value) if value is not None else None
     tid_set = set(tids)
     tenant_targets = [v for tid, v in targets.get(key, {}).items() if tid in tid_set]
     target = None
     vs_pct = None
+    perf_class = None
+
     if tenant_targets and fval is not None:
-        # Sum currency/count targets across tenants; average percentage targets
         combined = sum(tenant_targets) if fmt in ('currency', 'count') else sum(tenant_targets) / len(tenant_targets)
         target = round(combined, 4)
+
+        meta      = (metric_meta or {}).get(key, {})
+        range_t   = meta.get('range_type', 'above')
+        variance  = meta.get('variance')   # % threshold or None
+
         if combined != 0:
-            raw_pct = (fval - combined) / abs(combined) * 100
-            vs_pct = round(-raw_pct if key in LOWER_IS_BETTER else raw_pct, 1)
-    return {'value': fval, 'target': target, 'vs_target_pct': vs_pct}
+            raw_pct = (fval - combined) / abs(combined) * 100   # positive = above target
+
+            if range_t == 'within':
+                # Good = staying near target; bad = drifting outside variance band
+                dev_pct = abs(raw_pct)
+                if variance is not None:
+                    vs_pct = round(variance - dev_pct, 1)        # positive = inside band
+                    if dev_pct <= variance / 2:
+                        perf_class = 'strong-green'
+                    elif dev_pct <= variance:
+                        perf_class = 'weak-green'
+                    elif dev_pct <= variance * 2:
+                        perf_class = 'weak-red'
+                    else:
+                        perf_class = 'strong-red'
+                # Without variance, within-type can't be meaningfully scored
+            else:
+                # above: positive raw_pct = beating target
+                # below: invert sign so positive vs_pct = beating target
+                signed = raw_pct if range_t == 'above' else -raw_pct
+                vs_pct = round(signed, 1)
+                if variance is not None:
+                    if signed >= variance:
+                        perf_class = 'strong-green'
+                    elif signed >= 0:
+                        perf_class = 'weak-green'
+                    elif signed >= -variance:
+                        perf_class = 'weak-red'
+                    else:
+                        perf_class = 'strong-red'
+                else:
+                    perf_class = 'strong-green' if signed >= 0 else 'strong-red'
+
+    return {'value': fval, 'target': target, 'vs_target_pct': vs_pct, 'performance_class': perf_class}
 
 # ── KPI functions (one per section) ──────────────────────────────────────────
 
-def _kpis_revenue(cur, tids, period, site_id, pract_id, targets):
+def _kpis_revenue(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Revenue totals and patient count from Daily aggregate
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -432,16 +479,16 @@ def _kpis_revenue(cur, tids, period, site_id, pract_id, targets):
     deposit_ratio = round(float(dep_row[0]), 1) if dep_row and dep_row[0] else None
 
     return {
-        'total_revenue':       _wrap('total_revenue',       total,         targets, tids, 'currency'),
-        'nhs_revenue':         _wrap('nhs_revenue',         nhs,           targets, tids, 'currency'),
-        'private_revenue':     _wrap('private_revenue',     priv,          targets, tids, 'currency'),
-        'revenue_per_patient': _wrap('revenue_per_patient', rpp,           targets, tids, 'currency'),
-        'revenue_per_hour':    _wrap('revenue_per_hour',    rph,           targets, tids, 'currency'),
-        'deposit_ratio':       _wrap('deposit_ratio',       deposit_ratio, targets, tids, 'percent'),
+        'total_revenue':       _wrap('total_revenue',       total,         targets, tids, 'currency', metric_meta),
+        'nhs_revenue':         _wrap('nhs_revenue',         nhs,           targets, tids, 'currency', metric_meta),
+        'private_revenue':     _wrap('private_revenue',     priv,          targets, tids, 'currency', metric_meta),
+        'revenue_per_patient': _wrap('revenue_per_patient', rpp,           targets, tids, 'currency', metric_meta),
+        'revenue_per_hour':    _wrap('revenue_per_hour',    rph,           targets, tids, 'currency', metric_meta),
+        'deposit_ratio':       _wrap('deposit_ratio',       deposit_ratio, targets, tids, 'percent',  metric_meta),
     }
 
 
-def _kpis_patients(cur, tids, period, site_id, pract_id, targets):
+def _kpis_patients(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # New patients: period + site + practitioner sensitive
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -493,15 +540,15 @@ def _kpis_patients(cur, tids, period, site_id, pract_id, targets):
     recall_eff = round((total_r - overdue_r) / total_r * 100, 1) if total_r else None
 
     return {
-        'new_patients':             _wrap('new_patients',             new_pts,       targets, tids, 'count'),
-        'active_patients':          _wrap('active_patients',          active,        targets, tids, 'count'),
-        'recall_compliance':        _wrap('recall_compliance',        recall_eff,    targets, tids, 'percent'),
-        'patient_retention':        _wrap('patient_retention',        retention,     targets, tids, 'percent'),
-        'recalls_overdue_not_sent': _wrap('recalls_overdue_not_sent', overdue_ns_pct,targets, tids, 'percent'),
+        'new_patients':             _wrap('new_patients',             new_pts,        targets, tids, 'count',   metric_meta),
+        'active_patients':          _wrap('active_patients',          active,         targets, tids, 'count',   metric_meta),
+        'recall_compliance':        _wrap('recall_compliance',        recall_eff,     targets, tids, 'percent', metric_meta),
+        'patient_retention':        _wrap('patient_retention',        retention,      targets, tids, 'percent', metric_meta),
+        'recalls_overdue_not_sent': _wrap('recalls_overdue_not_sent', overdue_ns_pct, targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_treatment(cur, tids, period, site_id, pract_id, targets):
+def _kpis_treatment(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Acceptance rate and open courses from Fact_Treatment_Plan_Items
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='tpi')
@@ -551,14 +598,14 @@ def _kpis_treatment(cur, tids, period, site_id, pract_id, targets):
     exam_ratio = round(float(er_row[0]), 1) if er_row and er_row[0] else None
 
     return {
-        'acceptance_rate':           _wrap('acceptance_rate',           acceptance_rate, targets, tids, 'percent'),
-        'open_courses':              _wrap('open_courses',              open_courses,    targets, tids, 'count'),
-        'open_courses_without_appt': _wrap('open_courses_without_appt', oc_no_appt,     targets, tids, 'count'),
-        'exam_ratio':                _wrap('exam_ratio',                exam_ratio,      targets, tids, 'percent'),
+        'acceptance_rate':           _wrap('acceptance_rate',           acceptance_rate, targets, tids, 'percent', metric_meta),
+        'open_courses':              _wrap('open_courses',              open_courses,    targets, tids, 'count',   metric_meta),
+        'open_courses_without_appt': _wrap('open_courses_without_appt', oc_no_appt,     targets, tids, 'count',   metric_meta),
+        'exam_ratio':                _wrap('exam_ratio',                exam_ratio,      targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets):
+def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Appointment-level metrics from Daily aggregate
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -613,15 +660,15 @@ def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets):
     days60 = int(sl_row[1]) if sl_row and sl_row[1] is not None else None
 
     return {
-        'chair_utilisation':     _wrap('chair_utilisation',     chair_util, targets, tids, 'percent'),
-        'dna_rate':              _wrap('dna_rate',              dna_rate,   targets, tids, 'percent'),
-        'days_until_30min_free': _wrap('days_until_30min_free', days30,     targets, tids, 'count'),
-        'days_until_1hr_free':   _wrap('days_until_1hr_free',   days60,     targets, tids, 'count'),
-        'book_before_you_leave': _wrap('book_before_you_leave', bbyl_pct,   targets, tids, 'percent'),
+        'chair_utilisation':     _wrap('chair_utilisation',     chair_util, targets, tids, 'percent', metric_meta),
+        'dna_rate':              _wrap('dna_rate',              dna_rate,   targets, tids, 'percent', metric_meta),
+        'days_until_30min_free': _wrap('days_until_30min_free', days30,     targets, tids, 'count',   metric_meta),
+        'days_until_1hr_free':   _wrap('days_until_1hr_free',   days60,     targets, tids, 'count',   metric_meta),
+        'book_before_you_leave': _wrap('book_before_you_leave', bbyl_pct,   targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_nhs(cur, tids, period, site_id, pract_id, targets):
+def _kpis_nhs(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     return {}
 
 # ── Targets ───────────────────────────────────────────────────────────────────
@@ -640,11 +687,14 @@ def get_targets():
             return jsonify({'error': 'Forbidden'}), 403
 
         cur.execute(
-            "SELECT Metric_Key, Display_Name, Section, Format_Type "
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Variance "
             "FROM Config.Metric_Definitions WHERE Is_Active = 1 ORDER BY Display_Order"
         )
-        metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3]}
-                   for r in cur.fetchall()]
+        metrics = [
+            {'key': r[0], 'display_name': r[1], 'section': r[2],
+             'format_type': r[3], 'range_type': r[4], 'variance': float(r[5]) if r[5] is not None else None}
+            for r in cur.fetchall()
+        ]
 
         tenants = {}
         targets = {}

@@ -166,8 +166,10 @@
         .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
         .kpi-value { font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1; margin-bottom: 5px; }
         .kpi-delta { font-size: 12px; color: var(--text-3); }
-        .kpi.on-target  { background: rgba(0,140,70,0.06); border-color: rgba(0,140,70,0.35); }
-        .kpi.off-target { background: rgba(190,0,0,0.06);  border-color: rgba(190,0,0,0.3); }
+        .kpi.strong-green { background: rgba(0,140,70,0.12); border-color: rgba(0,140,70,0.55); }
+        .kpi.weak-green   { background: rgba(0,140,70,0.05); border-color: rgba(0,140,70,0.25); }
+        .kpi.weak-red     { background: rgba(190,0,0,0.05);  border-color: rgba(190,0,0,0.22); }
+        .kpi.strong-red   { background: rgba(190,0,0,0.12);  border-color: rgba(190,0,0,0.48); }
         .kpi-delta.on-target  { color: var(--good); }
         .kpi-delta.off-target { color: var(--bad); }
 
@@ -1124,13 +1126,13 @@
                 if (dEl) {
                     const d = fmtVsTarget(kpi.vs_target_pct);
                     dEl.textContent = d.text;
-                    dEl.className   = 'kpi-delta' + (d.cls ? ' ' + d.cls : '');
+                    const isGood = kpi.performance_class && kpi.performance_class.endsWith('green');
+                    const isBad  = kpi.performance_class && kpi.performance_class.endsWith('red');
+                    dEl.className = 'kpi-delta' + (isGood ? ' on-target' : isBad ? ' off-target' : '');
                 }
                 if (card) {
-                    card.classList.remove('on-target', 'off-target');
-                    if (kpi.vs_target_pct != null) {
-                        card.classList.add(kpi.vs_target_pct >= 0 ? 'on-target' : 'off-target');
-                    }
+                    card.classList.remove('strong-green', 'weak-green', 'weak-red', 'strong-red');
+                    if (kpi.performance_class) card.classList.add(kpi.performance_class);
                 }
             });
         } catch (_) {}
