@@ -37,11 +37,6 @@ REPORTS = {
 }
 print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
-# Metrics where lower = better; vs_target_pct sign is inverted for these
-LOWER_IS_BETTER = frozenset({
-    'dna_rate', 'days_until_30min_free', 'days_until_1hr_free',
-    'open_courses', 'open_courses_without_appt', 'recalls_overdue_not_sent',
-})
 
 # ── Azure AD token validation ─────────────────────────────────────────────────
 
@@ -266,8 +261,9 @@ def kpis():
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
-        targets = _fetch_targets(cur, tids)
-        result  = fn(cur, tids, period, site_id, pract_id, targets)
+        targets     = _fetch_targets(cur, tids)
+        metric_meta = _fetch_metric_meta(cur)
+        result      = fn(cur, tids, period, site_id, pract_id, targets, metric_meta)
         conn.close()
         return jsonify(result)
     except Exception as e:
@@ -342,41 +338,94 @@ def _prw(pract_id, tids, params, alias='fi'):
 
 
 def _fetch_targets(cur, tids):
-    """Returns {metric_key: {tenant_id: value}} for all user tenants."""
+    """Returns {metric_key: {tenant_id: {value, variance}}} for all user tenants."""
     if not tids:
         return {}
     ph = ','.join(['?'] * len(tids))
     cur.execute(
-        f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+        f"SELECT Tenant_ID, Metric, Target_Value, Variance FROM Input.Targets "
         f"WHERE Tenant_ID IN ({ph}) AND Period_Type = 'all_time' AND Period_Value = 'all' "
         f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
         tids,
     )
     result = {}
     for r in cur.fetchall():
-        result.setdefault(r[1], {})[r[0]] = float(r[2])
+        result.setdefault(r[1], {})[r[0]] = {
+            'value':    float(r[2]) if r[2] is not None else None,
+            'variance': float(r[3]) if r[3] is not None else None,
+        }
     return result
 
 
-def _wrap(key, value, targets, tids, fmt):
-    """Returns {value, target, vs_target_pct} where vs_target_pct > 0 means beating target."""
-    fval = float(value) if value is not None else None
+def _fetch_metric_meta(cur):
+    """Returns {metric_key: {range_type}} for all active metrics."""
+    cur.execute("SELECT Metric_Key, Range_Type FROM Config.Metric_Definitions WHERE Is_Active = 1")
+    return {r[0]: {'range_type': r[1] or 'above'} for r in cur.fetchall()}
+
+
+def _wrap(key, value, targets, tids, fmt, metric_meta=None):
+    """Returns {value, target, vs_target_pct, performance_class}.
+
+    vs_target_pct > 0 always means beating target (sign accounts for range_type).
+    performance_class: strong-green | weak-green | weak-red | strong-red | None.
+    Variance is the average of per-tenant variance values from Input.Targets.
+    """
+    fval    = float(value) if value is not None else None
     tid_set = set(tids)
-    tenant_targets = [v for tid, v in targets.get(key, {}).items() if tid in tid_set]
-    target = None
-    vs_pct = None
-    if tenant_targets and fval is not None:
-        # Sum currency/count targets across tenants; average percentage targets
-        combined = sum(tenant_targets) if fmt in ('currency', 'count') else sum(tenant_targets) / len(tenant_targets)
-        target = round(combined, 4)
+    meta    = (metric_meta or {}).get(key, {})
+    range_t = meta.get('range_type', 'above')
+
+    target_rows = {tid: v for tid, v in targets.get(key, {}).items() if tid in tid_set}
+    target     = None
+    vs_pct     = None
+    perf_class = None
+
+    if target_rows and fval is not None:
+        tenant_values    = [v['value']    for v in target_rows.values() if v.get('value')    is not None]
+        tenant_variances = [v['variance'] for v in target_rows.values() if v.get('variance') is not None]
+
+        if not tenant_values:
+            return {'value': fval, 'target': None, 'vs_target_pct': None, 'performance_class': None}
+
+        combined = sum(tenant_values) if fmt in ('currency', 'count') else sum(tenant_values) / len(tenant_values)
+        target   = round(combined, 4)
+        variance = sum(tenant_variances) / len(tenant_variances) if tenant_variances else None
+
         if combined != 0:
-            raw_pct = (fval - combined) / abs(combined) * 100
-            vs_pct = round(-raw_pct if key in LOWER_IS_BETTER else raw_pct, 1)
-    return {'value': fval, 'target': target, 'vs_target_pct': vs_pct}
+            raw_pct = (fval - combined) / abs(combined) * 100   # positive = above target
+
+            if range_t == 'within':
+                dev_pct = abs(raw_pct)
+                if variance is not None:
+                    vs_pct = round(variance - dev_pct, 1)        # positive = inside band
+                    if dev_pct <= variance / 2:
+                        perf_class = 'strong-green'
+                    elif dev_pct <= variance:
+                        perf_class = 'weak-green'
+                    elif dev_pct <= variance * 2:
+                        perf_class = 'weak-red'
+                    else:
+                        perf_class = 'strong-red'
+            else:
+                signed = raw_pct if range_t == 'above' else -raw_pct
+                vs_pct = round(signed, 1)
+                if variance is not None:
+                    if signed >= variance:
+                        perf_class = 'strong-green'
+                    elif signed >= 0:
+                        perf_class = 'weak-green'
+                    elif signed >= -variance:
+                        perf_class = 'weak-red'
+                    else:
+                        perf_class = 'strong-red'
+                else:
+                    perf_class = 'strong-green' if signed >= 0 else 'strong-red'
+
+    return {'value': fval, 'target': target, 'vs_target_pct': vs_pct, 'performance_class': perf_class}
 
 # ── KPI functions (one per section) ──────────────────────────────────────────
 
-def _kpis_revenue(cur, tids, period, site_id, pract_id, targets):
+def _kpis_revenue(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Revenue totals and patient count from Daily aggregate
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -432,16 +481,16 @@ def _kpis_revenue(cur, tids, period, site_id, pract_id, targets):
     deposit_ratio = round(float(dep_row[0]), 1) if dep_row and dep_row[0] else None
 
     return {
-        'total_revenue':       _wrap('total_revenue',       total,         targets, tids, 'currency'),
-        'nhs_revenue':         _wrap('nhs_revenue',         nhs,           targets, tids, 'currency'),
-        'private_revenue':     _wrap('private_revenue',     priv,          targets, tids, 'currency'),
-        'revenue_per_patient': _wrap('revenue_per_patient', rpp,           targets, tids, 'currency'),
-        'revenue_per_hour':    _wrap('revenue_per_hour',    rph,           targets, tids, 'currency'),
-        'deposit_ratio':       _wrap('deposit_ratio',       deposit_ratio, targets, tids, 'percent'),
+        'total_revenue':       _wrap('total_revenue',       total,         targets, tids, 'currency', metric_meta),
+        'nhs_revenue':         _wrap('nhs_revenue',         nhs,           targets, tids, 'currency', metric_meta),
+        'private_revenue':     _wrap('private_revenue',     priv,          targets, tids, 'currency', metric_meta),
+        'revenue_per_patient': _wrap('revenue_per_patient', rpp,           targets, tids, 'currency', metric_meta),
+        'revenue_per_hour':    _wrap('revenue_per_hour',    rph,           targets, tids, 'currency', metric_meta),
+        'deposit_ratio':       _wrap('deposit_ratio',       deposit_ratio, targets, tids, 'percent',  metric_meta),
     }
 
 
-def _kpis_patients(cur, tids, period, site_id, pract_id, targets):
+def _kpis_patients(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # New patients: period + site + practitioner sensitive
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -493,15 +542,15 @@ def _kpis_patients(cur, tids, period, site_id, pract_id, targets):
     recall_eff = round((total_r - overdue_r) / total_r * 100, 1) if total_r else None
 
     return {
-        'new_patients':             _wrap('new_patients',             new_pts,       targets, tids, 'count'),
-        'active_patients':          _wrap('active_patients',          active,        targets, tids, 'count'),
-        'recall_compliance':        _wrap('recall_compliance',        recall_eff,    targets, tids, 'percent'),
-        'patient_retention':        _wrap('patient_retention',        retention,     targets, tids, 'percent'),
-        'recalls_overdue_not_sent': _wrap('recalls_overdue_not_sent', overdue_ns_pct,targets, tids, 'percent'),
+        'new_patients':             _wrap('new_patients',             new_pts,        targets, tids, 'count',   metric_meta),
+        'active_patients':          _wrap('active_patients',          active,         targets, tids, 'count',   metric_meta),
+        'recall_compliance':        _wrap('recall_compliance',        recall_eff,     targets, tids, 'percent', metric_meta),
+        'patient_retention':        _wrap('patient_retention',        retention,      targets, tids, 'percent', metric_meta),
+        'recalls_overdue_not_sent': _wrap('recalls_overdue_not_sent', overdue_ns_pct, targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_treatment(cur, tids, period, site_id, pract_id, targets):
+def _kpis_treatment(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Acceptance rate and open courses from Fact_Treatment_Plan_Items
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='tpi')
@@ -551,14 +600,14 @@ def _kpis_treatment(cur, tids, period, site_id, pract_id, targets):
     exam_ratio = round(float(er_row[0]), 1) if er_row and er_row[0] else None
 
     return {
-        'acceptance_rate':           _wrap('acceptance_rate',           acceptance_rate, targets, tids, 'percent'),
-        'open_courses':              _wrap('open_courses',              open_courses,    targets, tids, 'count'),
-        'open_courses_without_appt': _wrap('open_courses_without_appt', oc_no_appt,     targets, tids, 'count'),
-        'exam_ratio':                _wrap('exam_ratio',                exam_ratio,      targets, tids, 'percent'),
+        'acceptance_rate':           _wrap('acceptance_rate',           acceptance_rate, targets, tids, 'percent', metric_meta),
+        'open_courses':              _wrap('open_courses',              open_courses,    targets, tids, 'count',   metric_meta),
+        'open_courses_without_appt': _wrap('open_courses_without_appt', oc_no_appt,     targets, tids, 'count',   metric_meta),
+        'exam_ratio':                _wrap('exam_ratio',                exam_ratio,      targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets):
+def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     # Appointment-level metrics from Daily aggregate
     p1 = []
     tid_w  = _tid_in(tids, p1, alias='d')
@@ -613,15 +662,15 @@ def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets):
     days60 = int(sl_row[1]) if sl_row and sl_row[1] is not None else None
 
     return {
-        'chair_utilisation':     _wrap('chair_utilisation',     chair_util, targets, tids, 'percent'),
-        'dna_rate':              _wrap('dna_rate',              dna_rate,   targets, tids, 'percent'),
-        'days_until_30min_free': _wrap('days_until_30min_free', days30,     targets, tids, 'count'),
-        'days_until_1hr_free':   _wrap('days_until_1hr_free',   days60,     targets, tids, 'count'),
-        'book_before_you_leave': _wrap('book_before_you_leave', bbyl_pct,   targets, tids, 'percent'),
+        'chair_utilisation':     _wrap('chair_utilisation',     chair_util, targets, tids, 'percent', metric_meta),
+        'dna_rate':              _wrap('dna_rate',              dna_rate,   targets, tids, 'percent', metric_meta),
+        'days_until_30min_free': _wrap('days_until_30min_free', days30,     targets, tids, 'count',   metric_meta),
+        'days_until_1hr_free':   _wrap('days_until_1hr_free',   days60,     targets, tids, 'count',   metric_meta),
+        'book_before_you_leave': _wrap('book_before_you_leave', bbyl_pct,   targets, tids, 'percent', metric_meta),
     }
 
 
-def _kpis_nhs(cur, tids, period, site_id, pract_id, targets):
+def _kpis_nhs(cur, tids, period, site_id, pract_id, targets, metric_meta=None):
     return {}
 
 # ── Targets ───────────────────────────────────────────────────────────────────
@@ -640,11 +689,14 @@ def get_targets():
             return jsonify({'error': 'Forbidden'}), 403
 
         cur.execute(
-            "SELECT Metric_Key, Display_Name, Section, Format_Type "
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type "
             "FROM Config.Metric_Definitions WHERE Is_Active = 1 ORDER BY Display_Order"
         )
-        metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3]}
-                   for r in cur.fetchall()]
+        metrics = [
+            {'key': r[0], 'display_name': r[1], 'section': r[2],
+             'format_type': r[3], 'range_type': r[4]}
+            for r in cur.fetchall()
+        ]
 
         tenants = {}
         targets = {}
@@ -658,14 +710,17 @@ def get_targets():
             tenants = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
 
             cur.execute(
-                f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+                f"SELECT Tenant_ID, Metric, Target_Value, Variance FROM Input.Targets "
                 f"WHERE Tenant_ID IN ({ph}) "
                 f"AND Period_Type = 'all_time' AND Period_Value = 'all' "
                 f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
                 tids,
             )
             for r in cur.fetchall():
-                targets[f"{r[0]}|{r[1]}"] = float(r[2])
+                targets[f"{r[0]}|{r[1]}"] = {
+                    'value':    float(r[2]) if r[2] is not None else None,
+                    'variance': float(r[3]) if r[3] is not None else None,
+                }
 
         conn.close()
         return jsonify({'metrics': metrics, 'tenants': tenants, 'targets': targets})
@@ -691,9 +746,10 @@ def save_targets():
         allowed_tids = set(tids)
 
         for row in rows:
-            tid    = int(row['tenant_id'])
-            metric = str(row['metric'])
-            value  = row.get('value')
+            tid      = int(row['tenant_id'])
+            metric   = str(row['metric'])
+            value    = row.get('value')
+            variance = row.get('variance')
             if tid not in allowed_tids:
                 continue
             cur.execute(
@@ -707,10 +763,47 @@ def save_targets():
                 cur.execute(
                     "INSERT INTO Input.Targets "
                     "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
-                    " Target_Value, DW_Created_At, DW_Updated_At) "
-                    "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, GETUTCDATE(), GETUTCDATE())",
-                    [tid, metric, float(value)],
+                    " Target_Value, Variance, DW_Created_At, DW_Updated_At) "
+                    "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    [tid, metric, float(value),
+                     float(variance) if variance is not None else None],
                 )
+
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/metric-config', methods=['PUT'])
+def update_metric_config():
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn            = _fabric_conn()
+        conn.autocommit = True
+        cur             = conn.cursor()
+        _, client_id, tids, maintain_targets = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain_targets:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+
+        rows = request.get_json(force=True) or []
+        valid_range_types = {'above', 'below', 'within'}
+
+        for row in rows:
+            metric_key = str(row.get('metric_key', ''))
+            range_type = str(row.get('range_type', 'above'))
+            if not metric_key or range_type not in valid_range_types:
+                continue
+            cur.execute(
+                "UPDATE Config.Metric_Definitions SET Range_Type = ? WHERE Metric_Key = ?",
+                [range_type, metric_key],
+            )
 
         conn.close()
         return jsonify({'ok': True})
