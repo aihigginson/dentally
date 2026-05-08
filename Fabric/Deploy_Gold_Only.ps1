@@ -14,7 +14,12 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Groups = [ordered]@{
 
     '03. Audit seed data' = @(
+        'Config.Metric_Definitions.Data.sql'
         'Audit.Process_Config.Data.sql'
+    )
+
+    '03b. Input data cleanup' = @(
+        'Input.Targets.Cleanup.sql'
     )
 
     '11. Gold tables & functions' = @(

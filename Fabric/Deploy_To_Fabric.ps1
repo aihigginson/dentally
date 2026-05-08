@@ -87,6 +87,10 @@ $Groups = [ordered]@{
         'Security.User_Tenants.Data.sql'
     )
 
+    '3b. Input data cleanup' = @(
+        'Input.Targets.Cleanup.sql'
+    )
+
     '4. Audit functions & procedures' = @(
         'Audit.ETL_Error_Handler.UserDefinedFunction.sql'
         'Audit.ETL_Start_Run.StoredProcedure.sql'
