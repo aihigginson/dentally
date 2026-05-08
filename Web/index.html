@@ -166,8 +166,10 @@
         .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
         .kpi-value { font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1; margin-bottom: 5px; }
         .kpi-delta { font-size: 12px; color: var(--text-3); }
-        .kpi-delta.up   { color: var(--good); }
-        .kpi-delta.down { color: var(--bad); }
+        .kpi.on-target  { background: rgba(0,140,70,0.06); border-color: rgba(0,140,70,0.35); }
+        .kpi.off-target { background: rgba(190,0,0,0.06);  border-color: rgba(190,0,0,0.3); }
+        .kpi-delta.on-target  { color: var(--good); }
+        .kpi-delta.off-target { color: var(--bad); }
 
         /* ── PBI page sub-nav (in section header) ── */
         .report-subnav { display: none; gap: 6px; }
@@ -386,10 +388,7 @@
     <!-- ── TREATMENT ── -->
     <section class="section active" id="section-treatment">
         <div class="section-header">
-            <div>
-                <div class="section-title">Treatment</div>
-                <div class="section-sub">Treatment plan conversion and performance by practitioner and category</div>
-            </div>
+            <div class="section-title">Treatment</div>
             <div class="section-controls">
                 <div class="report-subnav" id="subnav-treatment"></div>
                 <button class="page-tile" id="fs-treatment" title="Full screen" onclick="toggleFullscreen()">
@@ -398,10 +397,10 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Plans Presented</div><div class="kpi-value" id="kpi-plans_presented">—</div><div class="kpi-delta" id="kpi-plans_presented-d"></div></div>
             <div class="kpi"><div class="kpi-label">Acceptance Rate</div><div class="kpi-value" id="kpi-acceptance_rate">—</div><div class="kpi-delta" id="kpi-acceptance_rate-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Avg Accepted Value</div><div class="kpi-value" id="kpi-avg_accepted_value">—</div><div class="kpi-delta" id="kpi-avg_accepted_value-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Declined Value</div><div class="kpi-value" id="kpi-declined_value">—</div><div class="kpi-delta" id="kpi-declined_value-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Open Courses</div><div class="kpi-value" id="kpi-open_courses">—</div><div class="kpi-delta" id="kpi-open_courses-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Open Courses Without Appt</div><div class="kpi-value" id="kpi-open_courses_without_appt">—</div><div class="kpi-delta" id="kpi-open_courses_without_appt-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Exam Ratio</div><div class="kpi-value" id="kpi-exam_ratio">—</div><div class="kpi-delta" id="kpi-exam_ratio-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
     </section>
@@ -409,10 +408,7 @@
     <!-- ── PATIENT ── -->
     <section class="section" id="section-customer">
         <div class="section-header">
-            <div>
-                <div class="section-title">Patient</div>
-                <div class="section-sub">Acquisition, retention and value metrics by period and practitioner</div>
-            </div>
+            <div class="section-title">Patient</div>
             <div class="section-controls">
                 <div class="report-subnav" id="subnav-customer"></div>
                 <button class="page-tile" id="fs-customer" title="Full screen" onclick="toggleFullscreen()">
@@ -421,10 +417,11 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Active Patients</div><div class="kpi-value" id="kpi-active_patients">—</div><div class="kpi-delta" id="kpi-active_patients-d"></div></div>
             <div class="kpi"><div class="kpi-label">New Patients</div><div class="kpi-value" id="kpi-new_patients">—</div><div class="kpi-delta" id="kpi-new_patients-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Recall Compliance</div><div class="kpi-value" id="kpi-recall_compliance">—</div><div class="kpi-delta" id="kpi-recall_compliance-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Overdue Recalls</div><div class="kpi-value" id="kpi-overdue_recalls">—</div><div class="kpi-delta" id="kpi-overdue_recalls-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Active Patients</div><div class="kpi-value" id="kpi-active_patients">—</div><div class="kpi-delta" id="kpi-active_patients-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Recall Effectiveness</div><div class="kpi-value" id="kpi-recall_compliance">—</div><div class="kpi-delta" id="kpi-recall_compliance-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Patient Retention</div><div class="kpi-value" id="kpi-patient_retention">—</div><div class="kpi-delta" id="kpi-patient_retention-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Recalls Overdue Not Sent</div><div class="kpi-value" id="kpi-recalls_overdue_not_sent">—</div><div class="kpi-delta" id="kpi-recalls_overdue_not_sent-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
     </section>
@@ -432,10 +429,7 @@
     <!-- ── SCHEDULE ── -->
     <section class="section" id="section-scheduling">
         <div class="section-header">
-            <div>
-                <div class="section-title">Schedule</div>
-                <div class="section-sub">Diary utilisation, forward planning and appointment performance</div>
-            </div>
+            <div class="section-title">Schedule</div>
             <div class="section-controls">
                 <div class="report-subnav" id="subnav-scheduling"></div>
                 <button class="page-tile" id="fs-scheduling" title="Full screen" onclick="toggleFullscreen()">
@@ -444,10 +438,11 @@
             </div>
         </div>
         <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Total Appointments</div><div class="kpi-value" id="kpi-total_appointments">—</div><div class="kpi-delta" id="kpi-total_appointments-d"></div></div>
-            <div class="kpi"><div class="kpi-label">DNA Rate</div><div class="kpi-value" id="kpi-dna_rate">—</div><div class="kpi-delta" id="kpi-dna_rate-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Cancellations</div><div class="kpi-value" id="kpi-cancellations">—</div><div class="kpi-delta" id="kpi-cancellations-d"></div></div>
             <div class="kpi"><div class="kpi-label">Chair Utilisation</div><div class="kpi-value" id="kpi-chair_utilisation">—</div><div class="kpi-delta" id="kpi-chair_utilisation-d"></div></div>
+            <div class="kpi"><div class="kpi-label">DNA Rate</div><div class="kpi-value" id="kpi-dna_rate">—</div><div class="kpi-delta" id="kpi-dna_rate-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Next 30 Min Free (days)</div><div class="kpi-value" id="kpi-days_until_30min_free">—</div><div class="kpi-delta" id="kpi-days_until_30min_free-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Next 1 Hr Free (days)</div><div class="kpi-value" id="kpi-days_until_1hr_free">—</div><div class="kpi-delta" id="kpi-days_until_1hr_free-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Book Before You Leave</div><div class="kpi-value" id="kpi-book_before_you_leave">—</div><div class="kpi-delta" id="kpi-book_before_you_leave-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
     </section>
@@ -455,10 +450,7 @@
     <!-- ── REVENUE ── -->
     <section class="section" id="section-revenue">
         <div class="section-header">
-            <div>
-                <div class="section-title">Revenue</div>
-                <div class="section-sub">NHS and private revenue, cashflow and discounts by period and site</div>
-            </div>
+            <div class="section-title">Revenue</div>
             <div class="section-controls">
                 <div class="report-subnav" id="subnav-revenue"></div>
                 <button class="page-tile" id="fs-revenue" title="Full screen" onclick="toggleFullscreen()">
@@ -470,7 +462,9 @@
             <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="kpi-total_revenue">—</div><div class="kpi-delta" id="kpi-total_revenue-d"></div></div>
             <div class="kpi"><div class="kpi-label">NHS Revenue</div><div class="kpi-value" id="kpi-nhs_revenue">—</div><div class="kpi-delta" id="kpi-nhs_revenue-d"></div></div>
             <div class="kpi"><div class="kpi-label">Private Revenue</div><div class="kpi-value" id="kpi-private_revenue">—</div><div class="kpi-delta" id="kpi-private_revenue-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Revenue / Patient</div><div class="kpi-value" id="kpi-revenue_per_patient">—</div><div class="kpi-delta" id="kpi-revenue_per_patient-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Revenue per Patient</div><div class="kpi-value" id="kpi-revenue_per_patient">—</div><div class="kpi-delta" id="kpi-revenue_per_patient-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Revenue per Hour</div><div class="kpi-value" id="kpi-revenue_per_hour">—</div><div class="kpi-delta" id="kpi-revenue_per_hour-d"></div></div>
+            <div class="kpi"><div class="kpi-label">Deposit Ratio</div><div class="kpi-value" id="kpi-deposit_ratio">—</div><div class="kpi-delta" id="kpi-deposit_ratio-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
     </section>
@@ -478,22 +472,13 @@
     <!-- ── NHS ── -->
     <section class="section" id="section-nhs">
         <div class="section-header">
-            <div>
-                <div class="section-title">NHS</div>
-                <div class="section-sub">Contract performance — UDA delivery, financial return and claims</div>
-            </div>
+            <div class="section-title">NHS</div>
             <div class="section-controls">
                 <div class="report-subnav" id="subnav-nhs"></div>
                 <button class="page-tile" id="fs-nhs" title="Full screen" onclick="toggleFullscreen()">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                 </button>
             </div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">UDAs Delivered</div><div class="kpi-value" id="kpi-uda_delivered">—</div><div class="kpi-delta" id="kpi-uda_delivered-d"></div></div>
-            <div class="kpi"><div class="kpi-label">UDA Target</div><div class="kpi-value" id="kpi-uda_target">—</div><div class="kpi-delta" id="kpi-uda_target-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Achievement</div><div class="kpi-value" id="kpi-uda_achievement">—</div><div class="kpi-delta" id="kpi-uda_achievement-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Value / UDA</div><div class="kpi-value" id="kpi-value_per_uda">—</div><div class="kpi-delta" id="kpi-value_per_uda-d"></div></div>
         </div>
         <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
     </section>
@@ -1080,13 +1065,26 @@
 
     // ── KPI formatting ───────────────────────────────────────────────────────
     const KPI_FORMAT = {
-        avg_accepted_value: 'currency', declined_value:      'currency',
-        total_revenue:      'currency', nhs_revenue:         'currency',
-        private_revenue:    'currency', revenue_per_patient: 'currency',
-        value_per_uda:      'currency',
-        acceptance_rate:    'percent',  recall_compliance:   'percent',
-        dna_rate:           'percent',  chair_utilisation:   'percent',
-        uda_achievement:    'percent',
+        total_revenue:             'currency',
+        nhs_revenue:               'currency',
+        private_revenue:           'currency',
+        revenue_per_patient:       'currency',
+        revenue_per_hour:          'currency',
+        deposit_ratio:             'percent',
+        new_patients:              'count',
+        active_patients:           'count',
+        recall_compliance:         'percent',
+        patient_retention:         'percent',
+        recalls_overdue_not_sent:  'count',
+        acceptance_rate:           'percent',
+        open_courses:              'count',
+        open_courses_without_appt: 'count',
+        exam_ratio:                'percent',
+        chair_utilisation:         'percent',
+        dna_rate:                  'percent',
+        days_until_30min_free:     'count',
+        days_until_1hr_free:       'count',
+        book_before_you_leave:     'percent',
     };
 
     function fmtCurrency(v) {
@@ -1103,11 +1101,11 @@
         if (f === 'percent')  return fmtPct(v);
         return fmtCount(v);
     }
-    function fmtDelta(d) {
-        if (d == null) return { text: '', cls: '' };
-        const abs = Math.abs(d).toFixed(1);
-        return d >= 0 ? { text: `↑ ${abs}% vs prior year`, cls: 'up' }
-                      : { text: `↓ ${abs}% vs prior year`, cls: 'down' };
+    function fmtVsTarget(pct) {
+        if (pct == null) return { text: '', cls: '' };
+        const abs = Math.abs(pct).toFixed(1);
+        return pct >= 0 ? { text: `▲ ${abs}% vs target`, cls: 'on-target' }
+                        : { text: `▼ ${abs}% vs target`, cls: 'off-target' };
     }
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
@@ -1121,11 +1119,18 @@
             Object.entries(data).forEach(([key, kpi]) => {
                 const vEl = document.getElementById('kpi-' + key);
                 const dEl = document.getElementById('kpi-' + key + '-d');
+                const card = vEl && vEl.closest('.kpi');
                 if (vEl) vEl.textContent = fmtValue(key, kpi.value);
                 if (dEl) {
-                    const d = fmtDelta(kpi.delta_pct);
+                    const d = fmtVsTarget(kpi.vs_target_pct);
                     dEl.textContent = d.text;
                     dEl.className   = 'kpi-delta' + (d.cls ? ' ' + d.cls : '');
+                }
+                if (card) {
+                    card.classList.remove('on-target', 'off-target');
+                    if (kpi.vs_target_pct != null) {
+                        card.classList.add(kpi.vs_target_pct >= 0 ? 'on-target' : 'off-target');
+                    }
                 }
             });
         } catch (_) {}

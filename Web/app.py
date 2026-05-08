@@ -37,6 +37,12 @@ REPORTS = {
 }
 print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
+# Metrics where lower = better; vs_target_pct sign is inverted for these
+LOWER_IS_BETTER = frozenset({
+    'dna_rate', 'days_until_30min_free', 'days_until_1hr_free',
+    'open_courses', 'open_courses_without_appt', 'recalls_overdue_not_sent',
+})
+
 # ── Azure AD token validation ─────────────────────────────────────────────────
 
 _jwks_client = PyJWKClient(
@@ -157,20 +163,6 @@ def embed_token():
         return jsonify({'error': str(e)}), 500
 
 
-def _dax_query(dax):
-    token   = _pbi_delegated_token()
-    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-    r = requests.post(
-        f'{PBI_BASE}/groups/{WORKSPACE_ID}/datasets/{DATASET_ID}/executeQueries',
-        headers=headers,
-        json={'queries': [{'query': dax}], 'serializerSettings': {'includeNulls': True}},
-        timeout=15,
-    )
-    r.raise_for_status()
-    rows = r.json()['results'][0]['tables'][0].get('rows', [])
-    return [{k.split('[')[-1].rstrip(']'): v for k, v in row.items()} for row in rows]
-
-
 @app.route('/api/me')
 def me():
     upn, err = _auth()
@@ -274,7 +266,8 @@ def kpis():
         if client_id is None:
             conn.close()
             return jsonify({'error': 'Forbidden'}), 403
-        result = fn(cur, tids, period, site_id, pract_id)
+        targets = _fetch_targets(cur, tids)
+        result  = fn(cur, tids, period, site_id, pract_id, targets)
         conn.close()
         return jsonify(result)
     except Exception as e:
@@ -316,212 +309,322 @@ def _pw(date_col, period, params):
     return ""
 
 
-def _pyw(date_col, period, params):
-    if period and period != 'all':
-        params.append(period)
-        return (f"AND {date_col} IN "
-                f"(SELECT fk_Date_Previous_Year FROM Gold.Dim_Date_Grouping WHERE Date_Grouping = ?)")
-    return ""
-
-
 def _sw(site_id, tids, params, alias='fi'):
+    """Site filter for fact tables using fk_Practice_Site."""
     if site_id and site_id != 'all':
-        placeholders = ','.join(['?'] * len(tids))
+        ph = ','.join(['?'] * len(tids))
         params.extend([str(site_id)] + list(tids))
         return (f"AND {alias}.fk_Practice_Site IN "
                 f"(SELECT pk_Practice_Site FROM Gold.Dim_Practice_Sites "
-                f"WHERE Site_ID = ? AND Tenant_ID IN ({placeholders}))")
+                f"WHERE Site_ID = ? AND Tenant_ID IN ({ph}))")
+    return ""
+
+
+def _agg_sw(site_id, tids, params, alias='d'):
+    """Site filter for aggregate tables using fk_Site."""
+    if site_id and site_id != 'all':
+        ph = ','.join(['?'] * len(tids))
+        params.extend([str(site_id)] + list(tids))
+        return (f"AND {alias}.fk_Site IN "
+                f"(SELECT pk_Practice_Site FROM Gold.Dim_Practice_Sites "
+                f"WHERE Site_ID = ? AND Tenant_ID IN ({ph}))")
     return ""
 
 
 def _prw(pract_id, tids, params, alias='fi'):
     if pract_id and pract_id != 'all':
-        placeholders = ','.join(['?'] * len(tids))
+        ph = ','.join(['?'] * len(tids))
         params.extend([str(pract_id)] + list(tids))
         return (f"AND {alias}.fk_Practitioner IN "
                 f"(SELECT pk_Practitioner FROM Gold.Dim_Practitioners "
-                f"WHERE CAST(Practitioner_ID AS VARCHAR) = ? AND Tenant_ID IN ({placeholders}))")
+                f"WHERE CAST(Practitioner_ID AS VARCHAR) = ? AND Tenant_ID IN ({ph}))")
     return ""
 
 
-def _pct_delta(cur_val, py_val):
-    if cur_val is None or py_val is None or py_val == 0:
-        return None
-    return round((float(cur_val) - float(py_val)) / abs(float(py_val)) * 100, 1)
-
-
-def _kpi(value, delta_pct=None):
-    return {'value': float(value) if value is not None else None, 'delta_pct': delta_pct}
-
-
-def _invoice_agg(cur, tids, period, site_id, pract_id, prior=False):
-    params = []
-    tid_w  = _tid_in(tids, params, alias='fi')
-    date_w = _pyw('fi.fk_Date_Invoice', period, params) if prior \
-             else _pw('fi.fk_Date_Invoice', period, params)
-    site_w = _sw(site_id, tids, params)
-    prac_w = _prw(pract_id, tids, params)
-    cur.execute(f"""
-        SELECT SUM(fi.Invoice_Amount),
-               SUM(fi.Invoice_NHS_Amount),
-               SUM(fi.Invoice_Amount - fi.Invoice_NHS_Amount),
-               SUM(fi.Invoice_Amount_Outstanding),
-               COUNT(DISTINCT fi.fk_Patient)
-        FROM   Gold.Fact_Invoice_Items fi
-        WHERE  {tid_w} {date_w} {site_w} {prac_w}
-    """, params)
-    return cur.fetchone()
-
-
-def _kpis_revenue(cur, tids, period, site_id, pract_id):
-    c = _invoice_agg(cur, tids, period, site_id, pract_id)
-    p = _invoice_agg(cur, tids, period, site_id, pract_id, prior=True)
-    total  = float(c[0]) if c[0] else 0
-    pts    = int(c[4])   if c[4] else 0
-    py_pts = int(p[4])   if p[4] else 0
-    rpp    = round(total / pts, 2) if pts else None
-    py_rpp = round(float(p[0]) / py_pts, 2) if (p[0] and py_pts) else None
-    return {
-        'total_revenue':       _kpi(total, _pct_delta(c[0], p[0])),
-        'nhs_revenue':         _kpi(c[1],  _pct_delta(c[1], p[1])),
-        'private_revenue':     _kpi(c[2],  _pct_delta(c[2], p[2])),
-        'revenue_per_patient': _kpi(rpp,   _pct_delta(rpp,  py_rpp)),
-    }
-
-
-def _kpis_cashflow(cur, tids, period, site_id, pract_id):
-    c = _invoice_agg(cur, tids, period, site_id, pract_id)
-    p = _invoice_agg(cur, tids, period, site_id, pract_id, prior=True)
-    inv     = float(c[0]) if c[0] else 0
-    out     = float(c[3]) if c[3] else 0
-    coll    = inv - out
-    py_inv  = float(p[0]) if p[0] else 0
-    py_out  = float(p[3]) if p[3] else 0
-    py_coll = py_inv - py_out
-    rate    = round(coll / inv * 100, 1)    if inv    else None
-    py_rate = round(py_coll / py_inv * 100, 1) if py_inv else None
-    return {
-        'total_invoiced':  _kpi(inv,  _pct_delta(inv,  py_inv)),
-        'total_collected': _kpi(coll, _pct_delta(coll, py_coll)),
-        'outstanding':     _kpi(out,  _pct_delta(out,  py_out)),
-        'collection_rate': _kpi(rate, _pct_delta(rate, py_rate)),
-    }
-
-
-def _kpis_patients(cur, tids, period, site_id, pract_id):
-    params_a = []
-    tid_a    = _tid_in(tids, params_a)
+def _fetch_targets(cur, tids):
+    """Returns {metric_key: {tenant_id: value}} for all user tenants."""
+    if not tids:
+        return {}
+    ph = ','.join(['?'] * len(tids))
     cur.execute(
-        f"SELECT COUNT(*) FROM Gold.Dim_Patients "
-        f"WHERE {tid_a} AND Active = 1 AND pk_Patient > 0",
-        params_a,
+        f"SELECT Tenant_ID, Metric, Target_Value FROM Input.Targets "
+        f"WHERE Tenant_ID IN ({ph}) AND Period_Type = 'all_time' AND Period_Value = 'all' "
+        f"AND Site_ID IS NULL AND Practitioner_ID IS NULL",
+        tids,
     )
-    active = int(cur.fetchone()[0])
+    result = {}
+    for r in cur.fetchall():
+        result.setdefault(r[1], {})[r[0]] = float(r[2])
+    return result
 
-    params = []
-    tid_w  = _tid_in(tids, params, alias='dp')
-    date_w = _pw('Gold.fn_Get_Date_Key(CAST(dp.Patient_Created_Date AS DATE))', period, params)
+
+def _wrap(key, value, targets, tids, fmt):
+    """Returns {value, target, vs_target_pct} where vs_target_pct > 0 means beating target."""
+    fval = float(value) if value is not None else None
+    tid_set = set(tids)
+    tenant_targets = [v for tid, v in targets.get(key, {}).items() if tid in tid_set]
+    target = None
+    vs_pct = None
+    if tenant_targets and fval is not None:
+        # Sum currency/count targets across tenants; average percentage targets
+        combined = sum(tenant_targets) if fmt in ('currency', 'count') else sum(tenant_targets) / len(tenant_targets)
+        target = round(combined, 4)
+        if combined != 0:
+            raw_pct = (fval - combined) / abs(combined) * 100
+            vs_pct = round(-raw_pct if key in LOWER_IS_BETTER else raw_pct, 1)
+    return {'value': fval, 'target': target, 'vs_target_pct': vs_pct}
+
+# ── KPI functions (one per section) ──────────────────────────────────────────
+
+def _kpis_revenue(cur, tids, period, site_id, pract_id, targets):
+    # Revenue totals and patient count from Daily aggregate
+    p1 = []
+    tid_w  = _tid_in(tids, p1, alias='d')
+    date_w = _pw('d.fk_Date', period, p1)
+    site_w = _agg_sw(site_id, tids, p1)
+    prac_w = _prw(pract_id, tids, p1, alias='d')
     cur.execute(f"""
-        SELECT COUNT(*) FROM Gold.Dim_Patients dp
-        WHERE {tid_w} {date_w} AND dp.pk_Patient > 0
-    """, params)
-    new_pts = int(cur.fetchone()[0])
+        SELECT SUM(d.NHS_Revenue + d.Private_Revenue),
+               SUM(d.NHS_Revenue),
+               SUM(d.Private_Revenue),
+               COUNT(DISTINCT d.fk_Patient)
+        FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d
+        WHERE {tid_w} {date_w} {site_w} {prac_w}
+    """, p1)
+    row   = cur.fetchone()
+    total = float(row[0]) if row[0] else 0.0
+    nhs   = float(row[1]) if row[1] else 0.0
+    priv  = float(row[2]) if row[2] else 0.0
+    pts   = int(row[3])   if row[3] else 0
+    rpp   = round(total / pts, 2) if pts else None
 
-    params_r = []
-    tid_r    = _tid_in(tids, params_r, alias='r')
-    date_r   = _pw('r.fk_Date_Due', period, params_r)
+    # Worked hours deduplicated at practitioner-day level (Worked_Hours repeats per patient row)
+    p2 = []
+    tid_w2  = _tid_in(tids, p2, alias='d2')
+    date_w2 = _pw('d2.fk_Date', period, p2)
+    site_w2 = _agg_sw(site_id, tids, p2, alias='d2')
+    prac_w2 = _prw(pract_id, tids, p2, alias='d2')
+    cur.execute(f"""
+        SELECT SUM(mx) FROM (
+            SELECT MAX(d2.Worked_Hours) AS mx
+            FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d2
+            WHERE {tid_w2} {date_w2} {site_w2} {prac_w2}
+            GROUP BY d2.fk_Practitioner, d2.fk_Date, d2.fk_Site, d2.Tenant_ID
+        ) sub
+    """, p2)
+    wh_row = cur.fetchone()
+    worked = float(wh_row[0]) if wh_row and wh_row[0] else None
+    rph    = round(total / worked, 2) if worked else None
+
+    # Deposit ratio: % of open treatment plan items that have an invoice raised
+    p3 = []
+    tid_w3  = _tid_in(tids, p3, alias='tpi')
+    date_w3 = _pw('tpi.fk_Date_Created', period, p3)
+    prac_w3 = _prw(pract_id, tids, p3, alias='tpi')
+    cur.execute(f"""
+        SELECT
+            SUM(CASE WHEN tpi.Completed=0 AND tpi.Invoice_ID IS NOT NULL THEN 1 ELSE 0 END)
+                * 100.0 / NULLIF(SUM(CASE WHEN tpi.Completed=0 THEN 1 ELSE 0 END), 0)
+        FROM Gold.Fact_Treatment_Plan_Items tpi
+        WHERE {tid_w3} {date_w3} {prac_w3}
+    """, p3)
+    dep_row       = cur.fetchone()
+    deposit_ratio = round(float(dep_row[0]), 1) if dep_row and dep_row[0] else None
+
+    return {
+        'total_revenue':       _wrap('total_revenue',       total,         targets, tids, 'currency'),
+        'nhs_revenue':         _wrap('nhs_revenue',         nhs,           targets, tids, 'currency'),
+        'private_revenue':     _wrap('private_revenue',     priv,          targets, tids, 'currency'),
+        'revenue_per_patient': _wrap('revenue_per_patient', rpp,           targets, tids, 'currency'),
+        'revenue_per_hour':    _wrap('revenue_per_hour',    rph,           targets, tids, 'currency'),
+        'deposit_ratio':       _wrap('deposit_ratio',       deposit_ratio, targets, tids, 'percent'),
+    }
+
+
+def _kpis_patients(cur, tids, period, site_id, pract_id, targets):
+    # New patients: period + site + practitioner sensitive
+    p1 = []
+    tid_w  = _tid_in(tids, p1, alias='d')
+    date_w = _pw('d.fk_Date', period, p1)
+    site_w = _agg_sw(site_id, tids, p1)
+    prac_w = _prw(pract_id, tids, p1, alias='d')
+    cur.execute(f"""
+        SELECT COUNT(DISTINCT d.fk_Patient)
+        FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d
+        WHERE {tid_w} AND d.New_Patient = 1 {date_w} {site_w} {prac_w}
+    """, p1)
+    new_pts = int(cur.fetchone()[0] or 0)
+
+    # Current-state patient metrics: active, retention, recall overdue (site filter only)
+    p2 = []
+    tid_w2  = _tid_in(tids, p2, alias='c')
+    site_w2 = _agg_sw(site_id, tids, p2, alias='c')
+    cur.execute(f"""
+        SELECT SUM(CAST(c.Active_Patients   AS INT)),
+               SUM(CAST(c.Retained_Patients AS INT)),
+               COUNT(*),
+               SUM(CASE WHEN c.Recall_Due=1 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN c.Recall_Due=1 AND c.Recall_Sent=0 THEN 1 ELSE 0 END)
+        FROM Gold.Aggregate_Site_Patient_Current c
+        WHERE {tid_w2} {site_w2}
+    """, p2)
+    row2      = cur.fetchone()
+    active    = int(row2[0]) if row2[0] else 0
+    retained  = int(row2[1]) if row2[1] else 0
+    total_pts = int(row2[2]) if row2[2] else 0
+    due_cnt   = int(row2[3]) if row2[3] else 0
+    overdue_not_sent = int(row2[4]) if row2[4] else 0
+    retention     = round(retained / total_pts * 100, 1) if total_pts else None
+    overdue_ns_pct = round(overdue_not_sent / due_cnt * 100, 1) if due_cnt else None
+
+    # Recall effectiveness from Fact_Recalls (not overdue / total)
+    p3 = []
+    tid_w3  = _tid_in(tids, p3, alias='r')
+    date_w3 = _pw('r.fk_Date_Due', period, p3)
     cur.execute(f"""
         SELECT COUNT(*),
                SUM(CASE WHEN r.Days_Overdue > 0 THEN 1 ELSE 0 END)
-        FROM   Gold.Fact_Recalls r
-        WHERE  {tid_r} {date_r}
-    """, params_r)
-    row       = cur.fetchone()
-    total_r   = int(row[0]) if row[0] else 0
-    overdue_r = int(row[1]) if row[1] else 0
-    compliance = round((total_r - overdue_r) / total_r * 100, 1) if total_r else None
+        FROM Gold.Fact_Recalls r
+        WHERE {tid_w3} {date_w3}
+    """, p3)
+    row3      = cur.fetchone()
+    total_r   = int(row3[0]) if row3[0] else 0
+    overdue_r = int(row3[1]) if row3[1] else 0
+    recall_eff = round((total_r - overdue_r) / total_r * 100, 1) if total_r else None
+
     return {
-        'active_patients':   _kpi(active),
-        'new_patients':      _kpi(new_pts),
-        'recall_compliance': _kpi(compliance),
-        'overdue_recalls':   _kpi(overdue_r),
+        'new_patients':             _wrap('new_patients',             new_pts,       targets, tids, 'count'),
+        'active_patients':          _wrap('active_patients',          active,        targets, tids, 'count'),
+        'recall_compliance':        _wrap('recall_compliance',        recall_eff,    targets, tids, 'percent'),
+        'patient_retention':        _wrap('patient_retention',        retention,     targets, tids, 'percent'),
+        'recalls_overdue_not_sent': _wrap('recalls_overdue_not_sent', overdue_ns_pct,targets, tids, 'percent'),
     }
 
 
-def _kpis_treatment(cur, tids, period, site_id, pract_id):
-    params = []
-    tid_w  = _tid_in(tids, params, alias='tpi')
-    date_w = _pw('tpi.fk_Date_Created', period, params)
-    prac_w = _prw(pract_id, tids, params, alias='tpi')
+def _kpis_treatment(cur, tids, period, site_id, pract_id, targets):
+    # Acceptance rate and open courses from Fact_Treatment_Plan_Items
+    p1 = []
+    tid_w  = _tid_in(tids, p1, alias='tpi')
+    date_w = _pw('tpi.fk_Date_Created', period, p1)
+    prac_w = _prw(pract_id, tids, p1, alias='tpi')
     cur.execute(f"""
-        SELECT COUNT(DISTINCT tpi.Treatment_Plan_ID),
-               SUM(CASE WHEN tpi.Completed = 1 THEN 1 ELSE 0 END),
-               COUNT(*),
-               AVG(CASE WHEN tpi.Completed = 1 THEN tpi.Price END),
-               SUM(CASE WHEN tpi.Completed = 0 AND tpi.Charged = 0
-                        THEN tpi.Price ELSE 0 END)
-        FROM   Gold.Fact_Treatment_Plan_Items tpi
-        WHERE  {tid_w} {date_w} {prac_w}
-    """, params)
-    row   = cur.fetchone()
-    plans = int(row[0]) if row[0] else 0
-    comp  = int(row[1]) if row[1] else 0
-    total = int(row[2]) if row[2] else 0
-    rate  = round(comp / total * 100, 1) if total else None
-    return {
-        'plans_presented':    _kpi(plans),
-        'acceptance_rate':    _kpi(rate),
-        'avg_accepted_value': _kpi(row[3]),
-        'declined_value':     _kpi(row[4] if row[4] else 0),
-    }
+        SELECT
+            COUNT(DISTINCT CASE WHEN tpi.Completed=0 AND tpi.Charged=0
+                                THEN tpi.Treatment_Plan_ID END),
+            SUM(CAST(tpi.Completed AS INT)) * 100.0 / NULLIF(COUNT(*), 0)
+        FROM Gold.Fact_Treatment_Plan_Items tpi
+        WHERE {tid_w} {date_w} {prac_w}
+    """, p1)
+    row  = cur.fetchone()
+    open_courses    = int(row[0])             if row[0] is not None else 0
+    acceptance_rate = round(float(row[1]), 1) if row[1] else None
 
-
-def _kpis_nhs(cur, tids, period, site_id, pract_id):
-    params = []
-    tid_w  = _tid_in(tids, params, alias='fc')
-    date_w = _pw('fc.fk_Date_Start', period, params)
+    # Open courses without a future appointment (LEFT JOIN pattern, Fabric-safe)
+    p2 = []
+    tid_w2  = _tid_in(tids, p2, alias='tpi')
+    prac_w2 = _prw(pract_id, tids, p2, alias='tpi')
     cur.execute(f"""
-        SELECT SUM(fc.UDA_Delivered), SUM(fc.UDA_Target), SUM(fc.Contract_Value)
-        FROM   Gold.Fact_Contracts fc
-        WHERE  {tid_w} {date_w}
-    """, params)
-    row         = cur.fetchone()
-    delivered   = float(row[0]) if row[0] else 0
-    target      = float(row[1]) if row[1] else 0
-    value       = float(row[2]) if row[2] else 0
-    achievement = round(delivered / target * 100, 1) if target    else None
-    vpu         = round(value / delivered, 2)         if delivered else None
-    return {
-        'uda_delivered':   _kpi(delivered),
-        'uda_target':      _kpi(target),
-        'uda_achievement': _kpi(achievement),
-        'value_per_uda':   _kpi(vpu),
-    }
+        SELECT COUNT(DISTINCT tpi.Treatment_Plan_ID)
+        FROM Gold.Fact_Treatment_Plan_Items tpi
+        LEFT JOIN Gold.Fact_Treatment_Appointments ta
+            ON  ta.Treatment_Plan_ID = tpi.Treatment_Plan_ID
+            AND ta.Tenant_ID         = tpi.Tenant_ID
+            AND ta.fk_Date_Appointment >= Gold.fn_Get_Date_Key(CAST(GETDATE() AS DATE))
+        WHERE tpi.Completed = 0
+            AND {tid_w2} {prac_w2}
+            AND ta.pk_Treatment_Appointment IS NULL
+    """, p2)
+    oc_no_appt = int(cur.fetchone()[0] or 0)
 
-
-def _kpis_scheduling(cur, tids, period, site_id, pract_id):
-    params = []
-    tid_w  = _tid_in(tids, params, alias='apt')
-    date_w = _pw('apt.fk_Date_Start', period, params)
-    site_w = _sw(site_id, tids, params, alias='apt')
-    prac_w = _prw(pract_id, tids, params, alias='apt')
+    # Exam ratio from Daily aggregate
+    p3 = []
+    tid_w3  = _tid_in(tids, p3, alias='d')
+    date_w3 = _pw('d.fk_Date', period, p3)
+    site_w3 = _agg_sw(site_id, tids, p3)
+    prac_w3 = _prw(pract_id, tids, p3, alias='d')
     cur.execute(f"""
-        SELECT COUNT(*),
-               SUM(CASE WHEN apt.Is_DNA       = 1 THEN 1 ELSE 0 END),
-               SUM(CASE WHEN apt.Is_Cancelled = 1 THEN 1 ELSE 0 END)
-        FROM   Gold.Fact_Appointments apt
-        WHERE  {tid_w} {date_w} {site_w} {prac_w}
-    """, params)
-    row   = cur.fetchone()
-    total = int(row[0]) if row[0] else 0
-    dna   = int(row[1]) if row[1] else 0
-    canc  = int(row[2]) if row[2] else 0
+        SELECT SUM(d.Exam_Count) * 100.0 / NULLIF(SUM(d.Appointments), 0)
+        FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d
+        WHERE {tid_w3} {date_w3} {site_w3} {prac_w3}
+    """, p3)
+    er_row     = cur.fetchone()
+    exam_ratio = round(float(er_row[0]), 1) if er_row and er_row[0] else None
+
     return {
-        'total_appointments': _kpi(total),
-        'dna_rate':           _kpi(round(dna / total * 100, 1) if total else None),
-        'cancellations':      _kpi(canc),
+        'acceptance_rate':           _wrap('acceptance_rate',           acceptance_rate, targets, tids, 'percent'),
+        'open_courses':              _wrap('open_courses',              open_courses,    targets, tids, 'count'),
+        'open_courses_without_appt': _wrap('open_courses_without_appt', oc_no_appt,     targets, tids, 'count'),
+        'exam_ratio':                _wrap('exam_ratio',                exam_ratio,      targets, tids, 'percent'),
     }
 
+
+def _kpis_scheduling(cur, tids, period, site_id, pract_id, targets):
+    # Appointment-level metrics from Daily aggregate
+    p1 = []
+    tid_w  = _tid_in(tids, p1, alias='d')
+    date_w = _pw('d.fk_Date', period, p1)
+    site_w = _agg_sw(site_id, tids, p1)
+    prac_w = _prw(pract_id, tids, p1, alias='d')
+    cur.execute(f"""
+        SELECT SUM(d.Appointment_Hours),
+               SUM(d.DNA_Appointments),
+               SUM(d.Appointments),
+               SUM(d.BBYL_Appointments)
+        FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d
+        WHERE {tid_w} {date_w} {site_w} {prac_w}
+    """, p1)
+    row        = cur.fetchone()
+    apt_hrs    = float(row[0]) if row[0] else 0.0
+    dna_apts   = int(row[1])   if row[1] else 0
+    total_apts = int(row[2])   if row[2] else 0
+    bbyl_apts  = int(row[3])   if row[3] else 0
+    dna_rate   = round(dna_apts  / total_apts * 100, 1) if total_apts else None
+    bbyl_pct   = round(bbyl_apts / total_apts * 100, 1) if total_apts else None
+
+    # Worked hours deduplicated at practitioner-day level
+    p2 = []
+    tid_w2  = _tid_in(tids, p2, alias='d2')
+    date_w2 = _pw('d2.fk_Date', period, p2)
+    site_w2 = _agg_sw(site_id, tids, p2, alias='d2')
+    prac_w2 = _prw(pract_id, tids, p2, alias='d2')
+    cur.execute(f"""
+        SELECT SUM(mx) FROM (
+            SELECT MAX(d2.Worked_Hours) AS mx
+            FROM Gold.Aggregate_Site_Patient_Practitioner_Daily d2
+            WHERE {tid_w2} {date_w2} {site_w2} {prac_w2}
+            GROUP BY d2.fk_Practitioner, d2.fk_Date, d2.fk_Site, d2.Tenant_ID
+        ) sub
+    """, p2)
+    wh_row     = cur.fetchone()
+    worked     = float(wh_row[0]) if wh_row and wh_row[0] else None
+    chair_util = round(apt_hrs / worked * 100, 1) if worked else None
+
+    # Next free diary slots from Practitioner_Current (site filter only, no period)
+    p3 = []
+    tid_w3  = _tid_in(tids, p3, alias='c')
+    site_w3 = _agg_sw(site_id, tids, p3, alias='c')
+    cur.execute(f"""
+        SELECT MIN(c.Days_Until_Next_30_Mins), MIN(c.Days_Until_Next_1_Hour_Free)
+        FROM Gold.Aggregate_Site_Practitioner_Current c
+        WHERE {tid_w3} {site_w3}
+    """, p3)
+    sl_row = cur.fetchone()
+    days30 = int(sl_row[0]) if sl_row and sl_row[0] is not None else None
+    days60 = int(sl_row[1]) if sl_row and sl_row[1] is not None else None
+
+    return {
+        'chair_utilisation':     _wrap('chair_utilisation',     chair_util, targets, tids, 'percent'),
+        'dna_rate':              _wrap('dna_rate',              dna_rate,   targets, tids, 'percent'),
+        'days_until_30min_free': _wrap('days_until_30min_free', days30,     targets, tids, 'count'),
+        'days_until_1hr_free':   _wrap('days_until_1hr_free',   days60,     targets, tids, 'count'),
+        'book_before_you_leave': _wrap('book_before_you_leave', bbyl_pct,   targets, tids, 'percent'),
+    }
+
+
+def _kpis_nhs(cur, tids, period, site_id, pract_id, targets):
+    return {}
+
+# ── Targets ───────────────────────────────────────────────────────────────────
 
 @app.route('/api/targets', methods=['GET'])
 def get_targets():
@@ -543,7 +646,7 @@ def get_targets():
         metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3]}
                    for r in cur.fetchall()]
 
-        tenants = []
+        tenants = {}
         targets = {}
         if tids:
             ph = ','.join(['?'] * len(tids))
@@ -576,9 +679,9 @@ def save_targets():
     if err:
         return err
     try:
-        conn             = _fabric_conn()
-        conn.autocommit  = True   # Fabric Warehouse requires autocommit for DML
-        cur              = conn.cursor()
+        conn            = _fabric_conn()
+        conn.autocommit = True   # Fabric Warehouse requires autocommit for DML
+        cur             = conn.cursor()
         _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
