@@ -775,41 +775,6 @@ def save_targets():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/metric-config', methods=['PUT'])
-def update_metric_config():
-    upn, err = _auth()
-    if err:
-        return err
-    try:
-        conn            = _fabric_conn()
-        conn.autocommit = True
-        cur             = conn.cursor()
-        _, client_id, tids, maintain_targets = _get_user_info(cur, upn)
-        if client_id is None:
-            conn.close()
-            return jsonify({'error': 'Forbidden'}), 403
-        if not maintain_targets:
-            conn.close()
-            return jsonify({'error': 'Forbidden'}), 403
-
-        rows = request.get_json(force=True) or []
-        valid_range_types = {'above', 'below', 'within'}
-
-        for row in rows:
-            metric_key = str(row.get('metric_key', ''))
-            range_type = str(row.get('range_type', 'above'))
-            if not metric_key or range_type not in valid_range_types:
-                continue
-            cur.execute(
-                "UPDATE Config.Metric_Definitions SET Range_Type = ? WHERE Metric_Key = ?",
-                [range_type, metric_key],
-            )
-
-        conn.close()
-        return jsonify({'ok': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
