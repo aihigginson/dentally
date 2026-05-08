@@ -13,6 +13,15 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $Groups = [ordered]@{
 
+    '03. Audit seed data' = @(
+        'Config.Metric_Definitions.Data.sql'
+        'Audit.Process_Config.Data.sql'
+    )
+
+    '03b. Input data cleanup' = @(
+        'Input.Targets.Cleanup.sql'
+    )
+
     '11. Gold tables & functions' = @(
         'Gold.Dim_Accounts.Table.sql'
         'Gold.Dim_Date.Table.sql'
@@ -33,6 +42,9 @@ $Groups = [ordered]@{
         'Gold.Fact_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
+        'Gold.Aggregate_Site_Patient_Practitioner_Daily.Table.sql'
+        'Gold.Aggregate_Site_Patient_Current.Table.sql'
+        'Gold.Aggregate_Site_Practitioner_Current.Table.sql'
     )
 
     '13. Gold usp_Create procedures' = @(
@@ -74,6 +86,13 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql'
+    )
+
+    '15. Audit orchestrator' = @(
+        'Audit.usp_Load_All.sql'
     )
 }
 

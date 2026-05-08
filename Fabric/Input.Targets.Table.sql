@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-DROP TABLE IF EXISTS [Input].[Targets]
-GO
+IF OBJECT_ID('[Input].[Targets]', 'U') IS NULL
 CREATE TABLE [Input].[Targets] (
     [pk_target]          BIGINT IDENTITY NOT NULL,
     [Tenant_ID]          INT          NOT NULL,
