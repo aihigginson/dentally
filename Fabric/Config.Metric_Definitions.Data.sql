@@ -18,13 +18,12 @@ VALUES
 -- Patients
     ('new_patients',               'New Patients',                       'patients',   'count',    'Number of new patient registrations',                                     1, 1, 1, 20),
     ('active_patients',            'Active Patients',                    'patients',   'count',    'Total active patient count',                                              1, 0, 1, 21),
-    ('recall_compliance',          'Recall Compliance',                  'patients',   'percent',  'Percentage of due recalls that were attended',                            1, 1, 1, 22),
+    ('recall_compliance',          'Recall Effectiveness',               'patients',   'percent',  'Percentage of due recalls that were attended',                            1, 1, 1, 22),
     ('patient_retention',          'Patient Retention',                  'patients',   'percent',  'Percentage of patients who returned within the recall period',            1, 0, 1, 23),
     ('recalls_overdue_not_sent',   'Recalls Overdue Not Sent',           'patients',   'percent',  'Percentage of overdue recalls where no recall notice has been sent',      1, 0, 1, 24),
 
 -- Treatment
     ('acceptance_rate',            'Treatment Acceptance Rate',          'treatment',  'percent',  'Percentage of presented plans accepted by patients',                      1, 1, 1, 30),
-    ('avg_accepted_value',         'Avg Accepted Plan Value',            'treatment',  'currency', 'Average value of accepted treatment plans',                               1, 1, 1, 31),
     ('open_courses',               'Open Courses',                       'treatment',  'count',    'Number of open courses of treatment with no completed appointment',       1, 1, 1, 32),
     ('open_courses_without_appt',  'Open Courses Without Appointment',   'treatment',  'percent',  'Percentage of open courses with no future appointment booked',           1, 0, 1, 33),
     ('exam_ratio',                 'Exam Ratio',                         'treatment',  'percent',  'Percentage of appointments that are examinations',                        1, 1, 1, 34),
@@ -34,8 +33,5 @@ VALUES
     ('dna_rate',                   'DNA Rate',                           'scheduling', 'percent',  'Percentage of appointments that were did-not-attend',                     1, 1, 1, 41),
     ('days_until_30min_free',      'Days Until Next 30 Minute Free',     'scheduling', 'count',    'Days until the next available 30-minute diary slot for any practitioner', 1, 1, 1, 42),
     ('days_until_1hr_free',        'Days Until Next 1 Hour Free',        'scheduling', 'count',    'Days until the next available 1-hour diary slot for any practitioner',    1, 1, 1, 43),
-    ('book_before_you_leave',      'Book Before You Leave',              'scheduling', 'percent',  'Percentage of completed appointments where a follow-up was booked',       1, 0, 1, 44),
-
--- NHS
-    ('uda_delivered',              'UDAs Delivered',                     'nhs',        'count',    'Number of Units of Dental Activity delivered',                            0, 1, 1, 50);
+    ('book_before_you_leave',      'Book Before You Leave',              'scheduling', 'percent',  'Percentage of completed appointments where a follow-up was booked',       1, 0, 1, 44);
 GO
