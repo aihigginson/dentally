@@ -392,17 +392,19 @@ def _wrap(key, value, targets, tids, fmt, metric_meta=None):
         variance = sum(tenant_variances) / len(tenant_variances) if tenant_variances else None
 
         if combined != 0:
-            raw_pct = (fval - combined) / abs(combined) * 100   # positive = above target
+            raw_pct  = (fval - combined) / abs(combined) * 100   # positive = above target
+            abs_diff = fval - combined                            # absolute difference
 
             if range_t == 'within':
-                dev_pct = abs(raw_pct)
+                # pp deviation for %; relative % deviation for count/currency
+                dev = abs(abs_diff) if fmt == 'percent' else abs(raw_pct)
                 if variance is not None:
-                    vs_pct = round(variance - dev_pct, 1)        # positive = inside band
-                    if dev_pct <= variance / 2:
+                    vs_pct = round(variance - dev, 1)            # positive = inside band
+                    if dev <= variance / 2:
                         perf_class = 'strong-green'
-                    elif dev_pct <= variance:
+                    elif dev <= variance:
                         perf_class = 'weak-green'
-                    elif dev_pct <= variance * 2:
+                    elif dev <= variance * 2:
                         perf_class = 'weak-red'
                     else:
                         perf_class = 'strong-red'
@@ -410,11 +412,13 @@ def _wrap(key, value, targets, tids, fmt, metric_meta=None):
                 signed = raw_pct if range_t == 'above' else -raw_pct
                 vs_pct = round(signed, 1)
                 if variance is not None:
-                    if signed >= variance:
+                    # % metrics: variance is absolute pp; count/currency: relative %
+                    cmp = (abs_diff if range_t == 'above' else -abs_diff) if fmt == 'percent' else signed
+                    if cmp >= variance:
                         perf_class = 'strong-green'
-                    elif signed >= 0:
+                    elif cmp >= 0:
                         perf_class = 'weak-green'
-                    elif signed >= -variance:
+                    elif cmp >= -variance:
                         perf_class = 'weak-red'
                     else:
                         perf_class = 'strong-red'
