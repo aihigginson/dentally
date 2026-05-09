@@ -240,7 +240,6 @@
             text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; text-align: left;
         }
         .targets-table th:not(:first-child) { text-align: right; min-width: 140px; }
-        .targets-table th.col-range { text-align: left; min-width: 160px; }
         .targets-group-row td {
             background: var(--bg-page); color: var(--text-2); font-size: 11px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.07em;
@@ -265,15 +264,6 @@
         .targets-input::-webkit-outer-spin-button,
         .targets-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .targets-input[type=number] { -moz-appearance: textfield; }
-        .targets-config-cell   { padding: 5px 8px; }
-        .targets-range-select {
-            width: 100%; background: var(--bg-subtle);
-            border: 1px solid var(--border); border-radius: 5px;
-            padding: 5px 8px; font-size: 13px; font-family: var(--font); color: var(--text);
-            outline: none; cursor: pointer;
-        }
-        .targets-range-select:focus   { border-color: var(--navy); background: white; box-shadow: 0 0 0 2px rgba(26,82,122,0.1); }
-        .targets-range-select.changed { border-color: var(--teal-bright); background: #f0fbfb; }
         .targets-table caption { caption-side: bottom; font-size: 11px; color: var(--text-3); padding: 8px 16px; text-align: left; }
         .targets-var-wrap { margin-top: 3px; }
         .targets-var-wrap .targets-input { width: 60px; font-size: 12px; color: var(--text-2); }
@@ -779,9 +769,8 @@
     }
 
     // ── Targets data entry ───────────────────────────────────────────────────
-    let _targetsLoaded        = false;
-    let _targetsOriginal      = {};
-    let _metricConfigOriginal = {};   // {metric_key: {range_type, variance}}
+    let _targetsLoaded   = false;
+    let _targetsOriginal = {};
 
     const SECTION_LABELS = {
         revenue: 'Revenue', patients: 'Patient', treatment: 'Treatment',
@@ -799,10 +788,7 @@
             const res = await authFetch('/api/targets');
             if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
             const data = await res.json();
-            _targetsOriginal = { ...data.targets };   // {tid|metric: {value, variance}}
-            _metricConfigOriginal = Object.fromEntries(
-                data.metrics.map(m => [m.key, { range_type: m.range_type }])
-            );
+            _targetsOriginal = { ...data.targets };
             _buildTargetsTable(data);
             _targetsLoaded = true;
         } catch (e) {
@@ -810,36 +796,24 @@
         }
     }
 
-    const RANGE_OPTIONS = [
-        ['above', 'Higher is better'],
-        ['below', 'Lower is better'],
-        ['within', 'Stay within band'],
-    ];
-
     function _buildTargetsTable({ metrics, tenants, targets }) {
         const table = document.getElementById('targets-table');
         table.innerHTML = '';
 
         // Caption note
         const cap = document.createElement('caption');
-        cap.textContent = 'Range and Variance are metric-wide settings. Variance defines the ±% band for 4-way card colouring; leave blank for simple on/off-target colouring.';
+        cap.textContent = 'Variance (±%) defines the tolerance band for 4-way card colouring; leave blank for simple on/off-target colouring.';
         table.appendChild(cap);
 
         const thead = table.createTHead();
         const hrow  = thead.insertRow();
-        const addTh = (txt, cls) => {
-            const th = document.createElement('th');
-            th.textContent = txt;
-            if (cls) th.className = cls;
-            hrow.appendChild(th);
-        };
+        const addTh = txt => { const th = document.createElement('th'); th.textContent = txt; hrow.appendChild(th); };
         addTh('Metric');
-        addTh('Range', 'col-range');
         tenants.forEach(t => addTh(t.name));
 
         const tbody    = table.createTBody();
         const sections = [...new Set(metrics.map(m => m.section))];
-        const totalCols = tenants.length + 2;   // metric + range + tenants
+        const totalCols = tenants.length + 1;
 
         sections.forEach(sec => {
             const gRow  = tbody.insertRow();
@@ -855,24 +829,6 @@
                 nameCell.innerHTML =
                     `<div class="targets-metric-name">${metric.display_name}</div>` +
                     `<div class="targets-metric-fmt">${FORMAT_HINTS[metric.format_type] || ''}</div>`;
-
-                // ── Range select ──────────────────────────────────────────────
-                const rangeCell = row.insertCell();
-                rangeCell.className = 'targets-config-cell';
-                const sel = document.createElement('select');
-                sel.className = 'targets-range-select';
-                sel.dataset.metricKey = metric.key;
-                RANGE_OPTIONS.forEach(([v, l]) => {
-                    const opt = document.createElement('option');
-                    opt.value = v; opt.textContent = l;
-                    if (v === metric.range_type) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-                sel.addEventListener('change', function () {
-                    const orig = (_metricConfigOriginal[metric.key] || {}).range_type || 'above';
-                    this.classList.toggle('changed', this.value !== orig);
-                });
-                rangeCell.appendChild(sel);
 
                 // ── Per-tenant target + variance inputs ───────────────────────
                 const step = metric.format_type === 'count' ? '1'
@@ -936,25 +892,12 @@
             });
         });
 
-        // Collect metric config (Range_Type only — Variance lives in Input.Targets)
-        const configPayload = [];
-        document.querySelectorAll('#targets-table .targets-range-select').forEach(sel => {
-            configPayload.push({ metric_key: sel.dataset.metricKey, range_type: sel.value });
-        });
-
         try {
-            const [r1, r2] = await Promise.all([
-                authFetch('/api/targets', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(targetsPayload),
-                }),
-                authFetch('/api/metric-config', {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(configPayload),
-                }),
-            ]);
-            if (!r1.ok) throw new Error((await r1.json()).error || `Targets HTTP ${r1.status}`);
-            if (!r2.ok) throw new Error((await r2.json()).error || `Config HTTP ${r2.status}`);
+            const res = await authFetch('/api/targets', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(targetsPayload),
+            });
+            if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
 
             // Update originals and clear changed highlights
             document.querySelectorAll('#targets-table .targets-input:not(.targets-variance-input)').forEach(inp => {
@@ -968,12 +911,6 @@
                 if (!_targetsOriginal[key]) _targetsOriginal[key] = {};
                 _targetsOriginal[key].variance = inp.value !== '' ? parseFloat(inp.value) : null;
                 inp.classList.remove('changed');
-            });
-            document.querySelectorAll('#targets-table .targets-range-select').forEach(sel => {
-                const key = sel.dataset.metricKey;
-                if (!_metricConfigOriginal[key]) _metricConfigOriginal[key] = {};
-                _metricConfigOriginal[key].range_type = sel.value;
-                sel.classList.remove('changed');
             });
 
             status.textContent = 'Saved.';

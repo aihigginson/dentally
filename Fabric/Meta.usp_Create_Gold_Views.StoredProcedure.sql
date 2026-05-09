@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     29/04/2026  AIH Add PBI.[Security Users] view for RLS anchor
+--    *03     09/05/2026  AIH Add WHERE Patient_ID IS NOT NULL on List Accounts to exclude -1 unknown row
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Meta.usp_Create_Gold_Views @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Meta].[usp_Create_Gold_Views]    Script Date: 20/04/2026 10:15:06 ******/
@@ -65,8 +66,15 @@ BEGIN
             SET @ViewName = QUOTENAME(REPLACE(@ViewBase, 'Fact ', '_'));
         ELSE IF @TableName LIKE 'Dim_%'
             SET @ViewName = QUOTENAME('List ' + REPLACE(@ViewBase, 'Dim ', ''));
+        ELSE IF @TableName LIKE 'Aggregate_%'
+            SET @ViewName = QUOTENAME('Aggregate ' + REPLACE(@ViewBase, 'Aggregate ', ''));
         ELSE
             SET @ViewName = QUOTENAME(@TableName);
+
+        -- Table-specific WHERE clauses (e.g. exclude DW unknown/-1 rows)
+        DECLARE @WhereClause NVARCHAR(500) = N'';
+        IF @TableName = 'Dim_Accounts'
+            SET @WhereClause = N' WHERE [Patient_ID] IS NOT NULL';
 
         -- Build column list with space-friendly aliases
         SET @ColumnList = NULL;
@@ -82,7 +90,7 @@ BEGIN
 
         SET @SQL = N'CREATE VIEW PBI.' + @ViewName + N' AS
 SELECT ' + @ColumnList + N'
-FROM Gold.' + QUOTENAME(@TableName) + N';';
+FROM Gold.' + QUOTENAME(@TableName) + @WhereClause + N';';
 
         EXEC (@SQL);
 
@@ -94,9 +102,10 @@ FROM Gold.' + QUOTENAME(@TableName) + N';';
     -- Security lookup view (used as RLS anchor in Power BI)
     SET @SQL = N'CREATE VIEW PBI.[Application Users] AS
 SELECT [User_UPN] AS [User UPN], [Tenant_ID] AS [Tenant ID]
-FROM Security.Application_Users;';
+FROM Security.Application_Users a JOIN Security.Tenants t ON a.Client_ID = t.Client_ID;';
     EXEC (@SQL);
 
 END;
+
 
 GO
