@@ -233,7 +233,7 @@ def seed_practitioners(cur):
     for p in PRACTITIONERS:
         pk,pid,first,last,role,site_id,gdc,_,_,_ = p
         rows.append((
-            pk, TENANT_ID, pid, None, 'Dr', first, None, last, f"Dr {first} {last}",
+            1_000_000 + pk, TENANT_ID, pid, None, 'Dr', first, None, last, f"Dr {first} {last}",
             f"{first.lower()}.{last.lower()}@smiledental.co.uk", None,
             role, 3, 1, None, gdc, None, site_id, None, None, None, None,
         ))
@@ -272,7 +272,7 @@ def build_patients():
         dob = TODAY.replace(year=TODAY.year - age)
         active = RNG.random() < 0.72   # ~72% active (850/1200)
         patients.append({
-            'pk':               pid,
+            'pk':               1_000_000 + pid,
             'patient_id':       pid,
             'first':            first,
             'last':             last,
@@ -361,7 +361,7 @@ def generate_appointments(patients):
                 is_new  = pt['pk'] not in new_patient_set
                 if is_new:
                     new_patient_set.add(pt['pk'])
-                pt['appointments'].append((day, pk, site_pk, rev, is_exam, is_dna, is_bbyl, whrs, ahrs, is_new))
+                pt['appointments'].append((day, 1_000_000 + pk, site_pk, rev, is_exam, is_dna, is_bbyl, whrs, ahrs, is_new))
                 pt['total_revenue'] += rev
 
     # Compute lifecycle dates
@@ -503,7 +503,7 @@ def seed_practitioner_current(cur):
         site_pk = SITE_PK[site_id]
         days30 = RNG.randint(2, 9)
         days60 = days30 + RNG.randint(1, 5)
-        rows.append((idx + 1, site_pk, pk, TENANT_ID, days30, days60))
+        rows.append((idx + 1, site_pk, 1_000_000 + pk, TENANT_ID, days30, days60))
     exmany(cur,
         "INSERT INTO Gold.Aggregate_Site_Practitioner_Current ("
         "pk_Site_Practitioner_Current,fk_Site,fk_Practitioner,Tenant_ID,"

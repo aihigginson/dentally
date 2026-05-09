@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *04     09/05/2026  AIH Filter Patient_Id IS NOT NULL — accounts without a patient are invalid
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Accounts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Accounts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -47,7 +48,8 @@ BEGIN
             CAST(ISNULL(Planned_Private_Treatment_Value,0) AS DECIMAL(12,2))        AS Planned_Private_Treatment_Value
         INTO #src
         FROM Silver.Accounts
-        WHERE Account_Id IS NOT NULL;
+        WHERE Account_Id IS NOT NULL
+          AND Patient_Id IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
