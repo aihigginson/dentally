@@ -296,10 +296,17 @@
 
         "card": {
             "*": {
+                "background": [{
+                    "show":         true,
+                    "color":        { "solid": { "color": "#F0F4F8" } },
+                    "transparency": 0
+                }],
+                "border": [{ "show": false }],
+                "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "labels": [{
-                    "color":      { "solid": { "color": "#1A6FA0" } },
+                    "color":      { "solid": { "color": "#1A527A" } },
                     "fontFamily": "Segoe UI",
-                    "fontSize":   28,
+                    "fontSize":   22,
                     "fontBold":   true
                 }],
                 "categoryLabels": [{
@@ -346,20 +353,24 @@
 
         "kpi": {
             "*": {
+                "background": [{
+                    "show":         true,
+                    "color":        { "solid": { "color": "#F0F4F8" } },
+                    "transparency": 0
+                }],
+                "border": [{ "show": false }],
+                "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "indicator": [{
                     "fontFamily": "Segoe UI",
-                    "fontSize":   28,
+                    "fontSize":   22,
                     "fontBold":   true
                 }],
-                "trendline": [{
-                    "show":  true,
-                    "color": { "solid": { "color": "#1A6FA0" } }
-                }],
+                "trendline": [{ "show": false }],
                 "goals": [{
                     "show":        true,
                     "labelColor":  { "solid": { "color": "#6B7280" } },
                     "fontFamily":  "Segoe UI",
-                    "fontSize":    10
+                    "fontSize":    9
                 }]
             }
         },
