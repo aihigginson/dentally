@@ -180,11 +180,13 @@
         }
         .fullscreen-close:hover { background: rgba(0,0,0,0.8); }
 
+        /* ── Nav report controls (subnav + fullscreen, right of Filters) ── */
+        .nav-report-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; padding-left: 12px; }
+
         /* ── Fullscreen mode ── */
         body.is-fullscreen .header,
         body.is-fullscreen .nav,
-        body.is-fullscreen .filter-bar,
-        body.is-fullscreen .section-header { display: none !important; }
+        body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
         body.is-fullscreen .fullscreen-close { display: flex; }
@@ -198,7 +200,7 @@
         }
         .embed-full {
             flex: 1; min-height: 0;
-            width: 100%; margin: 0;
+            width: 100%; max-width: calc((100vh - 100px) * 16 / 9); margin: 0;
             background: var(--bg-page); border: none; display: block;
             overflow: hidden;
         }
@@ -265,6 +267,7 @@
             .nav-tab { padding: 10px 11px; font-size: 12px; }
             .main { padding: 12px 0 0; }
             .section-header { padding: 0 12px; }
+            .nav-report-controls { padding-left: 8px; gap: 4px; }
             .targets-wrap { padding: 0 12px; }
             .auth-box { padding: 36px 24px; }
             .contact-card { padding: 36px 24px; }
@@ -330,6 +333,16 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
     </button>
+    <div class="nav-report-controls" id="nav-report-controls">
+        <div class="report-subnav" id="subnav-treatment"></div>
+        <div class="report-subnav" id="subnav-customer"></div>
+        <div class="report-subnav" id="subnav-scheduling"></div>
+        <div class="report-subnav" id="subnav-revenue"></div>
+        <div class="report-subnav" id="subnav-nhs"></div>
+        <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+    </div>
 </nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
@@ -373,71 +386,26 @@
 
     <!-- ── TREATMENT ── -->
     <section class="section active" id="section-treatment">
-        <div class="section-header">
-            <div class="section-title">Treatment</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-treatment"></div>
-                <button class="page-tile" id="fs-treatment" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
     </section>
 
     <!-- ── PATIENT ── -->
     <section class="section" id="section-customer">
-        <div class="section-header">
-            <div class="section-title">Patient</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-customer"></div>
-                <button class="page-tile" id="fs-customer" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
     </section>
 
     <!-- ── SCHEDULE ── -->
     <section class="section" id="section-scheduling">
-        <div class="section-header">
-            <div class="section-title">Schedule</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-scheduling"></div>
-                <button class="page-tile" id="fs-scheduling" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
     </section>
 
     <!-- ── REVENUE ── -->
     <section class="section" id="section-revenue">
-        <div class="section-header">
-            <div class="section-title">Revenue</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-revenue"></div>
-                <button class="page-tile" id="fs-revenue" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
     </section>
 
     <!-- ── NHS ── -->
     <section class="section" id="section-nhs">
-        <div class="section-header">
-            <div class="section-title">NHS</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-nhs"></div>
-                <button class="page-tile" id="fs-nhs" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
     </section>
 
@@ -664,6 +632,12 @@
         const el = document.getElementById('section-' + key);
         if (!el) return;
         el.classList.add('active');
+
+        const navControls = document.getElementById('nav-report-controls');
+        if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
+        document.querySelectorAll('.report-subnav').forEach(s => s.style.display = 'none');
+        const activeSubnav = document.getElementById('subnav-' + key);
+        if (activeSubnav && activeSubnav.children.length > 0) activeSubnav.style.display = 'flex';
 
         if (key === 'targets') {
             filterBar.classList.remove('open');
