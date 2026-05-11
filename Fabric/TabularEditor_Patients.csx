@@ -47,6 +47,25 @@ add("Recalls Overdue Not Sent",
         'Aggregate Site Patient Current'[Recall Due] = TRUE())))",
     "#,##0.0%");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("New Patients Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""new_patients""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("New Patients vs Target",
+    @"VAR actual = [New Patients]
+VAR target = [New Patients Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // above + count  → relative %   (pct = (actual-target)/|target| * 100)
 // above + percent → absolute pp (diff_pp = (actual-target) * 100)
