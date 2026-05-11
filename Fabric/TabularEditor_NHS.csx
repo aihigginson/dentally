@@ -42,6 +42,71 @@ add("NHS UDA Completion Rate",
 // If you need a standalone copy, uncomment and rename below.
 // add("NHS Revenue (NHS)", @"[NHS Revenue]", ""£#,##0"");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("NHS UDAs Target",
+    @"VAR period_key = [_FY Period Key]
+VAR annual = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_udas""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR global = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_udas""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+    "#,##0.00");
+
+add("NHS UDAs vs Target",
+    @"VAR actual = [NHS UDAs]
+VAR target = [NHS UDAs Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("NHS UOAs Target",
+    @"VAR period_key = [_FY Period Key]
+VAR annual = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_uoas""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR global = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_uoas""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+    "#,##0.00");
+
+add("NHS UOAs vs Target",
+    @"VAR actual = [NHS UOAs]
+VAR target = [NHS UOAs Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("NHS UDA Completion Rate Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("NHS UDA Completion Rate vs Target",
+    @"VAR actual  = [NHS UDA Completion Rate]
+VAR target  = [NHS UDA Completion Rate Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // No _Targets rows exist for NHS metrics yet — all return white.
 // Add rows to _Targets with the metric keys below and these will light up:
