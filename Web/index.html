@@ -148,12 +148,12 @@
         }
 
         /* ── Main ── */
-        .main { padding: 24px 24px 0; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+        .main { padding: 24px 0 0; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
         /* ── Sections ── */
         .section { display: none; }
         .section.active { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
-        .section-header { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; }
+        .section-header { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; padding: 0 24px; }
         .section-title  { font-size: 17px; font-weight: 400; color: var(--text); }
         .section-sub    { display: none; }
 
@@ -161,7 +161,7 @@
         .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
         /* ── KPI row ── */
-        .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; flex-shrink: 0; }
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; flex-shrink: 0; padding: 0 24px; }
         .kpi { background: white; border-radius: var(--radius); padding: 14px 16px; border: 1px solid var(--border); }
         .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
         .kpi-value { font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1; margin-bottom: 5px; }
@@ -211,7 +211,7 @@
         }
         .embed-full {
             flex: 1; min-height: 0;
-            width: calc(100% + 48px); margin: 0 -24px;
+            width: 100%; margin: 0;
             background: var(--bg-page); border: none; display: block;
             overflow: hidden;
         }
@@ -231,7 +231,7 @@
         .targets-status.ok  { color: var(--good); }
         .targets-status.err { color: var(--bad); }
         .targets-loading    { font-size: 13px; color: var(--text-3); padding: 40px; text-align: center; }
-        .targets-wrap       { flex: 1; overflow: auto; min-height: 0; }
+        .targets-wrap       { flex: 1; overflow: auto; min-height: 0; padding: 0 24px; }
         .targets-table      { width: 100%; border-collapse: collapse; font-size: 13px; }
         .targets-table th {
             position: sticky; top: 0; z-index: 2;
@@ -276,15 +276,16 @@
             .header-org { display: none; }
             .nav { padding: 0 8px; }
             .nav-tab { padding: 10px 11px; font-size: 12px; }
-            .main { padding: 12px 12px 0; }
+            .main { padding: 12px 0 0; }
+            .section-header { padding: 0 12px; }
             .kpi-row {
                 display: flex; overflow-x: auto; gap: 10px;
                 scrollbar-width: none; -ms-overflow-style: none;
-                padding-bottom: 2px;
+                padding: 0 12px 2px;
             }
             .kpi-row::-webkit-scrollbar { display: none; }
             .kpi { min-width: 138px; flex-shrink: 0; }
-            .embed-full { width: calc(100% + 24px); margin: 0 -12px; }
+            .targets-wrap { padding: 0 12px; }
             .auth-box { padding: 36px 24px; }
             .contact-card { padding: 36px 24px; }
         }
@@ -936,7 +937,7 @@
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            : { layoutType: 1, customLayout: { displayOption: 1 } };
+            : { layoutType: 1, customLayout: { displayOption: 0 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -945,7 +946,7 @@
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 } },
         };
     }
 
@@ -1024,7 +1025,7 @@
             const fallback = () => {
                 if (rendered) return;
                 clearTimeout(timer);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
+                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 0 } } };
                 doEmbed(desktop);
             };
             report.on('error', fallback);
