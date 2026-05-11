@@ -304,10 +304,11 @@
                 "border": [{ "show": false }],
                 "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "labels": [{
-                    "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
-                    "fontSize":   22,
-                    "fontBold":   true
+                    "color":        { "solid": { "color": "#1A527A" } },
+                    "fontFamily":   "Segoe UI",
+                    "fontSize":     22,
+                    "fontBold":     true,
+                    "displayUnits": 0
                 }],
                 "categoryLabels": [{
                     "show":       true,
@@ -361,9 +362,10 @@
                 "border": [{ "show": false }],
                 "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "indicator": [{
-                    "fontFamily": "Segoe UI",
-                    "fontSize":   22,
-                    "fontBold":   true
+                    "fontFamily":   "Segoe UI",
+                    "fontSize":     22,
+                    "fontBold":     true,
+                    "displayUnits": 0
                 }],
                 "trendline": [{ "show": false }],
                 "goals": [{
