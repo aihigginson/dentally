@@ -323,19 +323,12 @@
                 "cardCalloutArea": [{
                     "paddingUniform": 3
                 }],
-                "outline":  [{ "show": false }],
-                "divider":  [{ "show": true }],
-                "referenceLabelValue": [{
-                    "valueFontSize": 10
-                }],
-                "referenceLabelTitle": [{
-                    "show": false
-                }],
-                "referenceLabelLayout": [{
-                    "horizontalAlignment":  "center",
-                    "position":             "below",
-                    "labelSpace":           0
-                }]
+                "outline":    [{ "show": false }],
+                "divider":    [{ "show": false }],
+                "dropShadow": [{ "show": false }],
+                "referenceLabelTitle":  [{ "show": false }],
+                "referenceLabelValue":  [{ "show": false }],
+                "referenceLabelLayout": [{ "show": false }]
             }
         },
 
