@@ -145,6 +145,7 @@ def embed_token():
                 'roles':    REPORT_ROLES,
                 'datasets': [dataset_id],
             }]
+        print(f"[embed-token] upn={upn!r} roles={REPORT_ROLES!r} report={report_name}", flush=True)
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
