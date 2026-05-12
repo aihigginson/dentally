@@ -284,7 +284,7 @@ def _get_user_info(cur, upn):
         return None, None, [], False
     display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
     cur.execute(
-        "SELECT Tenant_ID FROM Security.User_Tenants WHERE LOWER(User_UPN) = LOWER(?)",
+        "SELECT [Tenant ID] FROM [PBI].[Application Users] WHERE LOWER([User UPN]) = LOWER(?)",
         upn,
     )
     tids = [r[0] for r in cur.fetchall()]
