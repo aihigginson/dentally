@@ -67,15 +67,15 @@ RETURN MAXX(tbl, '_Targets'[Target Value])",
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("Total Revenue Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""total_revenue""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""total_revenue""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "£#,##0");
 
 add("Total Revenue vs Target",
@@ -90,15 +90,15 @@ RETURN IF(
     "");
 
 add("NHS Revenue Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_revenue""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_revenue""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "£#,##0");
 
 add("NHS Revenue vs Target",
@@ -113,15 +113,15 @@ RETURN IF(
     "");
 
 add("Private Revenue Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""private_revenue""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""private_revenue""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "£#,##0");
 
 add("Private Revenue vs Target",

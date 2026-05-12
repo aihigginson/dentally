@@ -45,15 +45,15 @@ add("NHS UDA Completion Rate",
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("NHS UDAs Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_udas""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_udas""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "#,##0.00");
 
 add("NHS UDAs vs Target",
@@ -68,15 +68,15 @@ RETURN IF(
     "");
 
 add("NHS UOAs Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_uoas""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""nhs_uoas""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "#,##0.00");
 
 add("NHS UOAs vs Target",

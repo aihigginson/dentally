@@ -50,15 +50,15 @@ add("Recalls Overdue Not Sent",
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("New Patients Target",
-    @"VAR period_key = [_FY Period Key]
-VAR annual = MAXX(FILTER('_Targets',
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""new_patients""
     && '_Targets'[Period Type] = ""annual""
     && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR global = MAXX(FILTER('_Targets',
+VAR all_time_target = MAXX(FILTER('_Targets',
     '_Targets'[Metric] = ""new_patients""
     && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), global, annual) * [_Period Run Rate]",
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
     "#,##0");
 
 add("New Patients vs Target",
