@@ -141,7 +141,7 @@ def embed_token():
         token_body = {'accessLevel': 'View'}
         if REPORT_ROLES:
             token_body['identities'] = [{
-                'username': USERNAME,
+                'username': upn,
                 'roles':    REPORT_ROLES,
                 'datasets': [dataset_id],
             }]
