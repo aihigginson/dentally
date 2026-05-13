@@ -49,6 +49,7 @@ Endpoints (all tenants):
 import math
 import os
 import random
+import uuid as _uuid_mod
 from datetime import date, datetime, timedelta
 
 from flask import Flask, g, jsonify, request
@@ -407,6 +408,10 @@ def gen_appointments(patients, n, ref):
     ]
     r_weights = [38, 28, 20, 4, 4, 6]
     practitioners = ref["practitioners"]
+    patient_map   = {p["id"]: p for p in patients}
+    cancellation_reason_ids = {
+        "Patient request": 1, "Practitioner unavailable": 2, "Emergency": 3
+    }
     appointments = []
     for i in range(1, n + 1):
         patient  = random.choice(patients)
@@ -418,24 +423,71 @@ def gen_appointments(patients, n, ref):
             state = random.choice(["Booked", "Booked", "Booked", "Cancelled"])
         waiting_mins    = random.randint(0, 20) if state == "Completed" else 0
         in_surgery_mins = duration + random.randint(-5, 10) if state == "Completed" else 0
+
+        # Derive status timestamps from state
+        arrived_dt    = None
+        in_surgery_dt = None
+        completed_dt  = None
+        cancelled_dt  = None
+        dna_dt        = None
+        confirmed_dt  = None
+        pending_dt    = apt_dt - timedelta(days=random.randint(1, 45))
+
+        if state == "Completed":
+            arrived_dt    = apt_dt - timedelta(minutes=waiting_mins)
+            in_surgery_dt = apt_dt
+            completed_dt  = apt_dt + timedelta(minutes=in_surgery_mins)
+        elif state == "Arrived":
+            arrived_dt = apt_dt - timedelta(minutes=random.randint(1, 15))
+        elif state == "In Chair":
+            arrived_dt    = apt_dt - timedelta(minutes=random.randint(5, 20))
+            in_surgery_dt = apt_dt
+        elif state == "Cancelled":
+            cancelled_dt = apt_dt - timedelta(days=random.randint(1, 7))
+        elif state == "Did Not Attend":
+            dna_dt = apt_dt + timedelta(minutes=random.randint(10, 30))
+
+        if state in ("Booked", "Completed", "Arrived", "In Chair") and random.random() > 0.3:
+            confirmed_dt = apt_dt - timedelta(days=random.randint(1, 3))
+
+        cancel_reason_str = None
+        cancel_reason_id  = None
+        if state == "Cancelled":
+            cancel_reason_str = random.choice(["Patient request", "Practitioner unavailable", "Emergency", None])
+            cancel_reason_id  = cancellation_reason_ids.get(cancel_reason_str)
+
         appointments.append({
             "id": i,
+            "uuid": str(_uuid_mod.uuid5(_uuid_mod.NAMESPACE_OID, f"appt-{i}")),
+            "appointment_cancellation_reason_id": cancel_reason_id,
             "patient_id": patient["id"],
             "patient_name": f"{patient['first_name']} {patient['last_name']}",
+            "patient_image_url": None,
             "practitioner_id": pract["id"],
+            "user_id": pract.get("user_id", 1),
+            "payment_plan_id": patient["payment_plan_id"],
             "site_id": patient["site_id"],
+            "room_id": f"room-{random.randint(1, 3)}",
             "reason": random.choices(reasons, weights=r_weights)[0],
             "booked_via_api": random.random() < 0.18,
             "start_time": _iso(apt_dt),
             "finish_time": _iso(apt_dt + timedelta(minutes=duration)),
             "duration": duration,
             "state": state,
+            "treatment_description": None,
             "did_not_attend": state == "Did Not Attend",
             "waiting_time": waiting_mins,
             "in_surgery_time": in_surgery_mins,
-            "cancellation_reason": random.choice(["Patient request", "Practitioner unavailable", "Emergency", None]) if state == "Cancelled" else None,
+            "cancellation_reason": cancel_reason_str,
             "notes": None,
-            "created_at": _iso(apt_dt - timedelta(days=random.randint(1, 45))),
+            "pending_at":       _iso(pending_dt),
+            "confirmed_at":     _iso(confirmed_dt)  if confirmed_dt  else None,
+            "arrived_at":       _iso(arrived_dt)    if arrived_dt    else None,
+            "in_surgery_at":    _iso(in_surgery_dt) if in_surgery_dt else None,
+            "completed_at":     _iso(completed_dt)  if completed_dt  else None,
+            "cancelled_at":     _iso(cancelled_dt)  if cancelled_dt  else None,
+            "did_not_attend_at":_iso(dna_dt)        if dna_dt        else None,
+            "created_at": _iso(pending_dt),
             "updated_at": _iso(apt_dt),
         })
     return appointments

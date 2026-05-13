@@ -30,30 +30,20 @@ BEGIN
         SELECT
               TRY_CAST(tenant_id                         AS INT)  AS Tenant_ID
             , TRY_CAST(id                                AS INT)  AS ID
-            , LEFT(uuid,                                   255)   AS UUID
-            , TRY_CAST(appointment_cancellation_reason_id AS INT) AS Appointment_Cancellation_Reason_ID
+            -- uuid, appointment_cancellation_reason_id, patient_image_url, user_id, payment_plan_id,
+            -- room_id, treatment_description, pending_at, confirmed_at, arrived_at, in_surgery_at,
+            -- completed_at, cancelled_at, did_not_attend_at: not yet in Stage — mock API to be updated.
+            -- Add these columns to this SELECT once Stage_Ingest has been re-run after the API update.
             , TRY_CAST(patient_id                        AS INT)  AS Patient_ID
             , LEFT(patient_name,                           255)   AS Patient_Name
-            , LEFT(patient_image_url,                      255)   AS Patient_Image_Url
             , TRY_CAST(practitioner_id                   AS INT)  AS Practitioner_ID
-            , TRY_CAST(user_id                           AS INT)  AS User_ID
-            , TRY_CAST(payment_plan_id                   AS INT)  AS Payment_Plan_ID
-            , LEFT(room_id,                                255)   AS Room_ID
             , LEFT(start_time,                             255)   AS Start_Time
             , LEFT(finish_time,                            255)   AS Finish_Time
             , TRY_CAST(duration                          AS INT)  AS Duration
             , LEFT(reason,                                 255)   AS Reason
             , LEFT(state,                                  255)   AS State
             , LEFT(notes,                                  255)   AS Notes
-            , LEFT(treatment_description,                  255)   AS Treatment_Description
             , TRY_CAST(booked_via_api                    AS INT)  AS Booked_Via_API
-            , LEFT(pending_at,                             255)   AS Pending_At
-            , LEFT(confirmed_at,                           255)   AS Confirmed_At
-            , LEFT(arrived_at,                             255)   AS Arrived_At
-            , LEFT(in_surgery_at,                          255)   AS In_Surgery_At
-            , LEFT(completed_at,                           255)   AS Completed_At
-            , LEFT(cancelled_at,                           255)   AS Cancelled_At
-            , LEFT(did_not_attend_at,                      255)   AS Did_Not_Attend_At
             , LEFT(created_at,                             255)   AS Created_At
             , LEFT(updated_at,                             255)   AS Updated_At
         INTO #src
@@ -61,55 +51,35 @@ BEGIN
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
 
         UPDATE tgt SET
-              tgt.UUID                               = src.UUID
-            , tgt.Appointment_Cancellation_Reason_ID = src.Appointment_Cancellation_Reason_ID
-            , tgt.Patient_ID                         = src.Patient_ID
-            , tgt.Patient_Name                       = src.Patient_Name
-            , tgt.Patient_Image_Url                  = src.Patient_Image_Url
-            , tgt.Practitioner_ID                    = src.Practitioner_ID
-            , tgt.User_ID                            = src.User_ID
-            , tgt.Payment_Plan_ID                    = src.Payment_Plan_ID
-            , tgt.Room_ID                            = src.Room_ID
-            , tgt.Start_Time                         = src.Start_Time
-            , tgt.Finish_Time                        = src.Finish_Time
-            , tgt.Duration                           = src.Duration
-            , tgt.Reason                             = src.Reason
-            , tgt.State                              = src.State
-            , tgt.Notes                              = src.Notes
-            , tgt.Treatment_Description              = src.Treatment_Description
-            , tgt.Booked_Via_API                     = src.Booked_Via_API
-            , tgt.Pending_At                         = src.Pending_At
-            , tgt.Confirmed_At                       = src.Confirmed_At
-            , tgt.Arrived_At                         = src.Arrived_At
-            , tgt.In_Surgery_At                      = src.In_Surgery_At
-            , tgt.Completed_At                       = src.Completed_At
-            , tgt.Cancelled_At                       = src.Cancelled_At
-            , tgt.Did_Not_Attend_At                  = src.Did_Not_Attend_At
-            , tgt.Created_At                         = src.Created_At
-            , tgt.Updated_At                         = src.Updated_At
-            , tgt.DW_Loaded_At                       = SYSUTCDATETIME()
+              tgt.Patient_ID    = src.Patient_ID
+            , tgt.Patient_Name  = src.Patient_Name
+            , tgt.Practitioner_ID = src.Practitioner_ID
+            , tgt.Start_Time    = src.Start_Time
+            , tgt.Finish_Time   = src.Finish_Time
+            , tgt.Duration      = src.Duration
+            , tgt.Reason        = src.Reason
+            , tgt.State         = src.State
+            , tgt.Notes         = src.Notes
+            , tgt.Booked_Via_API = src.Booked_Via_API
+            , tgt.Created_At    = src.Created_At
+            , tgt.Updated_At    = src.Updated_At
+            , tgt.DW_Loaded_At  = SYSUTCDATETIME()
         FROM Bronze.Appointments AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
         INSERT INTO Bronze.Appointments (
-            Tenant_ID, ID, UUID, Appointment_Cancellation_Reason_ID,
-            Patient_ID, Patient_Name, Patient_Image_Url,
-            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
-            Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
+            Tenant_ID, ID,
+            Patient_ID, Patient_Name, Practitioner_ID,
+            Start_Time, Finish_Time, Duration, Reason, State, Notes,
             Booked_Via_API,
-            Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
-            Completed_At, Cancelled_At, Did_Not_Attend_At,
             Created_At, Updated_At, DW_Loaded_At
         )
         SELECT
-            src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
-            src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
-            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
-            src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
+            src.Tenant_ID, src.ID,
+            src.Patient_ID, src.Patient_Name, src.Practitioner_ID,
+            src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes,
             src.Booked_Via_API,
-            src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
-            src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
             src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Appointments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
