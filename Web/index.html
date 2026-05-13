@@ -148,30 +148,18 @@
         }
 
         /* ── Main ── */
-        .main { padding: 24px 0 0; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+        .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
         /* ── Sections ── */
         .section { display: none; }
         .section.active { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
-        .section-header { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; padding: 0 24px; }
+        .section-header { padding: 16px 24px 0; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; }
         .section-title  { font-size: 17px; font-weight: 400; color: var(--text); }
         .section-sub    { display: none; }
 
         /* ── Section controls (subnav + fullscreen) ── */
         .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-        /* ── KPI row ── */
-        .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; flex-shrink: 0; padding: 0 24px; }
-        .kpi { background: white; border-radius: var(--radius); padding: 14px 16px; border: 1px solid var(--border); }
-        .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
-        .kpi-value { font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1; margin-bottom: 5px; }
-        .kpi-delta { font-size: 12px; color: var(--text-3); }
-        .kpi.strong-green { background: rgba(0,140,70,0.12); border-color: rgba(0,140,70,0.55); }
-        .kpi.weak-green   { background: rgba(0,140,70,0.05); border-color: rgba(0,140,70,0.25); }
-        .kpi.weak-red     { background: rgba(190,0,0,0.05);  border-color: rgba(190,0,0,0.22); }
-        .kpi.strong-red   { background: rgba(190,0,0,0.12);  border-color: rgba(190,0,0,0.48); }
-        .kpi-delta.on-target  { color: var(--good); }
-        .kpi-delta.off-target { color: var(--bad); }
 
         /* ── PBI page sub-nav (in section header) ── */
         .report-subnav { display: none; gap: 6px; }
@@ -192,12 +180,13 @@
         }
         .fullscreen-close:hover { background: rgba(0,0,0,0.8); }
 
+        /* ── Nav report controls (subnav + fullscreen, right of Filters) ── */
+        .nav-report-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; padding-left: 12px; }
+
         /* ── Fullscreen mode ── */
         body.is-fullscreen .header,
         body.is-fullscreen .nav,
-        body.is-fullscreen .filter-bar,
-        body.is-fullscreen .section-header,
-        body.is-fullscreen .kpi-row { display: none !important; }
+        body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
         body.is-fullscreen .fullscreen-close { display: flex; }
@@ -211,8 +200,8 @@
         }
         .embed-full {
             flex: 1; min-height: 0;
-            width: 100%; margin: 0;
-            background: var(--bg-page); border: none; display: block;
+            width: 100%; max-width: calc((100vh - 100px) * 16 / 9); margin: 0;
+            background: white; border: none; display: block;
             overflow: hidden;
         }
         .embed-full iframe,
@@ -276,15 +265,9 @@
             .header-org { display: none; }
             .nav { padding: 0 8px; }
             .nav-tab { padding: 10px 11px; font-size: 12px; }
-            .main { padding: 12px 0 0; }
+            .main { padding: 0; }
             .section-header { padding: 0 12px; }
-            .kpi-row {
-                display: flex; overflow-x: auto; gap: 10px;
-                scrollbar-width: none; -ms-overflow-style: none;
-                padding: 0 12px 2px;
-            }
-            .kpi-row::-webkit-scrollbar { display: none; }
-            .kpi { min-width: 138px; flex-shrink: 0; }
+            .nav-report-controls { padding-left: 8px; gap: 4px; }
             .targets-wrap { padding: 0 12px; }
             .auth-box { padding: 36px 24px; }
             .contact-card { padding: 36px 24px; }
@@ -350,6 +333,16 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
     </button>
+    <div class="nav-report-controls" id="nav-report-controls">
+        <div class="report-subnav" id="subnav-treatment"></div>
+        <div class="report-subnav" id="subnav-customer"></div>
+        <div class="report-subnav" id="subnav-scheduling"></div>
+        <div class="report-subnav" id="subnav-revenue"></div>
+        <div class="report-subnav" id="subnav-nhs"></div>
+        <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+    </div>
 </nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
@@ -380,7 +373,7 @@
     <label class="filter-check" for="f-active-only">
         <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-    <div class="filter-badge" id="filter-badge">FY 2025/26 &middot; All sites &middot; All practitioners</div>
+    <div class="filter-badge" id="filter-badge">All periods &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
@@ -393,99 +386,26 @@
 
     <!-- ── TREATMENT ── -->
     <section class="section active" id="section-treatment">
-        <div class="section-header">
-            <div class="section-title">Treatment</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-treatment"></div>
-                <button class="page-tile" id="fs-treatment" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Acceptance Rate</div><div class="kpi-value" id="kpi-acceptance_rate">—</div><div class="kpi-delta" id="kpi-acceptance_rate-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Open Courses</div><div class="kpi-value" id="kpi-open_courses">—</div><div class="kpi-delta" id="kpi-open_courses-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Open Courses Without Appt</div><div class="kpi-value" id="kpi-open_courses_without_appt">—</div><div class="kpi-delta" id="kpi-open_courses_without_appt-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Exam Ratio</div><div class="kpi-value" id="kpi-exam_ratio">—</div><div class="kpi-delta" id="kpi-exam_ratio-d"></div></div>
-        </div>
         <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
     </section>
 
     <!-- ── PATIENT ── -->
     <section class="section" id="section-customer">
-        <div class="section-header">
-            <div class="section-title">Patient</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-customer"></div>
-                <button class="page-tile" id="fs-customer" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">New Patients</div><div class="kpi-value" id="kpi-new_patients">—</div><div class="kpi-delta" id="kpi-new_patients-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Active Patients</div><div class="kpi-value" id="kpi-active_patients">—</div><div class="kpi-delta" id="kpi-active_patients-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Recall Effectiveness</div><div class="kpi-value" id="kpi-recall_compliance">—</div><div class="kpi-delta" id="kpi-recall_compliance-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Patient Retention</div><div class="kpi-value" id="kpi-patient_retention">—</div><div class="kpi-delta" id="kpi-patient_retention-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Recalls Overdue Not Sent</div><div class="kpi-value" id="kpi-recalls_overdue_not_sent">—</div><div class="kpi-delta" id="kpi-recalls_overdue_not_sent-d"></div></div>
-        </div>
         <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
     </section>
 
     <!-- ── SCHEDULE ── -->
     <section class="section" id="section-scheduling">
-        <div class="section-header">
-            <div class="section-title">Schedule</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-scheduling"></div>
-                <button class="page-tile" id="fs-scheduling" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Chair Utilisation</div><div class="kpi-value" id="kpi-chair_utilisation">—</div><div class="kpi-delta" id="kpi-chair_utilisation-d"></div></div>
-            <div class="kpi"><div class="kpi-label">DNA Rate</div><div class="kpi-value" id="kpi-dna_rate">—</div><div class="kpi-delta" id="kpi-dna_rate-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Next 30 Min Free (days)</div><div class="kpi-value" id="kpi-days_until_30min_free">—</div><div class="kpi-delta" id="kpi-days_until_30min_free-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Next 1 Hr Free (days)</div><div class="kpi-value" id="kpi-days_until_1hr_free">—</div><div class="kpi-delta" id="kpi-days_until_1hr_free-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Book Before You Leave</div><div class="kpi-value" id="kpi-book_before_you_leave">—</div><div class="kpi-delta" id="kpi-book_before_you_leave-d"></div></div>
-        </div>
         <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
     </section>
 
     <!-- ── REVENUE ── -->
     <section class="section" id="section-revenue">
-        <div class="section-header">
-            <div class="section-title">Revenue</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-revenue"></div>
-                <button class="page-tile" id="fs-revenue" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
-        <div class="kpi-row">
-            <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="kpi-total_revenue">—</div><div class="kpi-delta" id="kpi-total_revenue-d"></div></div>
-            <div class="kpi"><div class="kpi-label">NHS Revenue</div><div class="kpi-value" id="kpi-nhs_revenue">—</div><div class="kpi-delta" id="kpi-nhs_revenue-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Private Revenue</div><div class="kpi-value" id="kpi-private_revenue">—</div><div class="kpi-delta" id="kpi-private_revenue-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Revenue per Patient</div><div class="kpi-value" id="kpi-revenue_per_patient">—</div><div class="kpi-delta" id="kpi-revenue_per_patient-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Revenue per Hour</div><div class="kpi-value" id="kpi-revenue_per_hour">—</div><div class="kpi-delta" id="kpi-revenue_per_hour-d"></div></div>
-            <div class="kpi"><div class="kpi-label">Deposit Ratio</div><div class="kpi-value" id="kpi-deposit_ratio">—</div><div class="kpi-delta" id="kpi-deposit_ratio-d"></div></div>
-        </div>
         <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
     </section>
 
     <!-- ── NHS ── -->
     <section class="section" id="section-nhs">
-        <div class="section-header">
-            <div class="section-title">NHS</div>
-            <div class="section-controls">
-                <div class="report-subnav" id="subnav-nhs"></div>
-                <button class="page-tile" id="fs-nhs" title="Full screen" onclick="toggleFullscreen()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-            </div>
-        </div>
         <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
     </section>
 
@@ -642,7 +562,6 @@
         }
         loadFilters(false);
         loadEmbedsInSection('treatment');
-        refreshKPIs();
     }
 
     async function startApp() {
@@ -714,6 +633,12 @@
         if (!el) return;
         el.classList.add('active');
 
+        const navControls = document.getElementById('nav-report-controls');
+        if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
+        document.querySelectorAll('.report-subnav').forEach(s => s.style.display = 'none');
+        const activeSubnav = document.getElementById('subnav-' + key);
+        if (activeSubnav && activeSubnav.children.length > 0) activeSubnav.style.display = 'flex';
+
         if (key === 'targets') {
             filterBar.classList.remove('open');
             filterToggleBtn.classList.remove('active');
@@ -722,7 +647,6 @@
         } else {
             filterToggleBtn.style.visibility = '';
             loadEmbedsInSection(key);
-            refreshKPIs();
         }
     }
 
@@ -747,7 +671,7 @@
         const el = document.getElementById('subnav-' + sectionKey);
         if (!el || pages.length <= 1) { if (el) el.style.display = 'none'; return; }
         el.innerHTML = '';
-        el.style.display = 'flex';
+        if (sectionKey === activeSection) el.style.display = 'flex';
         pages.forEach((page, i) => {
             const btn = document.createElement('button');
             btn.className = 'page-tile' + (i === 0 ? ' active' : '');
@@ -937,7 +861,7 @@
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            : { layoutType: 1, customLayout: { displayOption: 0 } };
+            : { layoutType: 1, customLayout: { displayOption: 1 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -946,7 +870,7 @@
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 } },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
         };
     }
 
@@ -1025,7 +949,7 @@
             const fallback = () => {
                 if (rendered) return;
                 clearTimeout(timer);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 0 } } };
+                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
                 doEmbed(desktop);
             };
             report.on('error', fallback);
@@ -1054,7 +978,6 @@
         filterState.pract  = selPract.value;
         refreshBadge();
         applyFilters();
-        refreshKPIs();
     }
 
     selPeriod.addEventListener('change', onFilterChange);
@@ -1097,79 +1020,6 @@
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Date Grouping', column: 'Date Grouping' }, operator: 'In', values: [filterState.period], filterType: 1 });
         }
         Object.values(embeddedReports).forEach(r => r.setFilters(filters).catch(() => {}));
-    }
-
-    // ── KPI formatting ───────────────────────────────────────────────────────
-    const KPI_FORMAT = {
-        total_revenue:             'currency',
-        nhs_revenue:               'currency',
-        private_revenue:           'currency',
-        revenue_per_patient:       'currency',
-        revenue_per_hour:          'currency',
-        deposit_ratio:             'percent',
-        new_patients:              'count',
-        active_patients:           'count',
-        recall_compliance:         'percent',
-        patient_retention:         'percent',
-        recalls_overdue_not_sent:  'count',
-        acceptance_rate:           'percent',
-        open_courses:              'count',
-        open_courses_without_appt: 'count',
-        exam_ratio:                'percent',
-        chair_utilisation:         'percent',
-        dna_rate:                  'percent',
-        days_until_30min_free:     'count',
-        days_until_1hr_free:       'count',
-        book_before_you_leave:     'percent',
-    };
-
-    function fmtCurrency(v) {
-        if (v == null) return '—';
-        if (Math.abs(v) >= 1e6) return '£' + (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
-        if (Math.abs(v) >= 1e3) return '£' + (v / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
-        return '£' + Math.round(v).toLocaleString();
-    }
-    function fmtPct(v)   { return v == null ? '—' : v.toFixed(1) + '%'; }
-    function fmtCount(v) { return v == null ? '—' : Math.round(v).toLocaleString(); }
-    function fmtValue(key, v) {
-        const f = KPI_FORMAT[key];
-        if (f === 'currency') return fmtCurrency(v);
-        if (f === 'percent')  return fmtPct(v);
-        return fmtCount(v);
-    }
-    function fmtVsTarget(pct) {
-        if (pct == null) return { text: '', cls: '' };
-        const abs = Math.abs(pct).toFixed(1);
-        return pct >= 0 ? { text: `▲ ${abs}% vs target`, cls: 'on-target' }
-                        : { text: `▼ ${abs}% vs target`, cls: 'off-target' };
-    }
-
-    // ── KPIs ─────────────────────────────────────────────────────────────────
-    async function refreshKPIs() {
-        const reportKey = SECTION_REPORT[activeSection];
-        if (!reportKey) return;
-        const qs = new URLSearchParams({ section: reportKey, period: filterState.period, site: filterState.site, pract: filterState.pract });
-        try {
-            const data = await authFetch('/api/kpis?' + qs).then(r => r.json());
-            if (data._error) return;
-            Object.entries(data).forEach(([key, kpi]) => {
-                const vEl = document.getElementById('kpi-' + key);
-                const dEl = document.getElementById('kpi-' + key + '-d');
-                const card = vEl && vEl.closest('.kpi');
-                if (vEl) vEl.textContent = fmtValue(key, kpi.value);
-                if (dEl) {
-                    const d = fmtVsTarget(kpi.vs_target_pct);
-                    dEl.textContent = d.text;
-                    const isGood = kpi.performance_class && kpi.performance_class.endsWith('green');
-                    const isBad  = kpi.performance_class && kpi.performance_class.endsWith('red');
-                    dEl.className = 'kpi-delta' + (isGood ? ' on-target' : isBad ? ' off-target' : '');
-                }
-                if (card) {
-                    card.classList.remove('strong-green', 'weak-green', 'weak-red', 'strong-red');
-                    if (kpi.performance_class) card.classList.add(kpi.performance_class);
-                }
-            });
-        } catch (_) {}
     }
 
     // ── Init ─────────────────────────────────────────────────────────────────

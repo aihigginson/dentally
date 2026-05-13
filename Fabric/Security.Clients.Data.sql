@@ -11,5 +11,6 @@ DELETE FROM Security.Clients;
 GO
 
 INSERT INTO Security.Clients (Client_ID, Client_Name)
-VALUES (1, 'Smile Group (Dev)');
+VALUES (1, 'Smile Group (Dev)'),
+       (2, 'Bright Dental (Dev)');
 GO

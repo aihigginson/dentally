@@ -64,6 +64,128 @@ add("_Revenue Target",
 RETURN MAXX(tbl, '_Targets'[Target Value])",
     "");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("Total Revenue Target",
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""total_revenue""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR all_time_target = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""total_revenue""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    "£#,##0");
+
+add("Total Revenue vs Target",
+    @"VAR actual = [Total Revenue]
+VAR target = [Total Revenue Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("NHS Revenue Target",
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_revenue""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR all_time_target = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""nhs_revenue""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    "£#,##0");
+
+add("NHS Revenue vs Target",
+    @"VAR actual = [NHS Revenue]
+VAR target = [NHS Revenue Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Private Revenue Target",
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""private_revenue""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR all_time_target = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""private_revenue""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    "£#,##0");
+
+add("Private Revenue vs Target",
+    @"VAR actual = [Private Revenue]
+VAR target = [Private Revenue Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Outstanding Invoices Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Outstanding Invoices vs Target",
+    @"VAR actual = [Outstanding Invoices]
+VAR target = [Outstanding Invoices Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Revenue Per Patient Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Revenue Per Patient vs Target",
+    @"VAR actual = [Revenue Per Patient]
+VAR target = [Revenue Per Patient Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Revenue Per Hour Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_hour""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Revenue Per Hour vs Target",
+    @"VAR actual = [Revenue Per Hour]
+VAR target = [Revenue Per Hour Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // currency/count metrics → relative %  (pct = (actual-target)/|target| * 100)
 // above range: pct >= band = strong green … pct < -band = strong red

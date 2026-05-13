@@ -102,7 +102,7 @@ FROM Gold.' + QUOTENAME(@TableName) + @WhereClause + N';';
     -- Security lookup view (used as RLS anchor in Power BI)
     SET @SQL = N'CREATE VIEW PBI.[Application Users] AS
 SELECT [User_UPN] AS [User UPN], [Tenant_ID] AS [Tenant ID]
-FROM Security.Application_Users a JOIN Security.Tenants t ON a.Client_ID = t.Client_ID;';
+FROM Security.Application_Users a JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID;';
     EXEC (@SQL);
 
 END;

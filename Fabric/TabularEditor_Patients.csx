@@ -47,6 +47,99 @@ add("Recalls Overdue Not Sent",
         'Aggregate Site Patient Current'[Recall Due] = TRUE())))",
     "#,##0.0%");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("New Patients Target",
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""new_patients""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR all_time_target = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""new_patients""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    "#,##0");
+
+add("New Patients vs Target",
+    @"VAR actual = [New Patients]
+VAR target = [New Patients Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Active Patients Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""active_patients""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Active Patients vs Target",
+    @"VAR actual = [Active Patients]
+VAR target = [Active Patients Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Recall Effectiveness Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""recall_compliance""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Recall Effectiveness vs Target",
+    @"VAR actual  = [Recall Effectiveness]
+VAR target  = [Recall Effectiveness Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Patient Retention Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""patient_retention""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Patient Retention vs Target",
+    @"VAR actual  = [Patient Retention]
+VAR target  = [Patient Retention Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Recalls Overdue Not Sent Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""recalls_overdue_not_sent""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Recalls Overdue Not Sent vs Target",
+    @"VAR actual  = [Recalls Overdue Not Sent]
+VAR target  = [Recalls Overdue Not Sent Target]
+VAR diff_pp = (target - actual) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // above + count  → relative %   (pct = (actual-target)/|target| * 100)
 // above + percent → absolute pp (diff_pp = (actual-target) * 100)

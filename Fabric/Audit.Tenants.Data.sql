@@ -14,5 +14,5 @@ GO
 
 INSERT INTO Audit.Tenants (Tenant_ID, Client_ID, Tenant_Name, API_Base_URL, API_Key, Dentally_Client_ID, Dentally_Secret, Is_Active, Full_Refresh, Last_Loaded_At, Notes)
 VALUES (1, 1, 'Smile Group (Dev)',    'https://dentally-production.up.railway.app', 'dev-mock-key-abc123',  NULL, NULL, 1, 1, NULL, 'Development tenant — Tenant 1 (Oxford, 3 sites)'),
-       (2, 1, 'Bright Dental (Dev)', 'https://dentally-production.up.railway.app', 'dev-mock-key-tenant2', NULL, NULL, 1, 1, NULL, 'Development tenant — Tenant 2 (Brighton, 2 sites)');
+       (2, 2, 'Bright Dental (Dev)', 'https://dentally-production.up.railway.app', 'dev-mock-key-tenant2', NULL, NULL, 1, 1, NULL, 'Development tenant — Tenant 2 (Brighton, 2 sites)');
 GO

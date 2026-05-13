@@ -20,7 +20,7 @@ Usage:
 """
 
 import os, sys, random, math
-from datetime import date, timedelta, time as dtime
+from datetime import date, datetime, timedelta, time as dtime
 from dotenv import load_dotenv
 
 try:
@@ -124,6 +124,18 @@ TARGETS = [
     ('book_before_you_leave',          72.0,  5.0),
 ]
 
+# ── FY 2026/27 annual targets ─────────────────────────────────────────────────
+# Accumulative metrics only — prorated to a working-day run rate in DAX.
+# Period_Value = 'FY 2026/27' (matches Date Grouping without the "(YTD)" suffix).
+FY_TARGETS_2627 = [
+    ('total_revenue',    1200000.0, 10.0),
+    ('nhs_revenue',       360000.0, 10.0),
+    ('private_revenue',   840000.0, 10.0),
+    ('new_patients',         420.0, 10.0),
+    ('nhs_udas',            2800.0, 10.0),
+    ('nhs_uoas',             150.0, 10.0),
+]
+
 # ── Connection ────────────────────────────────────────────────────────────────
 
 def connect():
@@ -168,10 +180,12 @@ def fresh(fn, *args, **kwargs):
 def delete_existing(cur):
     print("  Deleting existing Tenant_ID=1 data …")
     for tbl in [
+        'Gold.Fact_Invoice_Items',
         'Gold.Fact_Recalls',
         'Gold.Aggregate_Site_Patient_Practitioner_Daily',
         'Gold.Aggregate_Site_Patient_Current',
         'Gold.Aggregate_Site_Practitioner_Current',
+        'Gold.Dim_Treatment_Plans',
         'Gold.Dim_Patients',
         'Gold.Dim_Practitioners',
         'Gold.Dim_Practice_Sites',
@@ -180,8 +194,7 @@ def delete_existing(cur):
         ex(cur, f"DELETE FROM {tbl} WHERE Tenant_ID = ?", [TENANT_ID])
     ex(cur,
        "DELETE FROM Input.Targets "
-       "WHERE Tenant_ID = ? AND Period_Type = 'all_time' AND Period_Value = 'all' "
-       "AND Site_ID IS NULL AND Practitioner_ID IS NULL",
+       "WHERE Tenant_ID = ? AND Site_ID IS NULL AND Practitioner_ID IS NULL",
        [TENANT_ID])
     print("  Done.")
 
@@ -447,7 +460,8 @@ def seed_daily(cur, patients, resume_from_pk=0):
                     1 if is_dna else 0,
                     1 if is_bbyl else 0,
                     round(nhs_rev, 2), round(priv_rev, 2),
-                    0, 0,
+                    1 if pt.get('has_open_plan') else 0,
+                    1 if (pt['next_appt_date'] and pt['next_appt_date'] > day) else 0,
                     1 if is_exam else 0,
                     1 if (not is_exam and not is_dna) else 0,
                     1 if is_new else 0,
@@ -465,6 +479,75 @@ def seed_daily(cur, patients, resume_from_pk=0):
         "DW_Created_At,DW_Updated_At) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETUTCDATE(),GETUTCDATE())",
         rows)
+
+# ── Build treatment plans (in-memory) ────────────────────────────────────────
+
+def build_treatment_plans(patients):
+    """Adds treatment_plans list and has_open_plan flag to each patient dict."""
+    ACCEPTANCE_RATE = 0.65
+    COMPLETION_RATE = 0.80
+    plan_pk = 1_000_000
+    plan_id = 0
+
+    for pt in patients:
+        pt['treatment_plans'] = []
+        pt['has_open_plan']   = False
+
+        appt_dates = sorted(a[0] for a in pt['appointments'])
+        if not appt_dates:
+            continue
+
+        months_history = max(1, (TODAY - appt_dates[0]).days // 30)
+        n_plans = RNG.randint(1, min(3, max(1, months_history // 10)))
+
+        for i in range(n_plans):
+            plan_pk += 1
+            plan_id += 1
+
+            idx          = min(int(len(appt_dates) * i / max(n_plans, 1)), len(appt_dates) - 1)
+            created_date = appt_dates[idx]
+
+            accepted   = RNG.random() < ACCEPTANCE_RATE
+            start_date = created_date + timedelta(days=RNG.randint(0, 7)) if accepted else None
+
+            completed      = False
+            completed_date = None
+            if accepted and start_date:
+                completed = RNG.random() < COMPLETION_RATE
+                if completed:
+                    comp_d = start_date + timedelta(days=RNG.randint(60, 180))
+                    if comp_d > TODAY:
+                        completed = False
+                    else:
+                        completed_date = datetime(comp_d.year, comp_d.month, comp_d.day)
+
+            is_nhs = pt['site_pk'] in (1, 3)
+            if is_nhs and accepted:
+                band    = RNG.choices([1, 2, 3], weights=[30, 50, 20])[0]
+                nhs_uda = {1: 1.0, 2: 3.0, 3: 12.0}[band]
+                nhs_done = nhs_uda if completed else round(nhs_uda * RNG.uniform(0, 0.7), 1)
+            else:
+                nhs_uda  = 0.0
+                nhs_done = 0.0
+
+            priv_val = round(math.exp(math.log(350) + 0.7 * RNG.gauss(0, 1)), 2) if accepted else 0.0
+
+            pt['treatment_plans'].append({
+                'pk':            plan_pk,
+                'plan_id':       plan_id,
+                'patient_id':    pt['patient_id'],
+                'practitioner_id': pt['prim_pract_id'],
+                'completed':     completed,
+                'start_date':    start_date,
+                'completed_date': completed_date,
+                'nhs_uda':       nhs_uda,
+                'nhs_done':      nhs_done,
+                'priv_val':      priv_val,
+                'created_dt':    datetime(created_date.year, created_date.month, created_date.day),
+            })
+
+            if accepted and not completed:
+                pt['has_open_plan'] = True
 
 # ── Aggregate_Site_Patient_Current ────────────────────────────────────────────
 
@@ -570,18 +653,98 @@ def seed_recalls(cur, patients, resume=False):
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETUTCDATE(),GETUTCDATE())",
         rows)
 
+# ── Gold.Dim_Treatment_Plans ──────────────────────────────────────────────────
+
+def seed_treatment_plans(cur, patients):
+    print("  Gold.Dim_Treatment_Plans …")
+    rows = []
+    for pt in patients:
+        for p in pt.get('treatment_plans', []):
+            cd = p['completed_date']
+            rows.append((
+                p['pk'], TENANT_ID, p['plan_id'], None,
+                p['patient_id'], p['practitioner_id'],
+                1 if p['completed'] else 0,
+                p['start_date'],
+                cd.date() if cd else None,   # End_Date
+                cd,                           # Completed_Date  datetime2(3)
+                cd.date() if cd else None,   # Last_Completed_Date
+                p['nhs_uda'], p['nhs_done'], p['priv_val'],
+                p['created_dt'], p['created_dt'],
+            ))
+    print(f"    {len(rows):,} rows …")
+    exmany(cur,
+        "INSERT INTO Gold.Dim_Treatment_Plans ("
+        "pk_Treatment_Plan,Tenant_ID,Treatment_Plan_ID,Nickname,"
+        "Patient_ID,Practitioner_ID,Completed,Start_Date,End_Date,"
+        "Completed_Date,Last_Completed_Date,"
+        "NHS_UDA_Value,NHS_Completed_UDA_Value,Private_Treatment_Value,"
+        "Created_Date,Updated_Date,"
+        "DW_Created_At,DW_Updated_At) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETUTCDATE(),GETUTCDATE())",
+        rows)
+
+# ── Gold.Fact_Invoice_Items ───────────────────────────────────────────────────
+
+def seed_invoice_items(cur, patients):
+    print("  Gold.Fact_Invoice_Items …")
+    rows = []
+    inv_id = 10_000
+    for pt in patients:
+        for appt in pt['appointments']:
+            day, pract_pk, site_pk, rev, is_exam, is_dna, is_bbyl, whrs, ahrs, is_new = appt
+            if is_dna:
+                continue
+            inv_id += 1
+            is_nhs      = site_pk in (1, 3)
+            nhs_charge  = round(rev * 0.3, 2) if is_nhs else 0.0
+            paid        = RNG.random() < 0.90
+            paid_date   = day + timedelta(days=RNG.randint(1, 30)) if paid else None
+            outstanding = 0.0 if paid else round(rev, 2)
+            item_name   = 'Dental Examination' if is_exam else 'Dental Treatment'
+            rows.append((
+                TENANT_ID,
+                f'INV{inv_id:07d}',
+                pt['pk'], pract_pk,
+                None, None, None, site_pk, None,
+                dk(day),
+                dk(day + timedelta(days=30)),
+                dk(paid_date) if paid_date else None,
+                dk(day),
+                inv_id, None, None, item_name,
+                inv_id, 'Due on receipt', None,
+                1 if paid else 0,
+                round(rev, 2), 1.0, round(rev, 2),
+                nhs_charge, round(rev, 2), outstanding, nhs_charge,
+            ))
+    print(f"    {len(rows):,} rows …")
+    exmany(cur,
+        "INSERT INTO Gold.Fact_Invoice_Items ("
+        "Tenant_ID,bk_Invoice_Item_ID,fk_Patient,fk_Practitioner,"
+        "fk_Payment_Plan,fk_Treatment_Plan,fk_Account,fk_Practice_Site,fk_User,"
+        "fk_Date_Invoice,fk_Date_Due,fk_Date_Paid,fk_Date_Created,"
+        "Invoice_ID,Treatment_Plan_Item_ID,Sundry_ID,Item_Name,"
+        "Invoice_Reference,Invoice_Payment_Terms,Invoice_Footnote,"
+        "Invoice_Paid,Item_Price,Quantity,Total_Price,"
+        "NHS_Charge,Invoice_Amount,Invoice_Amount_Outstanding,Invoice_NHS_Amount,"
+        "DW_Created_At,DW_Updated_At) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETUTCDATE(),GETUTCDATE())",
+        rows)
+
 # ── Input.Targets ─────────────────────────────────────────────────────────────
 
 def seed_targets(cur):
     print("  Input.Targets …")
-    rows = [(TENANT_ID, None, None, metric, 'all_time', 'all', target, variance)
-            for metric, target, variance in TARGETS]
+    all_time = [(TENANT_ID, None, None, m, 'all_time', 'all', t, v)
+                for m, t, v in TARGETS]
+    annual   = [(TENANT_ID, None, None, m, 'annual', 'FY 2026/27', t, v)
+                for m, t, v in FY_TARGETS_2627]
     exmany(cur,
         "INSERT INTO Input.Targets "
         "(Tenant_ID,Site_ID,Practitioner_ID,Metric,Period_Type,Period_Value,"
         "Target_Value,Variance,DW_Created_At,DW_Updated_At) "
         "VALUES (?,?,?,?,?,?,?,?,GETUTCDATE(),GETUTCDATE())",
-        rows)
+        all_time + annual)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -599,11 +762,15 @@ def main():
     print("Building patient + appointment data (no DB calls) …")
     patients = build_patients()
     patients = generate_appointments(patients)
-    total_apts = sum(len(p['appointments']) for p in patients)
-    total_rev  = sum(p['total_revenue'] for p in patients)
-    active_cnt = sum(1 for p in patients if p['active'])
-    print(f"  {len(patients)} patients, {active_cnt} active")
+    build_treatment_plans(patients)
+    total_apts  = sum(len(p['appointments']) for p in patients)
+    total_rev   = sum(p['total_revenue'] for p in patients)
+    active_cnt  = sum(1 for p in patients if p['active'])
+    open_plan_cnt = sum(1 for p in patients if p['has_open_plan'])
+    total_plans = sum(len(p['treatment_plans']) for p in patients)
+    print(f"  {len(patients)} patients, {active_cnt} active, {open_plan_cnt} with open plans")
     print(f"  {total_apts:,} appointment rows | £{total_rev:,.0f} total revenue")
+    print(f"  {total_plans:,} treatment plans")
 
     print("\nSeeding …")
     if args.resume:
@@ -628,6 +795,8 @@ def main():
     fresh(seed_patient_current, patients)
     fresh(seed_practitioner_current)
     fresh(seed_recalls, patients, resume=args.resume)
+    fresh(seed_treatment_plans, patients)
+    fresh(seed_invoice_items, patients)
     fresh(seed_targets)
 
     conn.close()

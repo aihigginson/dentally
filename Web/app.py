@@ -141,10 +141,11 @@ def embed_token():
         token_body = {'accessLevel': 'View'}
         if REPORT_ROLES:
             token_body['identities'] = [{
-                'username': USERNAME,
+                'username': upn,
                 'roles':    REPORT_ROLES,
                 'datasets': [dataset_id],
             }]
+        print(f"[embed-token] upn={upn!r} roles={REPORT_ROLES!r} report={report_name}", flush=True)
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
@@ -283,7 +284,9 @@ def _get_user_info(cur, upn):
         return None, None, [], False
     display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
     cur.execute(
-        "SELECT Tenant_ID FROM Security.User_Tenants WHERE LOWER(User_UPN) = LOWER(?)",
+        "SELECT t.Tenant_ID FROM Security.Application_Users a "
+        "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
+        "WHERE LOWER(a.User_UPN) = LOWER(?)",
         upn,
     )
     tids = [r[0] for r in cur.fetchall()]

@@ -42,6 +42,76 @@ add("Exam Ratio",
     SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("Treatment Acceptance Rate Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Treatment Acceptance Rate vs Target",
+    @"VAR actual  = [Treatment Acceptance Rate]
+VAR target  = [Treatment Acceptance Rate Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Open Courses Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""open_courses""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Open Courses vs Target",
+    @"VAR actual = [Open Courses]
+VAR target = [Open Courses Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Open Courses Without Appointment Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""open_courses_without_appt""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Open Courses Without Appointment vs Target",
+    @"VAR actual = [Open Courses Without Appointment]
+VAR target = [Open Courses Without Appointment Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Exam Ratio Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Exam Ratio vs Target",
+    @"VAR actual  = [Exam Ratio]
+VAR target  = [Exam Ratio Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // acceptance_rate  → above + percent → absolute pp
 // open_courses     → below + count   → relative %  (lower is better)

@@ -50,6 +50,93 @@ add("Book Before You Leave",
     SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
+// ── Target and variance measures ─────────────────────────────────────────────
+
+add("Chair Utilisation Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""chair_utilisation""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Chair Utilisation vs Target",
+    @"VAR actual  = [Chair Utilisation]
+VAR target  = [Chair Utilisation Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("DNA Rate Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""dna_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("DNA Rate vs Target",
+    @"VAR actual  = [DNA Rate]
+VAR target  = [DNA Rate Target]
+VAR diff_pp = (target - actual) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Days Until Next 30 Minute Free Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""days_until_30min_free""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Days Until Next 30 Minute Free vs Target",
+    @"VAR actual = [Days Until Next 30 Minute Free]
+VAR target = [Days Until Next 30 Minute Free Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Days Until Next 1 Hour Free Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""days_until_1hr_free""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Days Until Next 1 Hour Free vs Target",
+    @"VAR actual = [Days Until Next 1 Hour Free]
+VAR target = [Days Until Next 1 Hour Free Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Book Before You Leave Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""book_before_you_leave""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Book Before You Leave vs Target",
+    @"VAR actual  = [Book Before You Leave]
+VAR target  = [Book Before You Leave Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // chair_utilisation     → above + percent → absolute pp
 // dna_rate              → below + percent → absolute pp (lower is better)
