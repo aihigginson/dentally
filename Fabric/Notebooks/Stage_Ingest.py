@@ -133,9 +133,11 @@ def write_stage(records, table_name):
     full_table = f"stage_{table_name}"
 
     if spark.catalog.tableExists(full_table):
-        # Overwrite only this tenant's rows; other tenants' data is preserved
+        # Overwrite only this tenant's rows; other tenants' data is preserved.
+        # mergeSchema allows new columns (e.g. booked_via_api) to be added without error.
         df.write.format("delta").mode("overwrite") \
             .option("replaceWhere", f"tenant_id = '{tenant_id}'") \
+            .option("mergeSchema", "true") \
             .saveAsTable(full_table)
     else:
         # First run — create the table
