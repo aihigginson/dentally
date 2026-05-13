@@ -7,7 +7,7 @@
 #   - Gold.Fact_Appointments        (table recreated with 4 new journey columns)
 #   - Gold.usp_Load_Fact_Appointments
 #   - Stage.Appointments view refresh (picks up booked_via_api from Delta)
-# Then reloads data: Bronze → Silver → Derive → Gold
+# Then reloads data: Bronze -> Silver -> Derive -> Gold
 
 param(
     [Parameter(Mandatory)] [string] $Server,
@@ -70,7 +70,7 @@ GO
 "@ "Stage.Appointments (view refresh for booked_via_api)"
 
 if ($Errors -gt 0) {
-    Write-Host "`nAborting data reload — $Errors schema error(s) above." -ForegroundColor Red
+    Write-Host "`nAborting data reload - $Errors schema error(s) above." -ForegroundColor Red
     exit 1
 }
 
