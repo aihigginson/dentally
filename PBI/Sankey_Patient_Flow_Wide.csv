@@ -1,0 +1,105 @@
+Channel,Current Appointment,Next Outcome,Next Appointment,Current State,Patient Count
+New,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,157
+New,Exam (Current),BBYL Exam,Exam (Next),Uncertain,13
+New,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,8
+New,Exam (Current),BBYL Exam,Exam (Next),No longer a Patient,3
+New,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,52
+New,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,4
+New,Exam (Current),BBYL Treatment,Treatment (Next),Requiring Contact,2
+New,Exam (Current),BBYL Treatment,Treatment (Next),No longer a Patient,1
+New,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,35
+New,Exam (Current),Awaiting Recall,Exam (Next),Uncertain,3
+New,Exam (Current),Awaiting Recall,Exam (Next),Requiring Contact,2
+New,Exam (Current),Awaiting Recall,Exam (Next),No longer a Patient,1
+New,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,21
+New,Exam (Current),Recall Sent,Exam (Next),Uncertain,2
+New,Exam (Current),Recall Sent,Exam (Next),Requiring Contact,1
+New,Exam (Current),Closed,None,No longer a Patient,16
+BBYL,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,470
+BBYL,Exam (Current),BBYL Exam,Exam (Next),Uncertain,39
+BBYL,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,23
+BBYL,Exam (Current),BBYL Exam,Exam (Next),No longer a Patient,8
+BBYL,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,157
+BBYL,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,13
+BBYL,Exam (Current),BBYL Treatment,Treatment (Next),Requiring Contact,7
+BBYL,Exam (Current),BBYL Treatment,Treatment (Next),No longer a Patient,3
+BBYL,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,104
+BBYL,Exam (Current),Awaiting Recall,Exam (Next),Uncertain,9
+BBYL,Exam (Current),Awaiting Recall,Exam (Next),Requiring Contact,5
+BBYL,Exam (Current),Awaiting Recall,Exam (Next),No longer a Patient,2
+BBYL,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,63
+BBYL,Exam (Current),Recall Sent,Exam (Next),Uncertain,5
+BBYL,Exam (Current),Recall Sent,Exam (Next),Requiring Contact,3
+BBYL,Exam (Current),Recall Sent,Exam (Next),No longer a Patient,1
+BBYL,Exam (Current),Closed,None,No longer a Patient,48
+BBYL,Treatment (Current),BBYL Exam,Exam (Next),Exam Scheduled,83
+BBYL,Treatment (Current),BBYL Exam,Exam (Next),Uncertain,7
+BBYL,Treatment (Current),BBYL Exam,Exam (Next),Requiring Contact,4
+BBYL,Treatment (Current),BBYL Exam,Exam (Next),No longer a Patient,1
+BBYL,Treatment (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,125
+BBYL,Treatment (Current),BBYL Treatment,Treatment (Next),Uncertain,11
+BBYL,Treatment (Current),BBYL Treatment,Treatment (Next),Requiring Contact,5
+BBYL,Treatment (Current),BBYL Treatment,Treatment (Next),No longer a Patient,3
+Online Booking,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,78
+Online Booking,Exam (Current),BBYL Exam,Exam (Next),Uncertain,7
+Online Booking,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,4
+Online Booking,Exam (Current),BBYL Exam,Exam (Next),No longer a Patient,1
+Online Booking,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,26
+Online Booking,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,2
+Online Booking,Exam (Current),BBYL Treatment,Treatment (Next),Requiring Contact,1
+Online Booking,Exam (Current),BBYL Treatment,Treatment (Next),No longer a Patient,1
+Online Booking,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,17
+Online Booking,Exam (Current),Awaiting Recall,Exam (Next),Uncertain,1
+Online Booking,Exam (Current),Awaiting Recall,Exam (Next),Requiring Contact,1
+Online Booking,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,10
+Online Booking,Exam (Current),Recall Sent,Exam (Next),Uncertain,1
+Online Booking,Exam (Current),Recall Sent,Exam (Next),Requiring Contact,1
+Online Booking,Exam (Current),Closed,None,No longer a Patient,8
+Online Booking,Treatment (Current),BBYL Exam,Exam (Next),Exam Scheduled,14
+Online Booking,Treatment (Current),BBYL Exam,Exam (Next),Uncertain,1
+Online Booking,Treatment (Current),BBYL Exam,Exam (Next),Requiring Contact,1
+Online Booking,Treatment (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,21
+Online Booking,Treatment (Current),BBYL Treatment,Treatment (Next),Uncertain,2
+Online Booking,Treatment (Current),BBYL Treatment,Treatment (Next),Requiring Contact,1
+Emergency,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,20
+Emergency,Exam (Current),BBYL Exam,Exam (Next),Uncertain,2
+Emergency,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,1
+Emergency,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,7
+Emergency,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,1
+Emergency,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,4
+Emergency,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,3
+Emergency,Exam (Current),Closed,None,No longer a Patient,2
+Emergency,Treatment (Current),BBYL Exam,Exam (Next),Exam Scheduled,28
+Emergency,Treatment (Current),BBYL Exam,Exam (Next),Uncertain,2
+Emergency,Treatment (Current),BBYL Exam,Exam (Next),Requiring Contact,1
+Emergency,Treatment (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,42
+Emergency,Treatment (Current),BBYL Treatment,Treatment (Next),Uncertain,4
+Emergency,Treatment (Current),BBYL Treatment,Treatment (Next),Requiring Contact,2
+Emergency,Treatment (Current),BBYL Treatment,Treatment (Next),No longer a Patient,1
+Referral,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,39
+Referral,Exam (Current),BBYL Exam,Exam (Next),Uncertain,3
+Referral,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,2
+Referral,Exam (Current),BBYL Exam,Exam (Next),No longer a Patient,1
+Referral,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,13
+Referral,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,1
+Referral,Exam (Current),BBYL Treatment,Treatment (Next),Requiring Contact,1
+Referral,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,9
+Referral,Exam (Current),Awaiting Recall,Exam (Next),Uncertain,1
+Referral,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,5
+Referral,Exam (Current),Closed,None,No longer a Patient,4
+Referral,Treatment (Current),BBYL Exam,Exam (Next),Exam Scheduled,7
+Referral,Treatment (Current),BBYL Exam,Exam (Next),Uncertain,1
+Referral,Treatment (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,10
+Referral,Treatment (Current),BBYL Treatment,Treatment (Next),Uncertain,1
+Other,Exam (Current),BBYL Exam,Exam (Next),Exam Scheduled,20
+Other,Exam (Current),BBYL Exam,Exam (Next),Uncertain,2
+Other,Exam (Current),BBYL Exam,Exam (Next),Requiring Contact,1
+Other,Exam (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,7
+Other,Exam (Current),BBYL Treatment,Treatment (Next),Uncertain,1
+Other,Exam (Current),Awaiting Recall,Exam (Next),Exam Scheduled,4
+Other,Exam (Current),Recall Sent,Exam (Next),Exam Scheduled,3
+Other,Exam (Current),Closed,None,No longer a Patient,2
+Other,Treatment (Current),BBYL Exam,Exam (Next),Exam Scheduled,7
+Other,Treatment (Current),BBYL Exam,Exam (Next),Uncertain,1
+Other,Treatment (Current),BBYL Treatment,Treatment (Next),Treatment Scheduled,10
+Other,Treatment (Current),BBYL Treatment,Treatment (Next),Uncertain,1

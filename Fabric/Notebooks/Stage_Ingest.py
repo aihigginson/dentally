@@ -105,7 +105,8 @@ def fetch_one(endpoint):
 
 def write_stage(records, table_name):
     """Add metadata columns and write records to a Lakehouse Delta table.
-    All values stored as strings — Stage is raw landing, Bronze does the typing."""
+    All values stored as strings — Stage is raw landing, Bronze does the typing.
+    Writes are scoped to the current tenant_id so multiple tenants can coexist."""
     if not records:
         print(f"  {table_name}: 0 records (skipped)")
         return
@@ -129,8 +130,20 @@ def write_stage(records, table_name):
 
     str_records = [{k: _to_str(v) for k, v in r.items()} for r in records]
     df = spark.createDataFrame(str_records, schema=schema)
-    df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"stage_{table_name}")
-    print(f"  {table_name}: {len(records)} records -> stage_{table_name}")
+    full_table = f"stage_{table_name}"
+
+    if spark.catalog.tableExists(full_table):
+        # Overwrite only this tenant's rows; other tenants' data is preserved
+        df.write.format("delta").mode("overwrite") \
+            .option("replaceWhere", f"tenant_id = '{tenant_id}'") \
+            .saveAsTable(full_table)
+    else:
+        # First run — create the table
+        df.write.format("delta").mode("overwrite") \
+            .option("overwriteSchema", "true") \
+            .saveAsTable(full_table)
+
+    print(f"  {table_name}: {len(records)} records -> {full_table}")
 
 
 # -----------------------------------------------------------------------------

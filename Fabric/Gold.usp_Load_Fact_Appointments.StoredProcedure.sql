@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
+--    *03     13/05/2026  AIH Add Booking, This_Visit, Next_Visit, Future_Appointment from Silver.Appointment_Journey_Attrs
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -84,7 +85,12 @@ BEGIN
                  THEN DATEDIFF(MINUTE,
                         TRY_CAST(NULLIF(TRIM(a.In_Surgery_At),'') AS datetime2(3)),
                         TRY_CAST(NULLIF(TRIM(a.Completed_At),'') AS datetime2(3)))
-            END                                                         AS In_Surgery_Mins
+            END                                                         AS In_Surgery_Mins,
+
+            ja.Booking                                                  AS Booking,
+            ja.This_Visit                                               AS This_Visit,
+            ja.Next_Visit                                               AS Next_Visit,
+            ja.Future_Appointment                                       AS Future_Appointment
         INTO #src
         FROM Silver.Appointments a
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_Id          AND dpat.Tenant_ID = a.Tenant_ID
@@ -95,6 +101,8 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
+        LEFT JOIN Silver.Appointment_Journey_Attrs ja
+                                                ON ja.Appointment_Id   = a.Appointment_Id AND ja.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_Id IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -135,6 +143,10 @@ BEGIN
             Duration_Mins           = src.Duration_Mins,
             Waiting_Mins            = src.Waiting_Mins,
             In_Surgery_Mins         = src.In_Surgery_Mins,
+            Booking                 = src.Booking,
+            This_Visit              = src.This_Visit,
+            Next_Visit              = src.Next_Visit,
+            Future_Appointment      = src.Future_Appointment,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Appointments tgt
         INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -168,7 +180,11 @@ BEGIN
            ISNULL(CAST(tgt.[Is_Arrived] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Waiting_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Booking] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[This_Visit] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Next_Visit] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Future_Appointment] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
@@ -200,7 +216,11 @@ BEGIN
            ISNULL(CAST(src.[Is_Arrived] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Waiting_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Booking] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[This_Visit] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Next_Visit] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Future_Appointment] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -215,6 +235,7 @@ BEGIN
             Start_Time, Finish_Time, Pending_At,
             Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived,
             Duration_Mins, Waiting_Mins, In_Surgery_Mins,
+            Booking, This_Visit, Next_Visit, Future_Appointment,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -227,6 +248,7 @@ BEGIN
             src.Start_Time, src.Finish_Time, src.Pending_At,
             src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived,
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
+            src.Booking, src.This_Visit, src.Next_Visit, src.Future_Appointment,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);

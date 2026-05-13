@@ -1,0 +1,32 @@
+Source,Destination,Value
+New,Exam (Current),320
+BBYL,Exam (Current),960
+BBYL,Treatment (Current),240
+Online Booking,Exam (Current),160
+Online Booking,Treatment (Current),40
+Emergency,Exam (Current),40
+Emergency,Treatment (Current),80
+Referral,Exam (Current),80
+Referral,Treatment (Current),20
+Other,Exam (Current),40
+Other,Treatment (Current),20
+Exam (Current),BBYL Exam,900
+Exam (Current),BBYL Treatment,300
+Exam (Current),Awaiting Recall,200
+Exam (Current),Recall Sent,120
+Exam (Current),Closed,80
+Treatment (Current),BBYL Exam,160
+Treatment (Current),BBYL Treatment,240
+BBYL Exam,Exam (Next),1060
+BBYL Treatment,Treatment (Next),540
+Awaiting Recall,Exam (Next),200
+Recall Sent,Exam (Next),120
+Closed,No longer a Patient,80
+Exam (Next),Exam Scheduled,1200
+Exam (Next),Uncertain,100
+Exam (Next),Requiring Contact,60
+Exam (Next),No longer a Patient,20
+Treatment (Next),Treatment Scheduled,470
+Treatment (Next),Uncertain,40
+Treatment (Next),Requiring Contact,20
+Treatment (Next),No longer a Patient,10
