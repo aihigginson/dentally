@@ -84,7 +84,7 @@ $tenantOut = & sqlcmd -S $Server -d $Database -G -U $Username -P $pwd `
 $tenantIds = $tenantOut | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_.Trim() }
 
 if ($tenantIds.Count -eq 0) {
-    Write-Host "No active tenants found in Audit.Tenants — skipping data reload." -ForegroundColor Yellow
+    Write-Host "No active tenants found in Audit.Tenants - skipping data reload." -ForegroundColor Yellow
     exit 0
 }
 Write-Host "  Active tenants: $($tenantIds -join ', ')"
@@ -146,10 +146,10 @@ PRINT CONCAT('Gold.Fact_Appointments  I=', @i, '  U=', @u, '  D=', @d);
 "@ "Gold.usp_Load_Fact_Appointments"
 
 # ---------------------------------------------------------------------------
-Write-Host "`n$('─' * 60)"
+Write-Host "`n$('-' * 60)"
 if ($Errors -eq 0) {
     Write-Host "Complete: all journey attribute objects deployed and data reloaded." -ForegroundColor Green
 } else {
-    Write-Host "Finished with $Errors error(s) — review output above." -ForegroundColor Red
+    Write-Host "Finished with $Errors error(s) - review output above." -ForegroundColor Red
     exit 1
 }
