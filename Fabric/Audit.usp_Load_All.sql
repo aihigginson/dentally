@@ -300,8 +300,18 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Silver.usp_Load_Sundries @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
- 
- 
+
+    -- ── Silver derived attributes (run after all source Silver entities are loaded) ─
+
+    SET @Step = 'Appointment_Journey';
+    SET @Start = SYSUTCDATETIME();
+    SET @Process_Code = 'SILVER_DERIVE_APPOINTMENT_JOURNEY'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Silver.usp_Derive_Appointment_Journey @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode='TEST' PRINT @Step + ' completed in '
+    + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
+
+
     -- ---- DIMENSIONS (load before facts) ----
 
     SET @Step = 'Dim_Date';           SET @Start = SYSUTCDATETIME();

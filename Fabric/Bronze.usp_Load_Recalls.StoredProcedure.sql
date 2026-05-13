@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     13/05/2026  AIH Add First_Reminder_Sent_At from Stage
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Recalls]
@@ -26,30 +27,32 @@ BEGIN
     BEGIN TRY
 
         SELECT
-              TRY_CAST(tenant_id      AS INT)           AS Tenant_ID
-            , LEFT(id,                  255)            AS ID
-            , TRY_CAST(patient_id     AS DECIMAL(18,4)) AS Patient_ID
-            , LEFT(recall_type,         255)            AS Recall_Type
-            , LEFT(due_date,            255)            AS Due_Date
+              TRY_CAST(tenant_id      AS INT)            AS Tenant_ID
+            , LEFT(id,                  255)             AS ID
+            , TRY_CAST(patient_id     AS DECIMAL(18,4))  AS Patient_ID
+            , LEFT(recall_type,         255)             AS Recall_Type
+            , LEFT(due_date,            255)             AS Due_Date
             , TRY_CAST(times_contacted AS DECIMAL(18,4)) AS Times_Contacted
-            , LEFT(status,              255)            AS Status
+            , LEFT(status,              255)             AS Status
+            , LEFT(first_reminder_sent_at, 255)          AS First_Reminder_Sent_At
         INTO #src
         FROM Stage.Recalls
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
 
         UPDATE tgt SET
-              tgt.Patient_ID       = src.Patient_ID
-            , tgt.Recall_Type      = src.Recall_Type
-            , tgt.Due_Date         = src.Due_Date
-            , tgt.Times_Contacted  = src.Times_Contacted
-            , tgt.Status           = src.Status
-            , tgt.DW_Loaded_At     = SYSUTCDATETIME()
+              tgt.Patient_ID               = src.Patient_ID
+            , tgt.Recall_Type              = src.Recall_Type
+            , tgt.Due_Date                 = src.Due_Date
+            , tgt.Times_Contacted          = src.Times_Contacted
+            , tgt.Status                   = src.Status
+            , tgt.First_Reminder_Sent_At   = src.First_Reminder_Sent_At
+            , tgt.DW_Loaded_At             = SYSUTCDATETIME()
         FROM Bronze.Recalls AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Recalls (Tenant_ID, ID, Patient_ID, Recall_Type, Due_Date, Times_Contacted, Status, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Recall_Type, src.Due_Date, src.Times_Contacted, src.Status, SYSUTCDATETIME()
+        INSERT INTO Bronze.Recalls (Tenant_ID, ID, Patient_ID, Recall_Type, Due_Date, Times_Contacted, Status, First_Reminder_Sent_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Recall_Type, src.Due_Date, src.Times_Contacted, src.Status, src.First_Reminder_Sent_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Recalls tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

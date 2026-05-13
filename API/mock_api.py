@@ -401,12 +401,11 @@ def gen_patients(n, ref):
 def gen_appointments(patients, n, ref):
     states  = ["Arrived", "Completed", "Did Not Attend", "Cancelled", "Booked", "In Chair"]
     weights = [0.03, 0.68, 0.06, 0.08, 0.12, 0.03]
-    reasons = [
-        "Routine Examination", "Scale and Polish", "Filling", "Extraction",
-        "Root Canal Treatment", "Crown Preparation", "Crown Fit", "Denture Review",
-        "Hygiene Appointment", "Emergency - Pain", "Whitening Consultation",
-        "Implant Consultation", "Post-Op Review", "New Patient Examination",
+    reasons  = [
+        "Examination", "Scale and Polish", "Treatment",
+        "Emergency", "Review", "New Patient Examination",
     ]
+    r_weights = [38, 28, 20, 4, 4, 6]
     practitioners = ref["practitioners"]
     appointments = []
     for i in range(1, n + 1):
@@ -425,7 +424,8 @@ def gen_appointments(patients, n, ref):
             "patient_name": f"{patient['first_name']} {patient['last_name']}",
             "practitioner_id": pract["id"],
             "site_id": patient["site_id"],
-            "reason": random.choice(reasons),
+            "reason": random.choices(reasons, weights=r_weights)[0],
+            "booked_via_api": random.random() < 0.18,
             "start_time": _iso(apt_dt),
             "finish_time": _iso(apt_dt + timedelta(minutes=duration)),
             "duration": duration,
@@ -632,6 +632,17 @@ def gen_recalls(patients, ref):
         ]:
             recall_date  = date.fromisoformat(p[date_field])
             overdue_days = (date.today() - recall_date).days
+            times_contacted = random.randint(0, 4) if overdue_days > 0 else 0
+            # first_reminder_sent_at: set when a reminder has been dispatched (overdue + contacted,
+            # or sent in advance for upcoming recalls ~65% of the time)
+            if times_contacted > 0:
+                sent_dt = datetime.combine(recall_date - timedelta(days=random.randint(7, 21)), datetime.min.time())
+                first_reminder_sent_at = _iso(sent_dt)
+            elif overdue_days <= 0 and random.random() < 0.65:
+                sent_dt = datetime.combine(recall_date - timedelta(days=random.randint(14, 42)), datetime.min.time())
+                first_reminder_sent_at = _iso(sent_dt)
+            else:
+                first_reminder_sent_at = None
             recalls.append({
                 "id": recall_id,
                 "patient_id": p["id"],
@@ -641,7 +652,8 @@ def gen_recalls(patients, ref):
                 "recall_type": recall_type,
                 "due_date": recall_date.isoformat(),
                 "days_overdue": max(0, overdue_days),
-                "times_contacted": random.randint(0, 4) if overdue_days > 0 else 0,
+                "times_contacted": times_contacted,
+                "first_reminder_sent_at": first_reminder_sent_at,
                 "status": "Overdue" if overdue_days > 0 else "Due",
                 "created_at": _iso(datetime.now() - timedelta(days=abs(overdue_days) + p[f"{recall_type}_recall_interval"] * 30)),
                 "updated_at": _iso(datetime.now() - timedelta(days=random.randint(0, 30))),

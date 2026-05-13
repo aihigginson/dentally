@@ -31,6 +31,7 @@ warehouse_name         = "WH_Dentally"
 
 import pyodbc
 import struct
+import time
 from datetime import datetime, timezone
 
 
@@ -114,6 +115,9 @@ for row in tenants:
     )
 
     # ── Bronze load ───────────────────────────────────────────────────────────
+    # Brief pause to allow Fabric's lakehouse metadata to propagate to the
+    # Warehouse SQL engine before querying Stage views.
+    time.sleep(30)
     print("  [2/2] Bronze.usp_Load_All ...")
     cursor.execute(
         "EXEC Bronze.usp_Load_All @Tenant_ID = ?, @Full_Refresh = ?",
