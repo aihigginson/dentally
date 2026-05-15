@@ -53,6 +53,14 @@ function Deploy-File($file, $label) {
 Write-Host "`n=== 1. Schema objects ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
+# Recreate Stage view first so Fabric can validate SP column references against current Delta schema.
+Run-SQL @"
+DROP VIEW IF EXISTS [Stage].[Appointments]
+GO
+CREATE VIEW [Stage].[Appointments] AS SELECT * FROM LH_Dentally.dbo.stage_appointments
+GO
+"@ "Stage.Appointments (view refresh)"
+
 Deploy-File "Bronze.usp_Load_Appointments.StoredProcedure.sql"     "Bronze.usp_Load_Appointments"
 Deploy-File "Bronze.usp_Load_Recalls.StoredProcedure.sql"          "Bronze.usp_Load_Recalls"
 Deploy-File "Silver.Appointment_Reason_Map.Table.sql"              "Silver.Appointment_Reason_Map (table)"
@@ -60,14 +68,6 @@ Deploy-File "Silver.Appointment_Reason_Map.Data.sql"               "Silver.Appoi
 Deploy-File "Silver.usp_Derive_Appointment_Journey.StoredProcedure.sql" "Silver.usp_Derive_Appointment_Journey"
 Deploy-File "Gold.Fact_Appointments.Table.sql"                     "Gold.Fact_Appointments (DROP/CREATE)"
 Deploy-File "Gold.usp_Load_Fact_Appointments.StoredProcedure.sql"  "Gold.usp_Load_Fact_Appointments"
-
-# Recreate the Stage.Appointments view so the new booked_via_api column is visible.
-Run-SQL @"
-DROP VIEW IF EXISTS [Stage].[Appointments]
-GO
-CREATE VIEW [Stage].[Appointments] AS SELECT * FROM LH_Dentally.dbo.stage_appointments
-GO
-"@ "Stage.Appointments (view refresh for booked_via_api)"
 
 if ($Errors -gt 0) {
     Write-Host "`nAborting data reload - $Errors schema error(s) above." -ForegroundColor Red
