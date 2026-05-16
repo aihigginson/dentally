@@ -58,6 +58,10 @@ $Groups = [ordered]@{
         'Bronze.usp_Load_Patient_Referrals.StoredProcedure.sql'
         'Bronze.usp_Load_All.StoredProcedure.sql'
     )
+
+    '08. Process Config' = @(
+        'Audit.Process_Config.Data.sql'
+    )
 }
 
 $securePwd = Read-Host "Fabric password for $Username" -AsSecureString
@@ -97,6 +101,7 @@ Write-Host "`n$('─' * 60)"
 if ($rc -eq 0) {
     Write-Host "Complete: Bronze layer deployed successfully." -ForegroundColor Green
     Write-Host "Next: run the Fabric pipeline (Stage_Ingest -> Bronze.usp_Load_All) to repopulate Bronze." -ForegroundColor Yellow
+    Write-Host "Process_Config updated in same deploy -- no separate step needed." -ForegroundColor Yellow
 } else {
     Write-Host "Deployment finished with errors (see above). Exit code: $rc" -ForegroundColor Red
 }
