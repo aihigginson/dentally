@@ -24,7 +24,6 @@ BEGIN
     DECLARE @My_Updates BIGINT = 0;
     DECLARE @My_Deletes BIGINT = 0;
     DECLARE @My_Run_UUID VARCHAR(36);
-    DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
     DECLARE @Proc_Options VARCHAR(1000);
     DECLARE @Parent_UUID  VARCHAR(36);
@@ -83,17 +82,6 @@ BEGIN
                 @Rows_Deleted  = @My_Deletes;
     END TRY
     BEGIN CATCH
-        IF @Logging = 1
-        BEGIN
-            SET @My_Error = Audit.ETL_Error_Handler();
-            EXEC Audit.ETL_Finish_Run
-                @Run_UUID      = @My_Run_UUID,
-                @Run_Status    = 'FAILED',
-                @Rows_Inserted = @My_Inserts,
-                @Rows_Updated  = @My_Updates,
-                @Rows_Deleted  = @My_Deletes,
-                @Error         = @My_Error;
-        END
         THROW;
     END CATCH;
 
