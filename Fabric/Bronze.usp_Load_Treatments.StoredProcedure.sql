@@ -1,4 +1,4 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Treatments
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
@@ -27,12 +27,16 @@ BEGIN
     DECLARE @My_Run_UUID VARCHAR(36);
     DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
+    DECLARE @Proc_Options VARCHAR(1000);
+    DECLARE @Parent_UUID  VARCHAR(36);
+    SET @Proc_Options = CONCAT('@Tenant_ID = ', CAST(@Tenant_ID AS VARCHAR), ', @Full_Refresh = ', CAST(@Full_Refresh AS INT));
+    SET @Parent_UUID  = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
     IF @Logging = 1
         EXEC Audit.ETL_Start_Run
             @Run_Process_Name    = 'Bronze.usp_Load_Treatments',
-            @Run_Process_Options = CONCAT('@Tenant_ID = ', @Tenant_ID, ', @Full_Refresh = ', @Full_Refresh),
+            @Run_Process_Options = @Proc_Options,
             @Run_UUID            = @My_Run_UUID OUTPUT,
-            @Parent_Run_UUID     = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
+            @Parent_Run_UUID     = @Parent_UUID;
 
     BEGIN TRY
 
