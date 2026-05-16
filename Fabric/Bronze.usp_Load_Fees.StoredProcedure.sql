@@ -6,6 +6,7 @@
 --    *01     30/04/2026  AIH Initial Release
 --    *02     30/04/2026  AIH Fix source column id → fee_id to match mock API field name
 --    *03     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *04     16/05/2026  AIH Revert fee_id → id: 4-tenant rebuild restored standard id field name
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Fees]
 GO
@@ -28,7 +29,7 @@ BEGIN
 
         SELECT
               TRY_CAST(tenant_id AS INT)                                                                    AS Tenant_ID
-            , LEFT(fee_id, 255)                                                                             AS Fee_ID
+            , LEFT(id, 255)                                                                                AS Fee_ID
             , TRY_CAST(payment_plan_id AS INT)                                                              AS Payment_Plan_ID
             , TRY_CAST(treatment_id AS DECIMAL(18,4))                                                       AS Treatment_ID
             , CASE WHEN multiple_pricing IN ('True', '1', 'true') THEN 1 ELSE 0 END                         AS Multiple_Pricing
