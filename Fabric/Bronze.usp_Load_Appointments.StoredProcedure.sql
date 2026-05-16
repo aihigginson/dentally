@@ -7,6 +7,7 @@
 --    *02     13/05/2026  AIH Add Booked_Via_API; strip to confirmed Stage columns pending mock API update
 --    *03     14/05/2026  AIH Add all timestamp/status fields now present in Stage after mock API redeploy
 --    *04     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *05     16/05/2026  AIH Add Site_ID (missing from Stage read despite being in Bronze table)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -40,6 +41,7 @@ BEGIN
             , TRY_CAST(user_id                           AS INT)  AS User_ID
             , TRY_CAST(payment_plan_id                   AS INT)  AS Payment_Plan_ID
             , LEFT(room_id,                                255)   AS Room_ID
+            , LEFT(site_id,                                255)   AS Site_ID
             , LEFT(start_time,                             255)   AS Start_Time
             , LEFT(finish_time,                            255)   AS Finish_Time
             , TRY_CAST(duration                          AS INT)  AS Duration
@@ -71,6 +73,7 @@ BEGIN
             , tgt.User_ID                            = src.User_ID
             , tgt.Payment_Plan_ID                    = src.Payment_Plan_ID
             , tgt.Room_ID                            = src.Room_ID
+            , tgt.Site_ID                            = src.Site_ID
             , tgt.Start_Time                         = src.Start_Time
             , tgt.Finish_Time                        = src.Finish_Time
             , tgt.Duration                           = src.Duration
@@ -96,7 +99,7 @@ BEGIN
         INSERT INTO Bronze.Appointments (
             Tenant_ID, ID, UUID, Appointment_Cancellation_Reason_ID,
             Patient_ID, Patient_Name, Patient_Image_Url,
-            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
+            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID, Site_ID,
             Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
@@ -106,7 +109,7 @@ BEGIN
         SELECT
             src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
-            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
+            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID, src.Site_ID,
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
