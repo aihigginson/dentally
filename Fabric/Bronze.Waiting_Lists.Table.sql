@@ -15,10 +15,12 @@ CREATE TABLE [Bronze].[Waiting_Lists](
 	[Default_Treatment_Duration] [decimal](18, 4) NULL,
 	[Default_Treatment_Reason] [VARCHAR](255) NULL,
 	[Name] [VARCHAR](255) NULL,
+	[Site_ID] [VARCHAR](255) NULL,
 	[Target_Appointment_Days] [decimal](18, 4) NULL,
 	[Target_Treatment_Days] [decimal](18, 4) NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[Updated_At] [VARCHAR](255) NULL,
-	[Site_ID] [VARCHAR](255) NULL
+	[Tenant_ID] [int] NULL,
+	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

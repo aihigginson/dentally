@@ -509,6 +509,18 @@ def recalls():
 # ROUTES -- NHS CLAIMS & PRACTITIONER DIARIES
 # ==============================================================================
 
+@app.route("/v1/patient_referrals")
+def patient_referrals():
+    result = list(g.data["patient_referrals"])
+    if v := request.args.get("patient_id"):
+        result = [r for r in result if str(r["patient_id"]) == v]
+    if v := request.args.get("site_id"):
+        result = [r for r in result if r.get("site_id") == v]
+    result = filter_updated_after(result)
+    page_data, meta = paginate(result)
+    return jsonify({"patient_referrals": page_data, "meta": meta})
+
+
 @app.route("/v1/nhs_claims")
 def nhs_claims():
     result = list(g.data["nhs_claims"])

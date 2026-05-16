@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Appointments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Appointments
 --  Author           :  AIH
@@ -6,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     13/05/2026  AIH Add Booking, This_Visit, Next_Visit, Future_Appointment from Silver.Appointment_Journey_Attrs
+--    *04     14/05/2026  AIH Fix fk_Practice_Site join to use a.Site_Id instead of a.Room_Id
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -96,7 +98,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_Id          AND dpat.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_Id AS INT) AND dpr.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_Id AS INT) AND dpp.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Room_Id),'') AND dps.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Site_Id),'') AND dps.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_Id AS INT) AND du.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)

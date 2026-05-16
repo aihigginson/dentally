@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Date_Grouping] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Date_Grouping]    Script Date: 01/05/2026 14:19:54 ******/
 SET ANSI_NULLS ON
 GO

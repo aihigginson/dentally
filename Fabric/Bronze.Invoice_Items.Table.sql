@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Invoice_Items]
 GO
 CREATE TABLE [Bronze].[Invoice_Items](
 	[ID] [VARCHAR](255) NULL,
-	[Item_Price] [int] NULL,
+	[Item_Price] [decimal](18, 4) NULL,
 	[Name] [VARCHAR](255) NULL,
 	[NHS_Charge] [int] NULL,
 	[Quantity] [int] NULL,
@@ -18,7 +18,7 @@ CREATE TABLE [Bronze].[Invoice_Items](
 	[Practitioner_ID] [int] NULL,
 	[Sundry_ID] [VARCHAR](255) NULL,
 	[Treatment_Plan_ID] [int] NULL,
-	[Treatment_Plan_Item_ID] [int] NULL,
+	[Treatment_Plan_Item_ID] [VARCHAR](255) NULL,
 	[User_ID] [int] NULL,
 	[Tenant_ID] [int] NULL,
 	[DW_Loaded_At] [datetime2](3) NULL

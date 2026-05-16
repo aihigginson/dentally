@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_All] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_All
 --  Author           :  AIH
@@ -5,6 +6,8 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     29/04/2026  AIH Added 11 new Bronze entity load procedures
+--    *03     15/05/2026  AIH Add Cancellation_Reasons and Waiting_Lists
+--    *04     15/05/2026  AIH Add Patient_Referrals
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_All @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_All]
@@ -75,6 +78,12 @@ BEGIN
         EXEC Bronze.usp_Load_Acquisition_Sources     @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
         PRINT 'Acquisition_Sources:      ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
 
+        EXEC Bronze.usp_Load_Cancellation_Reasons    @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+        PRINT 'Cancellation_Reasons:     ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
+
+        EXEC Bronze.usp_Load_Waiting_Lists           @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+        PRINT 'Waiting_Lists:            ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
+
         EXEC Bronze.usp_Load_Sundries                @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
         PRINT 'Sundries:                 ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
 
@@ -101,6 +110,9 @@ BEGIN
 
         EXEC Bronze.usp_Load_Treatment_Appointments  @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
         PRINT 'Treatment_Appointments:   ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
+
+        EXEC Bronze.usp_Load_Patient_Referrals       @Tenant_ID=@Tenant_ID, @Full_Refresh=@Full_Refresh, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+        PRINT 'Patient_Referrals:        ins=' + CAST(@i AS VARCHAR(20)) + '  upd=' + CAST(@u AS VARCHAR(20)) + '  del=' + CAST(@d AS VARCHAR(20));
 
     END TRY
     BEGIN CATCH THROW; END CATCH;

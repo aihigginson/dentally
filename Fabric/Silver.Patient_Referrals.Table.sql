@@ -19,6 +19,7 @@ CREATE TABLE [Silver].[Patient_Referrals](
 	[Consented_By_Patient] [bit] NULL,
 	[Referred_Practitioner_Id] [int] NULL,
 	[Referred_Site_Id] [VARCHAR](50) NULL,
+	[Created_At] [datetime2](3) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL,
 	[_Row_Hash] [varbinary](32) NULL

@@ -17,6 +17,7 @@ CREATE TABLE [Silver].[Appointments](
 	[User_Id] [int] NULL,
 	[Payment_Plan_Id] [int] NULL,
 	[Room_Id] [VARCHAR](50) NULL,
+	[Site_Id] [VARCHAR](50) NULL,
 	[Start_Time] [VARCHAR](50) NULL,
 	[Finish_Time] [VARCHAR](50) NULL,
 	[Duration] [int] NULL,

@@ -26,7 +26,7 @@ CREATE TABLE [Bronze].[Practitioners](
 	[User_Role] [VARCHAR](255) NULL,
 	[User_Title] [VARCHAR](255) NULL,
 	[User_Updated_At] [VARCHAR](255) NULL,
-	[Contract_Targets_String] [VARCHAR](255) NULL,
+	[Contract_Targets_String] [VARCHAR](MAX) NULL,
 	[Tenant_ID] [int] NULL,
 	[DW_Loaded_At] [datetime2](3) NULL
 )

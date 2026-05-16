@@ -1,9 +1,11 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Appointments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Appointments
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     14/05/2026  AIH Add Site_Id from Bronze
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -46,6 +48,7 @@ BEGIN
         ISNULL(CAST(staged.[User_Id] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Payment_Plan_Id] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Room_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Start_Time] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Finish_Time] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Duration] AS VARCHAR(500)), ''),
@@ -88,6 +91,7 @@ BEGIN
                 User_ID  AS [User_Id],
                 Payment_Plan_ID  AS [Payment_Plan_Id],
                 LEFT(Room_ID, 50)  AS [Room_Id],
+                LEFT(Site_ID, 50)  AS [Site_Id],
                 LEFT(Start_Time,  50)  AS [Start_Time],
                 LEFT(Finish_Time, 50)  AS [Finish_Time],
                 Duration  AS [Duration],
@@ -128,6 +132,7 @@ BEGIN
             [User_Id] = src.[User_Id],
             [Payment_Plan_Id] = src.[Payment_Plan_Id],
             [Room_Id] = src.[Room_Id],
+            [Site_Id] = src.[Site_Id],
             [Start_Time] = src.[Start_Time],
             [Finish_Time] = src.[Finish_Time],
             [Duration] = src.[Duration],
@@ -158,9 +163,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_Id], [Appointment_Uuid], [Appointment_Cancellation_Reason_Id], [Patient_Id], [Patient_Name], [Patient_Image_Url], [Practitioner_Id], [User_Id], [Payment_Plan_Id], [Room_Id], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Notes], [Treatment_Description], [Booked_Via_Api], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_Id], [Appointment_Uuid], [Appointment_Cancellation_Reason_Id], [Patient_Id], [Patient_Name], [Patient_Image_Url], [Practitioner_Id], [User_Id], [Payment_Plan_Id], [Room_Id], [Site_Id], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Notes], [Treatment_Description], [Booked_Via_Api], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Appointment_Id], src.[Appointment_Uuid], src.[Appointment_Cancellation_Reason_Id], src.[Patient_Id], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_Id], src.[User_Id], src.[Payment_Plan_Id], src.[Room_Id], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Notes], src.[Treatment_Description], src.[Booked_Via_Api], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Appointment_Id], src.[Appointment_Uuid], src.[Appointment_Cancellation_Reason_Id], src.[Patient_Id], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_Id], src.[User_Id], src.[Payment_Plan_Id], src.[Room_Id], src.[Site_Id], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Notes], src.[Treatment_Description], src.[Booked_Via_Api], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Appointments] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Appointments
 --  Author           :  AIH
@@ -6,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     13/05/2026  AIH Add Booked_Via_API; strip to confirmed Stage columns pending mock API update
 --    *03     14/05/2026  AIH Add all timestamp/status fields now present in Stage after mock API redeploy
+--    *04     14/05/2026  AIH Add Site_ID; fix booked_via_api to handle string booleans from Stage
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -46,7 +48,8 @@ BEGIN
             , LEFT(state,                                  255)   AS State
             , LEFT(notes,                                  255)   AS Notes
             , LEFT(treatment_description,                  255)   AS Treatment_Description
-            , TRY_CAST(booked_via_api                    AS INT)  AS Booked_Via_API
+            , CASE WHEN LOWER(TRIM(CAST(booked_via_api AS NVARCHAR(10)))) IN ('1','true') THEN 1 ELSE 0 END AS Booked_Via_API
+            , LEFT(site_id,                                255)   AS Site_ID
             , LEFT(pending_at,                             255)   AS Pending_At
             , LEFT(confirmed_at,                           255)   AS Confirmed_At
             , LEFT(arrived_at,                             255)   AS Arrived_At
@@ -78,6 +81,7 @@ BEGIN
             , tgt.Notes                              = src.Notes
             , tgt.Treatment_Description              = src.Treatment_Description
             , tgt.Booked_Via_API                     = src.Booked_Via_API
+            , tgt.Site_ID                            = src.Site_ID
             , tgt.Pending_At                         = src.Pending_At
             , tgt.Confirmed_At                       = src.Confirmed_At
             , tgt.Arrived_At                         = src.Arrived_At
@@ -97,7 +101,7 @@ BEGIN
             Patient_ID, Patient_Name, Patient_Image_Url,
             Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
             Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
-            Booked_Via_API,
+            Booked_Via_API, Site_ID,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
             Completed_At, Cancelled_At, Did_Not_Attend_At,
             Created_At, Updated_At, DW_Loaded_At
@@ -107,7 +111,7 @@ BEGIN
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
             src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
-            src.Booked_Via_API,
+            src.Booked_Via_API, src.Site_ID,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
             src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
             src.Created_At, src.Updated_At, SYSUTCDATETIME()
