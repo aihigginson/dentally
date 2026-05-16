@@ -1,6 +1,7 @@
 # Deploy_Fix_Recalls_SP.ps1
 # Deploys the rewritten Silver.usp_Load_Recalls (revision *02) and reloads recalls + journey attrs.
-# Fixes: "Invalid column name 'Appointment_ID'" caused by Bronze schema change (Recall_Date/Interval_Months/Site_ID/Practitioner_ID).
+# Fixes: "Invalid column name 'Appointment_ID'" caused by Bronze schema change
+# (Recall_Date/Interval_Months/Site_ID/Practitioner_ID).
 
 param(
     [string] $Server   = "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com",
@@ -57,34 +58,37 @@ if ($Errors -gt 0) {
 Write-Host "`n=== 2. Reload Silver.Recalls ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Silver.usp_Load_Recalls @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Silver.usp_Load_Recalls  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Silver.usp_Load_Recalls"
+'@
+Run-SQL $sql "Silver.usp_Load_Recalls"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n=== 3. Re-derive appointment journey (uses Recalls.Due_Date) ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Silver.usp_Derive_Appointment_Journey @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Silver.usp_Derive_Appointment_Journey  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Silver.usp_Derive_Appointment_Journey"
+'@
+Run-SQL $sql "Silver.usp_Derive_Appointment_Journey"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n=== 4. Reload Gold.Fact_Appointments ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Gold.usp_Load_Fact_Appointments @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Gold.Fact_Appointments  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Gold.usp_Load_Fact_Appointments"
+'@
+Run-SQL $sql "Gold.usp_Load_Fact_Appointments"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n$('-' * 60)"

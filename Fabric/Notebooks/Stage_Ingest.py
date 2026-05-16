@@ -189,6 +189,7 @@ write_stage(fetch_all("/v1/patient_stats",              incremental_params), "pa
 write_stage(fetch_all("/v1/payment_allocations",        incremental_params), "payment_allocations")
 write_stage(fetch_all("/v1/payment_explanations",       incremental_params), "payment_explanations")
 write_stage(fetch_all("/v1/treatment_appointments",     incremental_params), "treatment_appointments")
+write_stage(fetch_all("/v1/patient_referrals",          incremental_params), "patient_referrals")
 
 
 # -----------------------------------------------------------------------------

@@ -48,7 +48,7 @@ function Deploy-File($file, $label) {
 Write-Host "`n=== 1. Stage view ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 BEGIN TRY
     IF OBJECT_ID('[Stage].[Patient_Referrals]', 'V') IS NOT NULL DROP VIEW [Stage].[Patient_Referrals];
     EXEC('CREATE VIEW [Stage].[Patient_Referrals] AS SELECT * FROM LH_Dentally.dbo.stage_patient_referrals');
@@ -57,7 +57,8 @@ END TRY
 BEGIN CATCH
     PRINT 'WARN: Stage.Patient_Referrals skipped -- run Stage_Ingest first';
 END CATCH;
-"@ "Stage.Patient_Referrals"
+'@
+Run-SQL $sql "Stage.Patient_Referrals"
 
 if ($Errors -gt 0) {
     Write-Host "`nAborting - Stage view failed (LH_Dentally Delta table not yet ingested)." -ForegroundColor Red
@@ -68,10 +69,10 @@ if ($Errors -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Host "`n=== 2. Bronze — table + load SP ===" -ForegroundColor Cyan
+Write-Host "`n=== 2. Bronze -- table + load SP ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Deploy-File "Bronze.Patient_Referrals.Table.sql"                   "Bronze.Patient_Referrals (table)"
+Deploy-File "Bronze.Patient_Referrals.Table.sql"                    "Bronze.Patient_Referrals (table)"
 Deploy-File "Bronze.usp_Load_Patient_Referrals.StoredProcedure.sql" "Bronze.usp_Load_Patient_Referrals"
 Deploy-File "Bronze.usp_Load_All.StoredProcedure.sql"               "Bronze.usp_Load_All (updated)"
 
@@ -80,13 +81,13 @@ if ($Errors -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Host "`n=== 3. Silver — table (with Created_At), load SP, derive SP ===" -ForegroundColor Cyan
+Write-Host "`n=== 3. Silver -- table (with Created_At), load SP, derive SP ===" -ForegroundColor Cyan
 # Silver.Patient_Referrals table must be deployed BEFORE usp_Derive_Appointment_Journey
 # because Fabric validates column references at CREATE PROCEDURE time.
 # ---------------------------------------------------------------------------
 
-Deploy-File "Silver.Patient_Referrals.Table.sql"                    "Silver.Patient_Referrals (table + Created_At)"
-Deploy-File "Silver.usp_Load_Patient_Referrals.StoredProcedure.sql" "Silver.usp_Load_Patient_Referrals"
+Deploy-File "Silver.Patient_Referrals.Table.sql"                        "Silver.Patient_Referrals (table + Created_At)"
+Deploy-File "Silver.usp_Load_Patient_Referrals.StoredProcedure.sql"     "Silver.usp_Load_Patient_Referrals"
 Deploy-File "Silver.usp_Derive_Appointment_Journey.StoredProcedure.sql" "Silver.usp_Derive_Appointment_Journey (*03)"
 
 if ($Errors -gt 0) {
@@ -94,16 +95,17 @@ if ($Errors -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Host "`n=== 4. Bronze load — Patient_Referrals per tenant (Full_Refresh) ===" -ForegroundColor Cyan
+Write-Host "`n=== 4. Bronze load -- Patient_Referrals per tenant (Full_Refresh) ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-foreach ($tid in $Tenants) {
-    Run-SQL @"
+$bronzeSqlTpl = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
-EXEC Bronze.usp_Load_Patient_Referrals @Tenant_ID = $tid, @Full_Refresh = 1,
+EXEC Bronze.usp_Load_Patient_Referrals @Tenant_ID = {0}, @Full_Refresh = 1,
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
-PRINT CONCAT('Bronze.Patient_Referrals  tenant=$tid  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Bronze.usp_Load_Patient_Referrals  tenant=$tid"
+PRINT CONCAT('Bronze.Patient_Referrals  tenant={0}  I=', @i, '  U=', @u, '  D=', @d);
+'@
+foreach ($tid in $Tenants) {
+    Run-SQL ($bronzeSqlTpl -f $tid) "Bronze.usp_Load_Patient_Referrals  tenant=$tid"
 }
 
 if ($Errors -gt 0) {
@@ -111,15 +113,16 @@ if ($Errors -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Host "`n=== 5. Silver load — Patient_Referrals ===" -ForegroundColor Cyan
+Write-Host "`n=== 5. Silver load -- Patient_Referrals ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Silver.usp_Load_Patient_Referrals @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Silver.Patient_Referrals  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Silver.usp_Load_Patient_Referrals"
+'@
+Run-SQL $sql "Silver.usp_Load_Patient_Referrals"
 
 if ($Errors -gt 0) {
     Write-Host "`nAborting - Silver Patient_Referrals load failed." -ForegroundColor Red; exit 1
@@ -129,12 +132,13 @@ if ($Errors -gt 0) {
 Write-Host "`n=== 6. Re-derive appointment journey (all four Sankey columns) ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Silver.usp_Derive_Appointment_Journey @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Silver.usp_Derive_Appointment_Journey  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Silver.usp_Derive_Appointment_Journey"
+'@
+Run-SQL $sql "Silver.usp_Derive_Appointment_Journey"
 
 if ($Errors -gt 0) {
     Write-Host "`nAborting - Journey derivation failed." -ForegroundColor Red; exit 1
@@ -144,12 +148,13 @@ if ($Errors -gt 0) {
 Write-Host "`n=== 7. Reload Gold.Fact_Appointments ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 
-Run-SQL @"
+$sql = @'
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 EXEC Gold.usp_Load_Fact_Appointments @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
 PRINT CONCAT('Gold.Fact_Appointments  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Gold.usp_Load_Fact_Appointments"
+'@
+Run-SQL $sql "Gold.usp_Load_Fact_Appointments"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n$('-' * 60)"
@@ -157,15 +162,15 @@ if ($Errors -eq 0) {
     Write-Host "Complete: all journey fixes deployed and data reloaded." -ForegroundColor Green
     Write-Host ""
     Write-Host "Sankey fixes applied:" -ForegroundColor Green
-    Write-Host "  Col 1 Booking:          Online + Referral now populated" -ForegroundColor Green
-    Write-Host "  Col 2 This_Visit:       Review codes now in generate_data.py pool" -ForegroundColor Green
-    Write-Host "  Col 3 Next_Visit:       Hygiene/Treatment/Review visible (Completed_DT filter removed)" -ForegroundColor Green
-    Write-Host "  Col 4 Future_Appt:      BBYL + Treatment Booked via separate active_bkg apply" -ForegroundColor Green
+    Write-Host "  Col 1 Booking:     Online + Referral now populated" -ForegroundColor Green
+    Write-Host "  Col 2 This_Visit:  Review codes now in generate_data.py pool" -ForegroundColor Green
+    Write-Host "  Col 3 Next_Visit:  Hygiene/Treatment/Review visible (Completed_DT filter removed)" -ForegroundColor Green
+    Write-Host "  Col 4 Future_Appt: BBYL + Treatment Booked via separate active_bkg apply" -ForegroundColor Green
     Write-Host ""
     Write-Host "NOTE: Tenants 1-4 (Railway API) also need updating:" -ForegroundColor Yellow
     Write-Host "  1. Upload updated generate_data.py to Railway" -ForegroundColor Yellow
     Write-Host "  2. Re-trigger Bronze pipeline for tenants 1-4 (Full_Refresh=1)" -ForegroundColor Yellow
-    Write-Host "  3. Re-run steps 5-7 above (or run Silver.usp_Load_Patient_Referrals + Derive + Gold)" -ForegroundColor Yellow
+    Write-Host "  3. Re-run steps 5-7 above (Silver.usp_Load_Patient_Referrals + Derive + Gold)" -ForegroundColor Yellow
 } else {
     Write-Host "Finished with $Errors error(s) - review output above." -ForegroundColor Red
     exit 1

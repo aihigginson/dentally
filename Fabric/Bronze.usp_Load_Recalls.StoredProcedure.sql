@@ -1,4 +1,3 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Recalls] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Recalls
 --  Author           :  AIH
@@ -6,7 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     13/05/2026  AIH Add First_Reminder_Sent_At from Stage
---    *03     15/05/2026  AIH Align with rebuilt mock API: recall_date, interval_months, notes; remove legacy fields
+--    *03     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Recalls]
@@ -14,61 +13,57 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Recalls]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
     DECLARE @My_Inserts BIGINT = 0;
     DECLARE @My_Updates BIGINT = 0;
     DECLARE @My_Deletes BIGINT = 0;
+    DECLARE @My_Run_UUID VARCHAR(36);
+    DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
+    IF @Logging = 1
+        EXEC Audit.ETL_Start_Run
+            @Run_Process_Name    = 'Bronze.usp_Load_Recalls',
+            @Run_Process_Options = CONCAT('@Tenant_ID = ', @Tenant_ID, ', @Full_Refresh = ', @Full_Refresh),
+            @Run_UUID            = @My_Run_UUID OUTPUT,
+            @Parent_Run_UUID     = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
+
     BEGIN TRY
 
         SELECT
-              TRY_CAST(tenant_id       AS INT)            AS Tenant_ID
-            , LEFT(id,                  255)              AS ID
-            , TRY_CAST(patient_id      AS DECIMAL(18,4))  AS Patient_ID
-            , TRY_CAST(practitioner_id AS DECIMAL(18,4))  AS Practitioner_ID
-            , LEFT(site_id,             255)              AS Site_ID
-            , LEFT(recall_date,         255)              AS Recall_Date
-            , LEFT(recall_type,         255)              AS Recall_Type
-            , TRY_CAST(interval_months AS DECIMAL(18,4))  AS Interval_Months
-            , LEFT(status,              255)              AS Status
-            , CAST(notes AS VARCHAR(MAX))                 AS Notes
-            , LEFT(created_at,          255)              AS Created_At
-            , LEFT(updated_at,          255)              AS Updated_At
+              TRY_CAST(tenant_id      AS INT)            AS Tenant_ID
+            , LEFT(id,                  255)             AS ID
+            , TRY_CAST(patient_id     AS DECIMAL(18,4))  AS Patient_ID
+            , LEFT(recall_type,         255)             AS Recall_Type
+            , LEFT(due_date,            255)             AS Due_Date
+            , TRY_CAST(times_contacted AS DECIMAL(18,4)) AS Times_Contacted
+            , LEFT(status,              255)             AS Status
+            , LEFT(first_reminder_sent_at, 255)          AS First_Reminder_Sent_At
         INTO #src
         FROM Stage.Recalls
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
 
         UPDATE tgt SET
-              tgt.Patient_ID      = src.Patient_ID
-            , tgt.Practitioner_ID = src.Practitioner_ID
-            , tgt.Site_ID         = src.Site_ID
-            , tgt.Recall_Date     = src.Recall_Date
-            , tgt.Recall_Type     = src.Recall_Type
-            , tgt.Interval_Months = src.Interval_Months
-            , tgt.Status          = src.Status
-            , tgt.Notes           = src.Notes
-            , tgt.Updated_At      = src.Updated_At
-            , tgt.DW_Loaded_At    = SYSUTCDATETIME()
+              tgt.Patient_ID               = src.Patient_ID
+            , tgt.Recall_Type              = src.Recall_Type
+            , tgt.Due_Date                 = src.Due_Date
+            , tgt.Times_Contacted          = src.Times_Contacted
+            , tgt.Status                   = src.Status
+            , tgt.First_Reminder_Sent_At   = src.First_Reminder_Sent_At
+            , tgt.DW_Loaded_At             = SYSUTCDATETIME()
         FROM Bronze.Recalls AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Recalls (
-            Tenant_ID, ID, Patient_ID, Practitioner_ID, Site_ID,
-            Recall_Date, Recall_Type, Interval_Months, Status, Notes,
-            Created_At, Updated_At, DW_Loaded_At
-        )
-        SELECT
-            src.Tenant_ID, src.ID, src.Patient_ID, src.Practitioner_ID, src.Site_ID,
-            src.Recall_Date, src.Recall_Type, src.Interval_Months, src.Status, src.Notes,
-            src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Recalls (Tenant_ID, ID, Patient_ID, Recall_Type, Due_Date, Times_Contacted, Status, First_Reminder_Sent_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Recall_Type, src.Due_Date, src.Times_Contacted, src.Status, src.First_Reminder_Sent_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Recalls tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -83,8 +78,28 @@ BEGIN
 
         DROP TABLE IF EXISTS #src;
 
+        IF @Logging = 1
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'SUCCEEDED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes;
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        IF @Logging = 1
+        BEGIN
+            SET @My_Error = Audit.ETL_Error_Handler();
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'FAILED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes,
+                @Error         = @My_Error;
+        END
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

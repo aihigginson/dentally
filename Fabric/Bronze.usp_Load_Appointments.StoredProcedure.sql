@@ -1,4 +1,3 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Appointments] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Appointments
 --  Author           :  AIH
@@ -7,7 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     13/05/2026  AIH Add Booked_Via_API; strip to confirmed Stage columns pending mock API update
 --    *03     14/05/2026  AIH Add all timestamp/status fields now present in Stage after mock API redeploy
---    *04     14/05/2026  AIH Add Site_ID; fix booked_via_api to handle string booleans from Stage
+--    *04     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -15,18 +14,28 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Appointments]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
     DECLARE @My_Inserts BIGINT = 0;
     DECLARE @My_Updates BIGINT = 0;
     DECLARE @My_Deletes BIGINT = 0;
+    DECLARE @My_Run_UUID VARCHAR(36);
+    DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
+    IF @Logging = 1
+        EXEC Audit.ETL_Start_Run
+            @Run_Process_Name    = 'Bronze.usp_Load_Appointments',
+            @Run_Process_Options = CONCAT('@Tenant_ID = ', @Tenant_ID, ', @Full_Refresh = ', @Full_Refresh),
+            @Run_UUID            = @My_Run_UUID OUTPUT,
+            @Parent_Run_UUID     = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
+
     BEGIN TRY
 
         SELECT
@@ -48,8 +57,7 @@ BEGIN
             , LEFT(state,                                  255)   AS State
             , LEFT(notes,                                  255)   AS Notes
             , LEFT(treatment_description,                  255)   AS Treatment_Description
-            , CASE WHEN LOWER(TRIM(CAST(booked_via_api AS NVARCHAR(10)))) IN ('1','true') THEN 1 ELSE 0 END AS Booked_Via_API
-            , LEFT(site_id,                                255)   AS Site_ID
+            , TRY_CAST(booked_via_api                    AS INT)  AS Booked_Via_API
             , LEFT(pending_at,                             255)   AS Pending_At
             , LEFT(confirmed_at,                           255)   AS Confirmed_At
             , LEFT(arrived_at,                             255)   AS Arrived_At
@@ -81,7 +89,6 @@ BEGIN
             , tgt.Notes                              = src.Notes
             , tgt.Treatment_Description              = src.Treatment_Description
             , tgt.Booked_Via_API                     = src.Booked_Via_API
-            , tgt.Site_ID                            = src.Site_ID
             , tgt.Pending_At                         = src.Pending_At
             , tgt.Confirmed_At                       = src.Confirmed_At
             , tgt.Arrived_At                         = src.Arrived_At
@@ -101,7 +108,7 @@ BEGIN
             Patient_ID, Patient_Name, Patient_Image_Url,
             Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
             Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
-            Booked_Via_API, Site_ID,
+            Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
             Completed_At, Cancelled_At, Did_Not_Attend_At,
             Created_At, Updated_At, DW_Loaded_At
@@ -111,7 +118,7 @@ BEGIN
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
             src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
-            src.Booked_Via_API, src.Site_ID,
+            src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
             src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
             src.Created_At, src.Updated_At, SYSUTCDATETIME()
@@ -129,8 +136,28 @@ BEGIN
 
         DROP TABLE IF EXISTS #src;
 
+        IF @Logging = 1
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'SUCCEEDED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes;
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        IF @Logging = 1
+        BEGIN
+            SET @My_Error = Audit.ETL_Error_Handler();
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'FAILED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes,
+                @Error         = @My_Error;
+        END
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

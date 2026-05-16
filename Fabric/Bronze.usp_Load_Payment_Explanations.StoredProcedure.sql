@@ -1,28 +1,38 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Payment_Explanations] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Payment_Explanations
 --  Author           :  AIH
 --  Initital Date    :  30/04/2026
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Payment_Explanations]
 GO
 CREATE PROCEDURE [Bronze].[usp_Load_Payment_Explanations]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
     DECLARE @My_Inserts BIGINT = 0;
     DECLARE @My_Updates BIGINT = 0;
     DECLARE @My_Deletes BIGINT = 0;
+    DECLARE @My_Run_UUID VARCHAR(36);
+    DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
+    IF @Logging = 1
+        EXEC Audit.ETL_Start_Run
+            @Run_Process_Name    = 'Bronze.usp_Load_Payment_Explanations',
+            @Run_Process_Options = CONCAT('@Tenant_ID = ', @Tenant_ID, ', @Full_Refresh = ', @Full_Refresh),
+            @Run_UUID            = @My_Run_UUID OUTPUT,
+            @Parent_Run_UUID     = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
+
     BEGIN TRY
 
         SELECT
@@ -68,8 +78,28 @@ BEGIN
 
         DROP TABLE IF EXISTS #src;
 
+        IF @Logging = 1
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'SUCCEEDED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes;
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        IF @Logging = 1
+        BEGIN
+            SET @My_Error = Audit.ETL_Error_Handler();
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'FAILED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes,
+                @Error         = @My_Error;
+        END
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

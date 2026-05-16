@@ -5,25 +5,36 @@
 --  Initital Date    :  15/05/2026
 --  History          :
 --    *01     15/05/2026  AIH Initial Release
---  To Run           :   DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Bronze.usp_Load_Patient_Referrals @Tenant_ID=1, @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Patient_Referrals @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patient_Referrals]
 GO
 CREATE PROCEDURE [Bronze].[usp_Load_Patient_Referrals]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
-    DECLARE @My_Inserts BIGINT = 0;
-    DECLARE @My_Updates BIGINT = 0;
-    DECLARE @My_Deletes BIGINT = 0;
+    DECLARE @My_Inserts  BIGINT = 0;
+    DECLARE @My_Updates  BIGINT = 0;
+    DECLARE @My_Deletes  BIGINT = 0;
+    DECLARE @My_Run_UUID VARCHAR(36);
+    DECLARE @My_Error    VARCHAR(4000);
     SET NOCOUNT ON;
+    IF @Logging = 1
+        EXEC Audit.ETL_Start_Run
+            @Run_Process_Name    = 'Bronze.usp_Load_Patient_Referrals',
+            @Run_Process_Options = CONCAT('@Tenant_ID = ', @Tenant_ID, ', @Full_Refresh = ', @Full_Refresh),
+            @Run_UUID            = @My_Run_UUID OUTPUT,
+            @Parent_Run_UUID     = ISNULL(CONVERT(VARCHAR(36), @Run_UUID), '00000000-0000-0000-0000-000000000000');
+
     BEGIN TRY
 
         SELECT
@@ -37,7 +48,7 @@ BEGIN
             , LEFT(referrable_type,                255)            AS Referrable_Type
             , LEFT(services_appointment_id,        255)            AS Services_Appointment_ID
             , CAST(additional_information        AS VARCHAR(MAX))  AS Additional_Information
-            , LEFT(CAST(consented_by_patient     AS NVARCHAR(10)), 10) AS Consented_By_Patient
+            , LEFT(CAST(consented_by_patient     AS VARCHAR(10)), 10) AS Consented_By_Patient
             , TRY_CAST(referred_practitioner_id  AS DECIMAL(18,4)) AS Referred_Practitioner_ID
             , LEFT(referred_site_id,               255)            AS Referred_Site_ID
             , LEFT(created_at,                     255)            AS Created_At
@@ -89,8 +100,28 @@ BEGIN
 
         DROP TABLE IF EXISTS #src;
 
+        IF @Logging = 1
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'SUCCEEDED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes;
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        IF @Logging = 1
+        BEGIN
+            SET @My_Error = Audit.ETL_Error_Handler();
+            EXEC Audit.ETL_Finish_Run
+                @Run_UUID      = @My_Run_UUID,
+                @Run_Status    = 'FAILED',
+                @Rows_Inserted = @My_Inserts,
+                @Rows_Updated  = @My_Updates,
+                @Rows_Deleted  = @My_Deletes,
+                @Error         = @My_Error;
+        END
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;
