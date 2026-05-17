@@ -29,10 +29,11 @@ PBI_SCOPE     = ['https://analysis.windows.net/powerbi/api/.default']
 PBI_BASE      = 'https://api.powerbi.com/v1.0/myorg'
 
 REPORTS = {
+    'home':       os.environ.get('REPORT_ID_HOME',      ''),
     'revenue':    os.environ.get('REPORT_ID_REVENUE',   ''),
-    'patients':   os.environ.get('REPORT_ID_PATIENT') or os.environ.get('REPORT_ID_PATIENTS', ''),
-    'treatment':  os.environ.get('REPORT_ID_TREATMENT', ''),
+    'patient':    os.environ.get('REPORT_ID_PATIENT',   ''),
     'scheduling': os.environ.get('REPORT_ID_SCHEDULE',  ''),
+    'clinical':   os.environ.get('REPORT_ID_CLINICAL',  ''),
     'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
 }
 print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
