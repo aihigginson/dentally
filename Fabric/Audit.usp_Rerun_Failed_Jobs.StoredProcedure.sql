@@ -1,15 +1,15 @@
 --------------------------------------------------------------------
---  Stored Procedure :  Audit.Rerun_Failed_Jobs
+--  Stored Procedure :  Audit.usp_Rerun_Failed_Jobs
 --  Author           :  AIH
 --  Initital Date    :  17/05/2026
 --  History          :
 --    *01     17/05/2026  AIH Initial Release
---  To Run           :   EXEC Audit.Rerun_Failed_Jobs
---                   :   EXEC Audit.Rerun_Failed_Jobs @Category_Code = 'BRONZE'
+--  To Run           :   EXEC Audit.usp_Rerun_Failed_Jobs
+--                   :   EXEC Audit.usp_Rerun_Failed_Jobs @Category_Code = 'BRONZE'
 ---------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS [Audit].[Rerun_Failed_Jobs]
+DROP PROCEDURE IF EXISTS [Audit].[usp_Rerun_Failed_Jobs]
 GO
-CREATE PROCEDURE [Audit].[Rerun_Failed_Jobs]
+CREATE PROCEDURE [Audit].[usp_Rerun_Failed_Jobs]
 (
       @Category_Code   VARCHAR(100) = NULL   -- NULL reruns all categories; pass e.g. 'BRONZE', 'SILVER', 'GOLD' to filter
     , @Parent_Run_UUID VARCHAR(36)  = '00000000-0000-0000-0000-000000000000'
