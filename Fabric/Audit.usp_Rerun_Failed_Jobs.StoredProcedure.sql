@@ -4,6 +4,7 @@
 --  Initital Date    :  17/05/2026
 --  History          :
 --    *01     17/05/2026  AIH Initial Release
+--    *02     17/05/2026  AIH Add transitive downstream dependency reruns via Process_Dependency
 --  To Run           :   EXEC Audit.usp_Rerun_Failed_Jobs
 --                   :   EXEC Audit.usp_Rerun_Failed_Jobs @Category_Code = 'BRONZE'
 ---------------------------------------------------------------------
@@ -19,19 +20,17 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        -- Find all Process_Codes where the most recent execution is FAILED
+        -- ── Step 1: seed with all jobs whose latest run is FAILED ──────────────
         SELECT   pc.Process_Code
                 , pc.Process_Name
                 , pc.Process_Category_Code
-                , latest.Start_Time      AS Last_Run_Time
-                , latest.Error_Message   AS Last_Error
+                , CAST(0 AS INT)    AS Run_Level   -- 0 = directly failed; downstream jobs get level 1, 2 ...
+                , CAST(0 AS INT)    AS Is_Downstream
         INTO    #to_rerun
         FROM    Audit.Process_Config AS pc
         INNER JOIN (
             SELECT  Process_Name
                   , Status
-                  , Start_Time
-                  , Error_Message
                   , ROW_NUMBER() OVER (PARTITION BY Process_Name ORDER BY Start_Time DESC) AS rn
             FROM    Audit.Process_Execution_Log
             WHERE   Process_Name IS NOT NULL
@@ -40,16 +39,50 @@ BEGIN
         WHERE   latest.Status = 'FAILED'
           AND   (@Category_Code IS NULL OR pc.Process_Category_Code = @Category_Code);
 
+        -- ── Step 2: iteratively add transitive downstream dependencies ─────────
+        -- Each pass adds jobs one level further downstream until nothing new is found.
+        -- Jobs already in #to_rerun (e.g. independently failed Silver jobs) are not
+        -- added again, so their Run_Level stays 0 and they run before their downstream.
+
+        DECLARE @Current_Level INT = 0;
+        DECLARE @Added         INT = 1;
+
+        WHILE @Added > 0
+        BEGIN
+            SET @Current_Level = @Current_Level + 1;
+
+            INSERT INTO #to_rerun (Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream)
+            SELECT   pc.Process_Code
+                   , pc.Process_Name
+                   , pc.Process_Category_Code
+                   , @Current_Level
+                   , 1
+            FROM    Audit.Process_Dependency AS pd
+            INNER JOIN Audit.Process_Config  AS pc ON pc.Process_Code = pd.Next_Process_Code
+            WHERE   pd.Is_Active = 1
+              AND   pd.Prev_Process_Code IN (SELECT Process_Code FROM #to_rerun WHERE Run_Level = @Current_Level - 1)
+              AND   pd.Next_Process_Code NOT IN (SELECT Process_Code FROM #to_rerun);
+
+            SET @Added = @@ROWCOUNT;
+        END
+
+        -- ── Step 3: run all jobs in level order ────────────────────────────────
+        -- Within the same level, run in category-code order (BRONZE < GOLD < SILVER)
+        -- so natural layer ordering is preserved where multiple categories appear.
+
         DECLARE @Code        VARCHAR(100);
         DECLARE @Name        VARCHAR(1000);
         DECLARE @Category    VARCHAR(100);
+        DECLARE @Level       INT;
+        DECLARE @IsDown      INT;
         DECLARE @Rerun_Count INT = 0;
+        DECLARE @Down_Count  INT = 0;
         DECLARE @Total_Count INT;
 
         SELECT @Total_Count = COUNT(*) FROM #to_rerun;
 
-        PRINT 'Rerun_Failed_Jobs: ' + CAST(@Total_Count AS VARCHAR) + ' failed job(s) to rerun'
-            + CASE WHEN @Category_Code IS NOT NULL THEN ' (category: ' + @Category_Code + ')' ELSE '' END;
+        PRINT 'usp_Rerun_Failed_Jobs: ' + CAST(@Total_Count AS VARCHAR) + ' job(s) to run'
+            + CASE WHEN @Category_Code IS NOT NULL THEN ' (category filter: ' + @Category_Code + ')' ELSE '' END;
 
         WHILE EXISTS (SELECT 1 FROM #to_rerun)
         BEGIN
@@ -57,22 +90,33 @@ BEGIN
                   @Code     = Process_Code
                 , @Name     = Process_Name
                 , @Category = Process_Category_Code
-            FROM #to_rerun
-            ORDER BY Process_Category_Code, Process_Code;
+                , @Level    = Run_Level
+                , @IsDown   = Is_Downstream
+            FROM  #to_rerun
+            ORDER BY Run_Level, Process_Category_Code, Process_Code;
 
-            PRINT '  Rerunning [' + @Category + '] ' + @Name + ' (' + @Code + ')';
+            IF @IsDown = 0
+                PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (failed)      [' + @Category + '] ' + @Name;
+            ELSE
+                PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (downstream)  [' + @Category + '] ' + @Name;
 
             EXEC Audit.ETL_Run_Process
                   @Process_Code    = @Code
                 , @Parent_Run_UUID = @Parent_Run_UUID;
 
             DELETE FROM #to_rerun WHERE Process_Code = @Code;
-            SET @Rerun_Count = @Rerun_Count + 1;
+
+            IF @IsDown = 0
+                SET @Rerun_Count = @Rerun_Count + 1;
+            ELSE
+                SET @Down_Count = @Down_Count + 1;
         END
 
         DROP TABLE IF EXISTS #to_rerun;
 
-        PRINT 'Rerun_Failed_Jobs: complete -- ' + CAST(@Rerun_Count AS VARCHAR) + ' job(s) rerun.';
+        PRINT 'usp_Rerun_Failed_Jobs: complete -- '
+            + CAST(@Rerun_Count AS VARCHAR) + ' failed job(s) rerun, '
+            + CAST(@Down_Count  AS VARCHAR) + ' downstream job(s) rerun.';
 
     END TRY
     BEGIN CATCH
