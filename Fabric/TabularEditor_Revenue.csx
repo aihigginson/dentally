@@ -55,27 +55,17 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
 
-// ── Target helper ────────────────────────────────────────────────────────────
-
-add("_Revenue Target",
-    @"VAR tbl = FILTER('_Targets',
-    '_Targets'[Metric] = ""total_revenue""
-    && '_Targets'[Period Type] = ""all_time"")
-RETURN MAXX(tbl, '_Targets'[Target Value])",
-    "");
-
 // ── Target and variance measures ─────────────────────────────────────────────
+// cumulative metrics (total_revenue, nhs_revenue, private_revenue):
+//   annual target is exploded into working-day rows in Gold.Fact_Daily_Targets.
+//   SUM over the active date filter gives the correct prorated target automatically.
+//   No _Period Run Rate proration needed.
+// rate / point_in_time metrics: fixed threshold from _Targets as before.
 
 add("Total Revenue Target",
-    @"VAR period_key    = [_FY Period Key]
-VAR annual        = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""total_revenue""
-    && '_Targets'[Period Type] = ""annual""
-    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR all_time_target = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""total_revenue""
-    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    @"CALCULATE(
+    SUM('List Daily Targets'[Daily Target Value]),
+    'List Daily Targets'[Metric] = ""total_revenue"")",
     "£#,##0");
 
 add("Total Revenue vs Target",
@@ -90,15 +80,9 @@ RETURN IF(
     "");
 
 add("NHS Revenue Target",
-    @"VAR period_key    = [_FY Period Key]
-VAR annual        = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_revenue""
-    && '_Targets'[Period Type] = ""annual""
-    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR all_time_target = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_revenue""
-    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    @"CALCULATE(
+    SUM('List Daily Targets'[Daily Target Value]),
+    'List Daily Targets'[Metric] = ""nhs_revenue"")",
     "£#,##0");
 
 add("NHS Revenue vs Target",
@@ -113,15 +97,9 @@ RETURN IF(
     "");
 
 add("Private Revenue Target",
-    @"VAR period_key    = [_FY Period Key]
-VAR annual        = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""private_revenue""
-    && '_Targets'[Period Type] = ""annual""
-    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR all_time_target = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""private_revenue""
-    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    @"CALCULATE(
+    SUM('List Daily Targets'[Daily Target Value]),
+    'List Daily Targets'[Metric] = ""private_revenue"")",
     "£#,##0");
 
 add("Private Revenue vs Target",
@@ -191,42 +169,42 @@ RETURN IF(
 // above range: pct >= band = strong green … pct < -band = strong red
 
 add("Total Revenue BG",
-    @"VAR actual   = [Total Revenue]
-VAR target   = [_Revenue Target]
-VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual = [Total Revenue]
+VAR target = [Total Revenue Target]
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),  ""#FFFFFF"",
-    pct >= band,      ""#1a7f3c"",
-    pct >= 0,         ""#6abf7b"",
-    pct >= -band,     ""#f4a261"",
-                      ""#c0392b"")",
+    ISBLANK(target), ""#FFFFFF"",
+    pct >= band,     ""#1a7f3c"",
+    pct >= 0,        ""#6abf7b"",
+    pct >= -band,    ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("NHS Revenue BG",
-    @"VAR actual   = [NHS Revenue]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue""), '_Targets'[Target Value])
-VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual = [NHS Revenue]
+VAR target = [NHS Revenue Target]
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),  ""#FFFFFF"",
-    pct >= band,      ""#1a7f3c"",
-    pct >= 0,         ""#6abf7b"",
-    pct >= -band,     ""#f4a261"",
-                      ""#c0392b"")",
+    ISBLANK(target), ""#FFFFFF"",
+    pct >= band,     ""#1a7f3c"",
+    pct >= 0,        ""#6abf7b"",
+    pct >= -band,    ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("Private Revenue BG",
-    @"VAR actual   = [Private Revenue]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue""), '_Targets'[Target Value])
-VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual = [Private Revenue]
+VAR target = [Private Revenue Target]
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),  ""#FFFFFF"",
-    pct >= band,      ""#1a7f3c"",
-    pct >= 0,         ""#6abf7b"",
-    pct >= -band,     ""#f4a261"",
-                      ""#c0392b"")",
+    ISBLANK(target), ""#FFFFFF"",
+    pct >= band,     ""#1a7f3c"",
+    pct >= 0,        ""#6abf7b"",
+    pct >= -band,    ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("Outstanding Invoices BG",
