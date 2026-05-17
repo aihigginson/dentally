@@ -5,9 +5,10 @@
 --  History          :
 --    *01     17/05/2026  AIH Initial Release
 --    *02     17/05/2026  AIH Add transitive downstream dependency reruns via Process_Dependency
---    *03     17/05/2026  AIH Replace DELETE-in-loop with sequence-counter loop (Fabric-safe)
+--    *03     17/05/2026  AIH Replace temp table with Audit.Rerun_Plan for Fabric reliability and visibility
 --  To Run           :   EXEC Audit.usp_Rerun_Failed_Jobs
 --                   :   EXEC Audit.usp_Rerun_Failed_Jobs @Category_Code = 'BRONZE'
+--  To inspect plan  :   SELECT * FROM Audit.Rerun_Plan ORDER BY Rerun_ID, Exec_Seq
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Audit].[usp_Rerun_Failed_Jobs]
 GO
@@ -21,13 +22,19 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        -- ── Step 1: seed with all jobs whose latest run is FAILED ──────────────
-        SELECT   pc.Process_Code
-                , pc.Process_Name
-                , pc.Process_Category_Code
-                , CAST(0 AS INT) AS Run_Level      -- 0 = directly failed
-                , CAST(0 AS INT) AS Is_Downstream
-        INTO    #to_rerun
+        DECLARE @Rerun_ID UNIQUEIDENTIFIER;
+        SET @Rerun_ID = NEWID();
+
+        -- ── Step 1: insert directly-failed jobs into Rerun_Plan at level 0 ─────
+        INSERT INTO Audit.Rerun_Plan (Rerun_ID, Exec_Seq, Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream, Planned_At)
+        SELECT  @Rerun_ID
+              , ROW_NUMBER() OVER (ORDER BY pc.Process_Category_Code, pc.Process_Code)
+              , pc.Process_Code
+              , pc.Process_Name
+              , pc.Process_Category_Code
+              , 0
+              , 0
+              , SYSUTCDATETIME()
         FROM    Audit.Process_Config AS pc
         INNER JOIN (
             SELECT  Process_Name
@@ -48,34 +55,49 @@ BEGIN
         BEGIN
             SET @Current_Level = @Current_Level + 1;
 
-            INSERT INTO #to_rerun (Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream)
-            SELECT   pc.Process_Code
-                   , pc.Process_Name
-                   , pc.Process_Category_Code
-                   , @Current_Level
-                   , 1
+            INSERT INTO Audit.Rerun_Plan (Rerun_ID, Exec_Seq, Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream, Planned_At)
+            SELECT  @Rerun_ID
+                  , 0          -- placeholder; Exec_Seq is reassigned below
+                  , pc.Process_Code
+                  , pc.Process_Name
+                  , pc.Process_Category_Code
+                  , @Current_Level
+                  , 1
+                  , SYSUTCDATETIME()
             FROM    Audit.Process_Dependency AS pd
             INNER JOIN Audit.Process_Config  AS pc ON pc.Process_Code = pd.Next_Process_Code
             WHERE   pd.Is_Active = 1
-              AND   pd.Prev_Process_Code IN (SELECT Process_Code FROM #to_rerun WHERE Run_Level = @Current_Level - 1)
-              AND   pd.Next_Process_Code NOT IN (SELECT Process_Code FROM #to_rerun);
+              AND   pd.Prev_Process_Code IN (
+                        SELECT Process_Code FROM Audit.Rerun_Plan
+                        WHERE  Rerun_ID = @Rerun_ID AND Run_Level = @Current_Level - 1
+                    )
+              AND   pd.Next_Process_Code NOT IN (
+                        SELECT Process_Code FROM Audit.Rerun_Plan
+                        WHERE  Rerun_ID = @Rerun_ID
+                    );
 
             SET @Added = @@ROWCOUNT;
         END
 
-        -- ── Step 3: assign a fixed execution sequence then run in order ────────
-        -- Using a counter avoids DML-in-loop issues in Fabric.
-        SELECT   Process_Code
-                , Process_Name
-                , Process_Category_Code
-                , Run_Level
-                , Is_Downstream
-                , ROW_NUMBER() OVER (ORDER BY Run_Level, Process_Category_Code, Process_Code) AS Exec_Seq
-        INTO    #exec_plan
-        FROM    #to_rerun;
+        -- ── Step 3: reassign Exec_Seq across the full plan in run order ────────
+        -- Build the final ordered sequence into a staging insert, then replace.
+        INSERT INTO Audit.Rerun_Plan (Rerun_ID, Exec_Seq, Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream, Planned_At)
+        SELECT  @Rerun_ID
+              , ROW_NUMBER() OVER (ORDER BY Run_Level, Process_Category_Code, Process_Code)
+              , Process_Code
+              , Process_Name
+              , Process_Category_Code
+              , Run_Level
+              , Is_Downstream
+              , Planned_At
+        FROM    Audit.Rerun_Plan
+        WHERE   Rerun_ID = @Rerun_ID;
 
-        DROP TABLE IF EXISTS #to_rerun;
+        DELETE FROM Audit.Rerun_Plan
+        WHERE  Rerun_ID = @Rerun_ID
+          AND  Exec_Seq = 0;
 
+        -- ── Step 4: execute in sequence ───────────────────────────────────────
         DECLARE @Code        VARCHAR(100);
         DECLARE @Name        VARCHAR(1000);
         DECLARE @Category    VARCHAR(100);
@@ -86,39 +108,49 @@ BEGIN
         DECLARE @Seq         INT = 1;
         DECLARE @Max_Seq     INT;
 
-        SELECT @Max_Seq = COUNT(*) FROM #exec_plan;
+        SELECT @Max_Seq = COUNT(*) FROM Audit.Rerun_Plan WHERE Rerun_ID = @Rerun_ID;
 
         PRINT 'usp_Rerun_Failed_Jobs: ' + CAST(@Max_Seq AS VARCHAR) + ' job(s) to run'
             + CASE WHEN @Category_Code IS NOT NULL THEN ' (category filter: ' + @Category_Code + ')' ELSE '' END;
+        PRINT 'Rerun_ID: ' + CAST(@Rerun_ID AS VARCHAR(36));
+        PRINT 'Inspect plan: SELECT * FROM Audit.Rerun_Plan WHERE Rerun_ID = ''' + CAST(@Rerun_ID AS VARCHAR(36)) + ''' ORDER BY Exec_Seq';
 
         WHILE @Seq <= @Max_Seq
         BEGIN
+            SET @Code = NULL;
+
             SELECT  @Code     = Process_Code
                   , @Name     = Process_Name
                   , @Category = Process_Category_Code
                   , @Level    = Run_Level
                   , @IsDown   = Is_Downstream
-            FROM    #exec_plan
-            WHERE   Exec_Seq = @Seq;
+            FROM    Audit.Rerun_Plan
+            WHERE   Rerun_ID = @Rerun_ID
+              AND   Exec_Seq = @Seq;
 
-            IF @IsDown = 0
-                PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (failed)      [' + @Category + '] ' + @Name;
+            IF @Code IS NULL
+            BEGIN
+                SET @Seq = @Seq + 1;
+            END
             ELSE
-                PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (downstream)  [' + @Category + '] ' + @Name;
+            BEGIN
+                IF @IsDown = 0
+                    PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (failed)      [' + @Category + '] ' + @Name;
+                ELSE
+                    PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (downstream)  [' + @Category + '] ' + @Name;
 
-            EXEC Audit.ETL_Run_Process
-                  @Process_Code    = @Code
-                , @Parent_Run_UUID = @Parent_Run_UUID;
+                EXEC Audit.ETL_Run_Process
+                      @Process_Code    = @Code
+                    , @Parent_Run_UUID = @Parent_Run_UUID;
 
-            IF @IsDown = 0
-                SET @Rerun_Count = @Rerun_Count + 1;
-            ELSE
-                SET @Down_Count = @Down_Count + 1;
+                IF @IsDown = 0
+                    SET @Rerun_Count = @Rerun_Count + 1;
+                ELSE
+                    SET @Down_Count = @Down_Count + 1;
 
-            SET @Seq = @Seq + 1;
+                SET @Seq = @Seq + 1;
+            END
         END
-
-        DROP TABLE IF EXISTS #exec_plan;
 
         PRINT 'usp_Rerun_Failed_Jobs: complete -- '
             + CAST(@Rerun_Count AS VARCHAR) + ' failed job(s) rerun, '

@@ -58,6 +58,7 @@ $Groups = [ordered]@{
         'Audit.Meta_Table_Profile.Table.sql'
         'Audit.Meta_Column_Profile.Table.sql'
         'Audit.Tenants.Table.sql'
+        'Audit.Rerun_Plan.Table.sql'
     )
 
     '2b. Security tables' = @(
