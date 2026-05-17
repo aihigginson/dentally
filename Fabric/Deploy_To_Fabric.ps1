@@ -101,6 +101,7 @@ $Groups = [ordered]@{
         'Audit.ETL_Execution_Log_Cleanup.StoredProcedure.sql'
         'Audit.Meta_Log_Record_Count.StoredProcedure.sql'
         'Audit.Meta_Refresh_Record_Count.StoredProcedure.sql'
+        'Audit.usp_Populate_Process_Dependencies.StoredProcedure.sql'
         'Audit.usp_Rerun_Failed_Jobs.StoredProcedure.sql'
     )
 
