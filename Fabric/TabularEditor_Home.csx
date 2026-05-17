@@ -34,7 +34,7 @@ add("Forward Book Value",
     @"VAR future_booked =
     CALCULATE(
         COUNTROWS('_Appointments'),
-        REMOVEFILTERS('_Date'),
+        REMOVEFILTERS('List Date'),
         '_Appointments'[Start Time] > NOW(),
         '_Appointments'[Start Time] <= NOW() + 30,
         '_Appointments'[Is Cancelled] = FALSE(),
@@ -42,8 +42,8 @@ add("Forward Book Value",
     )
 VAR avg_appt_value =
     DIVIDE(
-        CALCULATE([Total Revenue],    REMOVEFILTERS('_Date')),
-        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('_Date'))
+        CALCULATE([Total Revenue],    REMOVEFILTERS('List Date')),
+        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('List Date'))
     )
 RETURN future_booked * avg_appt_value",
     "£#,##0");
@@ -57,8 +57,8 @@ add("DNA Revenue Lost",
     SUM('Aggregate Site Patient Practitioner Daily'[DNA Appointments])
 VAR avg_appt_value =
     DIVIDE(
-        CALCULATE([Total Revenue],    REMOVEFILTERS('_Date')),
-        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('_Date'))
+        CALCULATE([Total Revenue],    REMOVEFILTERS('List Date')),
+        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('List Date'))
     )
 RETURN dna_count * avg_appt_value",
     "£#,##0");
