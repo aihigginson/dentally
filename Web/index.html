@@ -325,7 +325,7 @@
 <nav class="nav">
     <div class="nav-tab active" data-section="home">Home</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
-    <div class="nav-tab"        data-section="customer">Patient</div>
+    <div class="nav-tab"        data-section="patient">Patient</div>
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
@@ -337,7 +337,7 @@
     <div class="nav-report-controls" id="nav-report-controls">
         <div class="report-subnav" id="subnav-home"></div>
         <div class="report-subnav" id="subnav-revenue"></div>
-        <div class="report-subnav" id="subnav-customer"></div>
+        <div class="report-subnav" id="subnav-patient"></div>
         <div class="report-subnav" id="subnav-scheduling"></div>
         <div class="report-subnav" id="subnav-clinical"></div>
         <div class="report-subnav" id="subnav-nhs"></div>
@@ -396,8 +396,8 @@
     </section>
 
     <!-- ── PATIENT ── -->
-    <section class="section" id="section-customer">
-        <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
+    <section class="section" id="section-patient">
+        <div class="embed-slot embed-full" id="embed-patient">Power BI report will embed here</div>
     </section>
 
     <!-- ── SCHEDULE ── -->
@@ -588,9 +588,9 @@
     const SECTION_REPORT = {
         'home':      'home',
         'revenue':   'revenue',
-        'customer':  'patients',
+        'patient':   'patient',
         'scheduling':'scheduling',
-        'clinical':  'treatment',
+        'clinical':  'clinical',
         'nhs':       'nhs',
     };
 
@@ -705,7 +705,7 @@
     let _targetsOriginal = {};
 
     const SECTION_LABELS = {
-        home: 'Home', revenue: 'Revenue', patients: 'Patient',
+        home: 'Home', revenue: 'Revenue', patient: 'Patient',
         scheduling: 'Scheduling', clinical: 'Clinical', nhs: 'NHS',
     };
     const FORMAT_HINTS = {
