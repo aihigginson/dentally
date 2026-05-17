@@ -3,17 +3,18 @@
 --  Author           :  AIH
 --  Initital Date    :  17/05/2026
 --  History          :
---    *01     17/05/2026  AIH Initial Release
+--    *01     17/05/2026  AIH Initial Release - sys.sql_expression_dependencies
+--    *02     17/05/2026  AIH Rewrite: sys.sql_modules + LIKE text scan
+--                            (sql_expression_dependencies not supported in Fabric)
 --  To Run           :   EXEC Audit.usp_Populate_Process_Dependencies
 --  How it works     :
---    Uses sys.sql_expression_dependencies to discover which tables each SP
---    references. Two SPs are linked when they both reference the same table
---    in the same schema — one writing to it, one reading from it.
---      Bronze SP  → Bronze table ← Silver SP   => Bronze→Silver dependency
---      Silver SP  → Silver table ← Gold SP     => Silver→Gold dependency
---      Gold F/D SP→ Gold table   ← Gold Agg SP => Gold→Aggregate dependency
---    Each discovered pair is matched to Process_Config via Process_Name
---    so only SPs registered in Process_Config are included.
+--    Reads every stored procedure's definition text via sys.sql_modules.
+--    Two SPs are linked when one writes to a table (INTO Schema.Table)
+--    and the other reads from the same table (any mention of Schema.Table).
+--      Bronze SP writes Bronze.X  <-- Silver SP reads Bronze.X  => Bronze->Silver
+--      Silver SP writes Silver.X  <-- Gold SP   reads Silver.X  => Silver->Gold
+--      Gold F/D SP writes Gold.X  <-- Gold Agg  reads Gold.X   => Gold->Aggregate
+--    Only SPs registered in Process_Config are included.
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Audit].[usp_Populate_Process_Dependencies]
 GO
@@ -26,8 +27,8 @@ BEGIN
         DELETE FROM Audit.Process_Dependency;
 
         -- ── Bronze SPs → Silver SPs ───────────────────────────────────────────
-        -- A Bronze SP and a Silver SP are linked when they both reference the
-        -- same Bronze table: the Bronze SP writes to it; the Silver SP reads from it.
+        -- Bronze SP writes to Bronze.X  (MERGE INTO / INSERT INTO Bronze.X)
+        -- Silver SP reads from Bronze.X (any mention of Bronze.X in definition)
         INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
         SELECT DISTINCT
               b_pc.Process_Code
@@ -35,24 +36,34 @@ BEGIN
             , 'DATA'
             , 1
             , 1
-        FROM    sys.sql_expression_dependencies AS b_dep
-        INNER JOIN sys.objects  AS b_sp      ON b_sp.object_id      = b_dep.referencing_id AND b_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS b_sp_sch  ON b_sp_sch.schema_id  = b_sp.schema_id       AND b_sp_sch.name = 'Bronze'
-        INNER JOIN sys.objects  AS b_tbl     ON b_tbl.object_id     = b_dep.referenced_id  AND b_tbl.type = 'U'
-        INNER JOIN sys.schemas  AS b_tbl_sch ON b_tbl_sch.schema_id = b_tbl.schema_id      AND b_tbl_sch.name = 'Bronze'
-        -- Silver SP that also references the same Bronze table
-        INNER JOIN sys.sql_expression_dependencies AS s_dep ON s_dep.referenced_id = b_dep.referenced_id
-        INNER JOIN sys.objects  AS s_sp      ON s_sp.object_id      = s_dep.referencing_id AND s_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS s_sp_sch  ON s_sp_sch.schema_id  = s_sp.schema_id       AND s_sp_sch.name = 'Silver'
-        -- Match to Process_Config by qualified SP name
-        INNER JOIN Audit.Process_Config AS b_pc ON b_pc.Process_Name = b_sp_sch.name + '.' + b_sp.name
-        INNER JOIN Audit.Process_Config AS s_pc ON s_pc.Process_Name = s_sp_sch.name + '.' + s_sp.name;
+        FROM   sys.procedures  AS b_sp
+        JOIN   sys.schemas     AS b_sch ON b_sch.schema_id = b_sp.schema_id AND b_sch.name = 'Bronze'
+        JOIN   sys.sql_modules AS b_m   ON b_m.object_id   = b_sp.object_id
+        -- Candidate link tables: every Bronze table
+        CROSS JOIN (
+            SELECT t.name AS tbl_name
+            FROM   sys.tables  AS t
+            JOIN   sys.schemas AS s ON s.schema_id = t.schema_id AND s.name = 'Bronze'
+        ) AS bt
+        -- Silver SPs
+        JOIN   sys.procedures  AS s_sp  ON 1 = 1
+        JOIN   sys.schemas     AS s_sch ON s_sch.schema_id = s_sp.schema_id AND s_sch.name = 'Silver'
+        JOIN   sys.sql_modules AS s_m   ON s_m.object_id   = s_sp.object_id
+        -- Both must be registered in Process_Config
+        JOIN   Audit.Process_Config AS b_pc ON b_pc.Process_Name = b_sch.name + '.' + b_sp.name
+        JOIN   Audit.Process_Config AS s_pc ON s_pc.Process_Name = s_sch.name + '.' + s_sp.name
+        WHERE
+            -- Bronze SP writes to the Bronze table
+            UPPER(b_m.definition) LIKE '%INTO BRONZE.' + UPPER(bt.tbl_name) + '%'
+            AND
+            -- Silver SP references the same Bronze table
+            UPPER(s_m.definition) LIKE '%BRONZE.' + UPPER(bt.tbl_name) + '%';
 
         DECLARE @Bronze_Silver INT = @@ROWCOUNT;
 
         -- ── Silver SPs → Gold SPs ─────────────────────────────────────────────
-        -- A Silver SP and a Gold SP are linked when they both reference the
-        -- same Silver table.
+        -- Silver SP writes to Silver.X  (MERGE INTO / INSERT INTO Silver.X)
+        -- Gold SP reads from Silver.X   (any mention of Silver.X in definition)
         INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
         SELECT DISTINCT
               s_pc.Process_Code
@@ -60,23 +71,29 @@ BEGIN
             , 'DATA'
             , 2
             , 1
-        FROM    sys.sql_expression_dependencies AS s_dep
-        INNER JOIN sys.objects  AS s_sp      ON s_sp.object_id      = s_dep.referencing_id AND s_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS s_sp_sch  ON s_sp_sch.schema_id  = s_sp.schema_id       AND s_sp_sch.name = 'Silver'
-        INNER JOIN sys.objects  AS s_tbl     ON s_tbl.object_id     = s_dep.referenced_id  AND s_tbl.type = 'U'
-        INNER JOIN sys.schemas  AS s_tbl_sch ON s_tbl_sch.schema_id = s_tbl.schema_id      AND s_tbl_sch.name = 'Silver'
-        -- Gold SP that also references the same Silver table
-        INNER JOIN sys.sql_expression_dependencies AS g_dep ON g_dep.referenced_id = s_dep.referenced_id
-        INNER JOIN sys.objects  AS g_sp      ON g_sp.object_id      = g_dep.referencing_id AND g_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS g_sp_sch  ON g_sp_sch.schema_id  = g_sp.schema_id       AND g_sp_sch.name = 'Gold'
-        INNER JOIN Audit.Process_Config AS s_pc ON s_pc.Process_Name = s_sp_sch.name + '.' + s_sp.name
-        INNER JOIN Audit.Process_Config AS g_pc ON g_pc.Process_Name = g_sp_sch.name + '.' + g_sp.name;
+        FROM   sys.procedures  AS s_sp
+        JOIN   sys.schemas     AS s_sch ON s_sch.schema_id = s_sp.schema_id AND s_sch.name = 'Silver'
+        JOIN   sys.sql_modules AS s_m   ON s_m.object_id   = s_sp.object_id
+        CROSS JOIN (
+            SELECT t.name AS tbl_name
+            FROM   sys.tables  AS t
+            JOIN   sys.schemas AS s ON s.schema_id = t.schema_id AND s.name = 'Silver'
+        ) AS st
+        JOIN   sys.procedures  AS g_sp  ON 1 = 1
+        JOIN   sys.schemas     AS g_sch ON g_sch.schema_id = g_sp.schema_id AND g_sch.name = 'Gold'
+        JOIN   sys.sql_modules AS g_m   ON g_m.object_id   = g_sp.object_id
+        JOIN   Audit.Process_Config AS s_pc ON s_pc.Process_Name = s_sch.name + '.' + s_sp.name
+        JOIN   Audit.Process_Config AS g_pc ON g_pc.Process_Name = g_sch.name + '.' + g_sp.name
+        WHERE
+            UPPER(s_m.definition) LIKE '%INTO SILVER.' + UPPER(st.tbl_name) + '%'
+            AND
+            UPPER(g_m.definition) LIKE '%SILVER.' + UPPER(st.tbl_name) + '%';
 
         DECLARE @Silver_Gold INT = @@ROWCOUNT;
 
         -- ── Gold Fact/Dim SPs → Gold Aggregate SPs ────────────────────────────
-        -- A Gold Fact/Dim SP and a Gold Aggregate SP are linked when they both
-        -- reference the same Gold table.
+        -- Gold Fact/Dim SP writes to Gold.X  (INSERT INTO Gold.X)
+        -- Gold Agg SP reads from Gold.X      (any mention of Gold.X in definition)
         INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
         SELECT DISTINCT
               gf_pc.Process_Code
@@ -84,17 +101,27 @@ BEGIN
             , 'DATA'
             , 3
             , 1
-        FROM    sys.sql_expression_dependencies AS gf_dep
-        INNER JOIN sys.objects  AS gf_sp      ON gf_sp.object_id      = gf_dep.referencing_id AND gf_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS gf_sp_sch  ON gf_sp_sch.schema_id  = gf_sp.schema_id       AND gf_sp_sch.name = 'Gold'
-        INNER JOIN sys.objects  AS gf_tbl     ON gf_tbl.object_id     = gf_dep.referenced_id  AND gf_tbl.type = 'U'
-        INNER JOIN sys.schemas  AS gf_tbl_sch ON gf_tbl_sch.schema_id = gf_tbl.schema_id      AND gf_tbl_sch.name = 'Gold'
-        -- Gold Aggregate SP that also references the same Gold table
-        INNER JOIN sys.sql_expression_dependencies AS ga_dep ON ga_dep.referenced_id = gf_dep.referenced_id
-        INNER JOIN sys.objects  AS ga_sp      ON ga_sp.object_id      = ga_dep.referencing_id AND ga_sp.type  = 'P'
-        INNER JOIN sys.schemas  AS ga_sp_sch  ON ga_sp_sch.schema_id  = ga_sp.schema_id       AND ga_sp_sch.name = 'Gold'
-        INNER JOIN Audit.Process_Config AS gf_pc ON gf_pc.Process_Name = gf_sp_sch.name + '.' + gf_sp.name AND gf_pc.Process_Category_Code IN ('GOLD_FACT', 'GOLD_DIM')
-        INNER JOIN Audit.Process_Config AS ga_pc ON ga_pc.Process_Name = ga_sp_sch.name + '.' + ga_sp.name AND ga_pc.Process_Category_Code = 'GOLD_AGG';
+        FROM   sys.procedures  AS gf_sp
+        JOIN   sys.schemas     AS gf_sch ON gf_sch.schema_id = gf_sp.schema_id AND gf_sch.name = 'Gold'
+        JOIN   sys.sql_modules AS gf_m   ON gf_m.object_id   = gf_sp.object_id
+        CROSS JOIN (
+            SELECT t.name AS tbl_name
+            FROM   sys.tables  AS t
+            JOIN   sys.schemas AS s ON s.schema_id = t.schema_id AND s.name = 'Gold'
+        ) AS gt
+        JOIN   sys.procedures  AS ga_sp  ON 1 = 1
+        JOIN   sys.schemas     AS ga_sch ON ga_sch.schema_id = ga_sp.schema_id AND ga_sch.name = 'Gold'
+        JOIN   sys.sql_modules AS ga_m   ON ga_m.object_id   = ga_sp.object_id
+        -- Fact/Dim category filter on the writing SP
+        JOIN   Audit.Process_Config AS gf_pc ON gf_pc.Process_Name = gf_sch.name + '.' + gf_sp.name
+                                             AND gf_pc.Process_Category_Code IN ('GOLD_FACT', 'GOLD_DIM')
+        -- Aggregate category filter on the reading SP
+        JOIN   Audit.Process_Config AS ga_pc ON ga_pc.Process_Name = ga_sch.name + '.' + ga_sp.name
+                                             AND ga_pc.Process_Category_Code = 'GOLD_AGG'
+        WHERE
+            UPPER(gf_m.definition) LIKE '%INTO GOLD.' + UPPER(gt.tbl_name) + '%'
+            AND
+            UPPER(ga_m.definition) LIKE '%GOLD.' + UPPER(gt.tbl_name) + '%';
 
         DECLARE @Gold_Agg INT = @@ROWCOUNT;
 
