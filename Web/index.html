@@ -323,10 +323,11 @@
 
 <!-- ════════════════ PRIMARY NAVIGATION ════════════════ -->
 <nav class="nav">
-    <div class="nav-tab active" data-section="treatment">Treatment</div>
+    <div class="nav-tab active" data-section="home">Home</div>
+    <div class="nav-tab"        data-section="revenue">Revenue</div>
     <div class="nav-tab"        data-section="customer">Patient</div>
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
-    <div class="nav-tab"        data-section="revenue">Revenue</div>
+    <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
     <div class="nav-tab" data-section="targets" id="nav-targets" style="display:none">Targets</div>
     <button class="filter-toggle" id="filter-toggle">
@@ -334,10 +335,11 @@
         Filters
     </button>
     <div class="nav-report-controls" id="nav-report-controls">
-        <div class="report-subnav" id="subnav-treatment"></div>
+        <div class="report-subnav" id="subnav-home"></div>
+        <div class="report-subnav" id="subnav-revenue"></div>
         <div class="report-subnav" id="subnav-customer"></div>
         <div class="report-subnav" id="subnav-scheduling"></div>
-        <div class="report-subnav" id="subnav-revenue"></div>
+        <div class="report-subnav" id="subnav-clinical"></div>
         <div class="report-subnav" id="subnav-nhs"></div>
         <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -385,8 +387,12 @@
 <main class="main">
 
     <!-- ── TREATMENT ── -->
-    <section class="section active" id="section-treatment">
-        <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
+    <section class="section active" id="section-home">
+        <div class="embed-slot embed-full" id="embed-home">Power BI report will embed here</div>
+    </section>
+
+    <section class="section" id="section-clinical">
+        <div class="embed-slot embed-full" id="embed-clinical">Power BI report will embed here</div>
     </section>
 
     <!-- ── PATIENT ── -->
@@ -561,7 +567,7 @@
             filterToggleBtn.classList.add('active');
         }
         loadFilters(false);
-        loadEmbedsInSection('treatment');
+        loadEmbedsInSection('home');
     }
 
     async function startApp() {
@@ -580,10 +586,11 @@
 
     // ── Report map ───────────────────────────────────────────────────────────
     const SECTION_REPORT = {
-        'treatment': 'treatment',
+        'home':      'home',
+        'revenue':   'revenue',
         'customer':  'patients',
         'scheduling':'scheduling',
-        'revenue':   'revenue',
+        'clinical':  'treatment',
         'nhs':       'nhs',
     };
 
@@ -615,7 +622,7 @@
     }
 
     // ── State ────────────────────────────────────────────────────────────────
-    let activeSection = 'treatment';
+    let activeSection = 'home';
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -698,8 +705,8 @@
     let _targetsOriginal = {};
 
     const SECTION_LABELS = {
-        revenue: 'Revenue', patients: 'Patient', treatment: 'Treatment',
-        scheduling: 'Scheduling', nhs: 'NHS',
+        home: 'Home', revenue: 'Revenue', patients: 'Patient',
+        scheduling: 'Scheduling', clinical: 'Clinical', nhs: 'NHS',
     };
     const FORMAT_HINTS = {
         currency: '£  —  2 decimal places',
