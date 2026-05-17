@@ -80,11 +80,14 @@ BEGIN
             t.[Variance],
             SYSUTCDATETIME()
         FROM [Input].[Targets] t
+        INNER JOIN [Config].[Metric_Definitions] cmd
+            ON  cmd.[Metric_Key]  = t.[Metric]
+            AND cmd.[Target_Type] = 'cumulative'
         INNER JOIN #wd w
             ON REPLACE(t.[Period_Value], ' ', '') = w.FY_Name
         INNER JOIN [Gold].[Dim_Date] d
-            ON d.[Financial_Year_Name]          = w.FY_Name
-            AND d.[Is_Weekend]                  = 0
+            ON d.[Financial_Year_Name]            = w.FY_Name
+            AND d.[Is_Weekend]                    = 0
             AND d.[Is_England_Wales_Bank_Holiday] = 0
         WHERE t.[Period_Type] IN ('annual', 'financial_year');
 

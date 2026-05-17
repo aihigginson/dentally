@@ -15,6 +15,7 @@ CREATE TABLE [Config].[Metric_Definitions] (
     [Supports_Practitioner]   BIT            NOT NULL,
     [Is_Active]               BIT            NOT NULL,
     [Display_Order]           INT            NOT NULL,
-    [Range_Type]              VARCHAR(10)    NOT NULL    -- above | below | within
+    [Range_Type]              VARCHAR(10)    NOT NULL,   -- above | below | within
+    [Target_Type]             VARCHAR(20)    NOT NULL    -- cumulative | rate | point_in_time
 )
 GO
