@@ -123,7 +123,30 @@ foreach ($bName in $bronzeSps.Keys) {
     }
 }
 
-# -- Level 2: Silver SP writes Silver.X  &  Gold SP mentions Silver.X --------
+# -- Level 2: Silver SP writes Silver.X  &  another Silver SP mentions Silver.X
+foreach ($s1Name in $silverSps.Keys) {
+    if (-not $pcMap.ContainsKey($s1Name)) { continue }
+    $s1Codes  = $pcMap[$s1Name]
+    $s1Writes = Get-WriteTargets $silverSps[$s1Name] 'Silver'
+    if ($s1Writes.Count -eq 0) { continue }
+
+    foreach ($s2Name in $silverSps.Keys) {
+        if ($s2Name -eq $s1Name) { continue }
+        if (-not $pcMap.ContainsKey($s2Name)) { continue }
+        $s2Mentions = Get-Mentions $silverSps[$s2Name] 'Silver'
+        $shared     = $s1Writes | Where-Object { $s2Mentions -contains $_ }
+        if ($shared.Count -eq 0) { continue }
+
+        $s2Codes = $pcMap[$s2Name]
+        foreach ($s1c in $s1Codes) {
+            foreach ($s2c in $s2Codes) {
+                $deps.Add("$s1c|$s2c|2")
+            }
+        }
+    }
+}
+
+# -- Level 3: Silver SP writes Silver.X  &  Gold SP mentions Silver.X ---------
 foreach ($sName in $silverSps.Keys) {
     if (-not $pcMap.ContainsKey($sName)) { continue }
     $sCodes  = $pcMap[$sName]
@@ -139,13 +162,40 @@ foreach ($sName in $silverSps.Keys) {
         $gCodes = $pcMap[$gName]
         foreach ($sc in $sCodes) {
             foreach ($gc in $gCodes) {
-                $deps.Add("$sc|$gc|2")
+                $deps.Add("$sc|$gc|3")
             }
         }
     }
 }
 
-# -- Level 3: Gold Fact/Dim SP writes Gold.X  &  Gold Agg SP mentions Gold.X -
+# -- Level 4: Gold Dim SP writes Gold.Dim_X  &  Gold Fact SP mentions Gold.Dim_X
+foreach ($gdName in $goldSps.Keys) {
+    if (-not $pcMap.ContainsKey($gdName)) { continue }
+    $gdCodes = @($pcMap[$gdName] | Where-Object { $_ -like 'GOLD_DIM_*' })
+    if ($gdCodes.Count -eq 0) { continue }
+
+    $gdWrites = Get-WriteTargets $goldSps[$gdName] 'Gold'
+    if ($gdWrites.Count -eq 0) { continue }
+
+    foreach ($gfName in $goldSps.Keys) {
+        if ($gfName -eq $gdName) { continue }
+        if (-not $pcMap.ContainsKey($gfName)) { continue }
+        $gfCodes = @($pcMap[$gfName] | Where-Object { $_ -like 'GOLD_FACT_*' })
+        if ($gfCodes.Count -eq 0) { continue }
+
+        $gfMentions = Get-Mentions $goldSps[$gfName] 'Gold'
+        $shared     = $gdWrites | Where-Object { $gfMentions -contains $_ }
+        if ($shared.Count -eq 0) { continue }
+
+        foreach ($gdc in $gdCodes) {
+            foreach ($gfc in $gfCodes) {
+                $deps.Add("$gdc|$gfc|4")
+            }
+        }
+    }
+}
+
+# -- Level 5: Gold Fact/Dim SP writes Gold.X  &  Gold Agg SP mentions Gold.X --
 foreach ($gfName in $goldSps.Keys) {
     if (-not $pcMap.ContainsKey($gfName)) { continue }
     $gfCodes = @($pcMap[$gfName] | Where-Object { $_ -like 'GOLD_FACT_*' -or $_ -like 'GOLD_DIM_*' })
@@ -166,7 +216,7 @@ foreach ($gfName in $goldSps.Keys) {
 
         foreach ($gfc in $gfCodes) {
             foreach ($gac in $gaCodes) {
-                $deps.Add("$gfc|$gac|3")
+                $deps.Add("$gfc|$gac|5")
             }
         }
     }
@@ -180,12 +230,16 @@ $unique = $deps | Sort-Object | Select-Object -Unique
 $l1 = @($unique | Where-Object { $_.EndsWith('|1') })
 $l2 = @($unique | Where-Object { $_.EndsWith('|2') })
 $l3 = @($unique | Where-Object { $_.EndsWith('|3') })
+$l4 = @($unique | Where-Object { $_.EndsWith('|4') })
+$l5 = @($unique | Where-Object { $_.EndsWith('|5') })
 
 Write-Host "Dependencies found:"
-Write-Host "  Bronze -> Silver : $($l1.Count)"
-Write-Host "  Silver -> Gold   : $($l2.Count)"
-Write-Host "  Gold   -> Agg    : $($l3.Count)"
-Write-Host "  Total            : $($unique.Count)"
+Write-Host "  Bronze -> Silver   (1): $($l1.Count)"
+Write-Host "  Silver -> Silver   (2): $($l2.Count)"
+Write-Host "  Silver -> Gold     (3): $($l3.Count)"
+Write-Host "  Gold Dim -> Fact   (4): $($l4.Count)"
+Write-Host "  Gold -> Agg        (5): $($l5.Count)"
+Write-Host "  Total                 : $($unique.Count)"
 
 # ---------------------------------------------------------------------------
 # 6. Write SQL output file (ASCII encoding)
@@ -215,9 +269,11 @@ function Add-Section {
     $lines.Add('')
 }
 
-Add-Section $l1 'Bronze -> Silver (level 1)'
-Add-Section $l2 'Silver -> Gold   (level 2)'
-Add-Section $l3 'Gold   -> Agg    (level 3)'
+Add-Section $l1 'Bronze -> Silver  (level 1)'
+Add-Section $l2 'Silver -> Silver  (level 2)'
+Add-Section $l3 'Silver -> Gold    (level 3)'
+Add-Section $l4 'Gold Dim -> Fact  (level 4)'
+Add-Section $l5 'Gold -> Agg       (level 5)'
 
 [System.IO.File]::WriteAllLines($outFile, $lines, [System.Text.ASCIIEncoding]::new())
 
