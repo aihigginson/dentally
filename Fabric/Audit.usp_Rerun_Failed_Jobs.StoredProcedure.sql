@@ -5,6 +5,7 @@
 --  History          :
 --    *01     17/05/2026  AIH Initial Release
 --    *02     17/05/2026  AIH Add transitive downstream dependency reruns via Process_Dependency
+--    *03     17/05/2026  AIH Replace DELETE-in-loop with sequence-counter loop (Fabric-safe)
 --  To Run           :   EXEC Audit.usp_Rerun_Failed_Jobs
 --                   :   EXEC Audit.usp_Rerun_Failed_Jobs @Category_Code = 'BRONZE'
 ---------------------------------------------------------------------
@@ -24,8 +25,8 @@ BEGIN
         SELECT   pc.Process_Code
                 , pc.Process_Name
                 , pc.Process_Category_Code
-                , CAST(0 AS INT)    AS Run_Level   -- 0 = directly failed; downstream jobs get level 1, 2 ...
-                , CAST(0 AS INT)    AS Is_Downstream
+                , CAST(0 AS INT) AS Run_Level      -- 0 = directly failed
+                , CAST(0 AS INT) AS Is_Downstream
         INTO    #to_rerun
         FROM    Audit.Process_Config AS pc
         INNER JOIN (
@@ -40,10 +41,6 @@ BEGIN
           AND   (@Category_Code IS NULL OR pc.Process_Category_Code = @Category_Code);
 
         -- ── Step 2: iteratively add transitive downstream dependencies ─────────
-        -- Each pass adds jobs one level further downstream until nothing new is found.
-        -- Jobs already in #to_rerun (e.g. independently failed Silver jobs) are not
-        -- added again, so their Run_Level stays 0 and they run before their downstream.
-
         DECLARE @Current_Level INT = 0;
         DECLARE @Added         INT = 1;
 
@@ -66,9 +63,18 @@ BEGIN
             SET @Added = @@ROWCOUNT;
         END
 
-        -- ── Step 3: run all jobs in level order ────────────────────────────────
-        -- Within the same level, run in category-code order (BRONZE < GOLD < SILVER)
-        -- so natural layer ordering is preserved where multiple categories appear.
+        -- ── Step 3: assign a fixed execution sequence then run in order ────────
+        -- Using a counter avoids DML-in-loop issues in Fabric.
+        SELECT   Process_Code
+                , Process_Name
+                , Process_Category_Code
+                , Run_Level
+                , Is_Downstream
+                , ROW_NUMBER() OVER (ORDER BY Run_Level, Process_Category_Code, Process_Code) AS Exec_Seq
+        INTO    #exec_plan
+        FROM    #to_rerun;
+
+        DROP TABLE IF EXISTS #to_rerun;
 
         DECLARE @Code        VARCHAR(100);
         DECLARE @Name        VARCHAR(1000);
@@ -77,23 +83,23 @@ BEGIN
         DECLARE @IsDown      INT;
         DECLARE @Rerun_Count INT = 0;
         DECLARE @Down_Count  INT = 0;
-        DECLARE @Total_Count INT;
+        DECLARE @Seq         INT = 1;
+        DECLARE @Max_Seq     INT;
 
-        SELECT @Total_Count = COUNT(*) FROM #to_rerun;
+        SELECT @Max_Seq = COUNT(*) FROM #exec_plan;
 
-        PRINT 'usp_Rerun_Failed_Jobs: ' + CAST(@Total_Count AS VARCHAR) + ' job(s) to run'
+        PRINT 'usp_Rerun_Failed_Jobs: ' + CAST(@Max_Seq AS VARCHAR) + ' job(s) to run'
             + CASE WHEN @Category_Code IS NOT NULL THEN ' (category filter: ' + @Category_Code + ')' ELSE '' END;
 
-        WHILE EXISTS (SELECT 1 FROM #to_rerun)
+        WHILE @Seq <= @Max_Seq
         BEGIN
-            SELECT TOP 1
-                  @Code     = Process_Code
-                , @Name     = Process_Name
-                , @Category = Process_Category_Code
-                , @Level    = Run_Level
-                , @IsDown   = Is_Downstream
-            FROM  #to_rerun
-            ORDER BY Run_Level, Process_Category_Code, Process_Code;
+            SELECT  @Code     = Process_Code
+                  , @Name     = Process_Name
+                  , @Category = Process_Category_Code
+                  , @Level    = Run_Level
+                  , @IsDown   = Is_Downstream
+            FROM    #exec_plan
+            WHERE   Exec_Seq = @Seq;
 
             IF @IsDown = 0
                 PRINT '  [level ' + CAST(@Level AS VARCHAR) + '] rerunning (failed)      [' + @Category + '] ' + @Name;
@@ -104,15 +110,15 @@ BEGIN
                   @Process_Code    = @Code
                 , @Parent_Run_UUID = @Parent_Run_UUID;
 
-            DELETE FROM #to_rerun WHERE Process_Code = @Code;
-
             IF @IsDown = 0
                 SET @Rerun_Count = @Rerun_Count + 1;
             ELSE
                 SET @Down_Count = @Down_Count + 1;
+
+            SET @Seq = @Seq + 1;
         END
 
-        DROP TABLE IF EXISTS #to_rerun;
+        DROP TABLE IF EXISTS #exec_plan;
 
         PRINT 'usp_Rerun_Failed_Jobs: complete -- '
             + CAST(@Rerun_Count AS VARCHAR) + ' failed job(s) rerun, '
