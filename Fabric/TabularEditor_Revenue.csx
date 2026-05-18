@@ -64,8 +64,8 @@ RETURN DIVIDE([Total Revenue], total_worked)",
 
 add("Total Revenue Target",
     @"CALCULATE(
-    SUM('List Daily Targets'[Daily Target Value]),
-    'List Daily Targets'[Metric] = ""total_revenue"")",
+    SUM('_Daily Targets'[Daily Target Value]),
+    '_Daily Targets'[Metric] = ""total_revenue"")",
     "£#,##0");
 
 add("Total Revenue vs Target",
@@ -81,8 +81,8 @@ RETURN IF(
 
 add("NHS Revenue Target",
     @"CALCULATE(
-    SUM('List Daily Targets'[Daily Target Value]),
-    'List Daily Targets'[Metric] = ""nhs_revenue"")",
+    SUM('_Daily Targets'[Daily Target Value]),
+    '_Daily Targets'[Metric] = ""nhs_revenue"")",
     "£#,##0");
 
 add("NHS Revenue vs Target",
@@ -98,8 +98,8 @@ RETURN IF(
 
 add("Private Revenue Target",
     @"CALCULATE(
-    SUM('List Daily Targets'[Daily Target Value]),
-    'List Daily Targets'[Metric] = ""private_revenue"")",
+    SUM('_Daily Targets'[Daily Target Value]),
+    '_Daily Targets'[Metric] = ""private_revenue"")",
     "£#,##0");
 
 add("Private Revenue vs Target",
