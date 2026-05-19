@@ -5,6 +5,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     18/05/2026  AIH Fix Id conversion: Bronze ID is now VARCHAR(50) not DECIMAL
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -76,8 +77,7 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                -- Bronze ID is decimal(18,4); Silver is VARCHAR(50)
-        LEFT(CAST(TRY_CAST(ROUND(CAST(ID AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Id],
+        LEFT(ID, 50)  AS [Id],
                 -- Bronze Treatment_Plan_ID is VARCHAR(255); Silver is int
         TRY_CAST(Treatment_Plan_ID AS int)  AS [Treatment_Plan_Id],
                 Payment_Plan_ID  AS [Payment_Plan_Id],

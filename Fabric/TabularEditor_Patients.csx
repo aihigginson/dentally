@@ -18,6 +18,30 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
+// Lapsed: pre-existing patients whose last-ever appointment falls in the selected
+// period and who are now inactive (no future appointment implies Active = FALSE).
+// Using current Active flag is correct — if they later re-attended they are still active.
+add("Lapsed Patients",
+    @"VAR period_start = MIN('List Date'[Full Date])
+VAR period_end   = MAX('List Date'[Full Date])
+RETURN
+COUNTROWS(
+    FILTER(
+        ALL('List Patients'),
+        NOT ISBLANK('List Patients'[Last Appointment Date])
+        && 'List Patients'[Last Appointment Date] >= period_start
+        && 'List Patients'[Last Appointment Date] <= period_end
+        && 'List Patients'[Active] = FALSE()
+        && NOT ISBLANK('List Patients'[First Appointment Date])
+        && 'List Patients'[First Appointment Date] < period_start
+    )
+)",
+    "#,##0");
+
+add("Net Patient Growth",
+    @"[New Patients] - [Lapsed Patients]",
+    "#,##0");
+
 add("Active Patients",
     @"COUNTROWS(
     FILTER('Aggregate Site Patient Current',
@@ -64,6 +88,29 @@ RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
 add("New Patients vs Target",
     @"VAR actual = [New Patients]
 VAR target = [New Patients Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Net Patient Growth Target",
+    @"VAR period_key    = [_FY Period Key]
+VAR annual        = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""net_patient_growth""
+    && '_Targets'[Period Type] = ""annual""
+    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
+VAR all_time_target = MAXX(FILTER('_Targets',
+    '_Targets'[Metric] = ""net_patient_growth""
+    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
+RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    "#,##0");
+
+add("Net Patient Growth vs Target",
+    @"VAR actual = [Net Patient Growth]
+VAR target = [Net Patient Growth Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
@@ -156,6 +203,19 @@ RETURN SWITCH(TRUE(),
     pct >= 0,          ""#6abf7b"",
     pct >= -band,  ""#f4a261"",
                        ""#c0392b"")",
+    "");
+
+add("Net Patient Growth BG",
+    @"VAR actual = [Net Patient Growth]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""net_patient_growth""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""net_patient_growth""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct >= band,     ""#1a7f3c"",
+    pct >= 0,        ""#6abf7b"",
+    pct >= -band,    ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("Active Patients BG",

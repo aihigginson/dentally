@@ -23,6 +23,7 @@ $Groups = [ordered]@{
         'Bronze.Recalls.Table.sql'
         'Bronze.Waiting_Lists.Table.sql'
         'Bronze.Cancellation_Reasons.Table.sql'
+        'Bronze.Treatment_Plan_Items.Table.sql'
     )
 
     '07. Bronze stored procedures' = @(

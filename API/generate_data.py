@@ -1,15 +1,16 @@
 """
-generate_data.py  —  rebuilt 2026-05-15
+generate_data.py  —  rebuilt 2026-05-15; as-of date driven by GENERATE_AS_OF env var
 Run:  python API/generate_data.py
+      GENERATE_AS_OF=2026-07-01 python API/generate_data.py
 """
-import json, random, uuid as _uuid
+import json, os, random, uuid as _uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 random.seed(42)
-TODAY   = date(2026, 5, 15)
-START   = date(2023, 5, 15)
-FWD_END = date(2027, 7, 15)
+TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
+START   = TODAY.replace(year=TODAY.year - 3)
+FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
 
 def _u5(*p): return str(_uuid.uuid5(NS, "|".join(str(x) for x in p)))

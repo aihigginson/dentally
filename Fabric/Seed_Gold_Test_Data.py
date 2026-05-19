@@ -116,6 +116,7 @@ TARGETS = [
     ('acceptance_rate',                65.0,  5.0),
     ('open_courses',                  220.0, 10.0),
     ('open_courses_without_appt',      85.0, 10.0),
+    ('open_courses_value',          75000.0, 10.0),
     ('exam_ratio',                     28.0,  3.0),
     ('chair_utilisation',              78.0,  5.0),
     ('dna_rate',                        5.0,  2.0),

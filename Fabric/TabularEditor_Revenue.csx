@@ -44,13 +44,30 @@ add("Revenue Per Patient",
     @"DIVIDE([Total Revenue], [Active Patients])",
     "£#,##0");
 
-add("Revenue Per Hour",
+add("Revenue Per Clinical Hour",
     @"VAR by_prac_day =
-    SUMMARIZE(
+SUMMARIZE(
+    FILTER(
         'Aggregate Site Patient Practitioner Daily',
-        'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
-        'Aggregate Site Patient Practitioner Daily'[fk Date],
-        ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
+        RELATED('List Practitioners'[Role]) IN {""dentist"",""hygienist"",""orthodontist"",""specialist"",""therapist""}
+    ),
+    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
+    'Aggregate Site Patient Practitioner Daily'[fk Date],
+    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+RETURN DIVIDE([Total Revenue], total_worked)",
+    "£#,##0");
+
+add("Revenue Per Dentist Hour",
+    @"VAR by_prac_day =
+SUMMARIZE(
+    FILTER(
+        'Aggregate Site Patient Practitioner Daily',
+        RELATED('List Practitioners'[Role]) IN {""dentist"",""orthodontist""}
+    ),
+    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
+    'Aggregate Site Patient Practitioner Daily'[fk Date],
+    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
 VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
@@ -147,15 +164,32 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
-add("Revenue Per Hour Target",
+add("Revenue Per Clinical Hour Target",
     @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_hour""),
+    FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour""),
     '_Targets'[Target Value])",
     "£#,##0");
 
-add("Revenue Per Hour vs Target",
-    @"VAR actual = [Revenue Per Hour]
-VAR target = [Revenue Per Hour Target]
+add("Revenue Per Clinical Hour vs Target",
+    @"VAR actual = [Revenue Per Clinical Hour]
+VAR target = [Revenue Per Clinical Hour Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Revenue Per Dentist Hour Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Revenue Per Dentist Hour vs Target",
+    @"VAR actual = [Revenue Per Dentist Hour]
+VAR target = [Revenue Per Dentist Hour Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
@@ -233,10 +267,23 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")",
     "");
 
-add("Revenue Per Hour BG",
-    @"VAR actual   = [Revenue Per Hour]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_hour""), '_Targets'[Target Value])
-VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_hour""), '_Targets'[Variance])
+add("Revenue Per Clinical Hour BG",
+    @"VAR actual   = [Revenue Per Clinical Hour]
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour""), '_Targets'[Target Value])
+VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour""), '_Targets'[Variance])
+VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target),  ""#FFFFFF"",
+    pct >= band,      ""#1a7f3c"",
+    pct >= 0,         ""#6abf7b"",
+    pct >= -band,     ""#f4a261"",
+                      ""#c0392b"")",
+    "");
+
+add("Revenue Per Dentist Hour BG",
+    @"VAR actual   = [Revenue Per Dentist Hour]
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour""), '_Targets'[Target Value])
+VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour""), '_Targets'[Variance])
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",

@@ -12,9 +12,11 @@ USING (VALUES
     ('nhs_revenue',                'NHS Revenue',                        'revenue',    'currency', 'Revenue from NHS contracts and claims',                                   1, 1, 1, 11, 'above', 'cumulative'),
     ('private_revenue',            'Private Revenue',                    'revenue',    'currency', 'Revenue from private treatment',                                          1, 1, 1, 12, 'above', 'cumulative'),
     ('revenue_per_patient',        'Revenue per Patient',                'revenue',    'currency', 'Average revenue generated per active patient',                            1, 1, 1, 13, 'above', 'rate'),
-    ('revenue_per_hour',           'Revenue per Hour',                   'revenue',    'currency', 'Average revenue generated per clinical hour worked',                      1, 1, 1, 14, 'above', 'rate'),
-    ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Percentage of open treatment plan items that have an invoice raised',     1, 1, 1, 15, 'above', 'point_in_time'),
+    ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)',  1, 1, 1, 14, 'above', 'rate'),
+    ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist and orthodontist time only',        1, 1, 1, 15, 'above', 'rate'),
+    ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Percentage of open treatment plan items that have an invoice raised',     1, 1, 1, 16, 'above', 'point_in_time'),
 -- Patients
+    ('net_patient_growth',         'Net Patient Growth',                 'patients',   'count',    'New patients minus lapsed patients in the period',                        1, 0, 1, 19, 'above', 'cumulative'),
     ('new_patients',               'New Patients',                       'patients',   'count',    'Number of new patient registrations',                                     1, 1, 1, 20, 'above', 'cumulative'),
     ('active_patients',            'Active Patients',                    'patients',   'count',    'Total active patient count',                                              1, 0, 1, 21, 'above', 'point_in_time'),
     ('recall_compliance',          'Recall Effectiveness',               'patients',   'percent',  'Percentage of due recalls that were attended',                            1, 1, 1, 22, 'above', 'rate'),
@@ -32,7 +34,7 @@ USING (VALUES
     ('days_until_1hr_free',        'Days Until Next 1 Hour Free',        'scheduling', 'count',    'Days until the next available 1-hour diary slot for any practitioner',    1, 1, 1, 43, 'below', 'point_in_time'),
     ('book_before_you_leave',      'Book Before You Leave',              'scheduling', 'percent',  'Percentage of completed appointments where a follow-up was booked',       1, 0, 1, 44, 'above', 'rate'),
 -- Home
-    ('forward_book_value',         'Forward Book Value',                 'home',       'currency', 'Estimated value of appointments booked in the next 30 days',             1, 1, 1, 50, 'above', 'point_in_time'),
+    ('open_courses_value',         'Open Courses Value',                 'home',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time'),
     ('dna_revenue_lost',           'DNA Revenue Lost',                   'home',       'currency', 'Estimated revenue lost to did-not-attend appointments in the period',    1, 1, 1, 51, 'below', 'cumulative')
 ) AS src (
     [Metric_Key], [Display_Name], [Section], [Format_Type], [Description],
@@ -57,4 +59,10 @@ WHEN NOT MATCHED THEN INSERT (
     src.[Metric_Key], src.[Display_Name], src.[Section], src.[Format_Type], src.[Description],
     src.[Supports_Site], src.[Supports_Practitioner], src.[Is_Active], src.[Display_Order], src.[Range_Type], src.[Target_Type]
 );
+GO
+
+-- ── Retired / renamed metric keys ────────────────────────────────────────────
+-- Remove old keys that were renamed so they no longer appear in the UI or
+-- interfere with Input.Targets.Cleanup.sql.
+DELETE FROM [Config].[Metric_Definitions] WHERE [Metric_Key] = 'treatment_pipeline_value';
 GO

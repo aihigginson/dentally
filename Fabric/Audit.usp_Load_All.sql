@@ -419,6 +419,20 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
+    -- ── Derived fact tables (depend on Gold dims + facts above) ─────────────────
+
+    SET @Step = 'Fact_Daily_Targets';  SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_KPI_Snapshot';   SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_KPI_Snapshot @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
     -- ── Aggregates (built from Gold fact/dim tables — run after all facts) ──────
 
     SET @Step = 'Aggregate_Site_Patient_Practitioner_Daily'; SET @Start = GETDATE();

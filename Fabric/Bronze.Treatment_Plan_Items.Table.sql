@@ -6,7 +6,7 @@ GO
 DROP TABLE IF EXISTS [Bronze].[Treatment_Plan_Items]
 GO
 CREATE TABLE [Bronze].[Treatment_Plan_Items](
-	[ID] [decimal](18, 4) NULL,
+	[ID] [varchar](50) NULL,
 	[Appear_On_Invoice] [decimal](18, 4) NULL,
 	[Base_Chart] [decimal](18, 4) NULL,
 	[Charged] [decimal](18, 4) NULL,

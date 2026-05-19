@@ -9,6 +9,8 @@
 --                            all FYs in Dim_Date; specific FY rows override.
 --                            Ensures one daily-rate row per working day per FY
 --                            regardless of how the target was entered.
+--    *03     18/05/2026  AIH Bound all_time CROSS JOIN to 2 FYs back, current FY,
+--                            1 FY forward (dynamic, relative to run date).
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 --
 --  Purpose:
@@ -57,6 +59,13 @@ BEGIN
         --**** Procedure logic starts  ****
         --*********************************
 
+        -- FY range for all_time expansion: 2 full FYs back, current FY, 1 FY forward.
+        DECLARE @Cur_FY_Year SMALLINT = CASE WHEN MONTH(CAST(SYSUTCDATETIME() AS DATE)) >= 4
+                                             THEN YEAR(CAST(SYSUTCDATETIME() AS DATE))
+                                             ELSE YEAR(CAST(SYSUTCDATETIME() AS DATE)) - 1 END;
+        DECLARE @FY_Min VARCHAR(9) = 'FY' + CAST(@Cur_FY_Year - 2 AS VARCHAR(4)) + '/' + RIGHT(CAST(@Cur_FY_Year - 1 AS VARCHAR(4)), 2);
+        DECLARE @FY_Max VARCHAR(9) = 'FY' + CAST(@Cur_FY_Year + 1 AS VARCHAR(4)) + '/' + RIGHT(CAST(@Cur_FY_Year + 2 AS VARCHAR(4)), 2);
+
         -- Working day counts per financial year (all FYs in the date table).
         SELECT
             CAST(Financial_Year_Name AS varchar(9)) AS FY_Name,
@@ -69,7 +78,7 @@ BEGIN
 
         -- Build candidate target rows: one per (Tenant, Site, Practitioner, Metric, FY).
         -- Priority 1 = specific FY target; Priority 2 = all_time fallback.
-        -- CROSS JOIN for all_time ensures it covers every FY in the date table.
+        -- CROSS JOIN for all_time is bounded to @FY_Min/@FY_Max (2 back, current, 1 forward).
         SELECT
             t.[Tenant_ID],
             ISNULL(t.[Site_ID], '')         AS Site_ID,
@@ -104,7 +113,8 @@ BEGIN
             ON  cmd.[Metric_Key]  = t.[Metric]
             AND cmd.[Target_Type] = 'cumulative'
         CROSS JOIN #wd w
-        WHERE t.[Period_Type] = 'all_time';
+        WHERE t.[Period_Type] = 'all_time'
+          AND w.FY_Name BETWEEN @FY_Min AND @FY_Max;
 
         -- Pick the highest-priority target per (Tenant, Site, Practitioner, Metric, FY).
         SELECT

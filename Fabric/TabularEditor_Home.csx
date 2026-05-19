@@ -15,37 +15,33 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // KPI cards — no new measures needed for them:
 //
 //   Total Revenue / Total Revenue vs Target / Total Revenue BG   (Revenue KPIs)
-//   Revenue Per Hour / Revenue Per Hour vs Target / ...BG        (Revenue KPIs)
+//   Revenue Per Clinical Hour / Revenue Per Clinical Hour vs Target / ...BG  (Revenue KPIs)
 //   Chair Utilisation / Chair Utilisation vs Target / ...BG      (Scheduling KPIs)
 //   DNA Rate / DNA Rate vs Target / DNA Rate BG                  (Scheduling KPIs)
-//   New Patients / New Patients vs Target / New Patients BG      (Patients KPIs)
+//   Net Patient Growth / Net Patient Growth vs Target / Net Patient Growth BG  (Patients KPIs)
 //
 // This folder adds only the two new Tier 1 measures not defined elsewhere:
-//   Forward Book Value  — confirmed appointment pipeline (next 30 days, £)
-//   DNA Revenue Lost    — estimated revenue lost to DNAs in the period (£)
+//   Open Courses Value — £ value of open treatment plan items (no approximation)
+//   DNA Revenue Lost         — estimated revenue lost to DNAs in the period (£)
 
 // ── Value measures ───────────────────────────────────────────────────────────
 
-// Forward Book Value: count of booked appointments in the next 30 days
-// multiplied by the all-time average revenue per appointment.
-// Date filter is removed so future appointments (outside selected period)
-// are always included; site/practitioner filters are preserved.
-add("Forward Book Value",
-    @"VAR future_booked =
-    CALCULATE(
-        COUNTROWS('_Appointments'),
-        REMOVEFILTERS('List Date'),
-        '_Appointments'[Start Time] > NOW(),
-        '_Appointments'[Start Time] <= NOW() + 30,
-        '_Appointments'[Is Cancelled] = FALSE(),
-        '_Appointments'[Is DNA] = FALSE()
+// Open Courses Value: most recent weekly snapshot from Fact_KPI_Snapshot.
+// Semi-additive: picks the latest fk Date in the slicer selection so the card
+// always shows one value. Grain fixed to "weekly" for the Home card.
+add("Open Courses Value",
+    @"VAR last_date =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
     )
-VAR avg_appt_value =
-    DIVIDE(
-        CALCULATE([Total Revenue],    REMOVEFILTERS('List Date')),
-        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('List Date'))
-    )
-RETURN future_booked * avg_appt_value",
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = last_date,
+    '_KPI Snapshot'[Metric]         = ""open_courses_value"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+)",
     "£#,##0");
 
 // DNA Revenue Lost: DNA appointments in the selected period multiplied by
@@ -64,11 +60,11 @@ RETURN dna_count * avg_appt_value",
     "£#,##0");
 
 // ── Target measures ──────────────────────────────────────────────────────────
-// Forward Book Value: point-in-time target (no annualisation — it's always
-// the next 30 days regardless of the selected period).
-add("Forward Book Value Target",
+// Open Courses Value: point-in-time threshold — minimum acceptable
+// open pipeline the practice should hold at any given time.
+add("Open Courses Value Target",
     @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""forward_book_value""),
+    FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""),
     '_Targets'[Target Value])",
     "£#,##0");
 
@@ -80,9 +76,9 @@ add("DNA Revenue Lost Target",
     "£#,##0");
 
 // ── Variance measures ────────────────────────────────────────────────────────
-add("Forward Book Value vs Target",
-    @"VAR actual = [Forward Book Value]
-VAR target = [Forward Book Value Target]
+add("Open Courses Value vs Target",
+    @"VAR actual = [Open Courses Value]
+VAR target = [Open Courses Value Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
@@ -104,13 +100,13 @@ RETURN IF(
     "");
 
 // ── BG colour measures ───────────────────────────────────────────────────────
-// forward_book_value  → above is good → relative %
-// dna_revenue_lost    → below is good → relative %, sign inverted
+// open_courses_value → above is good → relative %
+// dna_revenue_lost         → below is good → relative %, sign inverted
 
-add("Forward Book Value BG",
-    @"VAR actual = [Forward Book Value]
-VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""forward_book_value""), '_Targets'[Target Value])
-VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""forward_book_value""), '_Targets'[Variance])
+add("Open Courses Value BG",
+    @"VAR actual = [Open Courses Value]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Variance])
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
