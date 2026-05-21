@@ -8,6 +8,7 @@
 --    *02     30/04/2026  AIH Add Tenant_ID to INSERT (NOT NULL column omitted); fix NOT EXISTS to include Tenant_ID
 --    *03     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -40,12 +41,12 @@ BEGIN
 
         SELECT
             Tenant_ID AS Tenant_ID,
-            CAST(Payment_Plan_Id AS INT)                                    AS Payment_Plan_ID,
+            CAST(Payment_Plan_ID AS INT)                                    AS Payment_Plan_ID,
             NULLIF(TRIM(Payment_Plan_Name),'')                              AS Payment_Plan_Name,
             NULLIF(TRIM(Payment_Plan_Patient_Friendly_Name),'')             AS Patient_Friendly_Name,
             CAST(ISNULL(Payment_Plan_Active,0) AS BIT)                      AS Active,
             NULLIF(TRIM(Payment_Plan_Colour),'')                            AS Colour,
-            NULLIF(TRIM(Payment_Plan_Site_Id),'')                           AS Site_ID,
+            NULLIF(TRIM(Payment_Plan_Site_ID),'')                           AS Site_ID,
             CAST(Dentist_Recall_Interval AS INT)                            AS Dentist_Recall_Interval_Months,
             CAST(Hygienist_Recall_Interval AS INT)                          AS Hygienist_Recall_Interval_Months,
             CAST(Emergency_Duration AS INT)                                 AS Emergency_Duration_Mins,
@@ -55,7 +56,7 @@ BEGIN
             TRY_CAST(Payment_Plan_Created_At AS datetime2(3))               AS Created_Date
         INTO #src
         FROM Silver.Payment_Plans
-        WHERE Payment_Plan_Id IS NOT NULL;
+        WHERE Payment_Plan_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt

@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
@@ -39,8 +40,8 @@ BEGIN
 
         SELECT
             Tenant_ID                                                       AS Tenant_ID,
-            CAST(Practitioner_Id AS INT)                                    AS Practitioner_ID,
-            CAST(User_Id AS INT)                                            AS User_ID,
+            CAST(Practitioner_ID AS INT)                                    AS Practitioner_ID,
+            CAST(User_ID AS INT)                                            AS User_ID,
             NULLIF(TRIM(User_Title),'')                                     AS Title,
             NULLIF(TRIM(User_First_Name),'')                                AS First_Name,
             NULLIF(TRIM(User_Middle_Name),'')                               AS Middle_Name,
@@ -57,8 +58,8 @@ BEGIN
             NULLIF(TRIM(Practitioner_Colour),'')                            AS Colour,
             NULLIF(TRIM(Practitioner_GDC_Number),'')                        AS GDC_Number,
             NULLIF(TRIM(Practitioner_NHS_Number),'')                        AS NHS_Number,
-            NULLIF(TRIM(Practitioner_Site_Id),'')                           AS Site_ID,
-            NULLIF(TRIM(Practitioner_Default_Contract_Id),'')               AS Default_Contract_ID,
+            NULLIF(TRIM(Practitioner_Site_ID),'')                           AS Site_ID,
+            NULLIF(TRIM(Practitioner_Default_Contract_ID),'')               AS Default_Contract_ID,
             NULLIF(TRIM(Contract_Targets_String),'')                        AS Contract_Targets_String,
             NULLIF(TRIM(User_Image_URL),'')                                 AS Image_URL,
             TRY_CAST(NULLIF(TRIM(User_Last_Login),'') AS DATE)              AS Last_Login_Date,
@@ -66,7 +67,7 @@ BEGIN
             TRY_CAST(NULLIF(TRIM(User_Updated_At),'') AS datetime2(3))      AS Updated_Date
         INTO #src
         FROM Silver.Practitioners
-        WHERE Practitioner_Id IS NOT NULL;
+        WHERE Practitioner_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt

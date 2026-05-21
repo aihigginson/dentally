@@ -20,12 +20,12 @@
 #>
 
 $ErrorActionPreference = 'Stop'
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 # ---------------------------------------------------------------------------
 # 1. Parse Process_Config.Data.sql -> process_name -> [process_code, ...]
 # ---------------------------------------------------------------------------
-$pcFile    = Join-Path $ScriptDir 'Audit.Process_Config.Data.sql'
+$pcFile    = Join-Path $FabricDir 'Audit.Process_Config.Data.sql'
 $pcContent = Get-Content $pcFile -Raw -Encoding UTF8
 
 $pcMap = @{}   # key = Process_Name (e.g. 'Bronze.usp_Load_Practitioners')
@@ -75,9 +75,9 @@ function Get-QualifiedName {
 # ---------------------------------------------------------------------------
 # 3. Load SP files
 # ---------------------------------------------------------------------------
-$bronzeFiles = Get-ChildItem (Join-Path $ScriptDir 'Bronze.usp_*.StoredProcedure.sql')
-$silverFiles = Get-ChildItem (Join-Path $ScriptDir 'Silver.usp_*.StoredProcedure.sql')
-$goldFiles   = Get-ChildItem (Join-Path $ScriptDir 'Gold.usp_*.StoredProcedure.sql')
+$bronzeFiles = Get-ChildItem (Join-Path $FabricDir 'Bronze.usp_*.StoredProcedure.sql')
+$silverFiles = Get-ChildItem (Join-Path $FabricDir 'Silver.usp_*.StoredProcedure.sql')
+$goldFiles   = Get-ChildItem (Join-Path $FabricDir 'Gold.usp_*.StoredProcedure.sql')
 
 $bronzeSps = @{}
 foreach ($f in $bronzeFiles) {
@@ -244,7 +244,7 @@ Write-Host "  Total                 : $($unique.Count)"
 # ---------------------------------------------------------------------------
 # 6. Write SQL output file (ASCII encoding)
 # ---------------------------------------------------------------------------
-$outFile = Join-Path $ScriptDir 'Audit.Process_Dependency.Data.sql'
+$outFile = Join-Path $FabricDir 'Audit.Process_Dependency.Data.sql'
 
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add('-- =============================================================================')

@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     19/05/2026  AIH bk_Treatment_Plan_Item_ID: use tpi.Id directly (UUID, not INT)
+--    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -48,7 +49,7 @@ BEGIN
             dd_c.pk_Date                                                    AS fk_Date_Created,
             dd_comp.pk_Date                                                 AS fk_Date_Completed,
             dd_u.pk_Date                                                    AS fk_Date_Updated,
-            TRY_CAST(tpi.Treatment_Plan_Id AS INT)                          AS Treatment_Plan_ID,
+            TRY_CAST(tpi.Treatment_Plan_ID AS INT)                          AS Treatment_Plan_ID,
             TRY_CAST(NULLIF(TRIM(tpi.Invoice_ID),'') AS INT)                AS Invoice_ID,
             NULLIF(TRIM(tpi.Treatment_Appointment_ID),'')                   AS Treatment_Appointment_ID,
             TRY_CAST(NULLIF(TRIM(tpi.Referrer_ID),'') AS INT)              AS Referrer_ID,
@@ -67,11 +68,11 @@ BEGIN
             CAST(tpi.Duration AS INT)                                       AS Duration_Mins
         INTO #src
         FROM Silver.Treatment_Plan_Items tpi
-        LEFT JOIN Gold.Dim_Treatment_Plans dp   ON dp.Treatment_Plan_ID  = TRY_CAST(tpi.Treatment_Plan_Id AS INT) AND dp.Tenant_ID = tpi.Tenant_ID
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID       = TRY_CAST(tpi.Patient_Id AS INT)        AND dpat.Tenant_ID = tpi.Tenant_ID
-        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID   = TRY_CAST(tpi.Practitioner_Id AS INT)   AND dpr.Tenant_ID = tpi.Tenant_ID
-        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID   = TRY_CAST(tpi.Payment_Plan_Id AS INT)   AND dpp.Tenant_ID = tpi.Tenant_ID
-        LEFT JOIN Gold.Dim_Treatments dt        ON dt.Treatment_ID       = TRY_CAST(tpi.Treatment_Id AS INT)      AND dt.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatment_Plans dp   ON dp.Treatment_Plan_ID  = TRY_CAST(tpi.Treatment_Plan_ID AS INT) AND dp.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID       = TRY_CAST(tpi.Patient_ID AS INT)        AND dpat.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID   = TRY_CAST(tpi.Practitioner_ID AS INT)   AND dpr.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID   = TRY_CAST(tpi.Payment_Plan_ID AS INT)   AND dpp.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatments dt        ON dt.Treatment_ID       = TRY_CAST(tpi.Treatment_ID AS INT)      AND dt.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Created_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_comp         ON dd_comp.Full_Date     = TRY_CAST(NULLIF(TRIM(tpi.Completed_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_u            ON dd_u.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Updated_At),'') AS DATE)

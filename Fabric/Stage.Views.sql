@@ -250,3 +250,13 @@ BEGIN CATCH
     PRINT 'WARN: Stage.Patient_Referrals skipped — run Stage_Ingest first';
 END CATCH;
 GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Rooms]', 'V') IS NOT NULL DROP VIEW [Stage].[Rooms];
+    EXEC('CREATE VIEW [Stage].[Rooms] AS SELECT * FROM LH_Dentally.dbo.stage_rooms');
+    PRINT 'Created Stage.Rooms';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Rooms skipped -- run Stage_Ingest first';
+END CATCH;
+GO

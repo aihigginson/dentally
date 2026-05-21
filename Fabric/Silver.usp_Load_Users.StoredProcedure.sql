@@ -5,6 +5,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Users @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Users]    Script Date: 20/04/2026 10:15:06 ******/
@@ -46,8 +47,8 @@ BEGIN
         ISNULL(CAST(staged.[Mobile_Phone] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Role] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Permission_Level] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Practice_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Practice_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Image_URL] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Last_Login] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Created_At] AS VARCHAR(500)), ''),
@@ -67,8 +68,8 @@ BEGIN
                 LEFT(Mobile_Phone,100)  AS [Mobile_Phone],
                 LEFT(Role,        100)  AS [Role],
                 TRY_CAST(ROUND(CAST(Permission_Level AS float),0) AS int)  AS [Permission_Level],
-                LEFT(Practice_ID, 100)  AS [Practice_Id],
-                LEFT(Site_ID,     100)  AS [Site_Id],
+                LEFT(Practice_ID, 100)  AS [Practice_ID],
+                LEFT(Site_ID,     100)  AS [Site_ID],
                 LEFT(Image_Url,   100)  AS [Image_URL],
                 LEFT(Last_Login,  100)  AS [Last_Login],
                 LEFT(Created_At,  100)  AS [Created_At],
@@ -87,8 +88,8 @@ BEGIN
             [Mobile_Phone] = src.[Mobile_Phone],
             [Role] = src.[Role],
             [Permission_Level] = src.[Permission_Level],
-            [Practice_Id] = src.[Practice_Id],
-            [Site_Id] = src.[Site_Id],
+            [Practice_ID] = src.[Practice_ID],
+            [Site_ID] = src.[Site_ID],
             [Image_URL] = src.[Image_URL],
             [Last_Login] = src.[Last_Login],
             [Created_At] = src.[Created_At],
@@ -100,9 +101,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Users] ([Tenant_ID], [Id], [Email], [Title], [First_Name], [Middle_Name], [Last_Name], [Mobile_Phone], [Role], [Permission_Level], [Practice_Id], [Site_Id], [Image_URL], [Last_Login], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Users] ([Tenant_ID], [Id], [Email], [Title], [First_Name], [Middle_Name], [Last_Name], [Mobile_Phone], [Role], [Permission_Level], [Practice_ID], [Site_ID], [Image_URL], [Last_Login], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Id], src.[Email], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Mobile_Phone], src.[Role], src.[Permission_Level], src.[Practice_Id], src.[Site_Id], src.[Image_URL], src.[Last_Login], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Email], src.[Title], src.[First_Name], src.[Middle_Name], src.[Last_Name], src.[Mobile_Phone], src.[Role], src.[Permission_Level], src.[Practice_ID], src.[Site_ID], src.[Image_URL], src.[Last_Login], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

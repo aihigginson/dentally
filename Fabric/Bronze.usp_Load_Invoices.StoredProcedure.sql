@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Add Payment_Terms, Sent_At
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Invoices @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Invoices]
@@ -42,6 +43,8 @@ BEGIN
             , LEFT(paid_on,                 255)           AS Paid_On
             , LEFT(reference,               255)           AS Reference
             , LEFT(footnote,                255)           AS Footnote
+            , LEFT(payment_terms, 255) AS Payment_Terms
+            , LEFT(sent_at,       255) AS Sent_At
             , LEFT(created_at,              255)           AS Created_At
             , LEFT(updated_at,              255)           AS Updated_At
         INTO #src
@@ -62,6 +65,8 @@ BEGIN
             , tgt.Paid_On             = src.Paid_On
             , tgt.Reference           = src.Reference
             , tgt.Footnote            = src.Footnote
+            , tgt.Payment_Terms       = src.Payment_Terms
+            , tgt.Sent_At             = src.Sent_At
             , tgt.Created_At          = src.Created_At
             , tgt.Updated_At          = src.Updated_At
             , tgt.DW_Loaded_At        = SYSUTCDATETIME()
@@ -69,8 +74,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Invoices (Tenant_ID, ID, Patient_ID, Account_ID, Site_ID, User_ID, Amount, Amount_Outstanding, NHS_Amount, Dated_On, Due_On, Paid, Paid_On, Reference, Footnote, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Account_ID, src.Site_ID, src.User_ID, src.Amount, src.Amount_Outstanding, src.NHS_Amount, src.Dated_On, src.Due_On, src.Paid, src.Paid_On, src.Reference, src.Footnote, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Invoices (Tenant_ID, ID, Patient_ID, Account_ID, Site_ID, User_ID, Amount, Amount_Outstanding, NHS_Amount, Dated_On, Due_On, Paid, Paid_On, Reference, Footnote, Payment_Terms, Sent_At, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Account_ID, src.Site_ID, src.User_ID, src.Amount, src.Amount_Outstanding, src.NHS_Amount, src.Dated_On, src.Due_On, src.Paid, src.Paid_On, src.Reference, src.Footnote, src.Payment_Terms, src.Sent_At, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Invoices tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

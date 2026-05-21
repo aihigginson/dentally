@@ -7,9 +7,9 @@ DROP TABLE IF EXISTS [Silver].[Fees]
 GO
 CREATE TABLE [Silver].[Fees](
 	[Tenant_ID] [int] NOT NULL,
-	[Fee_Id] [VARCHAR](255) NOT NULL,
-	[Treatment_Id] [int] NULL,
-	[Payment_Plan_Id] [int] NULL,
+	[Fee_ID] [VARCHAR](255) NOT NULL,
+	[Treatment_ID] [int] NULL,
+	[Payment_Plan_ID] [int] NULL,
 	[Price] [decimal](18, 4) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL,

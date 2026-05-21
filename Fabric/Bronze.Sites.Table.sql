@@ -13,7 +13,7 @@ CREATE TABLE [Bronze].[Sites](
 	[Default_Payment_Plan_ID] [decimal](18, 4) NULL,
 	[Logo_Url] [VARCHAR](255) NULL,
 	[Name] [VARCHAR](255) NULL,
-	[Nickname] [decimal](18, 4) NULL,
+	[Nickname] [VARCHAR](255) NULL,
 	[Phone_Number] [VARCHAR](255) NULL,
 	[Postcode] [VARCHAR](255) NULL,
 	[Practice_ID] [VARCHAR](255) NULL,
@@ -29,6 +29,7 @@ CREATE TABLE [Bronze].[Sites](
 	[Thursday_Close] [VARCHAR](255) NULL,
 	[Friday_Open] [VARCHAR](255) NULL,
 	[Friday_Close] [VARCHAR](255) NULL,
+	[Email_Address] [VARCHAR](255) NULL,
 	[Tenant_ID] [int] NULL,
 	[DW_Loaded_At] [datetime2](3) NULL
 )

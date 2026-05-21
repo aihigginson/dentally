@@ -16,6 +16,7 @@ CREATE TABLE [Gold].[Fact_Targets] (
     [Period_Type]        VARCHAR(20)  NOT NULL,
     [Period_Value]       VARCHAR(20)  NOT NULL,
     [Target_Value]       DECIMAL(18,4) NOT NULL,
+    [Variance]           DECIMAL(10,4) NULL,
     [DW_Created_At]      DATETIME2(3) NOT NULL,
     [DW_Updated_At]      DATETIME2(3) NOT NULL
 )

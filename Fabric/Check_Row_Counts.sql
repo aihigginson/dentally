@@ -259,6 +259,6 @@ SELECT
     COUNT(*) AS Appointments,
     CAST(ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (PARTITION BY a.Tenant_ID), 1) AS DECIMAL(5,1)) AS Pct
 FROM Silver.Appointment_Journey_Attrs j
-INNER JOIN Silver.Appointments a ON a.Tenant_ID = j.Tenant_ID AND a.Appointment_Id = j.Appointment_Id
+INNER JOIN Silver.Appointments a ON a.Tenant_ID = j.Tenant_ID AND a.Appointment_ID = j.Appointment_ID
 GROUP BY a.Tenant_ID, j.Booking
 ORDER BY a.Tenant_ID, j.Booking;

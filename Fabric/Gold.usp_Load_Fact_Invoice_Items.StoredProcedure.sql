@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
+--    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -50,9 +51,9 @@ BEGIN
             dd_due.pk_Date                                              AS fk_Date_Due,
             dd_paid.pk_Date                                             AS fk_Date_Paid,
             dd_c.pk_Date                                                AS fk_Date_Created,
-            CAST(ii.Invoice_Id AS INT)                                  AS Invoice_ID,
-            TRY_CAST(ii.Treatment_Plan_Item_Id AS INT)                  AS Treatment_Plan_Item_ID,
-            NULLIF(TRIM(ii.Sundry_Id),'')                               AS Sundry_ID,
+            CAST(ii.Invoice_ID AS INT)                                  AS Invoice_ID,
+            TRY_CAST(ii.Treatment_Plan_Item_ID AS INT)                  AS Treatment_Plan_Item_ID,
+            NULLIF(TRIM(ii.Sundry_ID),'')                               AS Sundry_ID,
             NULLIF(TRIM(ii.Name),'')                                    AS Item_Name,
             TRY_CAST(inv.Reference AS INT)                              AS Invoice_Reference,
             NULLIF(TRIM(inv.Payment_Terms),'')                          AS Invoice_Payment_Terms,
@@ -61,23 +62,23 @@ BEGIN
             CAST(ISNULL(ii.Item_Price,0) AS DECIMAL(12,2))              AS Item_Price,
             CAST(ISNULL(ii.Quantity,0) AS DECIMAL(10,4))                AS Quantity,
             CAST(ISNULL(ii.Total_Price,0) AS DECIMAL(12,2))             AS Total_Price,
-            CAST(ISNULL(ii.Nhs_Charge,0) AS DECIMAL(12,2))              AS NHS_Charge,
+            CAST(ISNULL(ii.NHS_Charge,0) AS DECIMAL(12,2))              AS NHS_Charge,
             CAST(ISNULL(inv.Amount,0) AS DECIMAL(12,2))                 AS Invoice_Amount,
             CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2))     AS Invoice_Amount_Outstanding,
-            CAST(TRY_CAST(inv.Nhs_Amount AS DECIMAL(12,2)) AS DECIMAL(12,2)) AS Invoice_NHS_Amount
+            CAST(TRY_CAST(inv.NHS_Amount AS DECIMAL(12,2)) AS DECIMAL(12,2)) AS Invoice_NHS_Amount
         INTO #src
         FROM Silver.Invoice_Items ii
-        LEFT JOIN Silver.Invoices inv         ON inv.Id              = ii.Invoice_Id
-        LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_Id AS INT)      AND dpat.Tenant_ID = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Practitioners dpr  ON dpr.Practitioner_ID = CAST(ii.Practitioner_Id AS INT)  AND dpr.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Silver.Invoices inv         ON inv.Id              = ii.Invoice_ID
+        LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_ID AS INT)      AND dpat.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr  ON dpr.Practitioner_ID = CAST(ii.Practitioner_ID AS INT)  AND dpr.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp  ON dpp.Payment_Plan_ID = (
-                                                    SELECT TOP 1 Payment_Plan_Id
+                                                    SELECT TOP 1 Payment_Plan_ID
                                                     FROM Silver.Patients
-                                                    WHERE Patient_Id = inv.Patient_Id)                  AND dpp.Tenant_ID = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(ii.Treatment_Plan_Id AS INT) AND dtp.Tenant_ID = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Accounts dacc       ON dacc.Account_ID       = CAST(inv.Account_Id AS INT)   AND dacc.Tenant_ID = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = NULLIF(TRIM(inv.Site_Id),'')  AND dps.Tenant_ID = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Users du            ON du.bk_User_ID         = TRY_CAST(NULLIF(TRIM(ii.User_Id),'') AS INT) AND du.Tenant_ID = ii.Tenant_ID
+                                                    WHERE Patient_ID = inv.Patient_ID)                  AND dpp.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(ii.Treatment_Plan_ID AS INT) AND dtp.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Accounts dacc       ON dacc.Account_ID       = CAST(inv.Account_ID AS INT)   AND dacc.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = NULLIF(TRIM(inv.Site_ID),'')  AND dps.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Users du            ON du.bk_User_ID         = TRY_CAST(NULLIF(TRIM(ii.User_ID),'') AS INT) AND du.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_inv         ON dd_inv.Full_Date      = CAST(inv.Dated_On AS DATE)
         LEFT JOIN Gold.Dim_Date dd_due         ON dd_due.Full_Date      = CAST(inv.Due_On AS DATE)
         LEFT JOIN Gold.Dim_Date dd_paid        ON dd_paid.Full_Date     = CAST(inv.Paid_On AS DATE)

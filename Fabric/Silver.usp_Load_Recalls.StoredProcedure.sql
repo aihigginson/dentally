@@ -8,6 +8,12 @@
 --    *02     15/05/2026  AIH Align with rebuilt Bronze schema: Recall_Date->Due_Date,
 --                            Interval_Months, Site_Id, Practitioner_Id from Bronze;
 --                            legacy API columns (Appointment_ID, Workflow_* etc.) set to NULL
+--    *03     19/05/2026  AIH Full realign to Dentally API shape: read all reminder fields,
+--                            Appointment_ID, Recall_Method, Times_Contacted, Run_Date,
+--                            Workflow_Status, Workflow_Stage_ID, Prebooked from Bronze;
+--                            remove Practitioner_Id, Site_Id, Interval_Months, Sent_At, Booked_At
+--    *04     19/05/2026  AIH Add First_Reminder_ID, Second_Reminder_ID from Bronze
+--    *05     20/05/2026  AIH Column naming convention fixes (Patient_Id -> Patient_ID)
 --  To Run           :   DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Silver.usp_Load_Recalls @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
@@ -41,66 +47,68 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Patient_Id]      AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Practitioner_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Site_Id]         AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Recall_Type]     AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Due_Date]        AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Interval_Months] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Status]          AS VARCHAR(500)), '')
+        ISNULL(CAST(staged.[Patient_ID]              AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Recall_Type]             AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Recall_Method]           AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Status]                  AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Due_Date]                AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Appointment_ID]          AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[First_Reminder_Sent_At]  AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Second_Reminder_Sent_At] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Last_Reminded_At]        AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Times_Contacted]         AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Workflow_Status]         AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[First_Reminder_ID]       AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Second_Reminder_ID]      AS VARCHAR(500)), '')
         ))) AS _Hash
         INTO #src
         FROM (
             SELECT
-                Tenant_ID  AS [Tenant_ID],
-                LEFT(ID, 50)  AS [Id],
-                TRY_CAST(ROUND(CAST(Patient_ID      AS float), 0) AS int)  AS [Patient_Id],
-                TRY_CAST(ROUND(CAST(Practitioner_ID AS float), 0) AS int)  AS [Practitioner_Id],
-                NULL  AS [Appointment_ID],
-                NULL  AS [Recall_Method],
-                NULL  AS [Workflow_Status],
-                NULL  AS [Workflow_Stage_ID],
-                NULL  AS [First_Reminder_Type],
-                NULL  AS [Second_Reminder_Type],
-                NULL  AS [First_Reminder_Sent_At],
-                NULL  AS [Second_Reminder_Sent_At],
-                NULL  AS [Latest_Reminder_Type],
-                NULL  AS [Last_Reminded_At],
-                NULL  AS [Times_Contacted],
-                NULL  AS [Run_Date],
-                LEFT(Site_ID, 50)    AS [Site_Id],
-                LEFT(Recall_Type, 50)  AS [Recall_Type],
-                TRY_CAST(Recall_Date AS date)  AS [Due_Date],
-                TRY_CAST(ROUND(CAST(Interval_Months AS float), 0) AS int)  AS [Interval_Months],
-                LEFT(Status, 50)  AS [Status],
-                CAST(NULL AS datetime2(3))  AS [Sent_At],
-                CAST(NULL AS datetime2(3))  AS [Booked_At]
+                Tenant_ID                                                              AS [Tenant_ID],
+                LEFT(ID, 50)                                                           AS [Id],
+                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)                  AS [Patient_ID],
+                LEFT(Appointment_ID, 50)                                              AS [Appointment_ID],
+                LEFT(Recall_Type, 50)                                                 AS [Recall_Type],
+                LEFT(Recall_Method, 50)                                               AS [Recall_Method],
+                LEFT(Status, 50)                                                      AS [Status],
+                LEFT(Prebooked, 10)                                                   AS [Prebooked],
+                TRY_CAST(Due_Date AS date)                                            AS [Due_Date],
+                LEFT(First_Reminder_Sent_At, 50)                                      AS [First_Reminder_Sent_At],
+                LEFT(First_Reminder_Type, 50)                                         AS [First_Reminder_Type],
+                LEFT(Second_Reminder_Sent_At, 50)                                     AS [Second_Reminder_Sent_At],
+                LEFT(Second_Reminder_Type, 50)                                        AS [Second_Reminder_Type],
+                LEFT(Last_Reminded_At, 50)                                            AS [Last_Reminded_At],
+                LEFT(Latest_Reminder_Type, 50)                                        AS [Latest_Reminder_Type],
+                LEFT(CAST(Times_Contacted AS VARCHAR(50)), 50)                        AS [Times_Contacted],
+                LEFT(Run_Date, 50)                                                    AS [Run_Date],
+                LEFT(Workflow_Status, 50)                                             AS [Workflow_Status],
+                LEFT(Workflow_Stage_ID, 50)                                           AS [Workflow_Stage_ID],
+                LEFT(First_Reminder_ID,  50)                                          AS [First_Reminder_ID],
+                LEFT(Second_Reminder_ID, 50)                                          AS [Second_Reminder_ID]
             FROM Bronze.Recalls
         ) AS staged;
 
         UPDATE tgt
         SET
-            [Patient_Id]              = src.[Patient_Id],
-            [Practitioner_Id]         = src.[Practitioner_Id],
+            [Patient_ID]              = src.[Patient_ID],
             [Appointment_ID]          = src.[Appointment_ID],
+            [Recall_Type]             = src.[Recall_Type],
             [Recall_Method]           = src.[Recall_Method],
-            [Workflow_Status]         = src.[Workflow_Status],
-            [Workflow_Stage_ID]       = src.[Workflow_Stage_ID],
-            [First_Reminder_Type]     = src.[First_Reminder_Type],
-            [Second_Reminder_Type]    = src.[Second_Reminder_Type],
+            [Status]                  = src.[Status],
+            [Prebooked]               = src.[Prebooked],
+            [Due_Date]                = src.[Due_Date],
             [First_Reminder_Sent_At]  = src.[First_Reminder_Sent_At],
+            [First_Reminder_Type]     = src.[First_Reminder_Type],
             [Second_Reminder_Sent_At] = src.[Second_Reminder_Sent_At],
-            [Latest_Reminder_Type]    = src.[Latest_Reminder_Type],
+            [Second_Reminder_Type]    = src.[Second_Reminder_Type],
             [Last_Reminded_At]        = src.[Last_Reminded_At],
+            [Latest_Reminder_Type]    = src.[Latest_Reminder_Type],
             [Times_Contacted]         = src.[Times_Contacted],
             [Run_Date]                = src.[Run_Date],
-            [Site_Id]                 = src.[Site_Id],
-            [Recall_Type]             = src.[Recall_Type],
-            [Due_Date]                = src.[Due_Date],
-            [Interval_Months]         = src.[Interval_Months],
-            [Status]                  = src.[Status],
-            [Sent_At]                 = src.[Sent_At],
-            [Booked_At]               = src.[Booked_At],
+            [Workflow_Status]         = src.[Workflow_Status],
+            [Workflow_Stage_ID]       = src.[Workflow_Stage_ID],
+            [First_Reminder_ID]       = src.[First_Reminder_ID],
+            [Second_Reminder_ID]      = src.[Second_Reminder_ID],
             [DW_Updated_At]           = SYSUTCDATETIME(),
             [_Row_Hash]               = src._Hash,
             [_Raw_Json]               = NULL
@@ -110,23 +118,23 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         INSERT INTO [Silver].[Recalls] (
-            [Tenant_ID], [Id], [Patient_Id], [Practitioner_Id], [Appointment_ID],
-            [Recall_Method], [Workflow_Status], [Workflow_Stage_ID],
-            [First_Reminder_Type], [Second_Reminder_Type],
-            [First_Reminder_Sent_At], [Second_Reminder_Sent_At],
-            [Latest_Reminder_Type], [Last_Reminded_At], [Times_Contacted], [Run_Date],
-            [Site_Id], [Recall_Type], [Due_Date], [Interval_Months], [Status],
-            [Sent_At], [Booked_At],
+            [Tenant_ID], [Id], [Patient_ID], [Appointment_ID],
+            [Recall_Type], [Recall_Method], [Status], [Prebooked], [Due_Date],
+            [First_Reminder_Sent_At], [First_Reminder_Type],
+            [Second_Reminder_Sent_At], [Second_Reminder_Type],
+            [Last_Reminded_At], [Latest_Reminder_Type],
+            [Times_Contacted], [Run_Date], [Workflow_Status], [Workflow_Stage_ID],
+            [First_Reminder_ID], [Second_Reminder_ID],
             [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json]
         )
         SELECT
-            src.[Tenant_ID], src.[Id], src.[Patient_Id], src.[Practitioner_Id], src.[Appointment_ID],
-            src.[Recall_Method], src.[Workflow_Status], src.[Workflow_Stage_ID],
-            src.[First_Reminder_Type], src.[Second_Reminder_Type],
-            src.[First_Reminder_Sent_At], src.[Second_Reminder_Sent_At],
-            src.[Latest_Reminder_Type], src.[Last_Reminded_At], src.[Times_Contacted], src.[Run_Date],
-            src.[Site_Id], src.[Recall_Type], src.[Due_Date], src.[Interval_Months], src.[Status],
-            src.[Sent_At], src.[Booked_At],
+            src.[Tenant_ID], src.[Id], src.[Patient_ID], src.[Appointment_ID],
+            src.[Recall_Type], src.[Recall_Method], src.[Status], src.[Prebooked], src.[Due_Date],
+            src.[First_Reminder_Sent_At], src.[First_Reminder_Type],
+            src.[Second_Reminder_Sent_At], src.[Second_Reminder_Type],
+            src.[Last_Reminded_At], src.[Latest_Reminder_Type],
+            src.[Times_Contacted], src.[Run_Date], src.[Workflow_Status], src.[Workflow_Stage_ID],
+            src.[First_Reminder_ID], src.[Second_Reminder_ID],
             SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (

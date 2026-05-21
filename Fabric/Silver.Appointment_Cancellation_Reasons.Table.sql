@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Silver].[Appointment_Cancellation_Reasons]
 GO
 CREATE TABLE [Silver].[Appointment_Cancellation_Reasons](
 	[Tenant_ID] [int] NOT NULL,
-	[Cancellation_Reason_Id] [VARCHAR](50) NOT NULL,
+	[Cancellation_Reason_ID] [VARCHAR](50) NOT NULL,
 	[Archived] [bit] NULL,
 	[Reason] [VARCHAR](255) NULL,
 	[Reason_Type] [VARCHAR](50) NULL,

@@ -22,6 +22,7 @@ USING (VALUES
     ('recall_compliance',          'Recall Effectiveness',               'patients',   'percent',  'Percentage of due recalls that were attended',                            1, 1, 1, 22, 'above', 'rate'),
     ('patient_retention',          'Patient Retention',                  'patients',   'percent',  'Percentage of patients who returned within the recall period',            1, 0, 1, 23, 'above', 'rate'),
     ('recalls_overdue_not_sent',   'Recalls Overdue Not Sent',           'patients',   'percent',  'Percentage of overdue recalls where no recall notice has been sent',      1, 0, 1, 24, 'below', 'point_in_time'),
+    ('retention_outlook',          'Retention Outlook',                  'patients',   'percent',  'Percentage of patients with an active recall who have a future appointment booked', 1, 0, 1, 25, 'above', 'point_in_time'),
 -- Treatment (section now called Clinical in the app)
     ('acceptance_rate',            'Treatment Acceptance Rate',          'treatment',  'percent',  'Percentage of presented plans accepted by patients',                      1, 1, 1, 30, 'above', 'rate'),
     ('open_courses',               'Open Courses',                       'treatment',  'count',    'Number of open courses of treatment',                                     1, 1, 1, 32, 'below', 'point_in_time'),

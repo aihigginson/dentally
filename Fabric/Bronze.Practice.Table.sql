@@ -31,7 +31,7 @@ CREATE TABLE [Bronze].[Practice](
 	[Oh_Sun#close] [VARCHAR](255) NULL,
 	[Oh_Sun#open] [VARCHAR](255) NULL,
 	[Patient_Email_Address] [VARCHAR](255) NULL,
-	[Phone_Number] [decimal](18, 4) NULL,
+	[Phone_Number] [VARCHAR](255) NULL,
 	[Postcode] [VARCHAR](255) NULL,
 	[Slug] [VARCHAR](255) NULL,
 	[Time_Zone] [VARCHAR](255) NULL,

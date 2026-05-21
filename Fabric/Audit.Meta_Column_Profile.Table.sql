@@ -12,7 +12,7 @@ CREATE TABLE [Audit].[Meta_Column_Profile](
 	[Database_Name] [varchar](255) NULL,
 	[Schema_Name] [varchar](255) NULL,
 	[Table_Name] [varchar](255) NULL,
-	[Column_Id] [int] NULL,
+	[Column_ID] [int] NULL,
 	[Column_Name] [varchar](255) NULL,
 	[Data_Type] [varchar](255) NULL,
 	[Num_Values] [int] NULL,

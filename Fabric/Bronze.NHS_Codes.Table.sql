@@ -8,6 +8,6 @@ GO
 CREATE TABLE [Bronze].[NHS_Codes](
 	[Code] [decimal](18, 4) NULL,
 	[Area] [VARCHAR](255) NULL,
-	[Codedescription] [VARCHAR](255) NULL
+	[Code_Description] [VARCHAR](255) NULL
 )
 GO

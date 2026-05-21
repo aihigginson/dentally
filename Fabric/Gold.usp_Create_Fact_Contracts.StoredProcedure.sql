@@ -4,6 +4,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (NHS)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Fact_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Contracts]
@@ -34,7 +35,7 @@ BEGIN
     CREATE TABLE Gold.Fact_Contracts (
         pk_Contract                 BIGINT            NOT NULL IDENTITY,
         Tenant_ID                      INT             NOT NULL,
-        bk_Contract_ID              VARCHAR(50)      NOT NULL,   -- Natural key from Silver.Nhs_Claims
+        bk_Contract_ID              VARCHAR(50)      NOT NULL,   -- Natural key from Silver.NHS_Claims
 
         fk_Practice_Site            BIGINT            NULL,
         fk_Date_Start               BIGINT            NULL,

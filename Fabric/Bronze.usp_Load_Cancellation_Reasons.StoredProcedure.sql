@@ -6,6 +6,7 @@
 --  History          :
 --    *01     15/05/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Fix: archived->Active (inverted), reason->Reason; add Reason_Type, Created_At, Updated_At
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Cancellation_Reasons @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Cancellation_Reasons]
@@ -30,22 +31,28 @@ BEGIN
         SELECT
               TRY_CAST(tenant_id AS INT)                                   AS Tenant_ID
             , LEFT(id, 255)                                                AS ID
-            , CASE WHEN active IN ('True', '1', 'true') THEN 1 ELSE 0 END AS Active
-            , LEFT(name, 255)                                              AS Name
+            , CASE WHEN archived IN ('True', '1', 'true') THEN 0 ELSE 1 END AS Active
+            , LEFT(reason, 255)                                            AS Reason
+            , LEFT(reason_type, 255)                                       AS Reason_Type
+            , LEFT(created_at,  255)                                       AS Created_At
+            , LEFT(updated_at,  255)                                       AS Updated_At
         INTO #src
         FROM Stage.Cancellation_Reasons
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
 
         UPDATE tgt SET
               tgt.Active       = src.Active
-            , tgt.Name         = src.Name
+            , tgt.Reason       = src.Reason
+            , tgt.Reason_Type  = src.Reason_Type
+            , tgt.Created_At   = src.Created_At
+            , tgt.Updated_At   = src.Updated_At
             , tgt.DW_Loaded_At = SYSUTCDATETIME()
         FROM Bronze.Cancellation_Reasons AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Cancellation_Reasons (Tenant_ID, ID, Active, Name, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Active, src.Name, SYSUTCDATETIME()
+        INSERT INTO Bronze.Cancellation_Reasons (Tenant_ID, ID, Active, Reason, Reason_Type, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Active, src.Reason, src.Reason_Type, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Cancellation_Reasons tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

@@ -132,7 +132,7 @@ SELECT
 FROM (
     SELECT Tenant_ID, COUNT(*) AS Silver_Appts
     FROM Silver.Appointments
-    WHERE Appointment_Id IS NOT NULL
+    WHERE Appointment_ID IS NOT NULL
     GROUP BY Tenant_ID
 ) s
 FULL OUTER JOIN (

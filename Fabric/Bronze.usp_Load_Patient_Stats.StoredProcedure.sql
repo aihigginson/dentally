@@ -5,6 +5,7 @@
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     20/05/2026  AIH Column naming convention fixes (Last_Fta -> Last_FTA)
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patient_Stats]
 GO
@@ -38,7 +39,7 @@ BEGIN
             , LEFT(updated_at, 255)                                        AS Updated_At
             , TRY_CAST(total_paid AS DECIMAL(18,4))                        AS Total_Paid
             , TRY_CAST(total_invoiced AS DECIMAL(18,4))                    AS Total_Invoiced
-            , LEFT(last_fta_appointment_date, 255)                         AS Last_Fta_Appointment_Date
+            , LEFT(last_fta_appointment_date, 255)                         AS Last_FTA_Appointment_Date
             , LEFT(first_appointment_date, 255)                            AS First_Appointment_Date
             , LEFT(first_exam_date, 255)                                   AS First_Exam_Date
             , TRY_CAST(nhs_exemption_code AS DECIMAL(18,4))                AS NHS_Exemption_Code
@@ -57,7 +58,7 @@ BEGIN
             , tgt.Updated_At                      = src.Updated_At
             , tgt.Total_Paid                      = src.Total_Paid
             , tgt.Total_Invoiced                  = src.Total_Invoiced
-            , tgt.Last_Fta_Appointment_Date       = src.Last_Fta_Appointment_Date
+            , tgt.Last_FTA_Appointment_Date       = src.Last_FTA_Appointment_Date
             , tgt.First_Appointment_Date          = src.First_Appointment_Date
             , tgt.First_Exam_Date                 = src.First_Exam_Date
             , tgt.NHS_Exemption_Code              = src.NHS_Exemption_Code
@@ -67,8 +68,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.Patient_ID = src.Patient_ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Patient_Stats (Tenant_ID, Patient_ID, Last_Appointment_Date, Last_Exam_Date, Last_Scale_And_Polish_Date, Next_Appointment_Date, Next_Exam_Date, Next_Scale_And_Polish_Date, Created_At, Updated_At, Total_Paid, Total_Invoiced, Last_Fta_Appointment_Date, First_Appointment_Date, First_Exam_Date, NHS_Exemption_Code, Last_Cancelled_Appointment_Date, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.Patient_ID, src.Last_Appointment_Date, src.Last_Exam_Date, src.Last_Scale_And_Polish_Date, src.Next_Appointment_Date, src.Next_Exam_Date, src.Next_Scale_And_Polish_Date, src.Created_At, src.Updated_At, src.Total_Paid, src.Total_Invoiced, src.Last_Fta_Appointment_Date, src.First_Appointment_Date, src.First_Exam_Date, src.NHS_Exemption_Code, src.Last_Cancelled_Appointment_Date, SYSUTCDATETIME()
+        INSERT INTO Bronze.Patient_Stats (Tenant_ID, Patient_ID, Last_Appointment_Date, Last_Exam_Date, Last_Scale_And_Polish_Date, Next_Appointment_Date, Next_Exam_Date, Next_Scale_And_Polish_Date, Created_At, Updated_At, Total_Paid, Total_Invoiced, Last_FTA_Appointment_Date, First_Appointment_Date, First_Exam_Date, NHS_Exemption_Code, Last_Cancelled_Appointment_Date, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.Patient_ID, src.Last_Appointment_Date, src.Last_Exam_Date, src.Last_Scale_And_Polish_Date, src.Next_Appointment_Date, src.Next_Exam_Date, src.Next_Scale_And_Polish_Date, src.Created_At, src.Updated_At, src.Total_Paid, src.Total_Invoiced, src.Last_FTA_Appointment_Date, src.First_Appointment_Date, src.First_Exam_Date, src.NHS_Exemption_Code, src.Last_Cancelled_Appointment_Date, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Patient_Stats tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Patient_ID = src.Patient_ID);
         SET @My_Inserts = @@ROWCOUNT;

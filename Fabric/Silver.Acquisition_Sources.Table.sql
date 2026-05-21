@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Silver].[Acquisition_Sources]
 GO
 CREATE TABLE [Silver].[Acquisition_Sources](
 	[Tenant_ID] [int] NOT NULL,
-	[Acquisition_Source_Id] [VARCHAR](50) NOT NULL,
+	[Acquisition_Source_ID] [VARCHAR](50) NOT NULL,
 	[Active] [bit] NULL,
 	[Name] [VARCHAR](255) NULL,
 	[Notes] [VARCHAR](1000) NULL,

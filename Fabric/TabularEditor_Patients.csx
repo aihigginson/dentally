@@ -18,9 +18,9 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
-// Lapsed: pre-existing patients whose last-ever appointment falls in the selected
-// period and who are now inactive (no future appointment implies Active = FALSE).
-// Using current Active flag is correct — if they later re-attended they are still active.
+// Lapsed: pre-existing patients whose 24-month exam clock expired during the period.
+// Uses Last Exam Date + 24 months as the lapse trigger — objective NHS standard,
+// no dependency on the practice managing the Active flag in Dentally.
 add("Lapsed Patients",
     @"VAR period_start = MIN('List Date'[Full Date])
 VAR period_end   = MAX('List Date'[Full Date])
@@ -28,10 +28,9 @@ RETURN
 COUNTROWS(
     FILTER(
         ALL('List Patients'),
-        NOT ISBLANK('List Patients'[Last Appointment Date])
-        && 'List Patients'[Last Appointment Date] >= period_start
-        && 'List Patients'[Last Appointment Date] <= period_end
-        && 'List Patients'[Active] = FALSE()
+        NOT ISBLANK('List Patients'[Last Exam Date])
+        && EDATE('List Patients'[Last Exam Date], 24) >= period_start
+        && EDATE('List Patients'[Last Exam Date], 24) <= period_end
         && NOT ISBLANK('List Patients'[First Appointment Date])
         && 'List Patients'[First Appointment Date] < period_start
     )
@@ -42,16 +41,52 @@ add("Net Patient Growth",
     @"[New Patients] - [Lapsed Patients]",
     "#,##0");
 
+// Retention Outlook: % of in-scope recall patients who have a booking.
+// Is_In_Scope and Is_Booked are pre-computed in Gold.usp_Load_Fact_Recalls,
+// replacing the previous FILTER/SELECTCOLUMNS/UNION/INTERSECT set operations.
+// REMOVEFILTERS('List Date') keeps the metric independent of the date slicer;
+// tenant RLS still propagates through the _Recalls relationship.
+add("Retention Outlook",
+    @"VAR due =
+    CALCULATE(
+        DISTINCTCOUNT( '_Recalls'[fk Patient] ),
+        '_Recalls'[Is In Scope] = TRUE(),
+        REMOVEFILTERS( 'List Date' )
+    )
+VAR booked =
+    CALCULATE(
+        DISTINCTCOUNT( '_Recalls'[fk Patient] ),
+        '_Recalls'[Is In Scope] = TRUE(),
+        '_Recalls'[Is Booked]   = TRUE(),
+        REMOVEFILTERS( 'List Date' )
+    )
+RETURN DIVIDE( booked, due )",
+    "#,##0.0%");
+
 add("Active Patients",
     @"COUNTROWS(
     FILTER('Aggregate Site Patient Current',
         'Aggregate Site Patient Current'[Active Patients] = TRUE()))",
     "#,##0");
 
+// Recall Effectiveness: % of in-scope open recalls where at least one reminder
+// has been sent. Dentally deletes attended recalls so Status = "attended" never
+// exists — this replaces the previous broken measure.
 add("Recall Effectiveness",
-    @"DIVIDE(
-    CALCULATE(COUNTROWS('_Recalls'), '_Recalls'[Status] = ""attended""),
-    CALCULATE(COUNTROWS('_Recalls'), '_Recalls'[Due Date] <= TODAY()))",
+    @"VAR in_scope =
+    CALCULATE(
+        COUNTROWS( '_Recalls' ),
+        '_Recalls'[Is In Scope] = TRUE(),
+        REMOVEFILTERS( 'List Date' )
+    )
+VAR contacted =
+    CALCULATE(
+        COUNTROWS( '_Recalls' ),
+        '_Recalls'[Is In Scope]      = TRUE(),
+        '_Recalls'[Is Reminder Sent] = TRUE(),
+        REMOVEFILTERS( 'List Date' )
+    )
+RETURN DIVIDE( contacted, in_scope )",
     "#,##0.0%");
 
 add("Patient Retention",
@@ -139,7 +174,7 @@ RETURN IF(
 add("Recall Effectiveness Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""recall_compliance""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Recall Effectiveness vs Target",
@@ -156,7 +191,7 @@ RETURN IF(
 add("Patient Retention Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""patient_retention""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Patient Retention vs Target",
@@ -173,7 +208,7 @@ RETURN IF(
 add("Recalls Overdue Not Sent Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""recalls_overdue_not_sent""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Recalls Overdue Not Sent vs Target",
@@ -233,7 +268,7 @@ RETURN SWITCH(TRUE(),
 
 add("Recall Effectiveness BG",
     @"VAR actual   = [Recall Effectiveness]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recall_compliance""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recall_compliance""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recall_compliance""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -246,7 +281,7 @@ RETURN SWITCH(TRUE(),
 
 add("Patient Retention BG",
     @"VAR actual   = [Patient Retention]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""patient_retention""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""patient_retention""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""patient_retention""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -259,7 +294,7 @@ RETURN SWITCH(TRUE(),
 
 add("Recalls Overdue Not Sent BG",
     @"VAR actual   = [Recalls Overdue Not Sent]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recalls_overdue_not_sent""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recalls_overdue_not_sent""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""recalls_overdue_not_sent""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -268,6 +303,37 @@ RETURN SWITCH(TRUE(),
     diff_pp <= 0,          ""#6abf7b"",
     diff_pp <= band,   ""#f4a261"",
                            ""#c0392b"")",
+    "");
+
+add("Retention Outlook Target",
+    @"MAXX(
+    FILTER( '_Targets', '_Targets'[Metric] = ""retention_outlook"" ),
+    '_Targets'[Target Value]) / 100",
+    "#,##0.0%");
+
+// Above is good, percentage metric — variance expressed as absolute pp
+add("Retention Outlook vs Target",
+    @"VAR actual  = [Retention Outlook]
+VAR target  = [Retention Outlook Target]
+VAR diff_pp = ( actual - target ) * 100
+RETURN IF(
+    ISBLANK( target ), BLANK(),
+    IF( diff_pp >= 0,
+        ""▲ "" & FORMAT( diff_pp,      ""0.0"" ) & ""pp"",
+        ""▼ "" & FORMAT( ABS(diff_pp), ""0.0"" ) & ""pp"" ))",
+    "");
+
+add("Retention Outlook BG",
+    @"VAR actual  = [Retention Outlook]
+VAR target  = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""retention_outlook"" ), '_Targets'[Target Value] ) / 100
+VAR band    = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""retention_outlook"" ), '_Targets'[Variance] )
+VAR diff_pp = ( actual - target ) * 100
+RETURN SWITCH( TRUE(),
+    ISBLANK( target ), ""#FFFFFF"",
+    diff_pp >= band,   ""#1a7f3c"",
+    diff_pp >= 0,      ""#6abf7b"",
+    diff_pp >= -band,  ""#f4a261"",
+                       ""#c0392b"" )",
     "");
 
 Info("Patients KPI measures created.");

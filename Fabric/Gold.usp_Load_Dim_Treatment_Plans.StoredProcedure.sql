@@ -8,6 +8,7 @@
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *04     19/05/2026  AIH TRY_CAST + LEFT(,10) for Start_Date/End_Date to handle ISO 8601 +00:00 suffix
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -42,8 +43,8 @@ BEGIN
             Tenant_ID                                                           AS Tenant_ID,
             CAST(Id AS INT)                                                     AS Treatment_Plan_ID,
             NULLIF(TRIM(Nickname),'')                                           AS Nickname,
-            CAST(Patient_Id AS INT)                                             AS Patient_ID,
-            CAST(Practitioner_Id AS INT)                                        AS Practitioner_ID,
+            CAST(Patient_ID AS INT)                                             AS Patient_ID,
+            CAST(Practitioner_ID AS INT)                                        AS Practitioner_ID,
             CAST(ISNULL(Completed,0) AS BIT)                                    AS Completed,
             TRY_CAST(LEFT(NULLIF(TRIM(Start_Date), ''), 10) AS DATE)            AS Start_Date,
             TRY_CAST(LEFT(NULLIF(TRIM(End_Date),   ''), 10) AS DATE)            AS End_Date,
@@ -51,7 +52,7 @@ BEGIN
             TRY_CAST(NULLIF(TRIM(Last_Completed_At),'') AS DATE)                AS Last_Completed_Date,
             CAST(ISNULL(NHS_UDA_Value,0) AS DECIMAL(10,2))                      AS NHS_UDA_Value,
             CAST(ISNULL(NHS_Completed_UDA_Value,0) AS DECIMAL(10,2))            AS NHS_Completed_UDA_Value,
-            CAST(ISNULL(Private_treatment_value,0) AS DECIMAL(12,2))            AS Private_Treatment_Value,
+            CAST(ISNULL(Private_Treatment_Value,0) AS DECIMAL(12,2))            AS Private_Treatment_Value,
             TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3))               AS Created_Date,
             TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3))               AS Updated_Date
         INTO #src

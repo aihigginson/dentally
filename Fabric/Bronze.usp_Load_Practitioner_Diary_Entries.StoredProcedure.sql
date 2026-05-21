@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     20/05/2026  AIH Fix Stage field names: date (not day); default Unavailable=0 (field not in API)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Practitioner_Diary_Entries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practitioner_Diary_Entries]
@@ -33,6 +34,7 @@ BEGIN
             , LEFT(date,               255)    AS Day
             , LEFT(start_time,         255)    AS Start_Time
             , LEFT(end_time,           255)    AS End_Time
+            , CAST(0.0 AS DECIMAL(18,4))       AS Unavailable
         INTO #src
         FROM Stage.Practitioner_Diary_Entries
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -42,13 +44,14 @@ BEGIN
             , tgt.Day             = src.Day
             , tgt.Start_Time      = src.Start_Time
             , tgt.End_Time        = src.End_Time
+            , tgt.Unavailable     = src.Unavailable
             , tgt.DW_Loaded_At    = SYSUTCDATETIME()
         FROM Bronze.Practitioner_Diary AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Practitioner_Diary (Tenant_ID, ID, Practitioner_ID, Day, Start_Time, End_Time, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Practitioner_ID, src.Day, src.Start_Time, src.End_Time, SYSUTCDATETIME()
+        INSERT INTO Bronze.Practitioner_Diary (Tenant_ID, ID, Practitioner_ID, Day, Start_Time, End_Time, Unavailable, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Practitioner_ID, src.Day, src.Start_Time, src.End_Time, src.Unavailable, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Practitioner_Diary tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

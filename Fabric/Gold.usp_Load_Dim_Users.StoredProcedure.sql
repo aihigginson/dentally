@@ -8,6 +8,7 @@
 --    *02     30/04/2026  AIH Add Is_Current to INSERT (NOT NULL column omitted from column list)
 --    *03     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Users @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Users]    Script Date: 20/04/2026 10:15:06 ******/
@@ -54,8 +55,8 @@ BEGIN
             NULLIF(TRIM(Mobile_Phone), '')                      AS Mobile_Phone,
             NULLIF(TRIM(Role), '')                              AS Role,
             CAST(Permission_Level AS INT)                       AS Permission_Level,
-            NULLIF(TRIM(Practice_Id), '')                       AS Practice_ID,
-            NULLIF(TRIM(Site_Id), '')                           AS Site_ID,
+            NULLIF(TRIM(Practice_ID), '')                       AS Practice_ID,
+            NULLIF(TRIM(Site_ID), '')                           AS Site_ID,
             NULLIF(TRIM(Image_URL), '')                         AS Image_URL,
             TRY_CAST(NULLIF(TRIM(Last_Login),'') AS DATE)       AS Last_Login_Date,
             TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3)) AS Created_Date,

@@ -5,6 +5,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Sundries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Sundries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -38,7 +39,7 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Price] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Active] AS VARCHAR(500)), '')
@@ -47,8 +48,8 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(ID AS int)  AS [Sundry_Id],
-                LEFT(Site_ID, 50)  AS [Site_Id],
+                TRY_CAST(ID AS int)  AS [Sundry_ID],
+                LEFT(Site_ID, 50)  AS [Site_ID],
                 Name  AS [Name],
                 Price  AS [Price],
                 CAST(NULL AS bit)  AS [Active]
@@ -59,7 +60,7 @@ BEGIN
 
         UPDATE tgt
         SET
-            [Site_Id] = src.[Site_Id],
+            [Site_ID] = src.[Site_ID],
             [Name] = src.[Name],
             [Price] = src.[Price],
             [Active] = src.[Active],
@@ -67,22 +68,22 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Sundries] AS tgt
-        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_Id] = src.[Sundry_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_ID] = src.[Sundry_ID]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Sundries] ([Tenant_ID], [Sundry_Id], [Site_Id], [Name], [Price], [Active], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Sundry_Id], src.[Site_Id], src.[Name], src.[Price], src.[Active], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Sundries] ([Tenant_ID], [Sundry_ID], [Site_ID], [Name], [Price], [Active], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Sundry_ID], src.[Site_ID], src.[Name], src.[Price], src.[Active], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Sundries] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_Id] = src.[Sundry_Id]
+            SELECT 1 FROM [Silver].[Sundries] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Sundry_ID] = src.[Sundry_ID]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Sundries] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Sundry_Id] = tgt.[Sundry_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Sundry_ID] = tgt.[Sundry_ID]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

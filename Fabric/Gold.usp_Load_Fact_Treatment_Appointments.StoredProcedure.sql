@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
+--    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -43,8 +44,8 @@ BEGIN
             ISNULL(dtp.pk_Treatment_Plan, -1)                           AS fk_Treatment_Plan,
             dd_a.pk_Date                                                AS fk_Date_Appointment,
             dd_c.pk_Date                                                AS fk_Date_Created,
-            ta.Appointment_Id                                           AS Appointment_ID,
-            ta.Treatment_Plan_Id                                        AS Treatment_Plan_ID,
+            ta.Appointment_ID                                           AS Appointment_ID,
+            ta.Treatment_Plan_ID                                        AS Treatment_Plan_ID,
             ta.Position                                                 AS Position,
             ta.Bookable                                                 AS Bookable,
             NULLIF(TRIM(ta.Notes),'')                                   AS Notes,
@@ -52,9 +53,9 @@ BEGIN
             CAST(NULL AS datetime2(3))                                  AS Updated_At
         INTO #src
         FROM Silver.Treatment_Appointments ta
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID        = ta.Patient_Id        AND dpat.Tenant_ID = ta.Tenant_ID
-        LEFT JOIN Gold.Dim_Treatment_Plans dtp  ON dtp.Treatment_Plan_ID  = ta.Treatment_Plan_Id AND dtp.Tenant_ID = ta.Tenant_ID
-        LEFT JOIN Silver.Appointments ba        ON ba.Appointment_Id      = ta.Appointment_Id
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID        = ta.Patient_ID        AND dpat.Tenant_ID = ta.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatment_Plans dtp  ON dtp.Treatment_Plan_ID  = ta.Treatment_Plan_ID AND dtp.Tenant_ID = ta.Tenant_ID
+        LEFT JOIN Silver.Appointments ba        ON ba.Appointment_ID      = ta.Appointment_ID
         LEFT JOIN Gold.Dim_Date dd_a            ON dd_a.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
         WHERE ta.Id IS NOT NULL;

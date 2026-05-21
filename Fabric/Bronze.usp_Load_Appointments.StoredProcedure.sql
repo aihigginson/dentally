@@ -8,6 +8,7 @@
 --    *03     14/05/2026  AIH Add all timestamp/status fields now present in Stage after mock API redeploy
 --    *04     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *05     16/05/2026  AIH Add Site_ID (missing from Stage read despite being in Bronze table)
+--    *06     19/05/2026  AIH Remove Site_ID, Created_At, Updated_At Stage reads (not in Dentally API)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -41,7 +42,6 @@ BEGIN
             , TRY_CAST(user_id                           AS INT)  AS User_ID
             , TRY_CAST(payment_plan_id                   AS INT)  AS Payment_Plan_ID
             , LEFT(room_id,                                255)   AS Room_ID
-            , LEFT(site_id,                                255)   AS Site_ID
             , LEFT(start_time,                             255)   AS Start_Time
             , LEFT(finish_time,                            255)   AS Finish_Time
             , TRY_CAST(duration                          AS INT)  AS Duration
@@ -57,8 +57,6 @@ BEGIN
             , LEFT(completed_at,                           255)   AS Completed_At
             , LEFT(cancelled_at,                           255)   AS Cancelled_At
             , LEFT(did_not_attend_at,                      255)   AS Did_Not_Attend_At
-            , LEFT(created_at,                             255)   AS Created_At
-            , LEFT(updated_at,                             255)   AS Updated_At
         INTO #src
         FROM Stage.Appointments
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -73,7 +71,6 @@ BEGIN
             , tgt.User_ID                            = src.User_ID
             , tgt.Payment_Plan_ID                    = src.Payment_Plan_ID
             , tgt.Room_ID                            = src.Room_ID
-            , tgt.Site_ID                            = src.Site_ID
             , tgt.Start_Time                         = src.Start_Time
             , tgt.Finish_Time                        = src.Finish_Time
             , tgt.Duration                           = src.Duration
@@ -89,8 +86,6 @@ BEGIN
             , tgt.Completed_At                       = src.Completed_At
             , tgt.Cancelled_At                       = src.Cancelled_At
             , tgt.Did_Not_Attend_At                  = src.Did_Not_Attend_At
-            , tgt.Created_At                         = src.Created_At
-            , tgt.Updated_At                         = src.Updated_At
             , tgt.DW_Loaded_At                       = SYSUTCDATETIME()
         FROM Bronze.Appointments AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
@@ -99,22 +94,22 @@ BEGIN
         INSERT INTO Bronze.Appointments (
             Tenant_ID, ID, UUID, Appointment_Cancellation_Reason_ID,
             Patient_ID, Patient_Name, Patient_Image_Url,
-            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID, Site_ID,
+            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
             Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
             Completed_At, Cancelled_At, Did_Not_Attend_At,
-            Created_At, Updated_At, DW_Loaded_At
+            DW_Loaded_At
         )
         SELECT
             src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
-            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID, src.Site_ID,
+            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
             src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
-            src.Created_At, src.Updated_At, SYSUTCDATETIME()
+            SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Appointments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

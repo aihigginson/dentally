@@ -7,7 +7,9 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     13/05/2026  AIH Add Booking, This_Visit, Next_Visit, Future_Appointment from Silver.Appointment_Journey_Attrs
---    *04     14/05/2026  AIH Fix fk_Practice_Site join to use a.Site_Id instead of a.Room_Id
+--    *04     14/05/2026  AIH Fix fk_Practice_Site join to use a.Site_ID instead of a.Room_ID
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID, API)
+--    *06     21/05/2026  AIH Add fk_Cancellation_Reason surrogate key via Dim_Cancellation_Reasons
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -40,24 +42,25 @@ BEGIN
 
         SELECT
             a.Tenant_ID                                                 AS Tenant_ID,
-            CAST(a.Appointment_Id AS INT)                               AS bk_Appointment_ID,
+            CAST(a.Appointment_ID AS INT)                               AS bk_Appointment_ID,
 
             ISNULL(dpat.pk_Patient, -1)                                 AS fk_Patient,
             ISNULL(dpr.pk_Practitioner, -1)                             AS fk_Practitioner,
             ISNULL(dpp.pk_Payment_Plan, -1)                             AS fk_Payment_Plan,
             ISNULL(dps.pk_Practice_Site, -1)                            AS fk_Practice_Site,
             ISNULL(du.pk_User, -1)                                      AS fk_User,
+            ISNULL(dcr.pk_Cancellation_Reason, -1)                      AS fk_Cancellation_Reason,
 
             dd_s.pk_Date                                                AS fk_Date_Start,
             dd_p.pk_Date                                                AS fk_Date_Pending,
             dd_c.pk_Date                                                AS fk_Date_Created,
 
-            NULLIF(TRIM(a.Room_Id),'')                                  AS Room_ID,
+            NULLIF(TRIM(a.Room_ID),'')                                  AS Room_ID,
             NULLIF(TRIM(a.State),'')                                    AS State,
             NULLIF(TRIM(a.Reason),'')                                   AS Reason,
             NULLIF(TRIM(a.Treatment_Description),'')                    AS Treatment_Description,
             NULLIF(TRIM(a.Notes),'')                                    AS Notes,
-            a.Appointment_Cancellation_Reason_Id                        AS Cancellation_Reason_ID,
+            a.Appointment_Cancellation_Reason_ID                        AS Cancellation_Reason_ID,
 
             TRY_CAST(NULLIF(TRIM(a.Arrived_At),'') AS datetime2(3))         AS Arrived_At,
             TRY_CAST(NULLIF(TRIM(a.In_Surgery_At),'') AS datetime2(3))      AS In_Surgery_At,
@@ -95,17 +98,18 @@ BEGIN
             ja.Future_Appointment                                       AS Future_Appointment
         INTO #src
         FROM Silver.Appointments a
-        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_Id          AND dpat.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_Id AS INT) AND dpr.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_Id AS INT) AND dpp.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Site_Id),'') AND dps.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_Id AS INT) AND du.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_ID AS INT) AND dpr.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_ID AS INT) AND dpp.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Site_ID),'') AND dps.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_ID AS INT) AND du.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
+        LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
         LEFT JOIN Silver.Appointment_Journey_Attrs ja
-                                                ON ja.Appointment_Id   = a.Appointment_Id AND ja.Tenant_ID = a.Tenant_ID
-        WHERE a.Appointment_Id IS NOT NULL;
+                                                ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
+        WHERE a.Appointment_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -120,6 +124,7 @@ BEGIN
             fk_Payment_Plan         = src.fk_Payment_Plan,
             fk_Practice_Site        = src.fk_Practice_Site,
             fk_User                 = src.fk_User,
+            fk_Cancellation_Reason  = src.fk_Cancellation_Reason,
             fk_Date_Start           = src.fk_Date_Start,
             fk_Date_Pending         = src.fk_Date_Pending,
             fk_Date_Created         = src.fk_Date_Created,
@@ -158,6 +163,7 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practice_Site] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_User] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Cancellation_Reason] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Start] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Pending] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Created] AS VARCHAR(500)), ''),
@@ -194,6 +200,7 @@ BEGIN
            ISNULL(CAST(src.[fk_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practice_Site] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_User] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Cancellation_Reason] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Start] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Pending] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Created] AS VARCHAR(500)), ''),
@@ -230,7 +237,7 @@ BEGIN
         INSERT INTO Gold.Fact_Appointments (
             Tenant_ID,
             bk_Appointment_ID,
-            fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Practice_Site, fk_User,
+            fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Practice_Site, fk_User, fk_Cancellation_Reason,
             fk_Date_Start, fk_Date_Pending, fk_Date_Created,
             Room_ID, State, Reason, Treatment_Description, Notes, Cancellation_Reason_ID,
             Arrived_At, In_Surgery_At, Completed_At, Confirmed_At, Cancelled_At, Did_Not_Attend_At,
@@ -243,7 +250,7 @@ BEGIN
         SELECT
             src.Tenant_ID,
             src.bk_Appointment_ID,
-            src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Practice_Site, src.fk_User,
+            src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Practice_Site, src.fk_User, src.fk_Cancellation_Reason,
             src.fk_Date_Start, src.fk_Date_Pending, src.fk_Date_Created,
             src.Room_ID, src.State, src.Reason, src.Treatment_Description, src.Notes, src.Cancellation_Reason_ID,
             src.Arrived_At, src.In_Surgery_At, src.Completed_At, src.Confirmed_At, src.Cancelled_At, src.Did_Not_Attend_At,

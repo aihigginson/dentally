@@ -5,6 +5,8 @@
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Add Name, Notes
+--    *04     20/05/2026  AIH Column naming convention fixes (PDS_Plus)
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Contracts]
 GO
@@ -33,13 +35,15 @@ BEGIN
             , LEFT(end_date, 255)                                                                           AS End_Date
             , LEFT(nhs_location_id, 255)                                                                    AS NHS_Location_ID
             , LEFT(nhs_site_id, 255)                                                                        AS NHS_Site_ID
-            , CASE WHEN pds_plus IN ('True', '1', 'true') THEN 1 ELSE 0 END                                AS Pds_Plus
+            , CASE WHEN pds_plus IN ('True', '1', 'true') THEN 1 ELSE 0 END                                AS PDS_Plus
             , LEFT(site_id, 255)                                                                            AS Site_ID
             , LEFT(start_date, 255)                                                                         AS Start_Date
             , LEFT(target, 255)                                                                             AS Target
             , LEFT(uda_value, 255)                                                                          AS UDA_Value
             , LEFT(uoa_target, 255)                                                                         AS UOA_Target
             , LEFT(uoa_value, 255)                                                                          AS UOA_Value
+            , LEFT(name,  255)                                                                              AS Name
+            , LEFT(notes, 255)                                                                              AS Notes
             , LEFT(created_at, 255)                                                                         AS Created_At
             , LEFT(updated_at, 255)                                                                         AS Updated_At
         INTO #src
@@ -52,21 +56,24 @@ BEGIN
             , tgt.End_Date        = src.End_Date
             , tgt.NHS_Location_ID = src.NHS_Location_ID
             , tgt.NHS_Site_ID     = src.NHS_Site_ID
-            , tgt.Pds_Plus        = src.Pds_Plus
+            , tgt.PDS_Plus        = src.PDS_Plus
             , tgt.Site_ID         = src.Site_ID
             , tgt.Start_Date      = src.Start_Date
             , tgt.Target          = src.Target
             , tgt.UDA_Value       = src.UDA_Value
             , tgt.UOA_Target      = src.UOA_Target
             , tgt.UOA_Value       = src.UOA_Value
+            , tgt.Name            = src.Name
+            , tgt.Notes           = src.Notes
+            , tgt.Created_At      = src.Created_At
             , tgt.Updated_At      = src.Updated_At
             , tgt.DW_Loaded_At    = SYSUTCDATETIME()
         FROM Bronze.Contracts AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Contracts (Tenant_ID, ID, Active, Contract_Number, End_Date, NHS_Location_ID, NHS_Site_ID, Pds_Plus, Site_ID, Start_Date, Target, UDA_Value, UOA_Target, UOA_Value, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Active, src.Contract_Number, src.End_Date, src.NHS_Location_ID, src.NHS_Site_ID, src.Pds_Plus, src.Site_ID, src.Start_Date, src.Target, src.UDA_Value, src.UOA_Target, src.UOA_Value, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Contracts (Tenant_ID, ID, Active, Contract_Number, End_Date, NHS_Location_ID, NHS_Site_ID, PDS_Plus, Site_ID, Start_Date, Target, UDA_Value, UOA_Target, UOA_Value, Name, Notes, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Active, src.Contract_Number, src.End_Date, src.NHS_Location_ID, src.NHS_Site_ID, src.PDS_Plus, src.Site_ID, src.Start_Date, src.Target, src.UDA_Value, src.UOA_Target, src.UOA_Value, src.Name, src.Notes, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Contracts tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

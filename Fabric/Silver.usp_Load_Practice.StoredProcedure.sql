@@ -5,6 +5,9 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     19/05/2026  AIH Read Town from Bronze (now available)
+--    *03     20/05/2026  AIH Phone_Number is VARCHAR — remove float cast, use LEFT directly
+--    *04     20/05/2026  AIH Column naming convention fixes (Practice_Id -> Practice_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practice @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Practice]    Script Date: 20/04/2026 10:15:06 ******/
@@ -55,17 +58,15 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                LEFT(Practice_ID, 50)  AS [Practice_Id],
+                LEFT(Practice_ID, 50)  AS [Practice_ID],
                 Practice_Name  AS [Practice_Name],
                 Email_Address  AS [Email_Address],
-                LEFT(CAST(TRY_CAST(ROUND(CAST(Phone_Number AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Phone_Number],
+                LEFT(Phone_Number, 50)  AS [Phone_Number],
                 Address_Line_1  AS [Address_Line_1],
                 Address_Line_2  AS [Address_Line_2],
-                NULL  AS [Town],
-                -- Town not present in Bronze.Practice
-        NULL  AS [County],
-                -- County not present in Bronze.Practice
-        LEFT(Postcode, 20)  AS [Postcode],
+                LEFT(Town, 100)  AS [Town],
+                NULL  AS [County],
+                LEFT(Postcode, 20)  AS [Postcode],
                 NULL  AS [Country],
                 TRY_CAST(ROUND(CAST(NHS AS float),0) AS int)  AS [NHS],
                 LEFT(Time_Zone, 50)  AS [Time_Zone],
@@ -91,24 +92,24 @@ BEGIN
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
         FROM [Silver].[Practice] AS tgt
-        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_Id] = src.[Practice_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_ID] = src.[Practice_ID]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Practice] ([Tenant_ID], [Practice_Id], [Practice_Name], [Email_Address], [Phone_Number], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Country], [NHS], [Time_Zone], [Website],
+        INSERT INTO [Silver].[Practice] ([Tenant_ID], [Practice_ID], [Practice_Name], [Email_Address], [Phone_Number], [Address_Line_1], [Address_Line_2], [Town], [County], [Postcode], [Country], [NHS], [Time_Zone], [Website],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Practice_Id], src.[Practice_Name], src.[Email_Address], src.[Phone_Number], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Country], src.[NHS], src.[Time_Zone], src.[Website],
+        SELECT src.[Tenant_ID], src.[Practice_ID], src.[Practice_Name], src.[Email_Address], src.[Phone_Number], src.[Address_Line_1], src.[Address_Line_2], src.[Town], src.[County], src.[Postcode], src.[Country], src.[NHS], src.[Time_Zone], src.[Website],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Practice] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_Id] = src.[Practice_Id]
+            SELECT 1 FROM [Silver].[Practice] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Practice_ID] = src.[Practice_ID]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Practice] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Practice_Id] = tgt.[Practice_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Practice_ID] = tgt.[Practice_ID]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

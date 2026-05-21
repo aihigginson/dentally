@@ -20,7 +20,7 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 $securePwd = Read-Host "Fabric password for $Username" -AsSecureString
 $bstr      = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePwd)
@@ -44,12 +44,12 @@ function Run-SQL($sql, $label) {
 }
 
 function Show-SQL($file) {
-    $path = Join-Path $ScriptDir $file
+    $path = Join-Path $FabricDir $file
     & sqlcmd -S $Server -d $Database -G -U $Username -P $pwd -i $path -W
 }
 
 function Deploy-File($file, $label) {
-    $path = Join-Path $ScriptDir $file
+    $path = Join-Path $FabricDir $file
     $sql  = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
     Run-SQL $sql $label
 }

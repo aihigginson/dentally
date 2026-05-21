@@ -5,6 +5,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -38,17 +39,17 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Invoice_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Practitioner_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Treatment_Plan_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Treatment_Plan_Item_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Sundry_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[User_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Invoice_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Practitioner_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Treatment_Plan_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Treatment_Plan_Item_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Sundry_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[User_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Quantity] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Item_Price] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Total_Price] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Nhs_Charge] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[NHS_Charge] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Created_At] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Updated_At] AS VARCHAR(500)), '')
         ))) AS _Hash
@@ -57,25 +58,25 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Id],
-                Invoice_ID  AS [Invoice_Id],
-                Practitioner_ID  AS [Practitioner_Id],
-                Treatment_Plan_ID  AS [Treatment_Plan_Id],
+                Invoice_ID  AS [Invoice_ID],
+                Practitioner_ID  AS [Practitioner_ID],
+                Treatment_Plan_ID  AS [Treatment_Plan_ID],
                 -- Bronze Treatment_Plan_Item_ID is int; Silver is VARCHAR(50)
         CASE WHEN Treatment_Plan_Item_ID IS NULL THEN NULL
              ELSE LEFT(CAST(Treatment_Plan_Item_ID AS VARCHAR(50)), 50)
-        END  AS [Treatment_Plan_Item_Id],
-                LEFT(Sundry_ID, 255)  AS [Sundry_Id],
+        END  AS [Treatment_Plan_Item_ID],
+                LEFT(Sundry_ID, 255)  AS [Sundry_ID],
                 -- Bronze User_ID is int; Silver is VARCHAR(255)
         CASE WHEN User_ID IS NULL THEN NULL
              ELSE LEFT(CAST(User_ID AS VARCHAR(255)), 255)
-        END  AS [User_Id],
+        END  AS [User_ID],
                 Name  AS [Name],
                 Quantity  AS [Quantity],
                 -- Bronze Item_Price is int; Silver is decimal(18,4)
         CAST(Item_Price AS decimal(18,4))  AS [Item_Price],
                 Total_Price  AS [Total_Price],
                 -- Bronze NHS_Charge is int; Silver is bit
-        CASE WHEN NHS_Charge = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Nhs_Charge],
+        CASE WHEN NHS_Charge = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [NHS_Charge],
                 LEFT(Created_At, 255)  AS [Created_At],
                 LEFT(Updated_At, 255)  AS [Updated_At]
             FROM Bronze.Invoice_Items
@@ -83,17 +84,17 @@ BEGIN
 
         UPDATE tgt
         SET
-            [Invoice_Id] = src.[Invoice_Id],
-            [Practitioner_Id] = src.[Practitioner_Id],
-            [Treatment_Plan_Id] = src.[Treatment_Plan_Id],
-            [Treatment_Plan_Item_Id] = src.[Treatment_Plan_Item_Id],
-            [Sundry_Id] = src.[Sundry_Id],
-            [User_Id] = src.[User_Id],
+            [Invoice_ID] = src.[Invoice_ID],
+            [Practitioner_ID] = src.[Practitioner_ID],
+            [Treatment_Plan_ID] = src.[Treatment_Plan_ID],
+            [Treatment_Plan_Item_ID] = src.[Treatment_Plan_Item_ID],
+            [Sundry_ID] = src.[Sundry_ID],
+            [User_ID] = src.[User_ID],
             [Name] = src.[Name],
             [Quantity] = src.[Quantity],
             [Item_Price] = src.[Item_Price],
             [Total_Price] = src.[Total_Price],
-            [Nhs_Charge] = src.[Nhs_Charge],
+            [NHS_Charge] = src.[NHS_Charge],
             [Created_At] = src.[Created_At],
             [Updated_At] = src.[Updated_At],
             [DW_Updated_At] = SYSUTCDATETIME(),
@@ -103,9 +104,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Invoice_Items] ([Tenant_ID], [Id], [Invoice_Id], [Practitioner_Id], [Treatment_Plan_Id], [Treatment_Plan_Item_Id], [Sundry_Id], [User_Id], [Name], [Quantity], [Item_Price], [Total_Price], [Nhs_Charge], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Invoice_Items] ([Tenant_ID], [Id], [Invoice_ID], [Practitioner_ID], [Treatment_Plan_ID], [Treatment_Plan_Item_ID], [Sundry_ID], [User_ID], [Name], [Quantity], [Item_Price], [Total_Price], [NHS_Charge], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Id], src.[Invoice_Id], src.[Practitioner_Id], src.[Treatment_Plan_Id], src.[Treatment_Plan_Item_Id], src.[Sundry_Id], src.[User_Id], src.[Name], src.[Quantity], src.[Item_Price], src.[Total_Price], src.[Nhs_Charge], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Invoice_ID], src.[Practitioner_ID], src.[Treatment_Plan_ID], src.[Treatment_Plan_Item_ID], src.[Sundry_ID], src.[User_ID], src.[Name], src.[Quantity], src.[Item_Price], src.[Total_Price], src.[NHS_Charge], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

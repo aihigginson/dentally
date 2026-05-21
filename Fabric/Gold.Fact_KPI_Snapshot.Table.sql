@@ -9,9 +9,9 @@
 --                            'monthly' = last calendar day of each month
 --            Site-level and practice-level totals are aggregations in DAX;
 --            no separate rollup rows are stored.
---            Current metrics loaded: open_courses_value
---            Future metrics (active_patients, open_courses etc.) can be
---            appended to usp_Load_Fact_KPI_Snapshot without schema changes.
+--            Current metrics loaded: open_courses_value, retention_outlook
+--            Additional metrics can be appended to usp_Load_Fact_KPI_Snapshot
+--            without schema changes.
 --------------------------------------------------------------------
 /****** Object:  Table [Gold].[Fact_KPI_Snapshot]    Script Date: 18/05/2026 ******/
 

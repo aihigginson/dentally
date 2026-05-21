@@ -8,6 +8,7 @@
 --    *02     07/05/2026  AIH  Fix: precompute BBYL flag (EXISTS illegal inside SUM in Fabric)
 --                             Fix: Fact_Treatment_Plan_Items has no fk_Practice_Site column;
 --                                  TPI aggregated by patient/practitioner/date only
+--    *03     20/05/2026  AIH  Column naming convention fixes (NHS)
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -195,8 +196,8 @@ BEGIN
             a.fk_Practitioner,
             a.fk_Date,
             a.Tenant_ID,
-            NULL                                               AS NHS_UDAs,  -- pending Silver.Nhs_Claims
-            NULL                                               AS NHS_UOAs,  -- pending Silver.Nhs_Claims
+            NULL                                               AS NHS_UDAs,  -- pending Silver.NHS_Claims
+            NULL                                               AS NHS_UOAs,  -- pending Silver.NHS_Claims
             a.Appointments,
             a.DNA_Appointments,
             a.BBYL_Appointments,

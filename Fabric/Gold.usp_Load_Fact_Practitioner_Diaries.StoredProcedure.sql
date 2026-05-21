@@ -7,6 +7,9 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     30/04/2026  AIH Replace CAST AS DATETIME with datetime2(3); TIME -> TIME(0) — Fabric requires explicit precision
 --    *03     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
+--    *04     19/05/2026  AIH DATEDIFF casts: datetime2(3) -> TIME; time-only strings fail TRY_CAST to datetime2 in Fabric
+--    *05     19/05/2026  AIH Time extractor: test-data format is '2023-07-21T09:00.000+00:00'; strip date prefix via CHARINDEX('T')
+--    *06     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -43,26 +46,34 @@ BEGIN
             ISNULL(dpr.pk_Practitioner, -1)                             AS fk_Practitioner,
             dd.pk_Date                                                  AS fk_Date_Day,
             CAST(pd.Day AS DATE)                                        AS Day_Date,
-            TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS TIME(0))            AS Start_Time,
-            TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS TIME(0))           AS End_Time,
+            TRY_CAST(
+                CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Start_Time),'')) > 0
+                     THEN LEFT(SUBSTRING(pd.Start_Time, CHARINDEX('T', pd.Start_Time)+1, 8), 5) + ':00'
+                     ELSE NULLIF(TRIM(pd.Start_Time),'')
+                END AS TIME(0))                                              AS Start_Time,
+            TRY_CAST(
+                CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Finish_Time),'')) > 0
+                     THEN LEFT(SUBSTRING(pd.Finish_Time, CHARINDEX('T', pd.Finish_Time)+1, 8), 5) + ':00'
+                     ELSE NULLIF(TRIM(pd.Finish_Time),'')
+                END AS TIME(0))                                              AS End_Time,
             1-CAST(ISNULL(pd.Available,0) AS BIT)                       AS Unavailable,
-            CASE WHEN pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
+            CASE WHEN NULLIF(TRIM(pd.Start_Time),'') IS NOT NULL AND NULLIF(TRIM(pd.Finish_Time),'') IS NOT NULL
                  THEN DATEDIFF(MINUTE,
-                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS datetime2(3)),
-                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS datetime2(3)))
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Start_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Start_Time, CHARINDEX('T', pd.Start_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Start_Time),'') END AS TIME),
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Finish_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Finish_Time, CHARINDEX('T', pd.Finish_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Finish_Time),'') END AS TIME))
             END                                                         AS Session_Duration_Mins,
             COALESCE(brk.Total_Break_Mins, 0)                           AS Total_Break_Mins,
             COALESCE(brk.Break_Count, 0)                                AS Break_Count,
             CASE WHEN CAST(ISNULL(pd.Available,0) AS BIT) = 1
-                      AND pd.Start_Time IS NOT NULL AND pd.Finish_Time IS NOT NULL
+                      AND NULLIF(TRIM(pd.Start_Time),'') IS NOT NULL AND NULLIF(TRIM(pd.Finish_Time),'') IS NOT NULL
                  THEN DATEDIFF(MINUTE,
-                        TRY_CAST(NULLIF(TRIM(pd.Start_Time),'') AS datetime2(3)),
-                        TRY_CAST(NULLIF(TRIM(pd.Finish_Time),'') AS datetime2(3)))
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Start_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Start_Time, CHARINDEX('T', pd.Start_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Start_Time),'') END AS TIME),
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Finish_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Finish_Time, CHARINDEX('T', pd.Finish_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Finish_Time),'') END AS TIME))
                       - COALESCE(brk.Total_Break_Mins, 0)
                  ELSE 0 END                                             AS Available_Clinical_Mins
         INTO #src
         FROM Silver.Practitioner_Diary pd
-        LEFT JOIN Gold.Dim_Practitioners dpr ON dpr.Practitioner_ID = CAST(pd.Practitioner_Id AS INT) AND dpr.Tenant_ID = pd.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr ON dpr.Practitioner_ID = CAST(pd.Practitioner_ID AS INT) AND dpr.Tenant_ID = pd.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd           ON dd.Full_Date        = pd.Day
         LEFT JOIN (
             SELECT

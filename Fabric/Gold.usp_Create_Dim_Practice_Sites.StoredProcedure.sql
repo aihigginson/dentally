@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *03     20/05/2026  AIH Column naming convention fixes (Mon/Tue/Wed/Thu/Fri -> Monday/Tuesday/etc.)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Practice_Sites]
@@ -46,16 +47,16 @@ BEGIN
         Site_Website                  VARCHAR(255)   NULL,
         Site_Logo_URL                 VARCHAR(255)   NULL,
         Site_Default_Payment_Plan_ID  INT             NULL,
-        Mon_Open                      TIME(0)            NULL,
-        Mon_Close                     TIME(0)            NULL,
-        Tue_Open                      TIME(0)            NULL,
-        Tue_Close                     TIME(0)            NULL,
-        Wed_Open                      TIME(0)            NULL,
-        Wed_Close                     TIME(0)            NULL,
-        Thu_Open                      TIME(0)            NULL,
-        Thu_Close                     TIME(0)            NULL,
-        Fri_Open                      TIME(0)            NULL,
-        Fri_Close                     TIME(0)            NULL,
+        Monday_Open                   TIME(0)            NULL,
+        Monday_Close                  TIME(0)            NULL,
+        Tuesday_Open                  TIME(0)            NULL,
+        Tuesday_Close                 TIME(0)            NULL,
+        Wednesday_Open                TIME(0)            NULL,
+        Wednesday_Close               TIME(0)            NULL,
+        Thursday_Open                 TIME(0)            NULL,
+        Thursday_Close                TIME(0)            NULL,
+        Friday_Open                   TIME(0)            NULL,
+        Friday_Close                  TIME(0)            NULL,
         Practice_ID                   VARCHAR(255)   NULL,
         Practice_Name                 VARCHAR(255)   NULL,
         Practice_Address_Line_1       VARCHAR(255)   NULL,

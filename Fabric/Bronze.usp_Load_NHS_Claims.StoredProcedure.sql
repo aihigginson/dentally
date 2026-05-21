@@ -5,6 +5,7 @@
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Add NHS_Updated_At, Dentist_Charge, Awarded_Dentist_Charge, NI_Calculated_Dentist_Fee, NI_Calculated_Patient_Fee
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_NHS_Claims]
 GO
@@ -46,6 +47,11 @@ BEGIN
             , TRY_CAST(uda_band AS DECIMAL(18,4))                 AS UDA_Band
             , TRY_CAST(ortho AS DECIMAL(18,4))                    AS Ortho
             , LEFT(continuation_part_number, 255)                 AS Continuation_Part_Number
+            , LEFT(nhs_updated_at, 255)                          AS NHS_Updated_At
+            , TRY_CAST(dentist_charge AS DECIMAL(18,4))          AS Dentist_Charge
+            , TRY_CAST(awarded_dentist_charge AS DECIMAL(18,4))  AS Awarded_Dentist_Charge
+            , TRY_CAST(ni_calculated_dentist_fee AS DECIMAL(18,4)) AS NI_Calculated_Dentist_Fee
+            , TRY_CAST(ni_calculated_patient_fee AS DECIMAL(18,4)) AS NI_Calculated_Patient_Fee
             , LEFT(created_at, 255)                               AS Created_At
             , LEFT(updated_at, 255)                               AS Updated_At
         INTO #src
@@ -70,15 +76,20 @@ BEGIN
             , tgt.Scot_Amount_Expected     = src.Scot_Amount_Expected
             , tgt.UDA_Band                 = src.UDA_Band
             , tgt.Ortho                    = src.Ortho
-            , tgt.Continuation_Part_Number = src.Continuation_Part_Number
-            , tgt.Updated_At               = src.Updated_At
-            , tgt.DW_Loaded_At             = SYSUTCDATETIME()
+            , tgt.Continuation_Part_Number    = src.Continuation_Part_Number
+            , tgt.NHS_Updated_At              = src.NHS_Updated_At
+            , tgt.Dentist_Charge              = src.Dentist_Charge
+            , tgt.Awarded_Dentist_Charge      = src.Awarded_Dentist_Charge
+            , tgt.NI_Calculated_Dentist_Fee   = src.NI_Calculated_Dentist_Fee
+            , tgt.NI_Calculated_Patient_Fee   = src.NI_Calculated_Patient_Fee
+            , tgt.Updated_At                  = src.Updated_At
+            , tgt.DW_Loaded_At                = SYSUTCDATETIME()
         FROM Bronze.NHS_Claims AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.NHS_Claims (Tenant_ID, ID, Awarded_UDA, Approval_Date, Contract_ID, Claim_Status, Expected_UDA, Patient_ID, Practitioner_ID, Sequence_Number, Site_ID, Status_Comments, Treatment_Plan_ID, Submitted_Date, Patient_Charge, Scot_Amount_Authorised, Scot_Amount_Expected, UDA_Band, Ortho, Continuation_Part_Number, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Awarded_UDA, src.Approval_Date, src.Contract_ID, src.Claim_Status, src.Expected_UDA, src.Patient_ID, src.Practitioner_ID, src.Sequence_Number, src.Site_ID, src.Status_Comments, src.Treatment_Plan_ID, src.Submitted_Date, src.Patient_Charge, src.Scot_Amount_Authorised, src.Scot_Amount_Expected, src.UDA_Band, src.Ortho, src.Continuation_Part_Number, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.NHS_Claims (Tenant_ID, ID, Awarded_UDA, Approval_Date, Contract_ID, Claim_Status, Expected_UDA, Patient_ID, Practitioner_ID, Sequence_Number, Site_ID, Status_Comments, Treatment_Plan_ID, Submitted_Date, Patient_Charge, Scot_Amount_Authorised, Scot_Amount_Expected, UDA_Band, Ortho, Continuation_Part_Number, NHS_Updated_At, Dentist_Charge, Awarded_Dentist_Charge, NI_Calculated_Dentist_Fee, NI_Calculated_Patient_Fee, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Awarded_UDA, src.Approval_Date, src.Contract_ID, src.Claim_Status, src.Expected_UDA, src.Patient_ID, src.Practitioner_ID, src.Sequence_Number, src.Site_ID, src.Status_Comments, src.Treatment_Plan_ID, src.Submitted_Date, src.Patient_Charge, src.Scot_Amount_Authorised, src.Scot_Amount_Expected, src.UDA_Band, src.Ortho, src.Continuation_Part_Number, src.NHS_Updated_At, src.Dentist_Charge, src.Awarded_Dentist_Charge, src.NI_Calculated_Dentist_Fee, src.NI_Calculated_Patient_Fee, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.NHS_Claims tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

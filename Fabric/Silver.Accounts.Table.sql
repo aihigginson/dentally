@@ -7,12 +7,12 @@ DROP TABLE IF EXISTS [Silver].[Accounts]
 GO
 CREATE TABLE [Silver].[Accounts](
 	[Tenant_ID] [int] NOT NULL,
-	[Account_Id] [int] NOT NULL,
-	[Patient_Id] [int] NULL,
+	[Account_ID] [int] NOT NULL,
+	[Patient_ID] [int] NULL,
 	[Patient_Name] [VARCHAR](255) NULL,
 	[Current_Balance] [decimal](18, 4) NULL,
 	[Opening_Balance] [decimal](18, 4) NULL,
-	[Planned_Nhs_Treatment_Value] [decimal](18, 4) NULL,
+	[Planned_NHS_Treatment_Value] [decimal](18, 4) NULL,
 	[Planned_Private_Treatment_Value] [decimal](18, 4) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL,

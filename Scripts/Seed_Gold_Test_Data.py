@@ -113,6 +113,7 @@ TARGETS = [
     ('recall_compliance',              82.0,  5.0),
     ('patient_retention',              78.0,  5.0),
     ('recalls_overdue_not_sent',       18.0,  5.0),
+    ('retention_outlook',              72.0,  5.0),
     ('acceptance_rate',                65.0,  5.0),
     ('open_courses',                  220.0, 10.0),
     ('open_courses_without_appt',      85.0, 10.0),

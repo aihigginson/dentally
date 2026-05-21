@@ -5,6 +5,7 @@
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Fix break_name->name Stage field; add ID as primary key; change key from composite to ID
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practitioner_Diary_Breaks]
 GO
@@ -26,46 +27,37 @@ BEGIN
     BEGIN TRY
 
         SELECT
-              TRY_CAST(tenant_id AS INT)                          AS Tenant_ID
-            , LEFT(practitioner_diary_id, 255)                    AS Practitioner_Diary_ID
-            , LEFT(break_name, 255)                               AS Break_Name
-            , LEFT(start_time, 255)                               AS Start_Time
-            , LEFT(end_time, 255)                                  AS End_Time
+              TRY_CAST(tenant_id AS INT)   AS Tenant_ID
+            , LEFT(id,                 255) AS ID
+            , LEFT(practitioner_diary_id, 255) AS Practitioner_Diary_ID
+            , LEFT(name, 255)              AS Name
+            , LEFT(start_time, 255)        AS Start_Time
+            , LEFT(end_time,   255)        AS End_Time
         INTO #src
         FROM Stage.Practitioner_Diary_Breaks
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
 
         UPDATE tgt SET
-              tgt.Start_Time   = src.Start_Time
-            , tgt.End_Time     = src.End_Time
+              tgt.Practitioner_Diary_ID = src.Practitioner_Diary_ID
+            , tgt.Name       = src.Name
+            , tgt.Start_Time = src.Start_Time
+            , tgt.End_Time   = src.End_Time
             , tgt.DW_Loaded_At = SYSUTCDATETIME()
         FROM Bronze.Practitioner_Diary_Breaks AS tgt
-        INNER JOIN #src AS src
-            ON tgt.Tenant_ID              = src.Tenant_ID
-           AND tgt.Practitioner_Diary_ID  = src.Practitioner_Diary_ID
-           AND tgt.Break_Name             = src.Break_Name;
+        INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Practitioner_Diary_Breaks (Tenant_ID, Practitioner_Diary_ID, Break_Name, Start_Time, End_Time, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.Practitioner_Diary_ID, src.Break_Name, src.Start_Time, src.End_Time, SYSUTCDATETIME()
+        INSERT INTO Bronze.Practitioner_Diary_Breaks (Tenant_ID, ID, Practitioner_Diary_ID, Name, Start_Time, End_Time, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Practitioner_Diary_ID, src.Name, src.Start_Time, src.End_Time, SYSUTCDATETIME()
         FROM #src AS src
-        WHERE NOT EXISTS (
-            SELECT 1 FROM Bronze.Practitioner_Diary_Breaks tgt
-            WHERE tgt.Tenant_ID = src.Tenant_ID
-              AND tgt.Practitioner_Diary_ID = src.Practitioner_Diary_ID
-              AND tgt.Break_Name = src.Break_Name
-        );
+        WHERE NOT EXISTS (SELECT 1 FROM Bronze.Practitioner_Diary_Breaks tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         IF @Full_Refresh = 1
         BEGIN
             DELETE tgt FROM Bronze.Practitioner_Diary_Breaks AS tgt
             WHERE tgt.Tenant_ID = @Tenant_ID
-              AND NOT EXISTS (
-                SELECT 1 FROM #src
-                WHERE Practitioner_Diary_ID = tgt.Practitioner_Diary_ID
-                  AND Break_Name = tgt.Break_Name
-              );
+              AND NOT EXISTS (SELECT 1 FROM #src WHERE ID = tgt.ID);
             SET @My_Deletes = @@ROWCOUNT;
         END
 

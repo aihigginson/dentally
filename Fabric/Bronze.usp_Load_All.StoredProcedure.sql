@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     29/04/2026  AIH Added 11 new Bronze entity load procedures
+--    *07     20/05/2026  AIH Add Rooms entity
 --    *05     16/05/2026  AIH Add Audit ETL logging; accumulate totals from children
 --    *06     16/05/2026  AIH Rewrite to use Audit.ETL_Run_Process pattern matching
 --                           Audit.usp_Load_All; Process_Config drives per-entity
@@ -55,6 +56,7 @@ BEGIN
         SET @Step = 'Treatment_Categories';       SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
         SET @Step = 'Acquisition_Sources';        SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
         SET @Step = 'Cancellation_Reasons';       SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
+        SET @Step = 'Rooms';                      SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
         SET @Step = 'Waiting_Lists';              SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
         SET @Step = 'Sundries';                   SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;
         SET @Step = 'Contracts';                  SET @Process_Code = 'BRONZE_T' + @TID + '_' + UPPER(@Step); EXEC Audit.ETL_Run_Process @Process_Code, @Parent_Run_UUID;

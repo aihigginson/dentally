@@ -9,7 +9,7 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 $Groups = [ordered]@{
 
@@ -119,7 +119,7 @@ foreach ($group in $Groups.GetEnumerator()) {
     $null = $combined.AppendLine("PRINT '>>> GROUP: $($group.Key)';")
     $null = $combined.AppendLine("GO")
     foreach ($file in $group.Value) {
-        $path = Join-Path $ScriptDir $file
+        $path = Join-Path $FabricDir $file
         $null = $combined.AppendLine("PRINT '  FILE: $file';")
         $null = $combined.AppendLine("GO")
         $null = $combined.AppendLine([System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8))

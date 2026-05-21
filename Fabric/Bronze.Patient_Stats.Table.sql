@@ -16,7 +16,7 @@ CREATE TABLE [Bronze].[Patient_Stats](
 	[Updated_At] [VARCHAR](255) NULL,
 	[Total_Paid] [decimal](18, 4) NULL,
 	[Total_Invoiced] [decimal](18, 4) NULL,
-	[Last_Fta_Appointment_Date] [VARCHAR](255) NULL,
+	[Last_FTA_Appointment_Date] [VARCHAR](255) NULL,
 	[First_Appointment_Date] [VARCHAR](255) NULL,
 	[First_Exam_Date] [VARCHAR](255) NULL,
 	[NHS_Exemption_Code] [decimal](18, 4) NULL,

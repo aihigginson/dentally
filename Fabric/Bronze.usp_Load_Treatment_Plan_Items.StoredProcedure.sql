@@ -8,6 +8,7 @@
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     18/05/2026  AIH Fix ID to VARCHAR(50) for UUID keys; load all Stage columns;
 --                            handle True/False boolean strings for Charged/Completed
+--    *04     19/05/2026  AIH Remove treatment_name from COALESCE (not in API); add Surfaces, Teeth
 --  To Run           :   DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 --                        EXEC Bronze.usp_Load_Treatment_Plan_Items @Tenant_ID=11, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT
 ---------------------------------------------------------------------
@@ -41,7 +42,6 @@ BEGIN
             , TRY_CAST(practitioner_id AS INT)                                         AS Practitioner_ID
             , TRY_CAST(treatment_id    AS DECIMAL(18,4))                               AS Treatment_ID
             , LEFT(COALESCE(
-                  NULLIF(CAST(treatment_name       AS VARCHAR(255)), ''),
                   NULLIF(CAST(nomenclature         AS VARCHAR(255)), ''),
                          CAST(patient_nomenclature AS VARCHAR(255))), 255)              AS Nomenclature
             , TRY_CAST(price            AS DECIMAL(18,4))                              AS Price
@@ -69,6 +69,8 @@ BEGIN
             , LEFT(region,               255)                                          AS Region
             , LEFT(treatment_appointment_id, 255)                                      AS Treatment_Appointment_ID
             , LEFT(uda_band,             255)                                          AS UDA_Band
+            , LEFT(surfaces, 255) AS Surfaces
+            , LEFT(teeth,    255) AS Teeth
         INTO #src
         FROM Stage.Treatment_Plan_Items
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID
@@ -99,6 +101,8 @@ BEGIN
             , tgt.Region                   = src.Region
             , tgt.Treatment_Appointment_ID = src.Treatment_Appointment_ID
             , tgt.UDA_Band                 = src.UDA_Band
+            , tgt.Surfaces                 = src.Surfaces
+            , tgt.Teeth                    = src.Teeth
             , tgt.DW_Loaded_At             = SYSUTCDATETIME()
         FROM Bronze.Treatment_Plan_Items AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
@@ -110,6 +114,7 @@ BEGIN
             Appear_On_Invoice, Base_Chart, Charged, Completed, Completed_At,
             Invoice_ID, NHS_Treatment_Cat, Notes, Patient_Nomenclature, Payment_Plan_ID,
             Position, Referrer_ID, Region, Treatment_Appointment_ID, UDA_Band,
+            Surfaces, Teeth,
             DW_Loaded_At
         )
         SELECT
@@ -118,6 +123,7 @@ BEGIN
             src.Appear_On_Invoice, src.Base_Chart, src.Charged, src.Completed, src.Completed_At,
             src.Invoice_ID, src.NHS_Treatment_Cat, src.Notes, src.Patient_Nomenclature, src.Payment_Plan_ID,
             src.Position, src.Referrer_ID, src.Region, src.Treatment_Appointment_ID, src.UDA_Band,
+            src.Surfaces, src.Teeth,
             SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Treatment_Plan_Items tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);

@@ -8,6 +8,7 @@
 --    *02     13/05/2026  AIH Fix datetime casting (strip tz suffix); Next_Visit defaults;
 --                            Emergency next visit treated as Exam; Recall Sent via First_Reminder_Sent_At
 --    *03     15/05/2026  AIH Fix all four Sankey columns:
+--    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, API)
 --                            Booking: distinguish BBYL vs Online (prev_appt date match);
 --                            add Referral using Silver.Patient_Referrals.Created_At;
 --                            This_Visit: Review appointments now generated upstream;
@@ -54,65 +55,65 @@ BEGIN
             -- LEFT(..., 23) strips any timezone suffix (e.g. +00:00) before casting to datetime2(3).
             SELECT
                 a.Tenant_ID,
-                a.Appointment_Id,
-                a.Patient_Id,
+                a.Appointment_ID,
+                a.Patient_ID  AS Patient_ID,
                 a.Reason,
-                a.Booked_Via_Api,
+                a.Booked_Via_API,
                 TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),        ''), 23) AS datetime2(3)) AS Start_DT,
                 TRY_CAST(LEFT(NULLIF(TRIM(a.Completed_At),      ''), 23) AS datetime2(3)) AS Completed_DT,
                 TRY_CAST(LEFT(NULLIF(TRIM(a.Cancelled_At),      ''), 23) AS datetime2(3)) AS Cancelled_DT,
                 TRY_CAST(LEFT(NULLIF(TRIM(a.Did_Not_Attend_At), ''), 23) AS datetime2(3)) AS DNA_DT,
                 TRY_CAST(LEFT(NULLIF(TRIM(a.Created_At),        ''), 23) AS datetime2(3)) AS Created_DT
             FROM Silver.Appointments a
-            WHERE a.Appointment_Id IS NOT NULL
+            WHERE a.Appointment_ID IS NOT NULL
         ),
         first_attended AS (
-            -- Lowest Appointment_Id among attended appointments per patient; used to flag 'New' channel
-            SELECT Tenant_ID, Patient_Id, MIN(Appointment_Id) AS First_Appt_Id
+            -- Lowest Appointment_ID among attended appointments per patient; used to flag 'New' channel
+            SELECT Tenant_ID, Patient_ID, MIN(Appointment_ID) AS First_Appt_ID
             FROM appts
             WHERE Completed_DT IS NOT NULL
-            GROUP BY Tenant_ID, Patient_Id
+            GROUP BY Tenant_ID, Patient_ID
         ),
         referrals AS (
             -- Earliest referral date per patient; used to identify the first appointment as 'Referral'
-            SELECT Tenant_ID, Patient_Id,
+            SELECT Tenant_ID, Patient_ID,
                    MIN(COALESCE(Created_At, DW_Created_At)) AS Earliest_Referral_DT
             FROM Silver.Patient_Referrals
-            GROUP BY Tenant_ID, Patient_Id
+            GROUP BY Tenant_ID, Patient_ID
         ),
         recall_ranked AS (
             SELECT
-                Tenant_ID, Patient_Id, Due_Date, First_Reminder_Sent_At,
+                Tenant_ID, Patient_ID, Due_Date, First_Reminder_Sent_At,
                 ROW_NUMBER() OVER (
-                    PARTITION BY Tenant_ID, Patient_Id
+                    PARTITION BY Tenant_ID, Patient_ID
                     ORDER BY Due_Date DESC, DW_Created_At DESC
                 ) AS rn
             FROM Silver.Recalls
         ),
         latest_recall AS (
-            SELECT Tenant_ID, Patient_Id, Due_Date, First_Reminder_Sent_At
+            SELECT Tenant_ID, Patient_ID, Due_Date, First_Reminder_Sent_At
             FROM recall_ranked
             WHERE rn = 1
         )
         INSERT INTO [Silver].[Appointment_Journey_Attrs] (
-            [Tenant_ID], [Appointment_Id],
+            [Tenant_ID], [Appointment_ID],
             [Booking], [This_Visit], [Next_Visit], [Future_Appointment],
             [DW_Created_At], [DW_Updated_At]
         )
         SELECT
             a.Tenant_ID,
-            a.Appointment_Id,
+            a.Appointment_ID,
 
             -- Booking: how the patient came to book this appointment (priority order).
             -- BBYL = booked via API on the same date as their previous completed visit.
             -- Online = booked via API on any other date (patient self-booked remotely).
             CASE
-                WHEN ref_appt.Appointment_Id = a.Appointment_Id THEN 'Referral'
-                WHEN fa.First_Appt_Id        = a.Appointment_Id THEN 'New'
-                WHEN a.Booked_Via_Api = 1
+                WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New'
+                WHEN a.Booked_Via_API = 1
                      AND prev_appt.Prev_Date IS NOT NULL
                      AND CAST(a.Created_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
-                WHEN a.Booked_Via_Api = 1                                  THEN 'Online'
+                WHEN a.Booked_Via_API = 1                                  THEN 'Online'
                 ELSE 'Reception'
             END AS Booking,
 
@@ -125,8 +126,8 @@ BEGIN
             -- Emergency bookings are unplanned so treated as if no appointment (defaults to Exam).
             -- Active patients with no further appointment are expected to return for an Exam.
             CASE
-                WHEN nxt.Appointment_Id IS NULL AND pat.Active = 0                           THEN 'Closed'
-                WHEN nxt.Appointment_Id IS NULL                                               THEN 'Exam'
+                WHEN nxt.Appointment_ID IS NULL AND pat.Active = 0                           THEN 'Closed'
+                WHEN nxt.Appointment_ID IS NULL                                               THEN 'Exam'
                 WHEN COALESCE(arm_nxt.Category, NULLIF(TRIM(nxt.Reason), '')) = 'Emergency' THEN 'Exam'
                 ELSE COALESCE(arm_nxt.Category, NULLIF(TRIM(nxt.Reason), ''))
             END AS Next_Visit,
@@ -136,9 +137,9 @@ BEGIN
             -- BBYL / Treatment Booked = an active future booking exists.
             -- Recall categories = no active booking; recall record drives expectation.
             CASE
-                WHEN seen_again.Appointment_Id IS NOT NULL                                         THEN 'Seen Again'
-                WHEN active_bkg.Appointment_Id IS NOT NULL AND active_bkg.Booked_Via_Api = 1      THEN 'BBYL'
-                WHEN active_bkg.Appointment_Id IS NOT NULL                                         THEN 'Treatment Booked'
+                WHEN seen_again.Appointment_ID IS NOT NULL                                         THEN 'Seen Again'
+                WHEN active_bkg.Appointment_ID IS NOT NULL AND active_bkg.Booked_Via_API = 1      THEN 'BBYL'
+                WHEN active_bkg.Appointment_ID IS NOT NULL                                         THEN 'Treatment Booked'
                 WHEN pat.Active = 0                                                                THEN 'Will Not See Again'
                 WHEN lr.First_Reminder_Sent_At IS NOT NULL                                         THEN 'Recall Sent'
                 WHEN lr.Due_Date < CAST(SYSDATETIME() AS DATE)                                     THEN 'Recall Overdue'
@@ -150,50 +151,50 @@ BEGIN
             SYSUTCDATETIME()
 
         FROM appts a
-        LEFT JOIN first_attended  fa   ON fa.Tenant_ID  = a.Tenant_ID  AND fa.Patient_Id  = a.Patient_Id
-        LEFT JOIN referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_Id = a.Patient_Id
-        LEFT JOIN Silver.Patients pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_Id = a.Patient_Id
-        LEFT JOIN latest_recall   lr   ON lr.Tenant_ID  = a.Tenant_ID  AND lr.Patient_Id  = a.Patient_Id
+        LEFT JOIN first_attended  fa   ON fa.Tenant_ID  = a.Tenant_ID  AND fa.Patient_ID  = a.Patient_ID
+        LEFT JOIN referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_ID = a.Patient_ID
+        LEFT JOIN Silver.Patients pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_ID = a.Patient_ID
+        LEFT JOIN latest_recall   lr   ON lr.Tenant_ID  = a.Tenant_ID  AND lr.Patient_ID  = a.Patient_ID
         LEFT JOIN Silver.Appointment_Reason_Map arm_this
                ON arm_this.Reason_Text = NULLIF(TRIM(a.Reason), '')
 
         -- Next completed appointment (any) to detect 'Seen Again' in Future_Appointment
         OUTER APPLY (
-            SELECT TOP 1 sa.Appointment_Id
+            SELECT TOP 1 sa.Appointment_ID
             FROM appts sa
             WHERE sa.Tenant_ID   = a.Tenant_ID
-              AND sa.Patient_Id  = a.Patient_Id
+              AND sa.Patient_ID  = a.Patient_ID
               AND sa.Completed_DT IS NOT NULL
               AND sa.Start_DT    > a.Start_DT
-            ORDER BY sa.Start_DT, sa.Appointment_Id
+            ORDER BY sa.Start_DT, sa.Appointment_ID
         ) seen_again
 
         -- Next chronological appointment (completed or active, excludes cancelled/DNA) for Next_Visit.
         -- Completed appointments are included so the column shows what the patient actually did next.
         OUTER APPLY (
-            SELECT TOP 1 nx.Appointment_Id, nx.Reason
+            SELECT TOP 1 nx.Appointment_ID, nx.Reason
             FROM appts nx
             WHERE nx.Tenant_ID   = a.Tenant_ID
-              AND nx.Patient_Id  = a.Patient_Id
+              AND nx.Patient_ID  = a.Patient_ID
               AND nx.Cancelled_DT IS NULL
               AND nx.DNA_DT      IS NULL
               AND nx.Start_DT    > a.Start_DT
-            ORDER BY nx.Start_DT, nx.Appointment_Id
+            ORDER BY nx.Start_DT, nx.Appointment_ID
         ) nxt
         LEFT JOIN Silver.Appointment_Reason_Map arm_nxt
                ON arm_nxt.Reason_Text = NULLIF(TRIM(nxt.Reason), '')
 
         -- Next active (uncompleted, non-cancelled) future appointment for Future_Appt BBYL/Treatment Booked
         OUTER APPLY (
-            SELECT TOP 1 ab.Appointment_Id, ab.Booked_Via_Api
+            SELECT TOP 1 ab.Appointment_ID, ab.Booked_Via_API
             FROM appts ab
             WHERE ab.Tenant_ID   = a.Tenant_ID
-              AND ab.Patient_Id  = a.Patient_Id
+              AND ab.Patient_ID  = a.Patient_ID
               AND ab.Cancelled_DT IS NULL
               AND ab.DNA_DT      IS NULL
               AND ab.Completed_DT IS NULL
               AND ab.Start_DT    > a.Start_DT
-            ORDER BY ab.Start_DT, ab.Appointment_Id
+            ORDER BY ab.Start_DT, ab.Appointment_ID
         ) active_bkg
 
         -- Most recent prior completed appointment; used to detect BBYL (created on same date)
@@ -201,21 +202,21 @@ BEGIN
             SELECT TOP 1 CAST(pa.Start_DT AS DATE) AS Prev_Date
             FROM appts pa
             WHERE pa.Tenant_ID   = a.Tenant_ID
-              AND pa.Patient_Id  = a.Patient_Id
+              AND pa.Patient_ID  = a.Patient_ID
               AND pa.Completed_DT IS NOT NULL
               AND pa.Start_DT    < a.Start_DT
-            ORDER BY pa.Start_DT DESC, pa.Appointment_Id DESC
+            ORDER BY pa.Start_DT DESC, pa.Appointment_ID DESC
         ) prev_appt
 
         -- First appointment on or after the patient's earliest referral to identify 'Referral' channel
         OUTER APPLY (
-            SELECT TOP 1 ra.Appointment_Id
+            SELECT TOP 1 ra.Appointment_ID
             FROM appts ra
             WHERE ref.Earliest_Referral_DT IS NOT NULL
               AND ra.Tenant_ID  = a.Tenant_ID
-              AND ra.Patient_Id = a.Patient_Id
+              AND ra.Patient_ID = a.Patient_ID
               AND ra.Start_DT   >= ref.Earliest_Referral_DT
-            ORDER BY ra.Start_DT, ra.Appointment_Id
+            ORDER BY ra.Start_DT, ra.Appointment_ID
         ) ref_appt;
 
         SET @My_Inserts = @@ROWCOUNT;

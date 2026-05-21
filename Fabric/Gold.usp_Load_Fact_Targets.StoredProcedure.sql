@@ -6,6 +6,7 @@
 --  History          :
 --    *01     06/05/2026  AIH Initial Release
 --    *02     06/05/2026  AIH Add all_time period type (no date key — fk_Date uses -1 sentinel)
+--    *03     19/05/2026  AIH Carry Variance column through from Input.Targets to Gold.Fact_Targets
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Targets @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Targets]    Script Date: 06/05/2026 ******/
@@ -47,7 +48,8 @@ BEGIN
             t.[Metric]                                                  AS Metric,
             t.[Period_Type]                                             AS Period_Type,
             t.[Period_Value]                                            AS Period_Value,
-            t.[Target_Value]                                            AS Target_Value
+            t.[Target_Value]                                            AS Target_Value,
+            t.[Variance]                                                AS Variance
 
         INTO #src
         FROM [Input].[Targets] t
@@ -93,6 +95,7 @@ BEGIN
             Period_Type      = src.Period_Type,
             Period_Value     = src.Period_Value,
             Target_Value     = src.Target_Value,
+            Variance         = src.Variance,
             DW_Updated_At    = SYSUTCDATETIME()
         FROM [Gold].[Fact_Targets] tgt
         INNER JOIN #src src
@@ -103,6 +106,7 @@ BEGIN
             ISNULL(CAST(tgt.[fk_Practitioner]  AS VARCHAR(50)), ''),
             ISNULL(CAST(tgt.[fk_Date]          AS VARCHAR(50)), ''),
             ISNULL(CAST(tgt.[Target_Value]     AS VARCHAR(50)), ''),
+            ISNULL(CAST(tgt.[Variance]         AS VARCHAR(50)), ''),
             ISNULL(tgt.[Metric],      ''),
             ISNULL(tgt.[Period_Type], ''),
             ISNULL(tgt.[Period_Value],'')
@@ -111,6 +115,7 @@ BEGIN
             ISNULL(CAST(src.[fk_Practitioner]  AS VARCHAR(50)), ''),
             ISNULL(CAST(src.[fk_Date]          AS VARCHAR(50)), ''),
             ISNULL(CAST(src.[Target_Value]     AS VARCHAR(50)), ''),
+            ISNULL(CAST(src.[Variance]         AS VARCHAR(50)), ''),
             ISNULL(src.[Metric],      ''),
             ISNULL(src.[Period_Type], ''),
             ISNULL(src.[Period_Value],'')
@@ -121,13 +126,13 @@ BEGIN
         INSERT INTO [Gold].[Fact_Targets] (
             Tenant_ID, bk_target_id,
             fk_Practice_Site, fk_Practitioner, fk_Date,
-            Metric, Period_Type, Period_Value, Target_Value,
+            Metric, Period_Type, Period_Value, Target_Value, Variance,
             DW_Created_At, DW_Updated_At
         )
         SELECT
             src.Tenant_ID, src.bk_target_id,
             src.fk_Practice_Site, src.fk_Practitioner, src.fk_Date,
-            src.Metric, src.Period_Type, src.Period_Value, src.Target_Value,
+            src.Metric, src.Period_Type, src.Period_Value, src.Target_Value, src.Variance,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (

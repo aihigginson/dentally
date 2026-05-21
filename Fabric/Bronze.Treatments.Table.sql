@@ -6,11 +6,12 @@ GO
 DROP TABLE IF EXISTS [Bronze].[Treatments]
 GO
 CREATE TABLE [Bronze].[Treatments](
-	[ID] [decimal](18, 4) NULL,
-	[Code] [decimal](18, 4) NULL,
+	[ID] [int] NULL,
+	[Active] [int] NULL,
+	[Code] [VARCHAR](255) NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[Description] [VARCHAR](max) NULL,
-	[NHS_Treatment_Cat] [decimal](18, 4) NULL,
+	[NHS_Treatment_Cat] [VARCHAR](255) NULL,
 	[Nomenclature] [VARCHAR](255) NULL,
 	[Notes] [VARCHAR](255) NULL,
 	[Patient_Description] [VARCHAR](255) NULL,
