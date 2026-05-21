@@ -1,0 +1,259 @@
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "background": "transparent",
+  "padding": 10,
+
+  "signals": [
+    {"name": "width",  "update": "containerSize()[0]"},
+    {"name": "height", "update": "containerSize()[1]"},
+    {"name": "cx",     "update": "width  / 2"},
+    {"name": "cy",     "update": "height / 2 + 14"},
+    {"name": "radius", "update": "min(width, height) / 2 - 76"}
+  ],
+
+  "data": [
+    {"name": "dataset"},
+
+    {
+      "name": "axes",
+      "values": [
+        {"key": "Spider Revenue vs Target", "label": "Revenue vs Target", "i": 0},
+        {"key": "Spider Chair Utilisation", "label": "Chair Utilisation", "i": 1},
+        {"key": "Spider Rev Per Hour",      "label": "Rev / Clinical Hr", "i": 2},
+        {"key": "Spider New Patients",      "label": "New Patients",      "i": 3},
+        {"key": "Spider Tx Conversion",     "label": "Tx Conversion",     "i": 4},
+        {"key": "Spider DNA Score",         "label": "DNA Score",         "i": 5},
+        {"key": "Spider UDA Completion",    "label": "UDA Completion",    "i": 6}
+      ],
+      "transform": [
+        {"type": "formula", "expr": "(datum.i / 7) * 2 * PI - PI / 2", "as": "a"}
+      ]
+    },
+
+    {
+      "name": "long",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider Revenue vs Target",
+            "Spider Chair Utilisation",
+            "Spider Rev Per Hour",
+            "Spider New Patients",
+            "Spider Tx Conversion",
+            "Spider DNA Score",
+            "Spider UDA Completion"
+          ],
+          "as": ["key", "val"]
+        },
+        {"type": "formula", "expr": "isValid(datum.val) ? +datum.val : 0", "as": "val"},
+        {
+          "type": "joinaggregate",
+          "groupby": ["key"],
+          "ops": ["max"],
+          "fields": ["val"],
+          "as": ["vmax"]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.vmax > 0 ? datum.val / datum.vmax : 0",
+          "as": "norm"
+        },
+        {
+          "type": "lookup",
+          "from": "axes",
+          "key": "key",
+          "fields": ["key"],
+          "values": ["i", "label", "a"]
+        },
+        {"type": "formula", "expr": "cx + datum.norm * radius * cos(datum.a)", "as": "px"},
+        {"type": "formula", "expr": "cy + datum.norm * radius * sin(datum.a)", "as": "py"}
+      ]
+    },
+
+    {
+      "name": "rings",
+      "source": "axes",
+      "transform": [
+        {
+          "type": "cross",
+          "with": {"values": [{"r": 0.25}, {"r": 0.5}, {"r": 0.75}, {"r": 1.0}]},
+          "as": ["ax", "rg"]
+        },
+        {"type": "formula", "expr": "datum.rg.r",                                  "as": "r"},
+        {"type": "formula", "expr": "datum.ax.i",                                  "as": "i"},
+        {"type": "formula", "expr": "cx + datum.rg.r * radius * cos(datum.ax.a)",  "as": "px"},
+        {"type": "formula", "expr": "cy + datum.rg.r * radius * sin(datum.ax.a)",  "as": "py"}
+      ]
+    },
+
+    {
+      "name": "ring_labels",
+      "source": "rings",
+      "transform": [
+        {"type": "filter", "expr": "datum.i === 0"}
+      ]
+    }
+  ],
+
+  "scales": [
+    {
+      "name": "col",
+      "type": "ordinal",
+      "domain": {"data": "dataset", "field": "Practitioner Name"},
+      "range": [
+        "#2E86AB", "#A23B72", "#F18F01", "#C73E1D",
+        "#44BBA4", "#7B2D8B", "#558B2F", "#E94F37",
+        "#1565C0", "#D84315"
+      ]
+    }
+  ],
+
+  "legends": [
+    {
+      "fill": "col",
+      "orient": "top",
+      "columns": 4,
+      "labelFont": "Segoe UI, sans-serif",
+      "labelFontSize": 9,
+      "labelColor": "#344054",
+      "symbolSize": 50,
+      "symbolStrokeWidth": 2,
+      "padding": 6,
+      "columnPadding": 12,
+      "encode": {
+        "symbols": {
+          "update": {
+            "fill":   {"value": "transparent"},
+            "stroke": {"scale": "col", "field": "value"},
+            "shape":  {"value": "stroke"}
+          }
+        }
+      }
+    }
+  ],
+
+  "marks": [
+    {
+      "description": "axis spokes",
+      "type": "rule",
+      "from": {"data": "axes"},
+      "encode": {
+        "enter": {
+          "x":  {"signal": "cx"},
+          "y":  {"signal": "cy"},
+          "x2": {"signal": "cx + radius * cos(datum.a)"},
+          "y2": {"signal": "cy + radius * sin(datum.a)"},
+          "stroke":      {"value": "#d0d5dd"},
+          "strokeWidth": {"value": 0.8}
+        }
+      }
+    },
+
+    {
+      "description": "concentric ring polygons",
+      "type": "group",
+      "from": {
+        "facet": {"name": "rf", "data": "rings", "groupby": "r"}
+      },
+      "marks": [
+        {
+          "type": "line",
+          "from": {"data": "rf"},
+          "sort": {"field": "i", "order": "ascending"},
+          "encode": {
+            "enter": {
+              "x":           {"field": "px"},
+              "y":           {"field": "py"},
+              "stroke":      {"value": "#d0d5dd"},
+              "strokeWidth": {"value": 0.8},
+              "interpolate": {"value": "linear-closed"}
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "description": "practitioner polygons",
+      "type": "group",
+      "from": {
+        "facet": {"name": "pf", "data": "long", "groupby": "Practitioner Name"}
+      },
+      "marks": [
+        {
+          "type": "line",
+          "from": {"data": "pf"},
+          "sort": {"field": "i", "order": "ascending"},
+          "encode": {
+            "enter": {
+              "x":             {"field": "px"},
+              "y":             {"field": "py"},
+              "fill":          {"scale": "col", "field": "Practitioner Name"},
+              "fillOpacity":   {"value": 0.10},
+              "stroke":        {"scale": "col", "field": "Practitioner Name"},
+              "strokeWidth":   {"value": 1.8},
+              "strokeOpacity": {"value": 0.9},
+              "interpolate":   {"value": "linear-closed"}
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "description": "data point dots (tooltip targets)",
+      "type": "symbol",
+      "from": {"data": "long"},
+      "encode": {
+        "enter": {
+          "x":    {"field": "px"},
+          "y":    {"field": "py"},
+          "fill": {"scale": "col", "field": "Practitioner Name"},
+          "size": {"value": 30}
+        },
+        "update": {
+          "tooltip": {
+            "signal": "{'Practitioner': datum['Practitioner Name'], 'Metric': datum.label, 'Relative Score': format(datum.norm * 100, '.0f') + '%', 'Value': format(datum.val, '.2f')}"
+          }
+        }
+      }
+    },
+
+    {
+      "description": "axis labels",
+      "type": "text",
+      "from": {"data": "axes"},
+      "encode": {
+        "enter": {
+          "x":          {"signal": "cx + (radius + 40) * cos(datum.a)"},
+          "y":          {"signal": "cy + (radius + 40) * sin(datum.a)"},
+          "text":       {"field": "label"},
+          "align":      {"signal": "cos(datum.a) > 0.2 ? 'left' : cos(datum.a) < -0.2 ? 'right' : 'center'"},
+          "baseline":   {"signal": "sin(datum.a) > 0.2 ? 'top'  : sin(datum.a) < -0.2 ? 'bottom' : 'middle'"},
+          "fill":       {"value": "#344054"},
+          "fontSize":   {"value": 10},
+          "fontWeight": {"value": "600"},
+          "font":       {"value": "Segoe UI, sans-serif"}
+        }
+      }
+    },
+
+    {
+      "description": "ring percentage labels at top spoke",
+      "type": "text",
+      "from": {"data": "ring_labels"},
+      "encode": {
+        "enter": {
+          "x":        {"field": "px", "offset": 4},
+          "y":        {"field": "py", "offset": -3},
+          "text":     {"signal": "format(datum.r * 100, '.0f') + '%'"},
+          "fill":     {"value": "#98a2b3"},
+          "fontSize": {"value": 8},
+          "font":     {"value": "Segoe UI, sans-serif"}
+        }
+      }
+    }
+  ]
+}
