@@ -21,9 +21,9 @@ Action<string,string,string> add = (name, dax, fmt) => {
     m.IsHidden      = false;
 };
 
-foreach (var m in Model.Tables[table].Measures
+foreach (var existing in Model.Tables[table].Measures
     .Where(m => m.DisplayFolder == folder).ToList())
-    Model.Tables[table].Measures.Remove(m);
+    existing.Delete();
 
 // Axis 1 — Revenue as % of target (higher = better)
 add("Spider Revenue vs Target",
