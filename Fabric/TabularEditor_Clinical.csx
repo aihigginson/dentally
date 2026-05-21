@@ -31,7 +31,7 @@ add("Open Courses",
 add("Open Courses Without Appointment",
     @"CALCULATE(
     DISTINCTCOUNT('Aggregate Site Patient Practitioner Daily'[fk Patient]),
-    'Aggregate Site Patient Practitioner Daily'[Open Treatment Plan] = TRUE(),
+    'Aggregate Site Patient Practitioner Daily'[Open Treatment Plan] > 0,
     'Aggregate Site Patient Practitioner Daily'[Future Appointment] = FALSE())",
     "#,##0");
 
