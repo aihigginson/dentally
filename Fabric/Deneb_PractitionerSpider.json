@@ -4,11 +4,16 @@
   "padding": 10,
 
   "signals": [
-    {"name": "width",  "update": "containerSize()[0]"},
-    {"name": "height", "update": "containerSize()[1]"},
-    {"name": "cx",     "update": "width  / 2"},
-    {"name": "cy",     "update": "height / 2 + 14"},
-    {"name": "radius", "update": "min(width, height) / 2 - 76"}
+    {"name": "width",     "update": "containerSize()[0]"},
+    {"name": "height",    "update": "containerSize()[1]"},
+    {"name": "cx",        "update": "width  / 2"},
+    {"name": "cy",        "update": "height / 2 + 14"},
+    {"name": "radius",    "update": "min(width, height) / 2 - 76"},
+    {"name": "sel_count", "update": "length(data('dataset'))"},
+    {"name": "show_sel",  "update": "sel_count === 1"},
+    {"name": "sel_name",  "update": "show_sel ? data('dataset')[0]['Practitioner Name'] : ''"},
+    {"name": "avg_col",   "value":  "#8AB5B2"},
+    {"name": "sel_col",   "value":  "#1A527A"}
   ],
 
   "data": [
@@ -31,7 +36,41 @@
     },
 
     {
-      "name": "long",
+      "name": "avg_row",
+      "source": "dataset",
+      "transform": [
+        {"type": "sample", "size": 1}
+      ]
+    },
+
+    {
+      "name": "avg_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider Avg Revenue vs Target",
+            "Spider Avg Chair Utilisation",
+            "Spider Avg Rev Per Hour",
+            "Spider Avg New Patients",
+            "Spider Avg Tx Conversion",
+            "Spider Avg DNA Score",
+            "Spider Avg UDA Completion"
+          ],
+          "as": ["raw_key", "val"]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider Avg ', 'Spider ')",
+          "as": "key"
+        },
+        {"type": "formula", "expr": "'Average'", "as": "series"}
+      ]
+    },
+
+    {
+      "name": "sel_long",
       "source": "dataset",
       "transform": [
         {
@@ -47,6 +86,22 @@
           ],
           "as": ["key", "val"]
         },
+        {
+          "type": "formula",
+          "expr": "datum['Practitioner Name']",
+          "as": "series"
+        },
+        {
+          "type": "filter",
+          "expr": "length(data('dataset')) === 1"
+        }
+      ]
+    },
+
+    {
+      "name": "combined",
+      "source": ["avg_long", "sel_long"],
+      "transform": [
         {"type": "formula", "expr": "isValid(datum.val) ? +datum.val : 0", "as": "val"},
         {
           "type": "joinaggregate",
@@ -73,6 +128,22 @@
     },
 
     {
+      "name": "avg_data",
+      "source": "combined",
+      "transform": [
+        {"type": "filter", "expr": "datum.series === 'Average'"}
+      ]
+    },
+
+    {
+      "name": "sel_data",
+      "source": "combined",
+      "transform": [
+        {"type": "filter", "expr": "datum.series !== 'Average'"}
+      ]
+    },
+
+    {
       "name": "rings",
       "source": "axes",
       "transform": [
@@ -94,43 +165,6 @@
       "transform": [
         {"type": "filter", "expr": "datum.i === 0"}
       ]
-    }
-  ],
-
-  "scales": [
-    {
-      "name": "col",
-      "type": "ordinal",
-      "domain": {"data": "dataset", "field": "Practitioner Name"},
-      "range": [
-        "#2E86AB", "#A23B72", "#F18F01", "#C73E1D",
-        "#44BBA4", "#7B2D8B", "#558B2F", "#E94F37",
-        "#1565C0", "#D84315"
-      ]
-    }
-  ],
-
-  "legends": [
-    {
-      "fill": "col",
-      "orient": "top",
-      "columns": 4,
-      "labelFont": "Segoe UI, sans-serif",
-      "labelFontSize": 9,
-      "labelColor": "#344054",
-      "symbolSize": 50,
-      "symbolStrokeWidth": 2,
-      "padding": 6,
-      "columnPadding": 12,
-      "encode": {
-        "symbols": {
-          "update": {
-            "fill":   {"value": "transparent"},
-            "stroke": {"scale": "col", "field": "value"},
-            "shape":  {"value": "stroke"}
-          }
-        }
-      }
     }
   ],
 
@@ -176,46 +210,80 @@
     },
 
     {
-      "description": "practitioner polygons",
-      "type": "group",
-      "from": {
-        "facet": {"name": "pf", "data": "long", "groupby": "Practitioner Name"}
-      },
-      "marks": [
-        {
-          "type": "line",
-          "from": {"data": "pf"},
-          "sort": {"field": "i", "order": "ascending"},
-          "encode": {
-            "enter": {
-              "x":             {"field": "px"},
-              "y":             {"field": "py"},
-              "fill":          {"scale": "col", "field": "Practitioner Name"},
-              "fillOpacity":   {"value": 0.10},
-              "stroke":        {"scale": "col", "field": "Practitioner Name"},
-              "strokeWidth":   {"value": 1.8},
-              "strokeOpacity": {"value": 0.9},
-              "interpolate":   {"value": "linear-closed"}
-            }
-          }
+      "description": "average web",
+      "type": "line",
+      "from": {"data": "avg_data"},
+      "sort": {"field": "i", "order": "ascending"},
+      "encode": {
+        "enter": {
+          "x":             {"field": "px"},
+          "y":             {"field": "py"},
+          "fill":          {"signal": "avg_col"},
+          "fillOpacity":   {"value": 0.18},
+          "stroke":        {"signal": "avg_col"},
+          "strokeWidth":   {"value": 2},
+          "strokeOpacity": {"value": 0.85},
+          "interpolate":   {"value": "linear-closed"}
         }
-      ]
+      }
     },
 
     {
-      "description": "data point dots (tooltip targets)",
+      "description": "average dots",
       "type": "symbol",
-      "from": {"data": "long"},
+      "from": {"data": "avg_data"},
       "encode": {
         "enter": {
           "x":    {"field": "px"},
           "y":    {"field": "py"},
-          "fill": {"scale": "col", "field": "Practitioner Name"},
-          "size": {"value": 30}
+          "fill": {"signal": "avg_col"},
+          "size": {"value": 28}
         },
         "update": {
           "tooltip": {
-            "signal": "{'Practitioner': datum['Practitioner Name'], 'Metric': datum.label, 'Relative Score': format(datum.norm * 100, '.0f') + '%', 'Value': format(datum.val, '.2f')}"
+            "signal": "{'Series': 'Practice Average', 'Metric': datum.label, 'Score': format(datum.norm * 100, '.0f') + '%'}"
+          }
+        }
+      }
+    },
+
+    {
+      "description": "selected practitioner web (only when sel_count === 1)",
+      "type": "line",
+      "from": {"data": "sel_data"},
+      "sort": {"field": "i", "order": "ascending"},
+      "encode": {
+        "enter": {
+          "x":           {"field": "px"},
+          "y":           {"field": "py"},
+          "fill":        {"signal": "sel_col"},
+          "fillOpacity": {"value": 0.14},
+          "stroke":      {"signal": "sel_col"},
+          "strokeWidth": {"value": 2},
+          "interpolate": {"value": "linear-closed"}
+        },
+        "update": {
+          "strokeOpacity": {"signal": "show_sel ? 0.9 : 0"},
+          "fillOpacity":   {"signal": "show_sel ? 0.14 : 0"}
+        }
+      }
+    },
+
+    {
+      "description": "selected practitioner dots (only when sel_count === 1)",
+      "type": "symbol",
+      "from": {"data": "sel_data"},
+      "encode": {
+        "enter": {
+          "fill": {"signal": "sel_col"},
+          "size": {"value": 36}
+        },
+        "update": {
+          "x":      {"field": "px"},
+          "y":      {"field": "py"},
+          "opacity":{"signal": "show_sel ? 1 : 0"},
+          "tooltip": {
+            "signal": "show_sel ? {'Series': datum.series, 'Metric': datum.label, 'Score': format(datum.norm * 100, '.0f') + '%'} : {}"
           }
         }
       }
@@ -231,7 +299,7 @@
           "y":          {"signal": "cy + (radius + 40) * sin(datum.a)"},
           "text":       {"field": "label"},
           "align":      {"signal": "cos(datum.a) > 0.2 ? 'left' : cos(datum.a) < -0.2 ? 'right' : 'center'"},
-          "baseline":   {"signal": "sin(datum.a) > 0.2 ? 'top'  : sin(datum.a) < -0.2 ? 'bottom' : 'middle'"},
+          "baseline":   {"signal": "sin(datum.a) > 0.2 ? 'top' : sin(datum.a) < -0.2 ? 'bottom' : 'middle'"},
           "fill":       {"value": "#344054"},
           "fontSize":   {"value": 10},
           "fontWeight": {"value": "600"},
@@ -254,6 +322,54 @@
           "font":     {"value": "Segoe UI, sans-serif"}
         }
       }
+    },
+
+    {
+      "description": "legend",
+      "type": "group",
+      "encode": {
+        "enter": {
+          "x": {"signal": "cx - 120"},
+          "y": {"value": 4}
+        }
+      },
+      "marks": [
+        {
+          "type": "symbol",
+          "encode": {
+            "enter": {
+              "x": {"value": 0}, "y": {"value": 7},
+              "fill": {"signal": "avg_col"}, "size": {"value": 60},
+              "shape": {"value": "stroke"}
+            }
+          }
+        },
+        {
+          "type": "text",
+          "encode": {
+            "enter": {
+              "x": {"value": 14}, "y": {"value": 11},
+              "text": {"value": "Practice Average"},
+              "fill": {"value": "#344054"}, "fontSize": {"value": 9},
+              "font": {"value": "Segoe UI, sans-serif"}
+            }
+          }
+        },
+        {
+          "type": "symbol",
+          "encode": {
+            "enter":  {"x": {"value": 130}, "y": {"value": 7}, "fill": {"signal": "sel_col"}, "size": {"value": 60}, "shape": {"value": "stroke"}},
+            "update": {"opacity": {"signal": "show_sel ? 1 : 0"}}
+          }
+        },
+        {
+          "type": "text",
+          "encode": {
+            "enter":  {"x": {"value": 144}, "y": {"value": 11}, "fill": {"value": "#344054"}, "fontSize": {"value": 9}, "font": {"value": "Segoe UI, sans-serif"}},
+            "update": {"text": {"signal": "show_sel ? sel_name : 'Select one practitioner'"}, "opacity": {"signal": "show_sel ? 1 : 0.4"}}
+          }
+        }
+      ]
     }
   ]
 }
