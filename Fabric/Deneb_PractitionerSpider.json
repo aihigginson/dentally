@@ -13,7 +13,8 @@
     {"name": "show_sel",  "update": "sel_count === 1"},
     {"name": "sel_name",  "update": "show_sel ? data('dataset')[0]['Practitioner Name'] : ''"},
     {"name": "avg_col",   "value":  "#8AB5B2"},
-    {"name": "sel_col",   "value":  "#1A527A"}
+    {"name": "sel_col",   "value":  "#1A527A"},
+    {"name": "tgt_col",   "value":  "#6B7280"}
   ],
 
   "data": [
@@ -40,6 +41,32 @@
       "source": "dataset",
       "transform": [
         {"type": "sample", "size": 1}
+      ]
+    },
+
+    {
+      "name": "target_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider Target Revenue vs Target",
+            "Spider Target Chair Utilisation",
+            "Spider Target Rev Per Hour",
+            "Spider Target New Patients",
+            "Spider Target Tx Conversion",
+            "Spider Target DNA Score",
+            "Spider Target UDA Completion"
+          ],
+          "as": ["raw_key", "target_val"]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider Target ', 'Spider ')",
+          "as": "key"
+        },
+        {"type": "formula", "expr": "isValid(datum.target_val) ? +datum.target_val : 0", "as": "target_val"}
       ]
     },
 
@@ -86,15 +113,8 @@
           ],
           "as": ["key", "val"]
         },
-        {
-          "type": "formula",
-          "expr": "datum['Practitioner Name']",
-          "as": "series"
-        },
-        {
-          "type": "filter",
-          "expr": "length(data('dataset')) === 1"
-        }
+        {"type": "formula", "expr": "datum['Practitioner Name']", "as": "series"},
+        {"type": "filter",  "expr": "length(data('dataset')) === 1"}
       ]
     },
 
@@ -104,15 +124,15 @@
       "transform": [
         {"type": "formula", "expr": "isValid(datum.val) ? +datum.val : 0", "as": "val"},
         {
-          "type": "joinaggregate",
-          "groupby": ["key"],
-          "ops": ["max"],
-          "fields": ["val"],
-          "as": ["vmax"]
+          "type": "lookup",
+          "from": "target_long",
+          "key": "key",
+          "fields": ["key"],
+          "values": ["target_val"]
         },
         {
           "type": "formula",
-          "expr": "datum.vmax > 0 ? datum.val / datum.vmax : 0",
+          "expr": "datum.target_val > 0 ? min(datum.val / datum.target_val, 2) / 2 : 0",
           "as": "norm"
         },
         {
@@ -123,24 +143,21 @@
           "values": ["i", "label", "a"]
         },
         {"type": "formula", "expr": "cx + datum.norm * radius * cos(datum.a)", "as": "px"},
-        {"type": "formula", "expr": "cy + datum.norm * radius * sin(datum.a)", "as": "py"}
+        {"type": "formula", "expr": "cy + datum.norm * radius * sin(datum.a)", "as": "py"},
+        {"type": "formula", "expr": "format(datum.norm * 200, '.0f') + '% of target'", "as": "pct_label"}
       ]
     },
 
     {
       "name": "avg_data",
       "source": "combined",
-      "transform": [
-        {"type": "filter", "expr": "datum.series === 'Average'"}
-      ]
+      "transform": [{"type": "filter", "expr": "datum.series === 'Average'"}]
     },
 
     {
       "name": "sel_data",
       "source": "combined",
-      "transform": [
-        {"type": "filter", "expr": "datum.series !== 'Average'"}
-      ]
+      "transform": [{"type": "filter", "expr": "datum.series !== 'Average'"}]
     },
 
     {
@@ -152,19 +169,17 @@
           "with": {"values": [{"r": 0.25}, {"r": 0.5}, {"r": 0.75}, {"r": 1.0}]},
           "as": ["ax", "rg"]
         },
-        {"type": "formula", "expr": "datum.rg.r",                                  "as": "r"},
-        {"type": "formula", "expr": "datum.ax.i",                                  "as": "i"},
-        {"type": "formula", "expr": "cx + datum.rg.r * radius * cos(datum.ax.a)",  "as": "px"},
-        {"type": "formula", "expr": "cy + datum.rg.r * radius * sin(datum.ax.a)",  "as": "py"}
+        {"type": "formula", "expr": "datum.rg.r",                                 "as": "r"},
+        {"type": "formula", "expr": "datum.ax.i",                                 "as": "i"},
+        {"type": "formula", "expr": "cx + datum.rg.r * radius * cos(datum.ax.a)", "as": "px"},
+        {"type": "formula", "expr": "cy + datum.rg.r * radius * sin(datum.ax.a)", "as": "py"}
       ]
     },
 
     {
       "name": "ring_labels",
       "source": "rings",
-      "transform": [
-        {"type": "filter", "expr": "datum.i === 0"}
-      ]
+      "transform": [{"type": "filter", "expr": "datum.i === 0"}]
     }
   ],
 
@@ -175,22 +190,18 @@
       "from": {"data": "axes"},
       "encode": {
         "enter": {
-          "x":  {"signal": "cx"},
-          "y":  {"signal": "cy"},
+          "x":  {"signal": "cx"}, "y":  {"signal": "cy"},
           "x2": {"signal": "cx + radius * cos(datum.a)"},
           "y2": {"signal": "cy + radius * sin(datum.a)"},
-          "stroke":      {"value": "#d0d5dd"},
-          "strokeWidth": {"value": 0.8}
+          "stroke": {"value": "#d0d5dd"}, "strokeWidth": {"value": 0.8}
         }
       }
     },
 
     {
-      "description": "concentric ring polygons",
+      "description": "concentric rings — target ring (r=0.5) styled distinctly",
       "type": "group",
-      "from": {
-        "facet": {"name": "rf", "data": "rings", "groupby": "r"}
-      },
+      "from": {"facet": {"name": "rf", "data": "rings", "groupby": "r"}},
       "marks": [
         {
           "type": "line",
@@ -198,11 +209,14 @@
           "sort": {"field": "i", "order": "ascending"},
           "encode": {
             "enter": {
-              "x":           {"field": "px"},
-              "y":           {"field": "py"},
-              "stroke":      {"value": "#d0d5dd"},
-              "strokeWidth": {"value": 0.8},
+              "x": {"field": "px"}, "y": {"field": "py"},
               "interpolate": {"value": "linear-closed"}
+            },
+            "update": {
+              "stroke":        {"signal": "datum.r === 0.5 ? tgt_col : '#d0d5dd'"},
+              "strokeWidth":   {"signal": "datum.r === 0.5 ? 1.5 : 0.7"},
+              "strokeOpacity": {"signal": "datum.r === 0.5 ? 0.9 : 0.6"},
+              "strokeDash":    {"signal": "datum.r === 0.5 ? [4, 3] : [1, 0]"}
             }
           }
         }
@@ -216,14 +230,11 @@
       "sort": {"field": "i", "order": "ascending"},
       "encode": {
         "enter": {
-          "x":             {"field": "px"},
-          "y":             {"field": "py"},
-          "fill":          {"signal": "avg_col"},
-          "fillOpacity":   {"value": 0.18},
-          "stroke":        {"signal": "avg_col"},
-          "strokeWidth":   {"value": 2},
+          "x": {"field": "px"}, "y": {"field": "py"},
+          "fill": {"signal": "avg_col"}, "fillOpacity": {"value": 0.18},
+          "stroke": {"signal": "avg_col"}, "strokeWidth": {"value": 2},
           "strokeOpacity": {"value": 0.85},
-          "interpolate":   {"value": "linear-closed"}
+          "interpolate": {"value": "linear-closed"}
         }
       }
     },
@@ -234,14 +245,12 @@
       "from": {"data": "avg_data"},
       "encode": {
         "enter": {
-          "x":    {"field": "px"},
-          "y":    {"field": "py"},
-          "fill": {"signal": "avg_col"},
-          "size": {"value": 28}
+          "x": {"field": "px"}, "y": {"field": "py"},
+          "fill": {"signal": "avg_col"}, "size": {"value": 28}
         },
         "update": {
           "tooltip": {
-            "signal": "{'Series': 'Practice Average', 'Metric': datum.label, 'Score': format(datum.norm * 100, '.0f') + '%'}"
+            "signal": "{'Series': 'Practice Average', 'Metric': datum.label, 'vs Target': datum.pct_label}"
           }
         }
       }
@@ -254,13 +263,9 @@
       "sort": {"field": "i", "order": "ascending"},
       "encode": {
         "enter": {
-          "x":           {"field": "px"},
-          "y":           {"field": "py"},
-          "fill":        {"signal": "sel_col"},
-          "fillOpacity": {"value": 0.14},
-          "stroke":      {"signal": "sel_col"},
-          "strokeWidth": {"value": 2},
-          "interpolate": {"value": "linear-closed"}
+          "x": {"field": "px"}, "y": {"field": "py"},
+          "fill": {"signal": "sel_col"}, "stroke": {"signal": "sel_col"},
+          "strokeWidth": {"value": 2}, "interpolate": {"value": "linear-closed"}
         },
         "update": {
           "strokeOpacity": {"signal": "show_sel ? 0.9 : 0"},
@@ -270,20 +275,18 @@
     },
 
     {
-      "description": "selected practitioner dots (only when sel_count === 1)",
+      "description": "selected practitioner dots",
       "type": "symbol",
       "from": {"data": "sel_data"},
       "encode": {
         "enter": {
-          "fill": {"signal": "sel_col"},
-          "size": {"value": 36}
+          "fill": {"signal": "sel_col"}, "size": {"value": 36}
         },
         "update": {
-          "x":      {"field": "px"},
-          "y":      {"field": "py"},
-          "opacity":{"signal": "show_sel ? 1 : 0"},
+          "x": {"field": "px"}, "y": {"field": "py"},
+          "opacity": {"signal": "show_sel ? 1 : 0"},
           "tooltip": {
-            "signal": "show_sel ? {'Series': datum.series, 'Metric': datum.label, 'Score': format(datum.norm * 100, '.0f') + '%'} : {}"
+            "signal": "show_sel ? {'Practitioner': datum.series, 'Metric': datum.label, 'vs Target': datum.pct_label} : {}"
           }
         }
       }
@@ -309,17 +312,18 @@
     },
 
     {
-      "description": "ring percentage labels at top spoke",
+      "description": "ring labels — target ring labelled 'Target', others as % of target",
       "type": "text",
       "from": {"data": "ring_labels"},
       "encode": {
         "enter": {
-          "x":        {"field": "px", "offset": 4},
-          "y":        {"field": "py", "offset": -3},
-          "text":     {"signal": "format(datum.r * 100, '.0f') + '%'"},
-          "fill":     {"value": "#98a2b3"},
-          "fontSize": {"value": 8},
-          "font":     {"value": "Segoe UI, sans-serif"}
+          "x":         {"field": "px", "offset": 4},
+          "y":         {"field": "py", "offset": -3},
+          "text":      {"signal": "datum.r === 0.5 ? 'Target' : format(datum.r * 200, '.0f') + '%'"},
+          "fill":      {"signal": "datum.r === 0.5 ? tgt_col : '#98a2b3'"},
+          "fontWeight":{"signal": "datum.r === 0.5 ? 'bold' : 'normal'"},
+          "fontSize":  {"value": 8},
+          "font":      {"value": "Segoe UI, sans-serif"}
         }
       }
     },
@@ -328,31 +332,19 @@
       "description": "legend",
       "type": "group",
       "encode": {
-        "enter": {
-          "x": {"signal": "cx - 120"},
-          "y": {"value": 4}
-        }
+        "enter": {"x": {"signal": "cx - 120"}, "y": {"value": 4}}
       },
       "marks": [
         {
           "type": "symbol",
           "encode": {
-            "enter": {
-              "x": {"value": 0}, "y": {"value": 7},
-              "fill": {"signal": "avg_col"}, "size": {"value": 60},
-              "shape": {"value": "stroke"}
-            }
+            "enter": {"x": {"value": 0}, "y": {"value": 7}, "fill": {"signal": "avg_col"}, "size": {"value": 60}, "shape": {"value": "stroke"}}
           }
         },
         {
           "type": "text",
           "encode": {
-            "enter": {
-              "x": {"value": 14}, "y": {"value": 11},
-              "text": {"value": "Practice Average"},
-              "fill": {"value": "#344054"}, "fontSize": {"value": 9},
-              "font": {"value": "Segoe UI, sans-serif"}
-            }
+            "enter": {"x": {"value": 14}, "y": {"value": 11}, "text": {"value": "Practice Average"}, "fill": {"value": "#344054"}, "fontSize": {"value": 9}, "font": {"value": "Segoe UI, sans-serif"}}
           }
         },
         {

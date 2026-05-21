@@ -66,6 +66,37 @@ add("Spider UDA Completion",
     @"IFERROR([NHS UDA Completion Rate], BLANK())",
     @"0.0%");
 
+// ── Target measures (what each axis is aimed at; same units as individual) ──
+// Spider Revenue vs Target is already a ratio — its target is always 1.0
+add("Spider Target Revenue vs Target",
+    @"IF(ISBLANK([Total Revenue Target]), BLANK(), 1)",
+    @"0.0%");
+
+add("Spider Target Chair Utilisation",
+    @"[Chair Utilisation Target]",
+    @"0.0%");
+
+add("Spider Target Rev Per Hour",
+    @"[Revenue Per Clinical Hour Target]",
+    @"£#,##0");
+
+add("Spider Target New Patients",
+    @"[New Patients Target]",
+    @"#,##0");
+
+add("Spider Target Tx Conversion",
+    @"[Treatment Acceptance Rate Target]",
+    @"0.0%");
+
+add("Spider Target DNA Score",
+    @"VAR r = [DNA Rate Target]
+RETURN IF(ISBLANK(r), BLANK(), 1 - r)",
+    @"0.0%");
+
+add("Spider Target UDA Completion",
+    @"IFERROR([NHS UDA Completion Rate Target], BLANK())",
+    @"0.0%");
+
 // ── Practice average measures (ALL bypasses practitioner slicer) ────────────
 
 add("Spider Avg Revenue vs Target",
