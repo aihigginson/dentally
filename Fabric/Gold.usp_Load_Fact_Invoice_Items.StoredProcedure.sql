@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS)
+--    *04     22/05/2026  AIH Add Tenant_ID filter to Silver.Invoices join; fix Silver.Patients subquery to include Tenant_ID
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -68,13 +69,14 @@ BEGIN
             CAST(TRY_CAST(inv.NHS_Amount AS DECIMAL(12,2)) AS DECIMAL(12,2)) AS Invoice_NHS_Amount
         INTO #src
         FROM Silver.Invoice_Items ii
-        LEFT JOIN Silver.Invoices inv         ON inv.Id              = ii.Invoice_ID
+        LEFT JOIN Silver.Invoices inv         ON inv.Id              = ii.Invoice_ID        AND inv.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_ID AS INT)      AND dpat.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr  ON dpr.Practitioner_ID = CAST(ii.Practitioner_ID AS INT)  AND dpr.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp  ON dpp.Payment_Plan_ID = (
                                                     SELECT TOP 1 Payment_Plan_ID
                                                     FROM Silver.Patients
-                                                    WHERE Patient_ID = inv.Patient_ID)                  AND dpp.Tenant_ID = ii.Tenant_ID
+                                                    WHERE Patient_ID = inv.Patient_ID
+                                                      AND Tenant_ID  = ii.Tenant_ID)                   AND dpp.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(ii.Treatment_Plan_ID AS INT) AND dtp.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Accounts dacc       ON dacc.Account_ID       = CAST(inv.Account_ID AS INT)   AND dacc.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = NULLIF(TRIM(inv.Site_ID),'')  AND dps.Tenant_ID = ii.Tenant_ID
