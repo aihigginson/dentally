@@ -72,6 +72,14 @@ DECLARE @Msg        nvarchar(500);
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
 
+    SET @Step = 'Appointment_Cancellation_Reasons';
+    SET @Start = SYSUTCDATETIME();
+    SET @Process_Code = 'SILVER_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Silver.usp_Load_Appointment_Cancellation_Reasons @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode='TEST' PRINT @Step + ' completed in '
+    + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
+
     SET @Step = 'Treatment_Categories';
     SET @Start = SYSUTCDATETIME();
     SET @Process_Code = 'SILVER_'+UPPER(@Step)
@@ -282,11 +290,11 @@ DECLARE @Msg        nvarchar(500);
 
     -- ── NHS ───────────────────────────────────────────────────────────────────────
 
-    SET @Step = 'Nhs_Claims';
+    SET @Step = 'NHS_Claims';
     SET @Start = SYSUTCDATETIME();
     SET @Process_Code = 'SILVER_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
- -- EXEC Silver.usp_Load_Nhs_Claims @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+ -- EXEC Silver.usp_Load_NHS_Claims @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
   
@@ -369,9 +377,15 @@ DECLARE @Msg        nvarchar(500);
 
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
+    SET @Step = 'Dim_Cancellation_Reasons'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Dim_Cancellation_Reasons @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
     SET @Step = 'Dim_Treatment_Plans'; SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
@@ -385,8 +399,14 @@ DECLARE @Msg        nvarchar(500);
 
     SET @Step = 'Fact_Invoice_Items';  SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_Payments';       SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_FACT_PAYMENTS'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_Payments @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     SET @Step = 'Fact_Treatment_Appointments'; SET @Start = GETDATE();
@@ -417,6 +437,20 @@ DECLARE @Msg        nvarchar(500);
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    -- ── Derived fact tables (depend on Gold dims + facts above) ─────────────────
+
+    SET @Step = 'Fact_Daily_Targets';  SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_KPI_Snapshot';   SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_KPI_Snapshot @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     -- ── Aggregates (built from Gold fact/dim tables — run after all facts) ──────

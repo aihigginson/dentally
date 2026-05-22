@@ -9,7 +9,7 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 $Groups = [ordered]@{
 
@@ -37,14 +37,18 @@ $Groups = [ordered]@{
         'Gold.Dim_Treatment_Plans.Table.sql'
         'Gold.Dim_Treatments.Table.sql'
         'Gold.Dim_Users.Table.sql'
+        'Gold.Dim_Cancellation_Reasons.Table.sql'
         'Gold.Fact_Appointments.Table.sql'
         'Gold.Fact_Contracts.Table.sql'
         'Gold.Fact_Invoice_Items.Table.sql'
         'Gold.Fact_Practitioner_Diaries.Table.sql'
         'Gold.Fact_Recalls.Table.sql'
+        'Gold.Fact_Payments.Table.sql'
         'Gold.Fact_Treatment_Appointments.Table.sql'
         'Gold.Fact_Treatment_Plan_Items.Table.sql'
         'Gold.Fact_Targets.Table.sql'
+        'Gold.Fact_Daily_Targets.Table.sql'
+        'Gold.Fact_KPI_Snapshot.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
         'Gold.Aggregate_Site_Patient_Practitioner_Daily.Table.sql'
@@ -64,6 +68,7 @@ $Groups = [ordered]@{
         'Gold.usp_Create_Fact_Appointments.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Contracts.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Invoice_Items.StoredProcedure.sql'
+        'Gold.usp_Create_Fact_Payments.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Practitioner_Diaries.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Recalls.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Treatment_Appointments.StoredProcedure.sql'
@@ -85,12 +90,16 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Appointments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Contracts.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Payments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Recalls.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_KPI_Snapshot.StoredProcedure.sql'
         'Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql'
         'Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql'
         'Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql'
@@ -115,7 +124,7 @@ foreach ($group in $Groups.GetEnumerator()) {
     $null = $combined.AppendLine("PRINT '>>> GROUP: $($group.Key)';")
     $null = $combined.AppendLine("GO")
     foreach ($file in $group.Value) {
-        $path = Join-Path $ScriptDir $file
+        $path = Join-Path $FabricDir $file
         $null = $combined.AppendLine("PRINT '  FILE: $file';")
         $null = $combined.AppendLine("GO")
         $null = $combined.AppendLine([System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8))

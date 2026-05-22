@@ -209,4 +209,77 @@ RETURN SWITCH(TRUE(),
                            ""#c0392b"")",
     "");
 
+// ── Home Detail measures ──────────────────────────────────────────────────────
+// Cancellation Frequency and Short Notice Cancellation Rate read from the
+// Aggregate table (Cancelled_Appointments / Short_Notice_Cancellations columns)
+// to avoid cross-table relationship dependency on _Appointments[Is Cancelled].
+
+add("Cancellation Frequency",
+    @"SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments])",
+    "#,##0");
+
+add("Short Notice Cancellation Rate",
+    @"DIVIDE(
+    SUM('Aggregate Site Patient Practitioner Daily'[Short Notice Cancellations]),
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
+    "#,##0.0%");
+
+add("Cancellation Frequency Target",
+    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Cancellation Frequency vs Target",
+    @"VAR actual = [Cancellation Frequency]
+VAR target = [Cancellation Frequency Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Short Notice Cancellation Rate Target",
+    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Short Notice Cancellation Rate vs Target",
+    @"VAR actual  = [Short Notice Cancellation Rate]
+VAR target  = [Short Notice Cancellation Rate Target]
+VAR diff_pp = (target - actual) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Cancellation Frequency BG",
+    @"VAR actual = [Cancellation Frequency]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
+add("Short Notice Cancellation Rate BG",
+    @"VAR actual  = [Short Notice Cancellation Rate]
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Target Value])
+VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Variance])
+VAR diff_pp = (actual - target) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp <= -band, ""#1a7f3c"",
+    diff_pp <= 0,     ""#6abf7b"",
+    diff_pp <= band,  ""#f4a261"",
+                      ""#c0392b"")",
+    "");
+
 Info("Scheduling KPI measures created.");

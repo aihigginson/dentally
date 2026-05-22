@@ -8,9 +8,9 @@ GO
 CREATE TABLE [Silver].[Practitioner_Diary](
 	[Tenant_ID] [int] NOT NULL,
 	[Id] [VARCHAR](50) NOT NULL,
-	[Practitioner_Id] [int] NULL,
-	[Site_Id] [VARCHAR](50) NULL,
-	[Room_Id] [VARCHAR](50) NULL,
+	[Practitioner_ID] [int] NULL,
+	[Site_ID] [VARCHAR](50) NULL,
+	[Room_ID] [VARCHAR](50) NULL,
 	[Start_Time] [VARCHAR](50) NULL,
 	[Finish_Time] [VARCHAR](50) NULL,
 	[Day] [date] NULL,

@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     29/04/2026  AIH Add PBI.[Security Users] view for RLS anchor
 --    *03     09/05/2026  AIH Add WHERE Patient_ID IS NOT NULL on List Accounts to exclude -1 unknown row
+--    *04     22/05/2026  AIH Exclude pk=-1 sentinel rows from List Patients and List Treatment Plans
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Meta.usp_Create_Gold_Views @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Meta].[usp_Create_Gold_Views]    Script Date: 20/04/2026 10:15:06 ******/

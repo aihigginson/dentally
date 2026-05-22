@@ -7,10 +7,10 @@ DROP TABLE IF EXISTS [Silver].[Payment_Explanations]
 GO
 CREATE TABLE [Silver].[Payment_Explanations](
 	[Tenant_ID] [int] NOT NULL,
-	[Explanation_Id] [int] NOT NULL,
-	[Payment_Id] [int] NULL,
-	[Invoice_Id] [int] NULL,
-	[User_Id] [int] NULL,
+	[Explanation_ID] [int] NOT NULL,
+	[Payment_ID] [int] NULL,
+	[Invoice_ID] [int] NULL,
+	[User_ID] [int] NULL,
 	[Payment_Reference] [VARCHAR](50) NULL,
 	[Invoice_Reference] [VARCHAR](50) NULL,
 	[Amount] [decimal](18, 4) NULL,

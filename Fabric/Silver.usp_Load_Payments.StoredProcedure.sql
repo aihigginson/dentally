@@ -1,9 +1,11 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Payments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Payments
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Payments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Payments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -37,12 +39,12 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Account_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Patient_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Practitioner_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Payment_Plan_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[User_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Account_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Patient_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Practitioner_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Payment_Plan_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[User_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Reference] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Transaction_Number] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Amount] AS VARCHAR(500)), ''),
@@ -57,13 +59,13 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int)  AS [Payment_Id],
-                TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)  AS [Account_Id],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_Id],
-                Practitioner_ID  AS [Practitioner_Id],
-                Payment_Plan_ID  AS [Payment_Plan_Id],
-                LEFT(Site_ID, 50)  AS [Site_Id],
-                User_ID  AS [User_Id],
+                TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int)  AS [Payment_ID],
+                TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)  AS [Account_ID],
+                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
+                Practitioner_ID  AS [Practitioner_ID],
+                Payment_Plan_ID  AS [Payment_Plan_ID],
+                LEFT(Site_ID, 50)  AS [Site_ID],
+                User_ID  AS [User_ID],
                 -- Bronze Reference is decimal; convert to string
         LEFT(CAST(TRY_CAST(ROUND(CAST(Reference AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Reference],
                 LEFT(CAST(TRY_CAST(ROUND(CAST(Transaction_Number AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Transaction_Number],
@@ -80,12 +82,12 @@ BEGIN
 
         UPDATE tgt
         SET
-            [Account_Id] = src.[Account_Id],
-            [Patient_Id] = src.[Patient_Id],
-            [Practitioner_Id] = src.[Practitioner_Id],
-            [Payment_Plan_Id] = src.[Payment_Plan_Id],
-            [Site_Id] = src.[Site_Id],
-            [User_Id] = src.[User_Id],
+            [Account_ID] = src.[Account_ID],
+            [Patient_ID] = src.[Patient_ID],
+            [Practitioner_ID] = src.[Practitioner_ID],
+            [Payment_Plan_ID] = src.[Payment_Plan_ID],
+            [Site_ID] = src.[Site_ID],
+            [User_ID] = src.[User_ID],
             [Reference] = src.[Reference],
             [Transaction_Number] = src.[Transaction_Number],
             [Amount] = src.[Amount],
@@ -98,24 +100,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Payments] AS tgt
-        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Id] = src.[Payment_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_ID] = src.[Payment_ID]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Payments] ([Tenant_ID], [Payment_Id], [Account_Id], [Patient_Id], [Practitioner_Id], [Payment_Plan_Id], [Site_Id], [User_Id], [Reference], [Transaction_Number], [Amount], [Amount_Unexplained], [Method], [Fully_Explained], [Deleted], [Status], [Dated_On],
+        INSERT INTO [Silver].[Payments] ([Tenant_ID], [Payment_ID], [Account_ID], [Patient_ID], [Practitioner_ID], [Payment_Plan_ID], [Site_ID], [User_ID], [Reference], [Transaction_Number], [Amount], [Amount_Unexplained], [Method], [Fully_Explained], [Deleted], [Status], [Dated_On],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Payment_Id], src.[Account_Id], src.[Patient_Id], src.[Practitioner_Id], src.[Payment_Plan_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Transaction_Number], src.[Amount], src.[Amount_Unexplained], src.[Method], src.[Fully_Explained], src.[Deleted], src.[Status], src.[Dated_On],
+        SELECT src.[Tenant_ID], src.[Payment_ID], src.[Account_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Payment_Plan_ID], src.[Site_ID], src.[User_ID], src.[Reference], src.[Transaction_Number], src.[Amount], src.[Amount_Unexplained], src.[Method], src.[Fully_Explained], src.[Deleted], src.[Status], src.[Dated_On],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Payments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_Id] = src.[Payment_Id]
+            SELECT 1 FROM [Silver].[Payments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Payment_ID] = src.[Payment_ID]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Payments] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Payment_Id] = tgt.[Payment_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Payment_ID] = tgt.[Payment_ID]
         );
         SET @My_Deletes = @@ROWCOUNT;
 

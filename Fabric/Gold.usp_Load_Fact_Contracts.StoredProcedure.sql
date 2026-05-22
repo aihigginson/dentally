@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Contracts] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Contracts
 --  Author           :  AIH
@@ -5,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
+--    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS, PDS, UDA, UOA)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -42,20 +44,20 @@ BEGIN
             dd_s.pk_Date                                                AS fk_Date_Start,
             dd_e.pk_Date                                                AS fk_Date_End,
             TRY_CAST(c.Contract_Number AS INT)                          AS Contract_Number,
-            TRY_CAST(c.Nhs_Location_Id AS INT)                         AS NHS_Location_ID,
-            TRY_CAST(c.Nhs_Site_Id AS INT)                             AS NHS_Site_ID,
-            NULLIF(TRIM(c.Site_Id),'')                                  AS Site_ID,
+            TRY_CAST(c.NHS_Location_ID AS INT)                         AS NHS_Location_ID,
+            TRY_CAST(c.NHS_Site_ID AS INT)                             AS NHS_Site_ID,
+            NULLIF(TRIM(c.Site_ID),'')                                  AS Site_ID,
             CAST(ISNULL(c.Active,0) AS BIT)                             AS Active,
-            CAST(ISNULL(c.Pds_Plus,0) AS BIT)                           AS PDS_Plus,
+            CAST(ISNULL(c.PDS_Plus,0) AS BIT)                           AS PDS_Plus,
             CAST(c.Start_Date AS DATE)                                  AS Start_Date,
             CAST(c.End_Date AS DATE)                                    AS End_Date,
             CAST(ISNULL(c.Target,0) AS DECIMAL(12,2))                   AS UDA_Target,
-            CAST(ISNULL(c.Uda_Value,0) AS DECIMAL(12,4))                AS UDA_Value,
-            CAST(ISNULL(c.Uoa_Target,0) AS DECIMAL(12,2))               AS UOA_Target,
-            CAST(ISNULL(c.Uoa_Value,0) AS DECIMAL(12,4))                AS UOA_Value
+            CAST(ISNULL(c.UDA_Value,0) AS DECIMAL(12,4))                AS UDA_Value,
+            CAST(ISNULL(c.UOA_Target,0) AS DECIMAL(12,2))               AS UOA_Target,
+            CAST(ISNULL(c.UOA_Value,0) AS DECIMAL(12,4))                AS UOA_Value
         INTO #src
         FROM Silver.Contracts c
-        LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = NULLIF(TRIM(c.Site_Id),'') AND dps.Tenant_ID = c.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = NULLIF(TRIM(c.Site_ID),'') AND dps.Tenant_ID = c.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s          ON dd_s.Full_Date = CAST(c.Start_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_e          ON dd_e.Full_Date = CAST(c.End_Date AS DATE)
         WHERE c.Id IS NOT NULL;

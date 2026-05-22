@@ -18,6 +18,7 @@ CREATE TABLE [Bronze].[Invoices](
 	[NHS_Amount] [VARCHAR](255) NULL,
 	[Payment_Terms] [VARCHAR](255) NULL,
 	[Created_At] [VARCHAR](255) NULL,
+	[Sent_At] [VARCHAR](255) NULL,
 	[Updated_At] [VARCHAR](255) NULL,
 	[Account_ID] [int] NULL,
 	[Patient_ID] [int] NULL,

@@ -26,7 +26,7 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 $Groups = [ordered]@{
 
@@ -58,6 +58,7 @@ $Groups = [ordered]@{
         'Audit.Meta_Table_Profile.Table.sql'
         'Audit.Meta_Column_Profile.Table.sql'
         'Audit.Tenants.Table.sql'
+        'Audit.Rerun_Plan.Table.sql'
     )
 
     '2b. Security tables' = @(
@@ -81,6 +82,7 @@ $Groups = [ordered]@{
         'Audit.Process_Category.Data.sql'
         'Audit.Process_Type.Data.sql'
         'Audit.Process_Config.Data.sql'
+        'Audit.Process_Dependency.Data.sql'
         'Audit.Tenants.Data.sql'
         'Security.Clients.Data.sql'
         'Security.Application_Users.Data.sql'
@@ -100,6 +102,7 @@ $Groups = [ordered]@{
         'Audit.ETL_Execution_Log_Cleanup.StoredProcedure.sql'
         'Audit.Meta_Log_Record_Count.StoredProcedure.sql'
         'Audit.Meta_Refresh_Record_Count.StoredProcedure.sql'
+        'Audit.usp_Rerun_Failed_Jobs.StoredProcedure.sql'
     )
 
     '5. Audit views' = @(
@@ -241,6 +244,7 @@ $Groups = [ordered]@{
         'Gold.Fact_Treatment_Appointments.Table.sql'
         'Gold.Fact_Treatment_Plan_Items.Table.sql'
         'Gold.Fact_Targets.Table.sql'
+        'Gold.Fact_Daily_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
     )
@@ -314,6 +318,7 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql'
     )
 
     '15. Meta procedures' = @(
@@ -337,7 +342,7 @@ foreach ($group in $Groups.GetEnumerator()) {
     $null = $combined.AppendLine("PRINT '>>> GROUP: $($group.Key)';")
     $null = $combined.AppendLine("GO")
     foreach ($file in $group.Value) {
-        $path = Join-Path $ScriptDir $file
+        $path = Join-Path $FabricDir $file
         $null = $combined.AppendLine("PRINT '  FILE: $file';")
         $null = $combined.AppendLine("GO")
         $null = $combined.AppendLine([System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8))

@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Silver].[Appointment_Journey_Attrs]
 GO
 CREATE TABLE [Silver].[Appointment_Journey_Attrs](
 	[Tenant_ID]          [int]          NOT NULL,
-	[Appointment_Id]     [int]          NOT NULL,
+	[Appointment_ID]     [int]          NOT NULL,
 	[Booking]            [varchar](50)  NULL,
 	[This_Visit]         [varchar](50)  NULL,
 	[Next_Visit]         [varchar](50)  NULL,

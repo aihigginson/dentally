@@ -1,26 +1,24 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Patients
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Add 15 new patient fields (title, recall_method, acquisition_source_id, use_email/sms, preferred_name, work_phone, middle_name, emergency_contact_*, ethnicity, archived_reason, legacy_id, preferred_phone_number)
+--    *04     20/05/2026  AIH Fix Stage field name: ethnicity -> ethnicity_id; Preferred_Phone_Number VARCHAR not decimal
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
-/****** Object:  StoredProcedure [Bronze].[usp_Load_Patients]    Script Date: 29/04/2026 15:29:24 ******/
-SET ANSI_NULLS ON
+DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patients]
 GO
-
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER PROCEDURE [Bronze].[usp_Load_Patients]
+CREATE PROCEDURE [Bronze].[usp_Load_Patients]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -61,6 +59,21 @@ BEGIN
             , CASE WHEN medical_alert = 'False' THEN 0 ELSE 1 END AS Medical_Alert
             , LEFT(medical_alert_text,            255)            AS Medical_Alert_Text
             , LEFT(occupation,                    255)            AS Occupation
+            , LEFT(title,                          255)            AS Title
+            , LEFT(recall_method,                  255)            AS Recall_Method
+            , LEFT(acquisition_source_id,          255)            AS Acquisition_Source_ID
+            , CASE WHEN use_email IN ('True','1','true') THEN CAST(1.0 AS DECIMAL(18,4)) ELSE CAST(0.0 AS DECIMAL(18,4)) END AS Use_Email
+            , CASE WHEN use_sms   IN ('True','1','true') THEN CAST(1.0 AS DECIMAL(18,4)) ELSE CAST(0.0 AS DECIMAL(18,4)) END AS Use_Sms
+            , LEFT(preferred_name,                 255)            AS Preferred_Name
+            , LEFT(work_phone,                     255)            AS Work_Phone
+            , LEFT(middle_name,                    255)            AS Middle_Name
+            , LEFT(emergency_contact_name,         255)            AS Emergency_Contact_Name
+            , LEFT(emergency_contact_relationship, 255)            AS Emergency_Contact_Relationship
+            , LEFT(emergency_contact_phone,        255)            AS Emergency_Contact_Phone
+            , LEFT(CAST(ethnicity_id AS VARCHAR(255)), 255)         AS Ethnicity
+            , LEFT(archived_reason,                255)            AS Archived_Reason
+            , LEFT(legacy_id,                      255)            AS Legacy_ID
+            , LEFT(preferred_phone_number,          50)              AS Preferred_Phone_Number
             , LEFT(created_at,                    255)            AS Created_At
             , LEFT(updated_at,                    255)            AS Updated_At
         INTO #src
@@ -96,6 +109,21 @@ BEGIN
             , tgt.Medical_Alert            = src.Medical_Alert
             , tgt.Medical_Alert_Text       = src.Medical_Alert_Text
             , tgt.Occupation               = src.Occupation
+            , tgt.Title                    = src.Title
+            , tgt.Recall_Method            = src.Recall_Method
+            , tgt.Acquisition_Source_ID    = src.Acquisition_Source_ID
+            , tgt.Use_Email                = src.Use_Email
+            , tgt.Use_Sms                  = src.Use_Sms
+            , tgt.Preferred_Name           = src.Preferred_Name
+            , tgt.Work_Phone               = src.Work_Phone
+            , tgt.Middle_Name              = src.Middle_Name
+            , tgt.Emergency_Contact_Name         = src.Emergency_Contact_Name
+            , tgt.Emergency_Contact_Relationship = src.Emergency_Contact_Relationship
+            , tgt.Emergency_Contact_Phone        = src.Emergency_Contact_Phone
+            , tgt.Ethnicity                = src.Ethnicity
+            , tgt.Archived_Reason          = src.Archived_Reason
+            , tgt.Legacy_ID                = src.Legacy_ID
+            , tgt.Preferred_Phone_Number   = src.Preferred_Phone_Number
             , tgt.Created_At               = src.Created_At
             , tgt.Updated_At               = src.Updated_At
             , tgt.DW_Loaded_At             = SYSUTCDATETIME()
@@ -134,9 +162,24 @@ BEGIN
             Medical_Alert,
             Medical_Alert_Text,
             Occupation,
+            Title,
+            Recall_Method,
+            Acquisition_Source_ID,
+            Use_Email,
+            Use_Sms,
+            Preferred_Name,
+            Work_Phone,
+            Middle_Name,
+            Emergency_Contact_Name,
+            Emergency_Contact_Relationship,
+            Emergency_Contact_Phone,
+            Ethnicity,
+            Archived_Reason,
+            Legacy_ID,
+            Preferred_Phone_Number,
             Created_At,
             Updated_At,
-            DW_Loaded_At 
+            DW_Loaded_At
         )
         SELECT
             src.Tenant_ID,
@@ -169,9 +212,24 @@ BEGIN
             src.Medical_Alert,
             src.Medical_Alert_Text,
             src.Occupation,
+            src.Title,
+            src.Recall_Method,
+            src.Acquisition_Source_ID,
+            src.Use_Email,
+            src.Use_Sms,
+            src.Preferred_Name,
+            src.Work_Phone,
+            src.Middle_Name,
+            src.Emergency_Contact_Name,
+            src.Emergency_Contact_Relationship,
+            src.Emergency_Contact_Phone,
+            src.Ethnicity,
+            src.Archived_Reason,
+            src.Legacy_ID,
+            src.Preferred_Phone_Number,
             src.Created_At,
             src.Updated_At,
-            SYSUTCDATETIME() 
+            SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Patients tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Patient_ID = src.Patient_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -187,13 +245,14 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;
     SET @Run_Deletes = @My_Deletes;
 END
-
 GO
 
 

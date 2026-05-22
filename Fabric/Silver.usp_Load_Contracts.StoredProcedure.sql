@@ -1,9 +1,12 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Contracts] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Contracts
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     19/05/2026  AIH Read Name, Notes from Bronze (now available)
+--    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS, PDS, UDA, UOA)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -37,61 +40,59 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Active] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Contract_Number] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Nhs_Location_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Nhs_Site_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[NHS_Location_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[NHS_Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Pds_Plus] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[PDS_Plus] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Start_Date] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[End_Date] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Target] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Uda_Value] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Uoa_Target] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Uoa_Value] AS VARCHAR(500)), '')
+        ISNULL(CAST(staged.[UDA_Value] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[UOA_Target] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[UOA_Value] AS VARCHAR(500)), '')
         ))) AS _Hash
         INTO #src
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Id],
-                LEFT(Site_ID, 50)  AS [Site_Id],
+                LEFT(Site_ID, 50)  AS [Site_ID],
                 CASE WHEN Active = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 LEFT(Contract_Number, 50)  AS [Contract_Number],
-                NULL  AS [Name],
-                -- Bronze has no Name column
-        LEFT(NHS_Location_ID, 50)  AS [Nhs_Location_Id],
-                LEFT(NHS_Site_ID, 50)  AS [Nhs_Site_Id],
-                NULL  AS [Notes],
-                -- Bronze has no Notes column
-        CASE WHEN Pds_Plus = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Pds_Plus],
+                LEFT(Name, 255)  AS [Name],
+                LEFT(NHS_Location_ID, 50)  AS [NHS_Location_ID],
+                LEFT(NHS_Site_ID, 50)  AS [NHS_Site_ID],
+                Notes  AS [Notes],
+                CASE WHEN PDS_Plus = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [PDS_Plus],
                 TRY_CAST(Start_Date AS date)  AS [Start_Date],
                 TRY_CAST(End_Date   AS date)  AS [End_Date],
                 TRY_CAST(Target     AS decimal(18,4))  AS [Target],
-                TRY_CAST(UDA_Value  AS decimal(18,4))  AS [Uda_Value],
-                TRY_CAST(UOA_Target AS decimal(18,4))  AS [Uoa_Target],
-                TRY_CAST(UOA_Value  AS decimal(18,4))  AS [Uoa_Value]
+                TRY_CAST(UDA_Value  AS decimal(18,4))  AS [UDA_Value],
+                TRY_CAST(UOA_Target AS decimal(18,4))  AS [UOA_Target],
+                TRY_CAST(UOA_Value  AS decimal(18,4))  AS [UOA_Value]
             FROM Bronze.Contracts
         ) AS staged;
 
         UPDATE tgt
         SET
-            [Site_Id] = src.[Site_Id],
+            [Site_ID] = src.[Site_ID],
             [Active] = src.[Active],
             [Contract_Number] = src.[Contract_Number],
             [Name] = src.[Name],
-            [Nhs_Location_Id] = src.[Nhs_Location_Id],
-            [Nhs_Site_Id] = src.[Nhs_Site_Id],
+            [NHS_Location_ID] = src.[NHS_Location_ID],
+            [NHS_Site_ID] = src.[NHS_Site_ID],
             [Notes] = src.[Notes],
-            [Pds_Plus] = src.[Pds_Plus],
+            [PDS_Plus] = src.[PDS_Plus],
             [Start_Date] = src.[Start_Date],
             [End_Date] = src.[End_Date],
             [Target] = src.[Target],
-            [Uda_Value] = src.[Uda_Value],
-            [Uoa_Target] = src.[Uoa_Target],
-            [Uoa_Value] = src.[Uoa_Value],
+            [UDA_Value] = src.[UDA_Value],
+            [UOA_Target] = src.[UOA_Target],
+            [UOA_Value] = src.[UOA_Value],
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
@@ -100,8 +101,8 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Contracts] ([Tenant_ID], [Id], [Site_Id], [Active], [Contract_Number], [Name], [Nhs_Location_Id], [Nhs_Site_Id], [Notes], [Pds_Plus], [Start_Date], [End_Date], [Target], [Uda_Value], [Uoa_Target], [Uoa_Value], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Id], src.[Site_Id], src.[Active], src.[Contract_Number], src.[Name], src.[Nhs_Location_Id], src.[Nhs_Site_Id], src.[Notes], src.[Pds_Plus], src.[Start_Date], src.[End_Date], src.[Target], src.[Uda_Value], src.[Uoa_Target], src.[Uoa_Value], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Contracts] ([Tenant_ID], [Id], [Site_ID], [Active], [Contract_Number], [Name], [NHS_Location_ID], [NHS_Site_ID], [Notes], [PDS_Plus], [Start_Date], [End_Date], [Target], [UDA_Value], [UOA_Target], [UOA_Value], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Site_ID], src.[Active], src.[Contract_Number], src.[Name], src.[NHS_Location_ID], src.[NHS_Site_ID], src.[Notes], src.[PDS_Plus], src.[Start_Date], src.[End_Date], src.[Target], src.[UDA_Value], src.[UOA_Target], src.[UOA_Value], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Contracts] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]

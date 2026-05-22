@@ -1,20 +1,22 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Practice
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Fix phone_number to VARCHAR; add Town
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practice]
 GO
 CREATE PROCEDURE [Bronze].[usp_Load_Practice]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -29,10 +31,11 @@ BEGIN
             , LEFT(id,                                   255)         AS Practice_ID
             , LEFT(name,                                 255)         AS Practice_Name
             , LEFT(email_address,                        255)         AS Email_Address
-            , TRY_CAST(phone_number AS DECIMAL(18,4))                 AS Phone_Number
+            , LEFT(phone_number, 255)                                 AS Phone_Number
             , LEFT(address_line_1,                       255)         AS Address_Line_1
             , LEFT(address_line_2,                       255)         AS Address_Line_2
             , LEFT(postcode,                             255)         AS Postcode
+            , LEFT(town,                                 255)         AS Town
             , LEFT(website,                              255)         AS Website
             , LEFT(logo_url,                             255)         AS Logo_Url
             , LEFT(slug,                                 255)         AS Slug
@@ -67,6 +70,7 @@ BEGIN
             , tgt.Address_Line_1               = src.Address_Line_1
             , tgt.Address_Line_2               = src.Address_Line_2
             , tgt.Postcode                     = src.Postcode
+            , tgt.Town                         = src.Town
             , tgt.Website                      = src.Website
             , tgt.Logo_Url                     = src.Logo_Url
             , tgt.Slug                         = src.Slug
@@ -95,8 +99,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.Practice_ID = src.Practice_ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Practice (Tenant_ID, Practice_ID, Practice_Name, Email_Address, Phone_Number, Address_Line_1, Address_Line_2, Postcode, Website, Logo_Url, Slug, Time_Zone, Patient_Email_Address, Custom_Patient_Field_Label_1, Custom_Patient_Field_Label_2, Medical_History_Expiry_Days, NHS, [Oh_Mon#open], [Oh_Mon#close], [Oh_Tues#open], [Oh_Tues#close], [Oh_Wed#open], [Oh_Wed#close], [Oh_Thur#open], [Oh_Thur#close], [Oh_Fri#open], [Oh_Fri#close], [Oh_Sat#open], [Oh_Sat#close], [Oh_Sun#open], [Oh_Sun#close], DW_Loaded_At)
-        SELECT src.Tenant_ID, src.Practice_ID, src.Practice_Name, src.Email_Address, src.Phone_Number, src.Address_Line_1, src.Address_Line_2, src.Postcode, src.Website, src.Logo_Url, src.Slug, src.Time_Zone, src.Patient_Email_Address, src.Custom_Patient_Field_Label_1, src.Custom_Patient_Field_Label_2, src.Medical_History_Expiry_Days, src.NHS, src.[Oh_Mon#open], src.[Oh_Mon#close], src.[Oh_Tues#open], src.[Oh_Tues#close], src.[Oh_Wed#open], src.[Oh_Wed#close], src.[Oh_Thur#open], src.[Oh_Thur#close], src.[Oh_Fri#open], src.[Oh_Fri#close], src.[Oh_Sat#open], src.[Oh_Sat#close], src.[Oh_Sun#open], src.[Oh_Sun#close], SYSUTCDATETIME()
+        INSERT INTO Bronze.Practice (Tenant_ID, Practice_ID, Practice_Name, Email_Address, Phone_Number, Address_Line_1, Address_Line_2, Postcode, Town, Website, Logo_Url, Slug, Time_Zone, Patient_Email_Address, Custom_Patient_Field_Label_1, Custom_Patient_Field_Label_2, Medical_History_Expiry_Days, NHS, [Oh_Mon#open], [Oh_Mon#close], [Oh_Tues#open], [Oh_Tues#close], [Oh_Wed#open], [Oh_Wed#close], [Oh_Thur#open], [Oh_Thur#close], [Oh_Fri#open], [Oh_Fri#close], [Oh_Sat#open], [Oh_Sat#close], [Oh_Sun#open], [Oh_Sun#close], DW_Loaded_At)
+        SELECT src.Tenant_ID, src.Practice_ID, src.Practice_Name, src.Email_Address, src.Phone_Number, src.Address_Line_1, src.Address_Line_2, src.Postcode, src.Town, src.Website, src.Logo_Url, src.Slug, src.Time_Zone, src.Patient_Email_Address, src.Custom_Patient_Field_Label_1, src.Custom_Patient_Field_Label_2, src.Medical_History_Expiry_Days, src.NHS, src.[Oh_Mon#open], src.[Oh_Mon#close], src.[Oh_Tues#open], src.[Oh_Tues#close], src.[Oh_Wed#open], src.[Oh_Wed#close], src.[Oh_Thur#open], src.[Oh_Thur#close], src.[Oh_Fri#open], src.[Oh_Fri#close], src.[Oh_Sat#open], src.[Oh_Sat#close], src.[Oh_Sun#open], src.[Oh_Sun#close], SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Practice tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Practice_ID = src.Practice_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -112,7 +116,9 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

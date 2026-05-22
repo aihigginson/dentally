@@ -132,6 +132,26 @@ END CATCH;
 GO
 
 BEGIN TRY
+    IF OBJECT_ID('[Stage].[Cancellation_Reasons]', 'V') IS NOT NULL DROP VIEW [Stage].[Cancellation_Reasons];
+    EXEC('CREATE VIEW [Stage].[Cancellation_Reasons] AS SELECT * FROM LH_Dentally.dbo.stage_cancellation_reasons');
+    PRINT 'Created Stage.Cancellation_Reasons';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Cancellation_Reasons skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Waiting_Lists]', 'V') IS NOT NULL DROP VIEW [Stage].[Waiting_Lists];
+    EXEC('CREATE VIEW [Stage].[Waiting_Lists] AS SELECT * FROM LH_Dentally.dbo.stage_waiting_lists');
+    PRINT 'Created Stage.Waiting_Lists';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Waiting_Lists skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
     IF OBJECT_ID('[Stage].[Sundries]', 'V') IS NOT NULL DROP VIEW [Stage].[Sundries];
     EXEC('CREATE VIEW [Stage].[Sundries] AS SELECT * FROM LH_Dentally.dbo.stage_sundries');
     PRINT 'Created Stage.Sundries';
@@ -218,5 +238,25 @@ BEGIN TRY
 END TRY
 BEGIN CATCH
     PRINT 'WARN: Stage.Treatment_Appointments skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Patient_Referrals]', 'V') IS NOT NULL DROP VIEW [Stage].[Patient_Referrals];
+    EXEC('CREATE VIEW [Stage].[Patient_Referrals] AS SELECT * FROM LH_Dentally.dbo.stage_patient_referrals');
+    PRINT 'Created Stage.Patient_Referrals';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Patient_Referrals skipped — run Stage_Ingest first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Rooms]', 'V') IS NOT NULL DROP VIEW [Stage].[Rooms];
+    EXEC('CREATE VIEW [Stage].[Rooms] AS SELECT * FROM LH_Dentally.dbo.stage_rooms');
+    PRINT 'Created Stage.Rooms';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Rooms skipped -- run Stage_Ingest first';
 END CATCH;
 GO

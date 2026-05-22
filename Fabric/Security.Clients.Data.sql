@@ -11,6 +11,15 @@ DELETE FROM Security.Clients;
 GO
 
 INSERT INTO Security.Clients (Client_ID, Client_Name)
-VALUES (1, 'Smile Group (Dev)'),
-       (2, 'Bright Dental (Dev)');
+VALUES
+-- API tenants
+  (1,  'Smile Group (Dev)'),
+  (2,  'Bright Dental (Dev)'),
+  (3,  'ClearSmile Manchester (Dev)'),
+  (4,  'ClearSmile Birmingham (Dev)'),
+-- Seeded tenants
+  (11, 'Valley Dental Group'),
+  (12, 'Elara Dental'),
+  (13, 'NorthCity Dental'),
+  (14, 'Eastside Dental');
 GO

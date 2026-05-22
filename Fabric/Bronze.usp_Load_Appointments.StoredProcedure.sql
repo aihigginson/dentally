@@ -1,4 +1,4 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Appointments
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
@@ -6,6 +6,9 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     13/05/2026  AIH Add Booked_Via_API; strip to confirmed Stage columns pending mock API update
 --    *03     14/05/2026  AIH Add all timestamp/status fields now present in Stage after mock API redeploy
+--    *04     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *05     16/05/2026  AIH Add Site_ID (missing from Stage read despite being in Bronze table)
+--    *06     19/05/2026  AIH Remove Site_ID, Created_At, Updated_At Stage reads (not in Dentally API)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -13,11 +16,11 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Appointments]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -54,8 +57,6 @@ BEGIN
             , LEFT(completed_at,                           255)   AS Completed_At
             , LEFT(cancelled_at,                           255)   AS Cancelled_At
             , LEFT(did_not_attend_at,                      255)   AS Did_Not_Attend_At
-            , LEFT(created_at,                             255)   AS Created_At
-            , LEFT(updated_at,                             255)   AS Updated_At
         INTO #src
         FROM Stage.Appointments
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -85,8 +86,6 @@ BEGIN
             , tgt.Completed_At                       = src.Completed_At
             , tgt.Cancelled_At                       = src.Cancelled_At
             , tgt.Did_Not_Attend_At                  = src.Did_Not_Attend_At
-            , tgt.Created_At                         = src.Created_At
-            , tgt.Updated_At                         = src.Updated_At
             , tgt.DW_Loaded_At                       = SYSUTCDATETIME()
         FROM Bronze.Appointments AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
@@ -100,7 +99,7 @@ BEGIN
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
             Completed_At, Cancelled_At, Did_Not_Attend_At,
-            Created_At, Updated_At, DW_Loaded_At
+            DW_Loaded_At
         )
         SELECT
             src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
@@ -110,7 +109,7 @@ BEGIN
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
             src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
-            src.Created_At, src.Updated_At, SYSUTCDATETIME()
+            SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Appointments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -126,7 +125,9 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

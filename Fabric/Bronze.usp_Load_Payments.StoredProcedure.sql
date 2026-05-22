@@ -1,9 +1,11 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Payments
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Fix Reference and Transaction_Number to VARCHAR (API returns string, not number)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Payments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Payments]
@@ -11,11 +13,11 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Payments]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -38,11 +40,11 @@ BEGIN
             , TRY_CAST(amount_unexplained AS DECIMAL(18,4)) AS Amount_Unexplained
             , LEFT(dated_on,                255)            AS Dated_On
             , LEFT(method,                  255)            AS Method
-            , TRY_CAST(reference          AS DECIMAL(18,4)) AS Reference
+            , LEFT(reference, 255) AS Reference
             , LEFT(status,                  255)            AS Status
             , TRY_CAST(deleted            AS DECIMAL(18,4)) AS Deleted
             , TRY_CAST(fully_explained    AS DECIMAL(18,4)) AS Fully_Explained
-            , TRY_CAST(transaction_number AS DECIMAL(18,4)) AS Transaction_Number
+            , LEFT(transaction_number, 255) AS Transaction_Number
         INTO #src
         FROM Stage.Payments
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -85,7 +87,9 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

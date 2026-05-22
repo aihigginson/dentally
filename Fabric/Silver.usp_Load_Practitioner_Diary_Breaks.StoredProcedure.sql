@@ -1,9 +1,11 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Practitioner_Diary_Breaks] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Practitioner_Diary_Breaks
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Read Bronze column Name (not Break_Name) — Bronze table column is Name
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practitioner_Diary_Breaks @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Practitioner_Diary_Breaks]    Script Date: 20/04/2026 10:15:06 ******/
@@ -45,7 +47,7 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(Practitioner_Diary_ID, 255)  AS [Practitioner_Diary_ID],
-                LEFT(Break_Name,            255)  AS [Break_Name],
+                LEFT(Name,                  255)  AS [Break_Name],
                 LEFT(Start_Time,            255)  AS [Start_Time],
                 LEFT(End_Time,              255)  AS [End_Time]
             FROM Bronze.Practitioner_Diary_Breaks

@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Practice_Sites] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Practice_Sites
 --  Author           :  AIH
@@ -6,6 +7,8 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, Mon/Tue/etc. -> Monday/Tuesday/etc., lowercase Silver.Sites cols)
+--    *05     22/05/2026  AIH Add Practice_Site_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
@@ -38,28 +41,28 @@ BEGIN
 
         SELECT
             s.Tenant_ID                                             AS Tenant_ID,
-            s.Site_Id                                               AS Site_ID,
+            s.Site_ID                                               AS Site_ID,
             NULLIF(TRIM(s.Name),'')                                 AS Site_Name,
-            CAST(ISNULL(s.active,0) AS BIT)                         AS Site_Active,
-            NULLIF(TRIM(s.address_line_1),'')                       AS Site_Address_Line_1,
-            NULLIF(TRIM(s.address_line_2),'')                       AS Site_Address_Line_2,
-            NULLIF(TRIM(s.town),'')                                 AS Site_Town,
-            NULLIF(TRIM(s.postcode),'')                             AS Site_Postcode,
-            NULLIF(TRIM(s.phone_number),'')                         AS Site_Phone,
-            NULLIF(TRIM(s.website),'')                              AS Site_Website,
-            NULLIF(TRIM(s.logo_url),'')                             AS Site_Logo_URL,
-            TRY_CAST(s.default_payment_plan_id AS INT)              AS Site_Default_Payment_Plan_ID,
-            TRY_CAST(s.monday_open AS TIME(0))                      AS Mon_Open,
-            TRY_CAST(s.monday_close AS TIME(0))                     AS Mon_Close,
-            TRY_CAST(s.tuesday_open AS TIME(0))                     AS Tue_Open,
-            TRY_CAST(s.tuesday_close AS TIME(0))                    AS Tue_Close,
-            TRY_CAST(s.wednesday_open AS TIME(0))                   AS Wed_Open,
-            TRY_CAST(s.wednesday_close AS TIME(0))                  AS Wed_Close,
-            TRY_CAST(s.thursday_open AS TIME(0))                    AS Thu_Open,
-            TRY_CAST(s.thursday_close AS TIME(0))                   AS Thu_Close,
-            TRY_CAST(s.friday_open AS TIME(0))                      AS Fri_Open,
-            TRY_CAST(s.friday_close AS TIME(0))                     AS Fri_Close,
-            NULLIF(TRIM(s.Practice_Id),'')                          AS Practice_ID,
+            CAST(ISNULL(s.Active,0) AS BIT)                         AS Site_Active,
+            NULLIF(TRIM(s.Address_Line_1),'')                       AS Site_Address_Line_1,
+            NULLIF(TRIM(s.Address_Line_2),'')                       AS Site_Address_Line_2,
+            NULLIF(TRIM(s.Town),'')                                 AS Site_Town,
+            NULLIF(TRIM(s.Postcode),'')                             AS Site_Postcode,
+            NULLIF(TRIM(s.Phone_Number),'')                         AS Site_Phone,
+            NULLIF(TRIM(s.Website),'')                              AS Site_Website,
+            NULLIF(TRIM(s.Logo_URL),'')                             AS Site_Logo_URL,
+            TRY_CAST(s.Default_Payment_Plan_ID AS INT)              AS Site_Default_Payment_Plan_ID,
+            TRY_CAST(s.Monday_Open AS TIME(0))                      AS Monday_Open,
+            TRY_CAST(s.Monday_Close AS TIME(0))                     AS Monday_Close,
+            TRY_CAST(s.Tuesday_Open AS TIME(0))                     AS Tuesday_Open,
+            TRY_CAST(s.Tuesday_Close AS TIME(0))                    AS Tuesday_Close,
+            TRY_CAST(s.Wednesday_Open AS TIME(0))                   AS Wednesday_Open,
+            TRY_CAST(s.Wednesday_Close AS TIME(0))                  AS Wednesday_Close,
+            TRY_CAST(s.Thursday_Open AS TIME(0))                    AS Thursday_Open,
+            TRY_CAST(s.Thursday_Close AS TIME(0))                   AS Thursday_Close,
+            TRY_CAST(s.Friday_Open AS TIME(0))                      AS Friday_Open,
+            TRY_CAST(s.Friday_Close AS TIME(0))                     AS Friday_Close,
+            NULLIF(TRIM(s.Practice_ID),'')                          AS Practice_ID,
             NULLIF(TRIM(p.Practice_Name),'')                        AS Practice_Name,
             NULLIF(TRIM(p.Address_Line_1),'')                       AS Practice_Address_Line_1,
             NULLIF(TRIM(p.Address_Line_2),'')                       AS Practice_Address_Line_2,
@@ -69,11 +72,12 @@ BEGIN
             NULLIF(TRIM(p.Email_Address),'')                        AS Practice_Email,
             NULLIF(TRIM(p.Website),'')                              AS Practice_Website,
             CAST(ISNULL(p.NHS,0) AS BIT)                            AS Practice_NHS,
-            NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone
+            NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone,
+            CAST(1 AS INT)                                          AS Practice_Site_Count
         INTO #src
         FROM Silver.Sites s
-        LEFT JOIN Silver.Practice p ON p.Practice_Id = s.Practice_Id AND p.Tenant_ID = s.Tenant_ID
-        WHERE s.Site_Id IS NOT NULL;
+        LEFT JOIN Silver.Practice p ON p.Practice_ID = s.Practice_ID AND p.Tenant_ID = s.Tenant_ID
+        WHERE s.Site_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -94,16 +98,16 @@ BEGIN
             Site_Website                = src.Site_Website,
             Site_Logo_URL               = src.Site_Logo_URL,
             Site_Default_Payment_Plan_ID= src.Site_Default_Payment_Plan_ID,
-            Mon_Open                    = src.Mon_Open,
-            Mon_Close                   = src.Mon_Close,
-            Tue_Open                    = src.Tue_Open,
-            Tue_Close                   = src.Tue_Close,
-            Wed_Open                    = src.Wed_Open,
-            Wed_Close                   = src.Wed_Close,
-            Thu_Open                    = src.Thu_Open,
-            Thu_Close                   = src.Thu_Close,
-            Fri_Open                    = src.Fri_Open,
-            Fri_Close                   = src.Fri_Close,
+            Monday_Open                 = src.Monday_Open,
+            Monday_Close                = src.Monday_Close,
+            Tuesday_Open                = src.Tuesday_Open,
+            Tuesday_Close               = src.Tuesday_Close,
+            Wednesday_Open              = src.Wednesday_Open,
+            Wednesday_Close             = src.Wednesday_Close,
+            Thursday_Open               = src.Thursday_Open,
+            Thursday_Close              = src.Thursday_Close,
+            Friday_Open                 = src.Friday_Open,
+            Friday_Close                = src.Friday_Close,
             Practice_ID                 = src.Practice_ID,
             Practice_Name               = src.Practice_Name,
             Practice_Address_Line_1     = src.Practice_Address_Line_1,
@@ -128,16 +132,16 @@ BEGIN
            ISNULL(CAST(tgt.[Site_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Site_Website] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Site_Logo_URL] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Mon_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Mon_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Tue_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Tue_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Wed_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Wed_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Thu_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Thu_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Fri_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Fri_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Monday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Monday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Tuesday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Tuesday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Wednesday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Wednesday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Thursday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Thursday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Friday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Friday_Close] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Practice_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Practice_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Practice_Address_Line_1] AS VARCHAR(500)), ''),
@@ -160,16 +164,16 @@ BEGIN
            ISNULL(CAST(src.[Site_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Site_Website] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Site_Logo_URL] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Mon_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Mon_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Tue_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Tue_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Wed_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Wed_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Thu_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Thu_Close] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Fri_Open] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Fri_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Monday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Monday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Tuesday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Tuesday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Wednesday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Wednesday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Thursday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Thursday_Close] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Friday_Open] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Friday_Close] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Practice_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Practice_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Practice_Address_Line_1] AS VARCHAR(500)), ''),
@@ -191,22 +195,22 @@ BEGIN
             Tenant_ID,
             Site_ID, Site_Name, Site_Active, Site_Address_Line_1, Site_Address_Line_2,
             Site_Town, Site_Postcode, Site_Phone, Site_Website, Site_Logo_URL, Site_Default_Payment_Plan_ID,
-            Mon_Open, Mon_Close, Tue_Open, Tue_Close, Wed_Open, Wed_Close,
-            Thu_Open, Thu_Close, Fri_Open, Fri_Close,
+            Monday_Open, Monday_Close, Tuesday_Open, Tuesday_Close, Wednesday_Open, Wednesday_Close,
+            Thursday_Open, Thursday_Close, Friday_Open, Friday_Close,
             Practice_ID, Practice_Name, Practice_Address_Line_1, Practice_Address_Line_2,
             Practice_Town, Practice_Postcode, Practice_Phone, Practice_Email,
-            Practice_Website, Practice_NHS, Practice_Time_Zone, DW_Created_At, DW_Updated_At
+            Practice_Website, Practice_NHS, Practice_Time_Zone, Practice_Site_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Practice_Site_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Site_ID),
             src.Tenant_ID,
             src.Site_ID, src.Site_Name, src.Site_Active, src.Site_Address_Line_1, src.Site_Address_Line_2,
             src.Site_Town, src.Site_Postcode, src.Site_Phone, src.Site_Website, src.Site_Logo_URL, src.Site_Default_Payment_Plan_ID,
-            src.Mon_Open, src.Mon_Close, src.Tue_Open, src.Tue_Close, src.Wed_Open, src.Wed_Close,
-            src.Thu_Open, src.Thu_Close, src.Fri_Open, src.Fri_Close,
+            src.Monday_Open, src.Monday_Close, src.Tuesday_Open, src.Tuesday_Close, src.Wednesday_Open, src.Wednesday_Close,
+            src.Thursday_Open, src.Thursday_Close, src.Friday_Open, src.Friday_Close,
             src.Practice_ID, src.Practice_Name, src.Practice_Address_Line_1, src.Practice_Address_Line_2,
             src.Practice_Town, src.Practice_Postcode, src.Practice_Phone, src.Practice_Email,
-            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, src.Practice_Site_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites tgt WHERE tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -214,8 +218,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, Practice_Site_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1);
         --*********************************
         --**** Procedure logic ends    ****

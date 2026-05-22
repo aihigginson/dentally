@@ -1,9 +1,11 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Treatment_Plans
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     19/05/2026  AIH Load missing columns: Start_Date, End_Date, Completed, Completed_At, Nickname, Last_Completed_At
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Treatment_Plans]
@@ -11,11 +13,11 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Treatment_Plans]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -35,6 +37,14 @@ BEGIN
             , TRY_CAST(private_treatment_value  AS DECIMAL(18,4)) AS Private_Treatment_Value
             , LEFT(created_at,                    255)            AS Created_At
             , LEFT(updated_at,                    255)            AS Updated_At
+            , LEFT(start_date,                    255)            AS Start_Date
+            , LEFT(end_date,                      255)            AS End_Date
+            , CASE WHEN completed IS NULL THEN NULL
+                   WHEN LOWER(CAST(completed AS VARCHAR(10))) IN ('true','1') THEN 1.0000
+                   ELSE 0.0000 END                                AS Completed
+            , LEFT(completed_at,                  255)            AS Completed_At
+            , LEFT(nickname,                      255)            AS Nickname
+            , LEFT(last_completed_at,             255)            AS Last_Completed_At
         INTO #src
         FROM Stage.Treatment_Plans
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -47,13 +57,28 @@ BEGIN
             , tgt.Private_Treatment_Value   = src.Private_Treatment_Value
             , tgt.Created_At                = src.Created_At
             , tgt.Updated_At                = src.Updated_At
+            , tgt.Start_Date                = src.Start_Date
+            , tgt.End_Date                  = src.End_Date
+            , tgt.Completed                 = src.Completed
+            , tgt.Completed_At              = src.Completed_At
+            , tgt.Nickname                  = src.Nickname
+            , tgt.Last_Completed_At         = src.Last_Completed_At
             , tgt.DW_Loaded_At              = SYSUTCDATETIME()
         FROM Bronze.Treatment_Plans AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Treatment_Plans (Tenant_ID, ID, Patient_ID, Practitioner_ID, NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Patient_ID, src.Practitioner_ID, src.NHS_UDA_Value, src.NHS_Completed_UDA_Value, src.Private_Treatment_Value, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Treatment_Plans (
+            Tenant_ID, ID, Patient_ID, Practitioner_ID, NHS_UDA_Value, NHS_Completed_UDA_Value,
+            Private_Treatment_Value, Created_At, Updated_At,
+            Start_Date, End_Date, Completed, Completed_At, Nickname, Last_Completed_At,
+            DW_Loaded_At
+        )
+        SELECT
+            src.Tenant_ID, src.ID, src.Patient_ID, src.Practitioner_ID, src.NHS_UDA_Value, src.NHS_Completed_UDA_Value,
+            src.Private_Treatment_Value, src.Created_At, src.Updated_At,
+            src.Start_Date, src.End_Date, src.Completed, src.Completed_At, src.Nickname, src.Last_Completed_At,
+            SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Treatment_Plans tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -69,7 +94,9 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

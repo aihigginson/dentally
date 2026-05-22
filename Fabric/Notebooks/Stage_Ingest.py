@@ -161,6 +161,8 @@ write_stage(fetch_all("/v1/payment_plans"),                 "payment_plans")
 write_stage(fetch_all("/v1/treatments"),                    "treatments")
 write_stage(fetch_all("/v1/treatment_categories"),          "treatment_categories")
 write_stage(fetch_all("/v1/acquisition_sources"),           "acquisition_sources")
+write_stage(fetch_all("/v1/cancellation_reasons"),          "cancellation_reasons")
+write_stage(fetch_all("/v1/waiting_lists"),                  "waiting_lists")
 write_stage(fetch_all("/v1/sundries"),                      "sundries")
 write_stage(fetch_all("/v1/contracts"),                     "contracts")
 write_stage(fetch_all("/v1/fees"),                          "fees")
@@ -187,6 +189,7 @@ write_stage(fetch_all("/v1/patient_stats",              incremental_params), "pa
 write_stage(fetch_all("/v1/payment_allocations",        incremental_params), "payment_allocations")
 write_stage(fetch_all("/v1/payment_explanations",       incremental_params), "payment_explanations")
 write_stage(fetch_all("/v1/treatment_appointments",     incremental_params), "treatment_appointments")
+write_stage(fetch_all("/v1/patient_referrals",          incremental_params), "patient_referrals")
 
 
 # -----------------------------------------------------------------------------

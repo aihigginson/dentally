@@ -22,6 +22,7 @@ CREATE TABLE [Gold].[Dim_Treatments](
 	[Treatment_Category_Name] [VARCHAR](255) NULL,
 	[Created_Date] [datetime2](3) NULL,
 	[Updated_Date] [datetime2](3) NULL,
+	[Treatment_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

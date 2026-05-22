@@ -6,7 +6,7 @@
 
 $server  = "HST\HS2"
 $db      = "Dentally"
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
 function Run-SQL($sql, $label) {
     $tmp = [System.IO.Path]::GetTempFileName() + ".sql"
@@ -18,7 +18,7 @@ function Run-SQL($sql, $label) {
 }
 
 function Deploy-Proc($file) {
-    $path = Join-Path $scriptDir $file
+    $path = Join-Path $FabricDir $file
     $sql  = (Get-Content $path -Raw) -replace '\bCREATE PROCEDURE\b', 'CREATE OR ALTER PROCEDURE'
     Run-SQL $sql $file
 }

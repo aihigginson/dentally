@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Treatments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Treatments
 --  Author           :  AIH
@@ -6,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *04     22/05/2026  AIH Add Treatment_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -51,7 +53,8 @@ BEGIN
             CAST(t.Treatment_Category_ID AS INT)            AS Treatment_Category_ID,
             NULLIF(TRIM(tc.Name),'')                        AS Treatment_Category_Name,
             TRY_CAST(NULLIF(TRIM(t.Created_At),'') AS datetime2(3)) AS Created_Date,
-            TRY_CAST(NULLIF(TRIM(t.Updated_At),'') AS datetime2(3)) AS Updated_Date
+            TRY_CAST(NULLIF(TRIM(t.Updated_At),'') AS datetime2(3)) AS Updated_Date,
+            CAST(1 AS INT)                                            AS Treatment_Count
         INTO #src
         FROM Silver.Treatments t
         LEFT JOIN Silver.Treatment_Categories tc ON tc.Id = t.Treatment_Category_ID AND tc.Tenant_ID = t.Tenant_ID
@@ -119,7 +122,7 @@ BEGIN
             Treatment_ID, Treatment_Code, Nomenclature, Patient_Nomenclature, Description,
             Patient_Description, Notes, Region, UDA_Band, NHS_Treatment_Cat,
             Treatment_Category_ID, Treatment_Category_Name, Created_Date, Updated_Date,
-            DW_Created_At, DW_Updated_At
+            Treatment_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Treatment_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Treatment_ID),
@@ -127,7 +130,7 @@ BEGIN
             src.Treatment_ID, src.Treatment_Code, src.Nomenclature, src.Patient_Nomenclature, src.Description,
             src.Patient_Description, src.Notes, src.Region, src.UDA_Band, src.NHS_Treatment_Cat,
             src.Treatment_Category_ID, src.Treatment_Category_Name, src.Created_Date, src.Updated_Date,
-            SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Treatment_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments tgt WHERE tgt.Treatment_ID = src.Treatment_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -135,8 +138,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Treatments (pk_Treatment, Tenant_ID, Treatment_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Treatments (pk_Treatment, Tenant_ID, Treatment_ID, Treatment_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments WHERE pk_Treatment = -1);
         --*********************************
         --**** Procedure logic ends    ****

@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Payment_Plans] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Payment_Plans
 --  Author           :  AIH
@@ -7,6 +8,8 @@
 --    *02     30/04/2026  AIH Add Tenant_ID to INSERT (NOT NULL column omitted); fix NOT EXISTS to include Tenant_ID
 --    *03     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *06     22/05/2026  AIH Add Payment_Plan_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -39,22 +42,23 @@ BEGIN
 
         SELECT
             Tenant_ID AS Tenant_ID,
-            CAST(Payment_Plan_Id AS INT)                                    AS Payment_Plan_ID,
+            CAST(Payment_Plan_ID AS INT)                                    AS Payment_Plan_ID,
             NULLIF(TRIM(Payment_Plan_Name),'')                              AS Payment_Plan_Name,
             NULLIF(TRIM(Payment_Plan_Patient_Friendly_Name),'')             AS Patient_Friendly_Name,
             CAST(ISNULL(Payment_Plan_Active,0) AS BIT)                      AS Active,
             NULLIF(TRIM(Payment_Plan_Colour),'')                            AS Colour,
-            NULLIF(TRIM(Payment_Plan_Site_Id),'')                           AS Site_ID,
+            NULLIF(TRIM(Payment_Plan_Site_ID),'')                           AS Site_ID,
             CAST(Dentist_Recall_Interval AS INT)                            AS Dentist_Recall_Interval_Months,
             CAST(Hygienist_Recall_Interval AS INT)                          AS Hygienist_Recall_Interval_Months,
             CAST(Emergency_Duration AS INT)                                 AS Emergency_Duration_Mins,
             CAST(Exam_Duration AS INT)                                      AS Exam_Duration_Mins,
             CAST(Exam_Scale_And_Polish_Duration AS INT)                     AS Exam_Scale_Polish_Duration_Mins,
             CAST(Scale_And_Polish_Duration AS INT)                          AS Scale_Polish_Duration_Mins,
-            TRY_CAST(Payment_Plan_Created_At AS datetime2(3))               AS Created_Date
+            TRY_CAST(Payment_Plan_Created_At AS datetime2(3))               AS Created_Date,
+            CAST(1 AS INT)                                                           AS Payment_Plan_Count
         INTO #src
         FROM Silver.Payment_Plans
-        WHERE Payment_Plan_Id IS NOT NULL;
+        WHERE Payment_Plan_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -112,14 +116,14 @@ BEGIN
             Tenant_ID, Payment_Plan_ID, Payment_Plan_Name, Patient_Friendly_Name, Active, Colour, Site_ID,
             Dentist_Recall_Interval_Months, Hygienist_Recall_Interval_Months,
             Emergency_Duration_Mins, Exam_Duration_Mins, Exam_Scale_Polish_Duration_Mins,
-            Scale_Polish_Duration_Mins, Created_Date, DW_Created_At, DW_Updated_At
+            Scale_Polish_Duration_Mins, Created_Date, Payment_Plan_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Payment_Plan_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Payment_Plan_ID),
             src.Tenant_ID, src.Payment_Plan_ID, src.Payment_Plan_Name, src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
             src.Dentist_Recall_Interval_Months, src.Hygienist_Recall_Interval_Months,
             src.Emergency_Duration_Mins, src.Exam_Duration_Mins, src.Exam_Scale_Polish_Duration_Mins,
-            src.Scale_Polish_Duration_Mins, src.Created_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Scale_Polish_Duration_Mins, src.Created_Date, src.Payment_Plan_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Payment_Plans tgt WHERE tgt.Payment_Plan_ID = src.Payment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -127,8 +131,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Payment_Plans (pk_Payment_Plan, Tenant_ID, Payment_Plan_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Payment_Plans (pk_Payment_Plan, Tenant_ID, Payment_Plan_ID, Payment_Plan_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Payment_Plans WHERE pk_Payment_Plan = -1);
         --*********************************
         --**** Procedure logic ends    ****

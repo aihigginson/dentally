@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Patients] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Patients
 --  Author           :  AIH
@@ -6,6 +7,10 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *04     19/05/2026  AIH Compute Next_Appointment_Date from Silver.Appointments (Cancelled_At IS NULL, future only)
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--                             replaces Patient_Stats API value which cannot guarantee cancelled appts are excluded
+--    *06     22/05/2026  AIH Add Patient_Count (1 for real rows, 0 for sentinel) for use in SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -38,8 +43,8 @@ BEGIN
 
         SELECT
             p.Tenant_ID AS Tenant_ID,
-            CAST(p.Patient_Id AS INT)                                                               AS Patient_ID,
-            CAST(p.Account_Id AS INT)                                                               AS Account_ID,
+            CAST(p.Patient_ID AS INT)                                                               AS Patient_ID,
+            CAST(p.Account_ID AS INT)                                                               AS Account_ID,
             NULLIF(TRIM(p.Title), '')                                                               AS Title,
             NULLIF(TRIM(p.First_Name), '')                                                          AS First_Name,
             NULLIF(TRIM(p.Middle_Name), '')                                                         AS Middle_Name,
@@ -73,12 +78,12 @@ BEGIN
             CAST(ISNULL(p.Active, 0) AS BIT)                                                        AS Active,
             CAST(ISNULL(p.Medical_Alert, 0) AS BIT)                                                 AS Medical_Alert,
             NULLIF(TRIM(p.Medical_Alert_Text), '')                                                  AS Medical_Alert_Text,
-            CAST(p.Payment_Plan_Id AS INT)                                                          AS Payment_Plan_ID,
-            NULLIF(TRIM(p.Site_Id), '')                                                             AS Site_ID,
-            NULLIF(TRIM(p.Family_Id), '')                                                           AS Family_ID,
-            NULLIF(TRIM(p.Acquisition_Source_Id), '')                                               AS Acquisition_Source_ID,
-            CAST(p.Dentist_Practitioner_Id AS INT)                                                  AS Dentist_Practitioner_ID,
-            CAST(p.Hygienist_Practitioner_Id AS INT)                                                AS Hygienist_Practitioner_ID,
+            CAST(p.Payment_Plan_ID AS INT)                                                          AS Payment_Plan_ID,
+            NULLIF(TRIM(p.Site_ID), '')                                                             AS Site_ID,
+            NULLIF(TRIM(p.Family_ID), '')                                                           AS Family_ID,
+            NULLIF(TRIM(p.Acquisition_Source_ID), '')                                               AS Acquisition_Source_ID,
+            CAST(p.Dentist_Practitioner_ID AS INT)                                                  AS Dentist_Practitioner_ID,
+            CAST(p.Hygienist_Practitioner_ID AS INT)                                                AS Hygienist_Practitioner_ID,
             CAST(p.Dentist_Recall_Date AS DATE)                                                     AS Dentist_Recall_Date,
             CAST(p.Dentist_Recall_Interval AS INT)                                                  AS Dentist_Recall_Interval_Months,
             CAST(p.Hygienist_Recall_Date AS DATE)                                                   AS Hygienist_Recall_Date,
@@ -89,23 +94,33 @@ BEGIN
             NULLIF(TRIM(p.Custom_Field_2), '')                                                      AS Custom_Field_2,
             TRY_CAST(NULLIF(TRIM(ps.First_Appointment_Date), '') AS DATE)                           AS First_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date), '') AS DATE)                            AS Last_Appointment_Date,
-            TRY_CAST(NULLIF(TRIM(ps.Next_Appointment_Date), '') AS DATE)                            AS Next_Appointment_Date,
+            next_apt.Next_Appointment_Date                                                          AS Next_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.First_Exam_Date), '') AS DATE)                                  AS First_Exam_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Exam_Date), '') AS DATE)                                   AS Last_Exam_Date,
             TRY_CAST(NULLIF(TRIM(ps.Next_Exam_Date), '') AS DATE)                                   AS Next_Exam_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Scale_And_Polish_Date), '') AS DATE)                       AS Last_Scale_Polish_Date,
             TRY_CAST(NULLIF(TRIM(ps.Next_Scale_And_Polish_Date), '') AS DATE)                       AS Next_Scale_Polish_Date,
-            TRY_CAST(NULLIF(TRIM(ps.Last_Fta_Appointment_Date), '') AS DATE)                        AS Last_FTA_Date,
+            TRY_CAST(NULLIF(TRIM(ps.Last_FTA_Appointment_Date), '') AS DATE)                        AS Last_FTA_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Cancelled_Appointment_Date), '') AS DATE)                  AS Last_Cancelled_Appointment_Date,
             CAST(ps.Total_Paid AS DECIMAL(12,2))                                                    AS Total_Paid,
             CAST(ps.Total_Invoiced AS DECIMAL(12,2))                                                AS Total_Invoiced,
-            TRY_CAST(ps.Nhs_Exemption_Code AS INT)                                                  AS NHS_Exemption_Code,
+            TRY_CAST(ps.NHS_Exemption_Code AS INT)                                                  AS NHS_Exemption_Code,
             TRY_CAST(p.Created_At AS DATE)                                                          AS Patient_Created_Date,
-            TRY_CAST(p.Updated_At AS DATE)                                                          AS Patient_Updated_Date
+            TRY_CAST(p.Updated_At AS DATE)                                                          AS Patient_Updated_Date,
+            CAST(1 AS INT)                                                                          AS Patient_Count
         INTO #src
         FROM Silver.Patients p
-        LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_Id = p.Patient_Id AND ps.Tenant_ID = p.Tenant_ID
-        WHERE p.Patient_Id IS NOT NULL;
+        LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_ID = p.Patient_ID AND ps.Tenant_ID = p.Tenant_ID
+        LEFT JOIN (
+            SELECT   a.Patient_ID,
+                     a.Tenant_ID,
+                     MIN(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''), 10) AS DATE)) AS Next_Appointment_Date
+            FROM     Silver.Appointments a
+            WHERE    a.Cancelled_At IS NULL
+            AND      TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''), 10) AS DATE) > CAST(SYSUTCDATETIME() AS DATE)
+            GROUP BY a.Patient_ID, a.Tenant_ID
+        ) next_apt ON next_apt.Patient_ID = p.Patient_ID AND next_apt.Tenant_ID = p.Tenant_ID
+        WHERE p.Patient_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -284,7 +299,7 @@ BEGIN
             Last_Scale_Polish_Date, Next_Scale_Polish_Date,
             Last_FTA_Date, Last_Cancelled_Appointment_Date,
             Total_Paid, Total_Invoiced, NHS_Exemption_Code,
-            Patient_Created_Date, Patient_Updated_Date, DW_Created_At, DW_Updated_At
+            Patient_Created_Date, Patient_Updated_Date, Patient_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
@@ -303,7 +318,7 @@ BEGIN
             src.Last_Scale_Polish_Date, src.Next_Scale_Polish_Date,
             src.Last_FTA_Date, src.Last_Cancelled_Appointment_Date,
             src.Total_Paid, src.Total_Invoiced, src.NHS_Exemption_Code,
-            src.Patient_Created_Date, src.Patient_Updated_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Patient_Created_Date, src.Patient_Updated_Date, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -311,8 +326,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, Patient_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients WHERE pk_Patient = -1);
         --*********************************
         --**** Procedure logic ends    ****

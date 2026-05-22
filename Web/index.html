@@ -193,10 +193,24 @@
 
         /* ── Embed slot ── */
         .embed-slot {
+            position: relative;
             background: var(--bg-subtle); border-radius: 4px;
             display: flex; align-items: center; justify-content: center;
             color: var(--text-3); font-size: 12px; letter-spacing: 0.04em;
             border: 1px dashed var(--border);
+        }
+        .pbi-loading {
+            position: absolute; inset: 0; z-index: 10; border-radius: 4px;
+            background: white; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 16px;
+            pointer-events: none; transition: opacity 0.25s;
+        }
+        .pbi-loading-brand { font-size: 22px; font-weight: 700; color: var(--navy); letter-spacing: 0.01em; }
+        .pbi-loading-brand span { color: var(--teal-bright); }
+        .pbi-loading-spinner {
+            width: 28px; height: 28px; border: 3px solid var(--border);
+            border-top-color: var(--navy); border-radius: 50%;
+            animation: spin 0.8s linear infinite;
         }
         .embed-full {
             flex: 1; min-height: 0;
@@ -323,10 +337,11 @@
 
 <!-- ════════════════ PRIMARY NAVIGATION ════════════════ -->
 <nav class="nav">
-    <div class="nav-tab active" data-section="treatment">Treatment</div>
-    <div class="nav-tab"        data-section="customer">Patient</div>
-    <div class="nav-tab"        data-section="scheduling">Schedule</div>
+    <div class="nav-tab active" data-section="home">Home</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
+    <div class="nav-tab"        data-section="patient">Patient</div>
+    <div class="nav-tab"        data-section="scheduling">Schedule</div>
+    <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
     <div class="nav-tab" data-section="targets" id="nav-targets" style="display:none">Targets</div>
     <button class="filter-toggle" id="filter-toggle">
@@ -334,10 +349,11 @@
         Filters
     </button>
     <div class="nav-report-controls" id="nav-report-controls">
-        <div class="report-subnav" id="subnav-treatment"></div>
-        <div class="report-subnav" id="subnav-customer"></div>
-        <div class="report-subnav" id="subnav-scheduling"></div>
+        <div class="report-subnav" id="subnav-home"></div>
         <div class="report-subnav" id="subnav-revenue"></div>
+        <div class="report-subnav" id="subnav-patient"></div>
+        <div class="report-subnav" id="subnav-scheduling"></div>
+        <div class="report-subnav" id="subnav-clinical"></div>
         <div class="report-subnav" id="subnav-nhs"></div>
         <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -385,28 +401,32 @@
 <main class="main">
 
     <!-- ── TREATMENT ── -->
-    <section class="section active" id="section-treatment">
-        <div class="embed-slot embed-full" id="embed-treatment">Power BI report will embed here</div>
+    <section class="section active" id="section-home">
+        <div class="embed-slot embed-full" id="embed-home">Please Wait...</div>
+    </section>
+
+    <section class="section" id="section-clinical">
+        <div class="embed-slot embed-full" id="embed-clinical">Please Wait...</div>
     </section>
 
     <!-- ── PATIENT ── -->
-    <section class="section" id="section-customer">
-        <div class="embed-slot embed-full" id="embed-customer">Power BI report will embed here</div>
+    <section class="section" id="section-patient">
+        <div class="embed-slot embed-full" id="embed-patient">Please Wait...</div>
     </section>
 
     <!-- ── SCHEDULE ── -->
     <section class="section" id="section-scheduling">
-        <div class="embed-slot embed-full" id="embed-scheduling">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-scheduling">Please Wait...</div>
     </section>
 
     <!-- ── REVENUE ── -->
     <section class="section" id="section-revenue">
-        <div class="embed-slot embed-full" id="embed-revenue">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-revenue">Please Wait...</div>
     </section>
 
     <!-- ── NHS ── -->
     <section class="section" id="section-nhs">
-        <div class="embed-slot embed-full" id="embed-nhs">Power BI report will embed here</div>
+        <div class="embed-slot embed-full" id="embed-nhs">Please Wait...</div>
     </section>
 
     <!-- ── TARGETS ── -->
@@ -561,7 +581,7 @@
             filterToggleBtn.classList.add('active');
         }
         loadFilters(false);
-        loadEmbedsInSection('treatment');
+        loadEmbedsInSection('home');
     }
 
     async function startApp() {
@@ -580,10 +600,11 @@
 
     // ── Report map ───────────────────────────────────────────────────────────
     const SECTION_REPORT = {
-        'treatment': 'treatment',
-        'customer':  'patients',
-        'scheduling':'scheduling',
+        'home':      'home',
         'revenue':   'revenue',
+        'patient':   'patient',
+        'scheduling':'scheduling',
+        'clinical':  'clinical',
         'nhs':       'nhs',
     };
 
@@ -615,7 +636,7 @@
     }
 
     // ── State ────────────────────────────────────────────────────────────────
-    let activeSection = 'treatment';
+    let activeSection = 'home';
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -698,8 +719,8 @@
     let _targetsOriginal = {};
 
     const SECTION_LABELS = {
-        revenue: 'Revenue', patients: 'Patient', treatment: 'Treatment',
-        scheduling: 'Scheduling', nhs: 'NHS',
+        home: 'Home', revenue: 'Revenue', patient: 'Patient',
+        scheduling: 'Scheduling', clinical: 'Clinical', nhs: 'NHS',
     };
     const FORMAT_HINTS = {
         currency: '£  —  2 decimal places',
@@ -908,10 +929,21 @@
                 window.powerbi.reset(slot);
                 const r = window.powerbi.embed(slot, cfg);
                 embeddedReports[sectionKey] = r;
+                attachEmbedOverlay(slot, r);
                 r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} });
             });
         }, 300);
     });
+
+    function attachEmbedOverlay(slot, report) {
+        const ov = document.createElement('div');
+        ov.className = 'pbi-loading';
+        ov.innerHTML = '<div class="pbi-loading-brand">Analytic<span>ally</span></div><div class="pbi-loading-spinner"></div>';
+        slot.appendChild(ov);
+        function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
+        report.on('rendered', remove);
+        report.on('error', remove);
+    }
 
     async function loadEmbedsInSection(sectionKey) {
         const reportName = SECTION_REPORT[sectionKey];
@@ -934,6 +966,7 @@
             window.powerbi.reset(slot);
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
+            attachEmbedOverlay(slot, r);
             r.on('loaded', async () => {
                 try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {}
             });

@@ -10,7 +10,7 @@ CREATE TABLE [Bronze].[Practitioners](
 	[Practitioner_Active] [decimal](18, 4) NULL,
 	[Practitioner_Colour] [VARCHAR](255) NULL,
 	[Practitioner_Default_Contract_ID] [VARCHAR](255) NULL,
-	[Practitioner_Gdc_Number] [VARCHAR](255) NULL,
+	[Practitioner_GDC_Number] [VARCHAR](255) NULL,
 	[Practitioner_NHS_Number] [VARCHAR](255) NULL,
 	[Practitioner_Site_ID] [VARCHAR](255) NULL,
 	[User_ID] [int] NULL,
@@ -26,7 +26,7 @@ CREATE TABLE [Bronze].[Practitioners](
 	[User_Role] [VARCHAR](255) NULL,
 	[User_Title] [VARCHAR](255) NULL,
 	[User_Updated_At] [VARCHAR](255) NULL,
-	[Contract_Targets_String] [VARCHAR](255) NULL,
+	[Contract_Targets_String] [VARCHAR](MAX) NULL,
 	[Tenant_ID] [int] NULL,
 	[DW_Loaded_At] [datetime2](3) NULL
 )

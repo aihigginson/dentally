@@ -1,9 +1,12 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Invoices] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Invoices
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     19/05/2026  AIH Read Sent_At from Bronze (now available)
+--    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Invoices @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Invoices]    Script Date: 20/04/2026 10:15:06 ******/
@@ -37,14 +40,14 @@ BEGIN
         SELECT
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-        ISNULL(CAST(staged.[Account_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Patient_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Site_Id] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[User_Id] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Account_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Patient_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[User_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Reference] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Amount] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Amount_Outstanding] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Nhs_Amount] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[NHS_Amount] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Paid] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Dated_On] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Due_On] AS VARCHAR(500)), ''),
@@ -59,17 +62,17 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 ID  AS [Id],
-                Account_ID  AS [Account_Id],
-                Patient_ID  AS [Patient_Id],
-                LEFT(Site_ID, 50)  AS [Site_Id],
+                Account_ID  AS [Account_ID],
+                Patient_ID  AS [Patient_ID],
+                LEFT(Site_ID, 50)  AS [Site_ID],
                 -- Bronze User_ID is int; Silver is VARCHAR(50)
         CASE WHEN User_ID IS NULL THEN NULL
              ELSE LEFT(CAST(User_ID AS VARCHAR(50)), 50)
-        END  AS [User_Id],
+        END  AS [User_ID],
                 LEFT(Reference, 50)  AS [Reference],
                 Amount  AS [Amount],
                 Amount_Outstanding  AS [Amount_Outstanding],
-                TRY_CAST(NHS_Amount AS decimal(18,4))  AS [Nhs_Amount],
+                TRY_CAST(NHS_Amount AS decimal(18,4))  AS [NHS_Amount],
                 -- Derive paid flag: paid if outstanding balance = 0 and amount > 0
         CASE WHEN Amount_Outstanding = 0 AND Amount > 0
              THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Paid],
@@ -78,23 +81,22 @@ BEGIN
                 TRY_CAST(Paid_On  AS date)  AS [Paid_On],
                 Payment_Terms  AS [Payment_Terms],
                 Footnote  AS [Footnote],
-                CAST(NULL AS datetime2(3))  AS [Sent_At],
-                -- Bronze has no Sent_At
-        NULL  AS [Status]
+                TRY_CAST(Sent_At AS datetime2(3))  AS [Sent_At],
+                NULL  AS [Status]
                 -- Bronze has no Status
             FROM Bronze.Invoices
         ) AS staged;
 
         UPDATE tgt
         SET
-            [Account_Id] = src.[Account_Id],
-            [Patient_Id] = src.[Patient_Id],
-            [Site_Id] = src.[Site_Id],
-            [User_Id] = src.[User_Id],
+            [Account_ID] = src.[Account_ID],
+            [Patient_ID] = src.[Patient_ID],
+            [Site_ID] = src.[Site_ID],
+            [User_ID] = src.[User_ID],
             [Reference] = src.[Reference],
             [Amount] = src.[Amount],
             [Amount_Outstanding] = src.[Amount_Outstanding],
-            [Nhs_Amount] = src.[Nhs_Amount],
+            [NHS_Amount] = src.[NHS_Amount],
             [Paid] = src.[Paid],
             [Dated_On] = src.[Dated_On],
             [Due_On] = src.[Due_On],
@@ -110,8 +112,8 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Invoices] ([Tenant_ID], [Id], [Account_Id], [Patient_Id], [Site_Id], [User_Id], [Reference], [Amount], [Amount_Outstanding], [Nhs_Amount], [Paid], [Dated_On], [Due_On], [Paid_On], [Payment_Terms], [Footnote], [Sent_At], [Status], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Id], src.[Account_Id], src.[Patient_Id], src.[Site_Id], src.[User_Id], src.[Reference], src.[Amount], src.[Amount_Outstanding], src.[Nhs_Amount], src.[Paid], src.[Dated_On], src.[Due_On], src.[Paid_On], src.[Payment_Terms], src.[Footnote], src.[Sent_At], src.[Status], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
+        INSERT INTO [Silver].[Invoices] ([Tenant_ID], [Id], [Account_ID], [Patient_ID], [Site_ID], [User_ID], [Reference], [Amount], [Amount_Outstanding], [NHS_Amount], [Paid], [Dated_On], [Due_On], [Paid_On], [Payment_Terms], [Footnote], [Sent_At], [Status], [DW_Created_At], [DW_Updated_At], [_Row_Hash])
+        SELECT src.[Tenant_ID], src.[Id], src.[Account_ID], src.[Patient_ID], src.[Site_ID], src.[User_ID], src.[Reference], src.[Amount], src.[Amount_Outstanding], src.[NHS_Amount], src.[Paid], src.[Dated_On], src.[Due_On], src.[Paid_On], src.[Payment_Terms], src.[Footnote], src.[Sent_At], src.[Status], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Invoices] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]

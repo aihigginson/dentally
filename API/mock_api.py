@@ -18,6 +18,7 @@ Usage:
 Endpoints (all tenants):
     GET /v1/practice
     GET /v1/sites
+    GET /v1/rooms                      ?site_id=
     GET /v1/users
     GET /v1/practitioners              ?site_id=
     GET /v1/payment_plans
@@ -43,7 +44,7 @@ Endpoints (all tenants):
     GET /v1/payment_allocations        ?patient_id=  &invoice_item_id=  &updated_after=ISO8601  &page=  &per_page=
     GET /v1/treatment_plans            ?site_id=  &patient_id=  &completed=  &created_after=  &created_before=  &updated_after=ISO8601  &page=  &per_page=
     GET /v1/treatment_plan_items       ?treatment_plan_id=  &patient_id=  &site_id=  &updated_after=ISO8601  &page=  &per_page=
-    GET /v1/recalls                    ?site_id=  &patient_id=  &practitioner_id=  &overdue=true  &updated_after=ISO8601  &page=  &per_page=
+    GET /v1/recalls                    ?site_id=  &patient_id=  &overdue=true  &updated_after=ISO8601  &page=  &per_page=
     GET /v1/nhs_claims                 ?patient_id=  &contract_id=  &site_id=  &updated_after=ISO8601  &page=  &per_page=
     GET /v1/practitioner_diary_entries ?practitioner_id=  &site_id=  &date_after=  &date_before=  &updated_after=ISO8601  &page=  &per_page=
     GET /v1/practitioner_diary_breaks  ?practitioner_diary_id=  &page=  &per_page=
@@ -254,6 +255,15 @@ def fees():
     return jsonify({"fees": page_data, "meta": meta})
 
 
+@app.route("/v1/rooms")
+def rooms():
+    result = list(g.data.get("rooms", []))
+    if v := request.args.get("site_id"):
+        result = [r for r in result if r["site_id"] == v]
+    page_data, meta = paginate(result)
+    return jsonify({"rooms": page_data, "meta": meta})
+
+
 @app.route("/v1/practitioner_diary_breaks")
 def diary_breaks():
     result = list(g.data["diary_breaks"])
@@ -342,7 +352,9 @@ def appointments():
     if v := request.args.get("patient_id"):
         result = [a for a in result if str(a["patient_id"]) == v]
     if v := request.args.get("site_id"):
-        result = [a for a in result if a["site_id"] == v]
+        # Appointments don't carry site_id in real API; filter via patient lookup
+        patient_ids = {p["id"] for p in g.data["patients"] if p.get("site_id") == v}
+        result = [a for a in result if a["patient_id"] in patient_ids]
     if v := request.args.get("state"):
         result = [a for a in result if a["state"].lower() == v.lower()]
     if v := request.args.get("after"):
@@ -493,14 +505,13 @@ def recalls():
         result = [r for r in result if str(r["patient_id"]) == v]
     if v := request.args.get("site_id"):
         result = [r for r in result if r["site_id"] == v]
-    if v := request.args.get("practitioner_id"):
-        result = [r for r in result if str(r["practitioner_id"]) == v]
     if request.args.get("overdue") == "true":
         from datetime import date
         today = str(date.today())
-        result = [r for r in result if r.get("recall_date", "9999") < today and r.get("status") != "complete"]
+        result = [r for r in result if r.get("due_date", "9999") < today
+                  and r.get("status", "").lower() not in ("completed", "complete")]
     result = filter_updated_after(result)
-    result.sort(key=lambda r: r.get("recall_date", ""))
+    result.sort(key=lambda r: r.get("due_date", ""))
     page_data, meta = paginate(result)
     return jsonify({"recalls": page_data, "meta": meta})
 
@@ -508,6 +519,18 @@ def recalls():
 # ==============================================================================
 # ROUTES -- NHS CLAIMS & PRACTITIONER DIARIES
 # ==============================================================================
+
+@app.route("/v1/patient_referrals")
+def patient_referrals():
+    result = list(g.data["patient_referrals"])
+    if v := request.args.get("patient_id"):
+        result = [r for r in result if str(r["patient_id"]) == v]
+    if v := request.args.get("site_id"):
+        result = [r for r in result if r.get("site_id") == v]
+    result = filter_updated_after(result)
+    page_data, meta = paginate(result)
+    return jsonify({"patient_referrals": page_data, "meta": meta})
+
 
 @app.route("/v1/nhs_claims")
 def nhs_claims():
@@ -559,6 +582,7 @@ def index():
             "reference": [
                 "GET /v1/practice",
                 "GET /v1/sites",
+                "GET /v1/rooms                      ?site_id=",
                 "GET /v1/users",
                 "GET /v1/practitioners              ?site_id=",
                 "GET /v1/payment_plans",
@@ -594,7 +618,7 @@ def index():
                 "GET /v1/treatment_plan_items       ?treatment_plan_id=  &patient_id=  &site_id=  &updated_after=ISO8601  &page=  &per_page=",
             ],
             "recalls": [
-                "GET /v1/recalls                    ?site_id=  &patient_id=  &practitioner_id=  &overdue=true  &updated_after=ISO8601  &page=  &per_page=",
+                "GET /v1/recalls                    ?site_id=  &patient_id=  &overdue=true  &updated_after=ISO8601  &page=  &per_page=",
             ],
             "nhs": [
                 "GET /v1/nhs_claims                 ?patient_id=  &contract_id=  &site_id=  &updated_after=ISO8601  &page=  &per_page=",

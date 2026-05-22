@@ -45,7 +45,7 @@ CREATE TABLE [Bronze].[Patients](
 	[Payment_Plan_ID] [int] NULL,
 	[Postcode] [VARCHAR](255) NULL,
 	[Preferred_Name] [VARCHAR](255) NULL,
-	[Preferred_Phone_Number] [decimal](18, 4) NULL,
+	[Preferred_Phone_Number] [VARCHAR](50) NULL,
 	[Recall_Method] [VARCHAR](255) NULL,
 	[Site_ID] [VARCHAR](255) NULL,
 	[Title] [VARCHAR](255) NULL,
@@ -55,6 +55,10 @@ CREATE TABLE [Bronze].[Patients](
 	[Use_Sms] [decimal](18, 4) NULL,
 	[Work_Phone] [VARCHAR](255) NULL,
 	[Work_Phone_Country] [VARCHAR](255) NULL,
+	[Emergency_Contact_Name] [VARCHAR](255) NULL,
+	[Emergency_Contact_Relationship] [VARCHAR](255) NULL,
+	[Emergency_Contact_Phone] [VARCHAR](255) NULL,
+	[Archived_Reason] [VARCHAR](255) NULL,
 	[Tenant_ID] [int] NULL,
 	[DW_Loaded_At] [datetime2](3) NULL
 )

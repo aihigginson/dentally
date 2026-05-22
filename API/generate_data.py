@@ -1,15 +1,16 @@
 """
-generate_data.py  —  rebuilt 2026-05-15
+generate_data.py  —  rebuilt 2026-05-15; as-of date driven by GENERATE_AS_OF env var
 Run:  python API/generate_data.py
+      GENERATE_AS_OF=2026-07-01 python API/generate_data.py
 """
-import json, random, uuid as _uuid
+import json, os, random, uuid as _uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 random.seed(42)
-TODAY   = date(2026, 5, 15)
-START   = date(2023, 5, 15)
-FWD_END = date(2027, 7, 15)
+TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
+START   = TODAY.replace(year=TODAY.year - 3)
+FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
 
 def _u5(*p): return str(_uuid.uuid5(NS, "|".join(str(x) for x in p)))
@@ -125,13 +126,22 @@ def _contract(tid, site_id, site_code, year, target, uda_val, uoa_target=0, uoa_
         "updated_at": _iso(date(y0, 4, 1)),
     }
 
-def _pp(id_, name, nhs=False, monthly="0.00", dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20):
+def _pp(id_, name, nhs=False, monthly="0.00", dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20,
+        exam_sp_dur=None, patient_friendly=None, site_id=None, colour=None):
     return {
         "id": id_, "name": name, "nhs": nhs,
+        "active": True,
         "monthly_charge": monthly,
         "dentist_recall_interval": dr, "hygienist_recall_interval": hr,
-        "exam_duration": exam_dur, "scale_polish_duration": sp_dur, "emergency_duration": emg_dur,
+        "exam_duration": exam_dur,
+        "scale_and_polish_duration": sp_dur,
+        "emergency_duration": emg_dur,
+        "exam_scale_and_polish_duration": exam_sp_dur,
+        "patient_friendly_name": patient_friendly or name,
+        "site_id": site_id,
+        "colour": colour,
         "payment_plan_colour": None,
+        "created_at": _iso(START),
     }
 
 def _sundry(tid, site_id, name, price, nickname=None):
@@ -158,8 +168,15 @@ def _wl(tid, site_id, name, target_appt_days, target_treat_days=None):
 def _acq(id_, name, active=True):
     return {"id": id_, "name": name, "active": active, "notes": None}
 
-def _cr(id_, name):
-    return {"id": id_, "name": name, "active": True}
+def _cr(id_, reason, archived=False):
+    return {
+        "id": id_,
+        "reason": reason,
+        "reason_type": "cancellation",
+        "archived": archived,
+        "created_at": _iso(START),
+        "updated_at": _iso(START),
+    }
 
 # ── T1 Smile Group ────────────────────────────────────────────────────────────
 T1 = {
@@ -183,17 +200,20 @@ T1 = {
     },
     "sites": [
         {"id":"site-hs","name":"High Street","active":True,"address_line_1":"14 High Street",
-         "town":"Oxford","postcode":"OX1 4AA","phone":"01865 123456","email":"highstreet@smilegroup.co.uk",
+         "town":"Oxford","postcode":"OX1 4AA","phone_number":"01865 123456",
+         "email_address":"highstreet@smilegroup.co.uk","nickname":"High St",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":None,"saturday_close":None},
         {"id":"site-rv","name":"Riverside","active":True,"address_line_1":"10 Riverside Walk",
-         "town":"Oxford","postcode":"OX2 6HH","phone":"01865 234567","email":"riverside@smilegroup.co.uk",
+         "town":"Oxford","postcode":"OX2 6HH","phone_number":"01865 234567",
+         "email_address":"riverside@smilegroup.co.uk","nickname":"Riverside",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":None,"saturday_close":None},
         {"id":"site-ng","name":"Northgate","active":True,"address_line_1":"45 Northgate",
-         "town":"Oxford","postcode":"OX3 9BB","phone":"01865 345678","email":"northgate@smilegroup.co.uk",
+         "town":"Oxford","postcode":"OX3 9BB","phone_number":"01865 345678",
+         "email_address":"northgate@smilegroup.co.uk","nickname":"Northgate",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":None,"saturday_close":None},
@@ -344,7 +364,8 @@ T2 = {
     },
     "sites": [
         {"id":"site-bd","name":"Bright Dental HQ","active":True,"address_line_1":"55 Kings Road",
-         "town":"Brighton","postcode":"BN1 1AB","phone":"01273 100200","email":"info@brightdental.co.uk",
+         "town":"Brighton","postcode":"BN1 1AB","phone_number":"01273 100200",
+         "email_address":"info@brightdental.co.uk","nickname":"Bright HQ",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":"09:00","saturday_close":"13:00"},
@@ -434,12 +455,14 @@ T3 = {
     },
     "sites": [
         {"id":"site-ma","name":"Site A","active":True,"address_line_1":"12 Oxford Road",
-         "town":"Manchester","postcode":"M1 1AA","phone":"0161 100100","email":"sitea@clearsmile-manchester.co.uk",
+         "town":"Manchester","postcode":"M1 1AA","phone_number":"0161 100100",
+         "email_address":"sitea@clearsmile-manchester.co.uk","nickname":"Site A",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":None,"saturday_close":None},
         {"id":"site-mb","name":"Site B","active":True,"address_line_1":"8 Deansgate",
-         "town":"Manchester","postcode":"M2 2BB","phone":"0161 200200","email":"siteb@clearsmile-manchester.co.uk",
+         "town":"Manchester","postcode":"M2 2BB","phone_number":"0161 200200",
+         "email_address":"siteb@clearsmile-manchester.co.uk","nickname":"Site B",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":"09:00","saturday_close":"13:00"},
@@ -528,7 +551,8 @@ T4 = {
     },
     "sites": [
         {"id":"site-bm","name":"Main","active":True,"address_line_1":"22 New Street",
-         "town":"Birmingham","postcode":"B1 1AA","phone":"0121 100100","email":"info@clearsmile-birmingham.co.uk",
+         "town":"Birmingham","postcode":"B1 1AA","phone_number":"0121 100100",
+         "email_address":"info@clearsmile-birmingham.co.uk","nickname":"Main",
          "monday_open":"09:00","monday_close":"17:30","tuesday_open":"09:00","tuesday_close":"17:30",
          "wednesday_open":"09:00","wednesday_close":"17:30","thursday_open":"09:00","thursday_close":"17:30",
          "friday_open":"09:00","friday_close":"17:30","saturday_open":None,"saturday_close":None},
@@ -612,13 +636,14 @@ def gen_treatments(tdef, tx_list):
         out.append({
             "id": i,
             "code": code_str,
+            "nomenclature": desc,
+            "patient_nomenclature": desc,
             "description": desc,
+            "active": True,
             "nhs_treatment_cat": nhs_cat if nhs_tenant else None,
             "uda_band": uda if nhs_tenant else 0,
             "region": region,
             "treatment_category_id": cat_map.get(cat_name, 1),
-            "nomenclature": desc,
-            "patient_nomenclature": desc,
             "notes": None,
             "patient_description": None,
             "created_at": _iso(START),
@@ -695,44 +720,101 @@ def gen_users_and_practitioners(tdef):
                      if c.get("active") and float(c.get("uoa_target","0")) > 0}
 
     users = [{"id":0,"first_name":"Admin","last_name":"User",
+               "title":"Mr","middle_name":None,
                "email":f"admin@{domain}","role":"admin","active":True,
-               "created_at":_iso(START),"updated_at":_iso(START)}]
+               "mobile_phone":None,"site_id":None,
+               "created_at":_iso(START),"updated_at":_iso(START),
+               "last_login":_iso(START)}]
     practitioners = []
 
     for p in prac_defs:
         uid = p["id"]
         fn, ln = p["first_name"], p["last_name"]
         email = f"{fn[0].lower()}.{ln.lower().replace(' ','').replace('-','')}@{domain}"
+        mobile = f"07{(uid * 137 + tid * 31) % 900000000:09d}"[:12]
         users.append({
             "id": uid, "first_name": fn, "last_name": ln,
+            "title": p["title"], "middle_name": None,
             "email": email, "role": p["role"], "active": p["active"],
+            "mobile_phone": mobile,
+            "site_id": p["site_id"],
+            "permission_level": 1,
+            "image_url": None,
             "created_at": _iso(START), "updated_at": _iso(START),
+            "last_login": _iso(START),
         })
-        # contract_targets_string
+        # contract_targets
         cts = None
+        contract_targets = []
         if p["performs_nhs"] and p["role"] in ("dentist","orthodontist"):
             site = p["site_id"]
             if p.get("has_uoa_contract") and site in uoa_contracts:
                 c = uoa_contracts[site]
-                cts = json.dumps([{"id":1,"contract_id":c["id"],
-                                   "uda_target":0,"uoa_target":int(float(c["uoa_target"])),"default":True}])
+                contract_targets = [{"id":1,"contract_id":c["id"],
+                                     "uda_target":0,"uoa_target":int(float(c["uoa_target"])),"default":True}]
             elif site in dental_contracts:
                 c = dental_contracts[site]
-                cts = json.dumps([{"id":1,"contract_id":c["id"],
-                                   "uda_target":int(float(c["target"])),"uoa_target":0,"default":True}])
+                contract_targets = [{"id":1,"contract_id":c["id"],
+                                     "uda_target":int(float(c["target"])),"uoa_target":0,"default":True}]
+        cts = json.dumps(contract_targets) if contract_targets else None
+
+        # Default contract for this site
+        default_contract_id = None
+        if p["site_id"] in dental_contracts:
+            default_contract_id = dental_contracts[p["site_id"]]["id"]
+        elif p["site_id"] in uoa_contracts:
+            default_contract_id = uoa_contracts[p["site_id"]]["id"]
 
         pcat = ("dentist" if p["role"] in ("dentist","orthodontist","specialist")
                 else "hygienist" if p["role"] == "hygienist" else "dental_nurse")
+        # Colour palette: cycle through a set of hex colours
+        _colours = ["#4A90D9","#E67E22","#27AE60","#8E44AD","#E74C3C",
+                    "#16A085","#2980B9","#F39C12","#1ABC9C","#D35400",
+                    "#C0392B","#7D3C98","#117A65"]
+        colour = _colours[(uid - 1) % len(_colours)]
+
+        # nhs_number: same as gdc_number for simplicity (real API returns separate field)
+        nhs_number = p.get("gdc_number")
+
+        user_obj = {
+            "id": uid,
+            "first_name": fn,
+            "last_name": ln,
+            "role": p["role"],
+            "title": p["title"],
+            "email": email,
+            "mobile_phone": mobile,
+            "middle_name": None,
+            "permission_level": 1,
+            "image_url": None,
+            "created_at": _iso(START),
+            "updated_at": _iso(START),
+            "last_login": _iso(START),
+        }
+
         practitioners.append({
             "id": uid, "user_id": uid,
-            "first_name": fn, "last_name": ln,
-            "title": p["title"], "role": p["role"],
             "site_id": p["site_id"], "active": p["active"],
             "gdc_number": p.get("gdc_number"),
+            "nhs_number": nhs_number,
+            "default_contract_id": default_contract_id,
+            "colour": colour,
+            "contract_targets": contract_targets,
             "contract_targets_string": cts,
             "performs_nhs": p["performs_nhs"],
             "practitioner_category": pcat,
-            "created_at": _iso(START), "updated_at": _iso(START),
+            "user_first_name":     fn,
+            "user_last_name":      ln,
+            "user_role":           p["role"],
+            "user_title":          p["title"],
+            "user_email":          email,
+            "user_mobile_phone":   mobile,
+            "user_middle_name":    None,
+            "user_permission_level": 1,
+            "user_image_url":      None,
+            "user_created_at":     _iso(START),
+            "user_updated_at":     _iso(START),
+            "user_last_login":     _iso(START),
         })
     return users, practitioners
 
@@ -796,11 +878,45 @@ def gen_diary(tdef, prac_defs):
                 breaks.append({
                     "id": _u5("brk", tid, pid, str(cur)),
                     "practitioner_diary_id": eid,
+                    "name": "Lunch",
                     "start_time": _iso(cur, "13:00"),
                     "end_time": _iso(cur, "14:00"),
                 })
             cur += timedelta(1)
     return entries, breaks
+
+# ─── ROOMS ────────────────────────────────────────────────────────────────────
+
+def gen_rooms(tdef):
+    tid = tdef["tenant_id"]
+    practice_id = tdef["practice"]["id"]
+    # Surgery counts per site based on tenant/site size
+    _site_surgery_counts = {
+        "site-hs": 3, "site-rv": 2, "site-ng": 3,
+        "site-bd": 2,
+        "site-ma": 2, "site-mb": 2,
+        "site-bm": 2,
+    }
+    _colours = ["#4A90D9","#E67E22","#27AE60","#8E44AD","#E74C3C","#16A085","#2980B9","#F39C12"]
+    rooms = []
+    room_id_seq = 0
+    for site in tdef["sites"]:
+        site_id = site["id"]
+        n_surgeries = _site_surgery_counts.get(site_id, 2)
+        for n in range(1, n_surgeries + 1):
+            room_id_seq += 1
+            rooms.append({
+                "id": _u5("room", tid, site_id, n),
+                "name": f"Surgery {n}",
+                "site_id": site_id,
+                "practice_id": practice_id,
+                "colour": _colours[(room_id_seq - 1) % len(_colours)],
+                "calendar_position": n,
+                "created_at": _iso(START),
+                "updated_at": _iso(START),
+            })
+    return rooms
+
 
 # ─── PATIENTS ─────────────────────────────────────────────────────────────────
 
@@ -892,13 +1008,48 @@ def gen_patients(tdef, rng):
         # Ethnicity
         ethnicity = rng.choice(_ET)
 
+        is_female_bool = is_female
+        title_female = rng.choice(["Mrs","Ms","Miss"])
+        title_male   = rng.choice(["Mr","Mr","Mr","Dr"])
+        pat_title = title_female if is_female_bool else title_male
+
+        recall_methods = ["sms","sms","sms","email","email","letter"]
+        recall_method = rng.choice(recall_methods)
+
+        use_email = rng.random() > 0.1
+        use_sms   = rng.random() > 0.15
+        preferred_phone = rng.choice(["mobile","mobile","mobile","home","work"])
+
+        # preferred_name: ~15% chance
+        preferred_name = first if rng.random() < 0.15 else None
+
+        # work_phone: ~30% chance
+        work_phone = (f"0{rng.randint(1000,9999)} {rng.randint(100000,999999)}"
+                      if rng.random() < 0.30 else None)
+
+        # emergency contact: ~60% chance
+        if rng.random() < 0.60:
+            ec_rel = rng.choice(["Spouse","Partner","Parent","Sibling","Friend","Child"])
+            ec_name = f"{rng.choice(_FF if rng.random()<0.5 else _FM)} {last}"
+            ec_phone = f"07{rng.randint(100,999)} {rng.randint(100000,999999)}"
+        else:
+            ec_rel = None; ec_name = None; ec_phone = None
+
+        # archived_reason: only for inactive patients (~5%)
+        is_active = rng.random() > 0.05
+        archived_reason = rng.choice(["Moved away","Deceased","No longer a patient",None]) if not is_active else None
+
         patients.append({
             "id": i,
+            "title": pat_title,
             "first_name": first,
+            "preferred_name": preferred_name,
+            "middle_name": None,
             "last_name": last,
             "date_of_birth": str(dob),
             "email_address": f"{first.lower()}.{last.lower()}{i}@example.com",
             "phone_number": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}",
+            "work_phone": work_phone,
             "address_line_1": f"{house_num} {street}",
             "address_line_2": None,
             "town": town,
@@ -907,10 +1058,19 @@ def gen_patients(tdef, rng):
             "practitioner_id": dentist["id"],
             "payment_plan_id": pp_id,
             "account_id": _u5("acct", tid, i),
-            "active": rng.random() > 0.05,
+            "active": is_active,
             "nhs_exemption_code": exemption,
             "ethnicity_id": ethnicity,
             "acquisition_source_id": acq_id,
+            "recall_method": recall_method,
+            "use_email": use_email,
+            "use_sms": use_sms,
+            "preferred_phone_number": preferred_phone,
+            "emergency_contact_name": ec_name,
+            "emergency_contact_relationship": ec_rel,
+            "emergency_contact_phone": ec_phone,
+            "archived_reason": archived_reason,
+            "legacy_id": None,
             "created_at": _iso(created),
             "updated_at": _iso(created),
         })
@@ -941,7 +1101,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
         if p["role"] == "hygienist":
             site_hygienists.setdefault(p["site_id"], []).append(p["id"])
 
-    # Slot tracker: prac_id → set of (date, slot_idx) used
+    # Slot tracker: prac_id → {date_str: count} (O(1) per lookup)
     used_slots = {}
 
     def _book_slot(pid, dates_list, after_date=None, before_date=None):
@@ -956,11 +1116,10 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             if before_date and d > before_date:
                 continue
             key = (pid, dstr)
-            used = used_slots.setdefault(pid, set())
-            # Allow up to 8 appointments per day per practitioner (simplified)
-            count = sum(1 for k in used if k[0] == dstr)
+            used = used_slots.setdefault(pid, {})
+            count = used.get(dstr, 0)
             if count < 8:
-                used.add((dstr, len(used)))
+                used[dstr] = count + 1
                 return d
         return None
 
@@ -1023,31 +1182,36 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                 state = "booked"
 
             cancel_id = rng.choice(cr_ids) if state in ("cancelled","did_not_attend") else None
-            slot_n = used_slots.get(pid, set())
+            slot_n = used_slots.get(pid, {})
             start_t, end_t = _slot_times(d, rng.randint(0,6), dur)
             apt_id += 1
             appointments.append({
                 "id": apt_id,
                 "patient_id": pat_id,
                 "practitioner_id": pid,
-                "site_id": site_id,
+                "room_id": None,
                 "start_time": _iso(d, start_t),
                 "end_time": _iso(d, end_t),
                 "state": state,
                 "reason": "New Patient Examination" if is_first else "Routine Examination",
                 "treatment_id": tx_id,
-                "cancellation_reason_id": cancel_id,
+                "appointment_cancellation_reason_id": cancel_id,
                 "online_booking": False,
-                "created_at": _iso(d - timedelta(days=rng.randint(7,60))),
-                "updated_at": _iso(d),
+                "booked_via_api": False,
+                "completed_at": _iso(d, end_t) if state == "completed" else None,
+                "cancelled_at": _iso(d) if state == "cancelled" else None,
+                "did_not_attend_at": _iso(d) if state == "did_not_attend" else None,
             })
 
             if state == "completed":
                 prev_exam_date = d
                 # Possibly add a treatment appointment (30% chance) or hygiene
                 if rng.random() < 0.35 and is_past:
-                    # Treatment follow-up 1-3 weeks later
-                    tx_code = rng.choice([1401,1421,1201,201,801,1001,1301])
+                    # Treatment follow-up 1-3 weeks later; ~12% chance is a Review-type appointment
+                    if rng.random() < 0.12:
+                        tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                    else:
+                        tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
                     ttx = tx_by_code.get(tx_code)
                     tdur = 30
                     td = _book_slot(pid, pdates,
@@ -1055,21 +1219,26 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                     before_date=d + timedelta(42))
                     if td:
                         ts_t, te_t = _slot_times(td, rng.randint(0,6), tdur)
+                        tx_state  = "completed" if td < TODAY else "booked"
+                        tx_bbyl   = rng.random() < 0.35
+                        tx_online = (not tx_bbyl) and rng.random() < 0.20
                         apt_id += 1
                         appointments.append({
                             "id": apt_id,
                             "patient_id": pat_id,
                             "practitioner_id": pid,
-                            "site_id": site_id,
+                            "room_id": None,
                             "start_time": _iso(td, ts_t),
                             "end_time": _iso(td, te_t),
-                            "state": "completed" if td < TODAY else "booked",
+                            "state": tx_state,
                             "reason": ttx["description"] if ttx else "Treatment",
                             "treatment_id": ttx["id"] if ttx else None,
-                            "cancellation_reason_id": None,
-                            "online_booking": False,
-                            "created_at": _iso(td - timedelta(7)),
-                            "updated_at": _iso(td),
+                            "appointment_cancellation_reason_id": None,
+                            "online_booking": tx_online,
+                            "booked_via_api": tx_bbyl or tx_online,
+                            "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
+                            "cancelled_at": None,
+                            "did_not_attend_at": None,
                         })
 
                 # Hygiene appointment (every 6 months for care plan / NHS, annually for private)
@@ -1083,22 +1252,58 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                         if hd:
                             hs_t, he_t = _slot_times(hd, rng.randint(0,5), 30)
                             htx = tx_by_code.get(1001)
+                            hyg_state  = "completed" if hd < TODAY else "booked"
+                            hyg_bbyl   = rng.random() < 0.40
+                            hyg_online = (not hyg_bbyl) and rng.random() < 0.25
                             apt_id += 1
                             appointments.append({
                                 "id": apt_id,
                                 "patient_id": pat_id,
                                 "practitioner_id": hpid,
-                                "site_id": site_id,
+                                "room_id": None,
                                 "start_time": _iso(hd, hs_t),
                                 "end_time": _iso(hd, he_t),
-                                "state": "completed" if hd < TODAY else "booked",
+                                "state": hyg_state,
                                 "reason": "Scale & Polish",
                                 "treatment_id": htx["id"] if htx else None,
-                                "cancellation_reason_id": None,
-                                "online_booking": False,
-                                "created_at": _iso(hd - timedelta(14)),
-                                "updated_at": _iso(hd),
+                                "appointment_cancellation_reason_id": None,
+                                "online_booking": hyg_online,
+                                "booked_via_api": hyg_bbyl or hyg_online,
+                                "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
+                                "cancelled_at": None,
+                                "did_not_attend_at": None,
                             })
+
+        # ~35% of patients who have had exams get a future booked recall appointment.
+        # Simulates patients who have already scheduled their next recall visit.
+        if prev_exam_date is not None and rng.random() < 0.35:
+            due_date = prev_exam_date + timedelta(days=recall_months * 30)
+            after_d  = max(TODAY, due_date - timedelta(14))
+            before_d = min(FWD_END, due_date + timedelta(60))
+            fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
+            if fd is not None and fd >= TODAY:
+                fs_t, fe_t = _slot_times(fd, rng.randint(0, 6), 20)
+                booked_on  = TODAY - timedelta(days=rng.randint(1, 30))
+                online     = rng.random() < 0.35
+                apt_id    += 1
+                appointments.append({
+                    "id":                     apt_id,
+                    "patient_id":             pat_id,
+                    "practitioner_id":        pid,
+                    "room_id":                None,
+                    "start_time":             _iso(fd, fs_t),
+                    "end_time":               _iso(fd, fe_t),
+                    "state":                  "booked",
+                    "reason":                 "Recall Examination",
+                    "treatment_id":           None,
+                    "appointment_cancellation_reason_id": None,
+                    "online_booking":         online,
+                    "booked_via_api":         online,
+                    "pending_at":             _iso(booked_on),
+                    "completed_at":           None,
+                    "cancelled_at":           None,
+                    "did_not_attend_at":      None,
+                })
 
     return appointments
 
@@ -1165,6 +1370,8 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
         if current_cluster:
             clusters.append(current_cluster)
 
+        pat_site_id = pat.get("site_id", "")
+
         for cluster in clusters:
             if not cluster:
                 continue
@@ -1174,7 +1381,16 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             first_date = date.fromisoformat(first_apt["start_time"][:10])
             last_date = date.fromisoformat(last_apt["start_time"][:10])
 
-            completed = last_date < TODAY - timedelta(days=7)
+            would_complete = last_date < TODAY - timedelta(days=7)
+            # ~15% of multi-appointment plans completed within the last 6 months
+            # are kept open to represent in-progress courses of treatment
+            in_progress = (
+                would_complete
+                and (TODAY - last_date).days < 180
+                and len(cluster) > 1
+                and rng.random() < 0.15
+            )
+            completed = would_complete and not in_progress
             completed_at = _iso(last_date) if completed else None
 
             # Determine highest NHS band in this cluster
@@ -1225,7 +1441,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 "id": plan_id,
                 "patient_id": pat_id,
                 "practitioner_id": first_apt["practitioner_id"],
-                "site_id": first_apt["site_id"],
+                "site_id": pat_site_id,
                 "nickname": nickname,
                 "completed": completed,
                 "completed_at": completed_at,
@@ -1257,14 +1473,16 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "completed_at": completed_at,
                     "appear_on_invoice": True,
                     "base_chart": None,
-                    "charged": True,
+                    "charged": completed,
                     "position": pos,
                     "nhs_treatment_cat": nhs_cat if is_nhs else None,
                     "uda_band": uda_b if is_nhs else 0,
-                    "nomenclature": tx.get("description",""),
-                    "patient_nomenclature": tx.get("description",""),
+                    "nomenclature": tx.get("nomenclature", tx.get("description","")),
+                    "patient_nomenclature": tx.get("patient_nomenclature", tx.get("description","")),
                     "notes": None,
                     "region": tx.get("region",""),
+                    "surfaces": None,
+                    "teeth": None,
                     "created_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                     "updated_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                 })
@@ -1272,6 +1490,8 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             # Treatment appointment join records
             for pos, apt in enumerate(cluster):
                 ta_seq += 1
+                apt_completed = apt["state"] == "completed"
+                apt_completed_at = apt.get("completed_at")
                 t_appts.append({
                     "id": _u5("ta", tid, apt["id"], plan_id),
                     "appointment_id": apt["id"],
@@ -1279,9 +1499,11 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "patient_id": pat_id,
                     "position": pos,
                     "bookable": False,
+                    "completed": apt_completed,
+                    "completed_at": apt_completed_at,
                     "notes": None,
-                    "created_at": apt["created_at"],
-                    "updated_at": apt["updated_at"],
+                    "created_at": _iso(date.fromisoformat(apt["start_time"][:10])),
+                    "updated_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                 })
 
     return plans, items, t_appts
@@ -1344,7 +1566,8 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             "dated_on": str(completed_date),
             "due_on": str(completed_date),
             "nhs_amount": _fmt(patient_charge) if is_nhs else None,
-            "payment_terms": "due_immediately",
+            "payment_terms": "30 days",
+            "sent_at": _iso(completed_date) if is_paid else None,
             "footnote": None,
             "created_at": _iso(completed_date),
             "updated_at": _iso(completed_date),
@@ -1370,7 +1593,7 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
                 "created_at": _iso(completed_date),
                 "updated_at": _iso(completed_date),
             })
-            # Update plan item with invoice_id (reference only — can't mutate in-place easily)
+            pi["invoice_id"] = inv_id  # mutate in-place; pibp holds references to plan_items dicts
 
         # NHS band charge line
         if is_nhs and patient_charge > 0:
@@ -1525,6 +1748,10 @@ def gen_nhs_claims(tdef, plans, patients_by_id, contracts_by_site, rng):
                 status = "submitted"; submitted = str(completed_date + timedelta(5)); approved = None
 
         awarded_uda = expected_uda if status == "approved" else 0.0
+        # UDA value for this contract year
+        uda_val_rate = float(contract.get("uda_value", "28.00"))
+        dentist_charge = round(expected_uda * uda_val_rate, 2) if status == "approved" else 0.0
+        awarded_dentist_charge = dentist_charge if status == "approved" else 0.0
         seq += 1
         claims.append({
             "id": _u5("claim", tid, plan["id"]),
@@ -1537,9 +1764,14 @@ def gen_nhs_claims(tdef, plans, patients_by_id, contracts_by_site, rng):
             "expected_uda": expected_uda,
             "awarded_uda": awarded_uda,
             "patient_charge": _fmt(patient_charge),
+            "dentist_charge": _fmt(dentist_charge),
+            "awarded_dentist_charge": _fmt(awarded_dentist_charge),
+            "ni_calculated_dentist_fee": _fmt(round(dentist_charge * 0.9, 2)),
+            "ni_calculated_patient_fee": _fmt(patient_charge),
             "claim_status": status,
             "submitted_date": submitted,
             "approval_date": approved,
+            "nhs_updated_at": _iso(approved or submitted or completed_date),
             "sequence_number": f"{seq:06d}",
             "status_comments": "Patient exemption not verified" if status == "rejected" else None,
             "ortho": False,
@@ -1610,6 +1842,9 @@ def gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat):
 def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id):
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
+    today = date.today()
+    reminder_lead = timedelta(days=42)   # first reminder 6 weeks before due
+    second_lead   = timedelta(days=14)   # second reminder 2 weeks before due
     recalls = []
     for pat in patients:
         pid = pat["id"]
@@ -1618,30 +1853,92 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id):
         completed = [a for a in all_apts if a["state"] == "completed"]
         if not completed:
             continue
-        last_apt = completed[-1]
-        last_date = date.fromisoformat(last_apt["start_time"][:10])
+        last_date = date.fromisoformat(completed[-1]["start_time"][:10])
         interval = 6 if pp_id == nhs_pp_id else 12
-        recall_date = _add_months(last_date, interval)
-        # Complete if there's a completed appointment on or after the recall date
-        has_followup = any(
-            date.fromisoformat(a["start_time"][:10]) >= recall_date
+        due_date = _add_months(last_date, interval)
+        # Skip patients who have reattended after their recall date — Dentally deletes the recall
+        has_reattended = any(
+            date.fromisoformat(a["start_time"][:10]) >= due_date
             for a in completed
         )
-        status = "complete" if has_followup else "pending"
+        if has_reattended:
+            continue
+        # Status — TitleCase to match real API
+        status = "Overdue" if due_date < today else "Pending"
+        # Reminder dates — sent once the recall is within the reminder window
+        first_sent  = due_date - reminder_lead
+        second_sent = due_date - second_lead
+        has_first  = first_sent  <= today
+        has_second = second_sent <= today and due_date < today   # 2nd only sent for overdue
+        first_sent_at  = _iso(first_sent)  if has_first  else None
+        second_sent_at = _iso(second_sent) if has_second else None
+        last_reminded  = second_sent_at if has_second else first_sent_at
+        latest_type    = ("Letter" if has_second else "SMS") if (has_first or has_second) else None
+        times_contacted = (2 if has_second else 1) if has_first else 0
         recalls.append({
-            "id": _u5("recall", tid, pid),
-            "patient_id": pid,
-            "practitioner_id": pat["practitioner_id"],
-            "site_id": pat["site_id"],
-            "recall_date": str(recall_date),
-            "recall_type": "examination",
-            "interval_months": interval,
-            "status": status,
-            "notes": None,
-            "created_at": _iso(last_date),
-            "updated_at": _iso(last_date),
+            "id":                      _u5("recall", tid, pid),
+            "patient_id":              pid,
+            "site_id":                 pat["site_id"],
+            "due_date":                str(due_date),
+            "recall_type":             "Dentist",
+            "recall_method":           "SMS",
+            "status":                  status,
+            "appointment_id":          None,
+            "prebooked":               False,
+            "first_reminder_sent_at":  first_sent_at,
+            "first_reminder_type":     "SMS"    if has_first  else None,
+            "second_reminder_sent_at": second_sent_at,
+            "second_reminder_type":    "Letter" if has_second else None,
+            "last_reminded_at":        last_reminded,
+            "latest_reminder_type":    latest_type,
+            "times_contacted":         times_contacted,
+            "run_date":                None,
+            "workflow_status":         "unprocessed",
+            "workflow_stage_id":       None,
+            "first_reminder_id":       None,
+            "second_reminder_id":      None,
         })
     return recalls
+
+# ─── PATIENT REFERRALS ───────────────────────────────────────────────────────
+
+def gen_patient_referrals(tdef, patients, apts_by_pat, rng):
+    tid      = tdef["tenant_id"]
+    site_ids = [s["id"] for s in tdef["sites"]]
+    ref_types = ["Patient", "Specialist", "Internal"]
+    referrals = []
+    ref_id    = tid * 100000
+
+    for pat in patients:
+        if rng.random() >= 0.15:
+            continue
+        pat_id = pat["id"]
+        appts  = sorted(apts_by_pat.get(pat_id, []), key=lambda a: a["start_time"])
+        if not appts:
+            continue
+        first_apt = appts[0]
+        ref_id   += 1
+        ref_type  = rng.choice(ref_types)
+        site_id   = pat.get("site_id") or rng.choice(site_ids)
+        ref_dt    = first_apt["start_time"]
+        referrals.append({
+            "id":                        ref_id,
+            "patient_id":                pat_id,
+            "site_id":                   site_id,
+            "user_id":                   None,
+            "reference":                 f"REF{ref_id:07d}",
+            "status":                    "active",
+            "referrable_type":           ref_type,
+            "services_appointment_id":   None,
+            "additional_information":    None,
+            "consented_by_patient":      True,
+            "referred_practitioner_id":  None,
+            "referred_site_id":          None,
+            "created_at":                ref_dt,
+            "updated_at":                ref_dt,
+        })
+    return referrals
+
 
 # ─── GENERATE TENANT ─────────────────────────────────────────────────────────
 
@@ -1666,6 +1963,7 @@ def generate_tenant(tdef):
     # Fee lookup: {(pp_id, tx_id): price}
     fee_map = {(f["payment_plan_id"], f["treatment_id"]): float(f["price_one"]) for f in fees}
 
+    rooms   = gen_rooms(tdef)
     patients = gen_patients(tdef, rng)
     appointments = gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng)
 
@@ -1696,12 +1994,14 @@ def generate_tenant(tdef):
     for p in payments:
         pay_by_pat.setdefault(p["patient_id"], []).append(p)
 
-    patient_stats = gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat)
-    recalls = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id)
+    patient_stats      = gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat)
+    recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id)
+    patient_referrals  = gen_patient_referrals(tdef, patients, apts_by_pat, rng)
 
     return {
         "practice":            tdef["practice"],
-        "sites":               tdef["sites"],
+        "sites":               [{**{"email_address": None, "nickname": None, "address_line_2": None, "website": None, "logo_url": None, "default_payment_plan_id": None}, **s, "practice_id": tdef["practice"]["id"]} for s in tdef["sites"]],
+        "rooms":               rooms,
         "users":               users,
         "practitioners":       practitioners,
         "payment_plans":       pp_list,
@@ -1728,6 +2028,7 @@ def generate_tenant(tdef):
         "nhs_claims":          nhs_claims,
         "patient_stats":       patient_stats,
         "recalls":             recalls,
+        "patient_referrals":   patient_referrals,
     }
 
 

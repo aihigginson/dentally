@@ -8,7 +8,7 @@ GO
 CREATE TABLE [Silver].[Treatments](
 	[Tenant_ID] [int] NOT NULL,
 	[Id] [int] NOT NULL,
-	[Site_Id] [VARCHAR](50) NULL,
+	[Site_ID] [VARCHAR](50) NULL,
 	[Code] [VARCHAR](50) NULL,
 	[Name] [VARCHAR](255) NULL,
 	[Description] [VARCHAR](255) NULL,

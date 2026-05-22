@@ -1,21 +1,24 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Sites
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     29/04/2026  AIH Map all Bronze.Sites columns (practice_id, active, opening hours etc.)
+--    *03     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *04     19/05/2026  AIH Fix phone->phone_number Stage field name; add Email_Address, Nickname
+--    *05     20/05/2026  AIH Default address_line_2/website/logo_url/default_payment_plan_id/email_address/nickname in gen_tenant() to ensure Stage columns always present
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Sites]
 GO
 CREATE PROCEDURE [Bronze].[usp_Load_Sites]
 (
       @Tenant_ID    INT
+    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
     , @Run_Deletes  BIGINT OUT
-    , @Full_Refresh BIT    = 0
 )
 AS
 BEGIN
@@ -35,7 +38,9 @@ BEGIN
             , LEFT(address_line_2,         255)                                                              AS Address_Line_2
             , LEFT(town,                   255)                                                              AS Town
             , LEFT(postcode,               255)                                                              AS Postcode
-            , LEFT(phone,                  255)                                                              AS Phone_Number
+            , LEFT(phone_number,            255)                                                              AS Phone_Number
+            , LEFT(email_address,          255)                                                              AS Email_Address
+            , LEFT(nickname,               255)                                                              AS Nickname
             , LEFT(website,                255)                                                              AS Website
             , LEFT(logo_url,               255)                                                              AS Logo_Url
             , TRY_CAST(default_payment_plan_id AS DECIMAL(18,4))                                            AS Default_Payment_Plan_ID
@@ -62,6 +67,8 @@ BEGIN
             , tgt.Town                     = src.Town
             , tgt.Postcode                 = src.Postcode
             , tgt.Phone_Number             = src.Phone_Number
+            , tgt.Email_Address            = src.Email_Address
+            , tgt.Nickname                 = src.Nickname
             , tgt.Website                  = src.Website
             , tgt.Logo_Url                 = src.Logo_Url
             , tgt.Default_Payment_Plan_ID  = src.Default_Payment_Plan_ID
@@ -80,8 +87,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.Site_ID = src.Site_ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Sites (Tenant_ID, Site_ID, Practice_ID, Name, Active, Address_Line_1, Address_Line_2, Town, Postcode, Phone_Number, Website, Logo_Url, Default_Payment_Plan_ID, Monday_Open, Monday_Close, Tuesday_Open, Tuesday_Close, Wednesday_Open, Wednesday_Close, Thursday_Open, Thursday_Close, Friday_Open, Friday_Close, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.Site_ID, src.Practice_ID, src.Name, src.Active, src.Address_Line_1, src.Address_Line_2, src.Town, src.Postcode, src.Phone_Number, src.Website, src.Logo_Url, src.Default_Payment_Plan_ID, src.Monday_Open, src.Monday_Close, src.Tuesday_Open, src.Tuesday_Close, src.Wednesday_Open, src.Wednesday_Close, src.Thursday_Open, src.Thursday_Close, src.Friday_Open, src.Friday_Close, SYSUTCDATETIME()
+        INSERT INTO Bronze.Sites (Tenant_ID, Site_ID, Practice_ID, Name, Active, Address_Line_1, Address_Line_2, Town, Postcode, Phone_Number, Email_Address, Nickname, Website, Logo_Url, Default_Payment_Plan_ID, Monday_Open, Monday_Close, Tuesday_Open, Tuesday_Close, Wednesday_Open, Wednesday_Close, Thursday_Open, Thursday_Close, Friday_Open, Friday_Close, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.Site_ID, src.Practice_ID, src.Name, src.Active, src.Address_Line_1, src.Address_Line_2, src.Town, src.Postcode, src.Phone_Number, src.Email_Address, src.Nickname, src.Website, src.Logo_Url, src.Default_Payment_Plan_ID, src.Monday_Open, src.Monday_Close, src.Tuesday_Open, src.Tuesday_Close, src.Wednesday_Open, src.Wednesday_Close, src.Thursday_Open, src.Thursday_Close, src.Friday_Open, src.Friday_Close, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Sites tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Site_ID = src.Site_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -97,7 +104,9 @@ BEGIN
         DROP TABLE IF EXISTS #src;
 
     END TRY
-    BEGIN CATCH THROW; END CATCH;
+    BEGIN CATCH
+        THROW;
+    END CATCH;
 
     SET @Run_Inserts = @My_Inserts;
     SET @Run_Updates = @My_Updates;

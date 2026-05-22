@@ -7,8 +7,8 @@ DROP TABLE IF EXISTS [Silver].[Sundries]
 GO
 CREATE TABLE [Silver].[Sundries](
 	[Tenant_ID] [int] NOT NULL,
-	[Sundry_Id] [int] NOT NULL,
-	[Site_Id] [VARCHAR](50) NULL,
+	[Sundry_ID] [int] NOT NULL,
+	[Site_ID] [VARCHAR](50) NULL,
 	[Name] [VARCHAR](255) NULL,
 	[Price] [decimal](18, 4) NULL,
 	[Active] [bit] NULL,

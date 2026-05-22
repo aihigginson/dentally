@@ -1,3 +1,4 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Users] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Users
 --  Author           :  AIH
@@ -7,6 +8,8 @@
 --    *02     30/04/2026  AIH Add Is_Current to INSERT (NOT NULL column omitted from column list)
 --    *03     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *06     22/05/2026  AIH Add User_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Users @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Users]    Script Date: 20/04/2026 10:15:06 ******/
@@ -53,12 +56,13 @@ BEGIN
             NULLIF(TRIM(Mobile_Phone), '')                      AS Mobile_Phone,
             NULLIF(TRIM(Role), '')                              AS Role,
             CAST(Permission_Level AS INT)                       AS Permission_Level,
-            NULLIF(TRIM(Practice_Id), '')                       AS Practice_ID,
-            NULLIF(TRIM(Site_Id), '')                           AS Site_ID,
+            NULLIF(TRIM(Practice_ID), '')                       AS Practice_ID,
+            NULLIF(TRIM(Site_ID), '')                           AS Site_ID,
             NULLIF(TRIM(Image_URL), '')                         AS Image_URL,
             TRY_CAST(NULLIF(TRIM(Last_Login),'') AS DATE)       AS Last_Login_Date,
             TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3)) AS Created_Date,
-            TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3)) AS Updated_Date
+            TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3)) AS Updated_Date,
+            CAST(1 AS INT)                                        AS User_Count
         INTO #src
         FROM Silver.Users
         WHERE Id IS NOT NULL;
@@ -134,7 +138,7 @@ BEGIN
             bk_User_ID, Title, First_Name, Middle_Name, Last_Name, Full_Name,
             Email, Mobile_Phone, Role, Permission_Level, Practice_ID, Site_ID,
             Image_URL, Last_Login_Date, Created_Date, Updated_Date,
-            DW_Created_At, DW_Updated_At, Is_Current
+            User_Count, DW_Created_At, DW_Updated_At, Is_Current
         )
         SELECT
             @pk_User_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.bk_User_ID),
@@ -142,7 +146,7 @@ BEGIN
             src.bk_User_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name, src.Full_Name,
             src.Email, src.Mobile_Phone, src.Role, src.Permission_Level, src.Practice_ID, src.Site_ID,
             src.Image_URL, src.Last_Login_Date, src.Created_Date, src.Updated_Date,
-            SYSUTCDATETIME(), SYSUTCDATETIME(), 1
+            src.User_Count, SYSUTCDATETIME(), SYSUTCDATETIME(), 1
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Users tgt WHERE tgt.bk_User_ID = src.bk_User_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -150,8 +154,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Users (pk_User, Tenant_ID, bk_User_ID, DW_Created_At, DW_Updated_At, Is_Current)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME(), 0
+        INSERT INTO Gold.Dim_Users (pk_User, Tenant_ID, bk_User_ID, User_Count, DW_Created_At, DW_Updated_At, Is_Current)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), 0
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Users WHERE pk_User = -1);
         --*********************************
         --**** Procedure logic ends    ****

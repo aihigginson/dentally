@@ -14,6 +14,7 @@ CREATE TABLE [Gold].[Fact_Appointments](
 	[fk_Payment_Plan] [bigint] NULL,
 	[fk_Practice_Site] [bigint] NULL,
 	[fk_User] [bigint] NULL,
+	[fk_Cancellation_Reason] [bigint] NULL,
 	[fk_Date_Start] [bigint] NULL,
 	[fk_Date_Pending] [bigint] NULL,
 	[fk_Date_Created] [bigint] NULL,

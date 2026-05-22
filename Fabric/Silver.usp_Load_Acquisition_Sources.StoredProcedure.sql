@@ -1,9 +1,11 @@
+--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Acquisition_Sources] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Acquisition_Sources
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Acquisition_Sources @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Acquisition_Sources]    Script Date: 20/04/2026 10:15:06 ******/
@@ -46,7 +48,7 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 -- Bronze ID is VARCHAR(255); Silver is VARCHAR(50) – truncate safely
-        LEFT(CAST(ID AS VARCHAR(255)), 50)  AS [Acquisition_Source_Id],
+        LEFT(CAST(ID AS VARCHAR(255)), 50)  AS [Acquisition_Source_ID],
                 -- Bronze Active is int; Silver is bit
         CASE WHEN Active = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 Name  AS [Name],
@@ -63,24 +65,24 @@ BEGIN
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Acquisition_Sources] AS tgt
-        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Acquisition_Source_Id] = src.[Acquisition_Source_Id]
+        INNER JOIN #src AS src ON tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Acquisition_Source_ID] = src.[Acquisition_Source_ID]
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Acquisition_Sources] ([Tenant_ID], [Acquisition_Source_Id], [Active], [Name], [Notes],
+        INSERT INTO [Silver].[Acquisition_Sources] ([Tenant_ID], [Acquisition_Source_ID], [Active], [Name], [Notes],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Acquisition_Source_Id], src.[Active], src.[Name], src.[Notes],
+        SELECT src.[Tenant_ID], src.[Acquisition_Source_ID], src.[Active], src.[Name], src.[Notes],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
-            SELECT 1 FROM [Silver].[Acquisition_Sources] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Acquisition_Source_Id] = src.[Acquisition_Source_Id]
+            SELECT 1 FROM [Silver].[Acquisition_Sources] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Acquisition_Source_ID] = src.[Acquisition_Source_ID]
         );
         SET @My_Inserts = @@ROWCOUNT;
 
         DELETE tgt
         FROM [Silver].[Acquisition_Sources] AS tgt
         WHERE NOT EXISTS (
-            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Acquisition_Source_Id] = tgt.[Acquisition_Source_Id]
+            SELECT 1 FROM #src AS src WHERE src.[Tenant_ID] = tgt.[Tenant_ID] AND src.[Acquisition_Source_ID] = tgt.[Acquisition_Source_ID]
         );
         SET @My_Deletes = @@ROWCOUNT;
 
