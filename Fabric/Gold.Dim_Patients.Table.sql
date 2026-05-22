@@ -69,6 +69,7 @@ CREATE TABLE [Gold].[Dim_Patients](
 	[NHS_Exemption_Code] [int] NULL,
 	[Patient_Created_Date] [date] NULL,
 	[Patient_Updated_Date] [date] NULL,
+	[Patient_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

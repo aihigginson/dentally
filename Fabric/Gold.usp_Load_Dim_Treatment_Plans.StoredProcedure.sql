@@ -9,6 +9,7 @@
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *04     19/05/2026  AIH TRY_CAST + LEFT(,10) for Start_Date/End_Date to handle ISO 8601 +00:00 suffix
 --    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *06     22/05/2026  AIH Add Treatment_Plan_Count (1 for real rows, 0 for sentinel) for use in SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -54,7 +55,8 @@ BEGIN
             CAST(ISNULL(NHS_Completed_UDA_Value,0) AS DECIMAL(10,2))            AS NHS_Completed_UDA_Value,
             CAST(ISNULL(Private_Treatment_Value,0) AS DECIMAL(12,2))            AS Private_Treatment_Value,
             TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3))               AS Created_Date,
-            TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3))               AS Updated_Date
+            TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3))               AS Updated_Date,
+            CAST(1 AS INT)                                                       AS Treatment_Plan_Count
         INTO #src
         FROM Silver.Treatment_Plans
         WHERE Id IS NOT NULL;
@@ -121,7 +123,7 @@ BEGIN
             Treatment_Plan_ID, Nickname, Patient_ID, Practitioner_ID, Completed,
             Start_Date, End_Date, Completed_Date, Last_Completed_Date,
             NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value,
-            Created_Date, Updated_Date, DW_Created_At, DW_Updated_At
+            Created_Date, Updated_Date, Treatment_Plan_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Treatment_Plan_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Treatment_Plan_ID),
@@ -129,16 +131,17 @@ BEGIN
             src.Treatment_Plan_ID, src.Nickname, src.Patient_ID, src.Practitioner_ID, src.Completed,
             src.Start_Date, src.End_Date, src.Completed_Date, src.Last_Completed_Date,
             src.NHS_UDA_Value, src.NHS_Completed_UDA_Value, src.Private_Treatment_Value,
-            src.Created_Date, src.Updated_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Created_Date, src.Updated_Date, src.Treatment_Plan_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatment_Plans tgt WHERE tgt.Treatment_Plan_ID = src.Treatment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID);
+
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Treatment_Plans (pk_Treatment_Plan, Tenant_ID, Treatment_Plan_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Treatment_Plans (pk_Treatment_Plan, Tenant_ID, Treatment_Plan_ID, Treatment_Plan_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatment_Plans WHERE pk_Treatment_Plan = -1);
         --*********************************
         --**** Procedure logic ends    ****

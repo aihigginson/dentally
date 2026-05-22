@@ -293,4 +293,122 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")",
     "");
 
+// ── Home page measures ────────────────────────────────────────────────────────
+
+// DNA Revenue Lost: DNA appointments in the selected period × all-time avg revenue per appointment.
+// All-time average used as the rate — more stable than the period average on short windows.
+add("DNA Revenue Lost",
+    @"VAR dna_count =
+    SUM('Aggregate Site Patient Practitioner Daily'[DNA Appointments])
+VAR avg_appt_value =
+    DIVIDE(
+        CALCULATE([Total Revenue],    REMOVEFILTERS('List Date')),
+        CALCULATE(SUM('Aggregate Site Patient Practitioner Daily'[Appointments]), REMOVEFILTERS('List Date'))
+    )
+RETURN dna_count * avg_appt_value",
+    "£#,##0");
+
+add("Deposit Value",
+    @"SUM('_Payments'[Deposit Amount])",
+    "£#,##0");
+
+add("Discounts",
+    @"SUMX(
+    SUMMARIZE('_Invoice Items',
+        '_Invoice Items'[Invoice ID],
+        ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
+        ""_items"", SUM('_Invoice Items'[Total Price])),
+    IF([_inv] > [_items], [_inv] - [_items], 0))",
+    "£#,##0");
+
+add("Deposit Value Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""deposit_value""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Deposit Value vs Target",
+    @"VAR actual = [Deposit Value]
+VAR target = [Deposit Value Target]
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Deposit Value BG",
+    @"VAR actual = [Deposit Value]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct >= band,     ""#1a7f3c"",
+    pct >= 0,        ""#6abf7b"",
+    pct >= -band,    ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
+add("Discounts Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""discounts""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("Discounts vs Target",
+    @"VAR actual = [Discounts]
+VAR target = [Discounts Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Discounts BG",
+    @"VAR actual = [Discounts]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
+add("DNA Revenue Lost Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost""),
+    '_Targets'[Target Value])",
+    "£#,##0");
+
+add("DNA Revenue Lost vs Target",
+    @"VAR actual = [DNA Revenue Lost]
+VAR target = [DNA Revenue Lost Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("DNA Revenue Lost BG",
+    @"VAR actual = [DNA Revenue Lost]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
 Info("Revenue KPI measures created.");

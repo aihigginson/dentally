@@ -26,6 +26,8 @@ CREATE TABLE [Gold].[Aggregate_Site_Patient_Practitioner_Daily](
 	[New_Patient]                         [bit]           NULL,
 	[Worked_Hours]                        [decimal](10,2) NULL,
 	[Appointment_Hours]                   [decimal](10,2) NULL,
+	[Cancelled_Appointments]              [int]           NULL,
+	[Short_Notice_Cancellations]          [int]           NULL,
 	[DW_Created_At]                       [datetime2](6)  NOT NULL,
 	[DW_Updated_At]                       [datetime2](6)  NOT NULL
 )

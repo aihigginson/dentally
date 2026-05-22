@@ -8,6 +8,7 @@
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *05     22/05/2026  AIH Add Practitioner_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
@@ -64,7 +65,8 @@ BEGIN
             NULLIF(TRIM(User_Image_URL),'')                                 AS Image_URL,
             TRY_CAST(NULLIF(TRIM(User_Last_Login),'') AS DATE)              AS Last_Login_Date,
             TRY_CAST(NULLIF(TRIM(User_Created_At),'') AS datetime2(3))      AS Created_Date,
-            TRY_CAST(NULLIF(TRIM(User_Updated_At),'') AS datetime2(3))      AS Updated_Date
+            TRY_CAST(NULLIF(TRIM(User_Updated_At),'') AS datetime2(3))      AS Updated_Date,
+            CAST(1 AS INT)                                                          AS Practitioner_Count
         INTO #src
         FROM Silver.Practitioners
         WHERE Practitioner_ID IS NOT NULL;
@@ -155,7 +157,7 @@ BEGIN
             Practitioner_ID, User_ID, Title, First_Name, Middle_Name, Last_Name, Full_Name,
             Email, Mobile_Phone, Role, Permission_Level, Active, Colour, GDC_Number, NHS_Number,
             Site_ID, Default_Contract_ID, Contract_Targets_String, Image_URL,
-            Last_Login_Date, Created_Date, Updated_Date, DW_Created_At, DW_Updated_At
+            Last_Login_Date, Created_Date, Updated_Date, Practitioner_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Practitioner_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Practitioner_ID),
@@ -163,7 +165,7 @@ BEGIN
             src.Practitioner_ID, src.User_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name, src.Full_Name,
             src.Email, src.Mobile_Phone, src.Role, src.Permission_Level, src.Active, src.Colour, src.GDC_Number, src.NHS_Number,
             src.Site_ID, src.Default_Contract_ID, src.Contract_Targets_String, src.Image_URL,
-            src.Last_Login_Date, src.Created_Date, src.Updated_Date, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Last_Login_Date, src.Created_Date, src.Updated_Date, src.Practitioner_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners tgt WHERE tgt.Practitioner_ID = src.Practitioner_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -171,8 +173,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Practitioners (pk_Practitioner, Tenant_ID, Practitioner_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Practitioners (pk_Practitioner, Tenant_ID, Practitioner_ID, Practitioner_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners WHERE pk_Practitioner = -1);
         --*********************************
         --**** Procedure logic ends    ****

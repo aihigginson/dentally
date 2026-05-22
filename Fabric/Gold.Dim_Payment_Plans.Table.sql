@@ -21,6 +21,7 @@ CREATE TABLE [Gold].[Dim_Payment_Plans](
 	[Exam_Scale_Polish_Duration_Mins] [int] NULL,
 	[Scale_Polish_Duration_Mins] [int] NULL,
 	[Created_Date] [datetime2](3) NULL,
+	[Payment_Plan_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

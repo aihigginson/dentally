@@ -3,8 +3,8 @@
 -- Tenant 15: "Dev Test Practice"  — minimal Bronze seed for pipeline testing
 -- =============================================================================
 -- Scope: 1 site | 2 practitioners | 5 patients | 2 payment plans | 1 NHS contract
---        10 appointments | 8 treatment plans | 12 treatment plan items
---        5 invoices | 10 invoice items | 4 payments | 2 NHS claims
+--        13 appointments | 9 treatment plans | 14 treatment plan items | 2 cancellation reasons
+--        6 invoices | 12 invoice items | 5 payments | 2 NHS claims
 --
 -- All entity IDs use 15xxx prefix to avoid clashes with T1–14.
 -- Revenue data placed in Nov–Dec 2025 (FY 2025/26).
@@ -41,7 +41,7 @@ DELETE FROM Audit.Tenants WHERE Tenant_ID = 15;
 INSERT INTO Audit.Tenants
     (Tenant_ID, Client_ID, Tenant_Name, API_Base_URL, API_Key, Dentally_Client_ID, Dentally_Secret, Is_Active, Full_Refresh, Last_Loaded_At, Notes)
 VALUES
-    (15, 1, 'Dev Test Practice', NULL, NULL, NULL, NULL, 1, 0, NULL,
+    (15, 3, 'Dev Test Practice', NULL, NULL, NULL, NULL, 1, 0, NULL,
      'Pipeline test tenant — minimal data, not a real practice.');
 GO
 
@@ -211,7 +211,9 @@ VALUES
     (15005, 15004, 15002, 1, '2025-09-15', '2025-11-10', '2025-11-10T15:00:00Z', 0,   0,   1200, '2025-09-15T09:00:00Z', '2025-11-10T15:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15006, 15005, 15002, 1, '2025-10-15', '2025-12-05', '2025-12-05T10:00:00Z', 0,   0,   600,  '2025-10-15T09:00:00Z', '2025-12-05T10:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15007, 15004, 15002, 0, '2025-11-01', NULL,          NULL,                  0,   0,   800,  '2025-11-01T09:00:00Z', '2025-11-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15008, 15005, 15002, 0, '2025-12-01', NULL,          NULL,                  0,   0,   400,  '2025-12-01T09:00:00Z', '2025-12-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15008, 15005, 15002, 0, '2025-12-01', NULL,          NULL,                  0,   0,   400,  '2025-12-01T09:00:00Z', '2025-12-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Proposed (no Start_Date): Treatment_Acceptance_Rate = 8/9 = 88.9%
+    (15009, 15001, 15001, 0, NULL,          NULL,          NULL,                  0,   0,   800,  '2026-04-01T09:00:00Z', '2026-04-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -247,7 +249,10 @@ VALUES
     ('150010', '15007', 15004, 15002, 'Implant Crown',     NULL,          NULL, 0, NULL,                   0, 800.00, 0, 1501, '2025-11-01T09:00:00Z', '2025-11-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- TP 15008 (Dr Beth, open)
     ('150011', '15008', 15005, 15002, 'Ceramic Crown',     NULL,          NULL, 0, NULL,                   0, 400.00, 0, 1501, '2025-12-01T09:00:00Z', '2025-12-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    ('150012', '15008', 15005, 15002, 'Exam',              NULL,          NULL, 0, NULL,                   0, 100.00, 0, 1501, '2025-12-01T09:00:00Z', '2025-12-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    ('150012', '15008', 15005, 15002, 'Exam',              NULL,          NULL, 0, NULL,                   0, 100.00, 0, 1501, '2025-12-01T09:00:00Z', '2025-12-01T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- TP 15007 extra items — linked to discounted invoice 15006 (patient 15004)
+    ('150013', '15007', 15004, 15002, 'Hygiene Session',   NULL,          NULL, 0, NULL,                   0, 250.00, 0, 1501, '2025-12-12T09:00:00Z', '2025-12-12T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('150014', '15007', 15004, 15002, 'Fluoride Varnish',  NULL,          NULL, 0, NULL,                   0, 150.00, 0, 1501, '2025-12-12T09:00:00Z', '2025-12-12T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -266,20 +271,21 @@ INSERT INTO Bronze.Appointments
      Start_Time, Finish_Time, Duration, State,
      Reason, Payment_Plan_ID,
      Completed_At, Cancelled_At, Did_Not_Attend_At,
+     Appointment_Cancellation_Reason_ID,
      Tenant_ID, DW_Loaded_At)
 VALUES
     -- Dr Alex (NHS/private mix)
-    (15001, 15001, 15001, 15001, '1500', '2025-11-03T09:00:00Z', '2025-11-03T09:30:00Z', 30, 'complete',        'Examination', 1500, '2025-11-03T09:30:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15002, 15002, 15001, 15001, '1500', '2025-11-10T10:00:00Z', '2025-11-10T11:00:00Z', 60, 'complete',        'Crown prep',  1500, '2025-11-10T11:00:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15003, 15001, 15001, 15001, '1500', '2025-11-17T14:00:00Z', '2025-11-17T15:30:00Z', 90, 'complete',        'Veneers',     1501, '2025-11-17T15:30:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15004, 15003, 15001, 15001, '1500', '2025-12-01T09:00:00Z', '2025-12-01T09:30:00Z', 30, 'cancelled',       'Consult',     1501, NULL,                    '2025-11-30T14:00:00Z', NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15005, 15002, 15001, 15001, '1500', '2026-01-15T10:00:00Z', '2026-01-15T11:00:00Z', 60, 'waiting',         'Crown fit',   1500, NULL,                    NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15001, 15001, 15001, 15001, '1500', '2025-11-03T09:00:00Z', '2025-11-03T09:30:00Z', 30, 'complete',        'Examination', 1500, '2025-11-03T09:30:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15002, 15002, 15001, 15001, '1500', '2025-11-10T10:00:00Z', '2025-11-10T11:00:00Z', 60, 'complete',        'Crown prep',  1500, '2025-11-10T11:00:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15003, 15001, 15001, 15001, '1500', '2025-11-17T14:00:00Z', '2025-11-17T15:30:00Z', 90, 'complete',        'Veneers',     1501, '2025-11-17T15:30:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15004, 15003, 15001, 15001, '1500', '2025-12-01T09:00:00Z', '2025-12-01T09:30:00Z', 30, 'cancelled',       'Consult',     1501, NULL,                    '2025-11-30T14:00:00Z', NULL,                    1,    15, CAST(GETUTCDATE() AS datetime2(3))),  -- standard cancellation
+    (15005, 15002, 15001, 15001, '1500', '2026-01-15T10:00:00Z', '2026-01-15T11:00:00Z', 60, 'waiting',         'Crown fit',   1500, NULL,                    NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- Dr Beth (private only)
-    (15006, 15004, 15002, 15002, '1500', '2025-11-05T09:00:00Z', '2025-11-05T10:30:00Z', 90, 'complete',        'Invisalign',  1501, '2025-11-05T10:30:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15007, 15005, 15002, 15002, '1500', '2025-11-12T11:00:00Z', '2025-11-12T12:00:00Z', 60, 'complete',        'Whitening',   1501, '2025-11-12T12:00:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15008, 15004, 15002, 15002, '1500', '2025-12-03T09:30:00Z', '2025-12-03T10:30:00Z', 60, 'complete',        'Implant',     1501, '2025-12-03T10:30:00Z', NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15009, 15005, 15002, 15002, '1500', '2025-12-10T14:00:00Z', '2025-12-10T14:30:00Z', 30, 'did_not_attend',  'Review',      1501, NULL,                    NULL,                    '2025-12-10T14:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15010, 15004, 15002, 15002, '1500', '2026-02-10T09:00:00Z', '2026-02-10T10:30:00Z', 90, 'waiting',         'Implant crown',1501, NULL,                   NULL,                    NULL,                    15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15006, 15004, 15002, 15002, '1500', '2025-11-05T09:00:00Z', '2025-11-05T10:30:00Z', 90, 'complete',        'Invisalign',  1501, '2025-11-05T10:30:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15007, 15005, 15002, 15002, '1500', '2025-11-12T11:00:00Z', '2025-11-12T12:00:00Z', 60, 'complete',        'Whitening',   1501, '2025-11-12T12:00:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15008, 15004, 15002, 15002, '1500', '2025-12-03T09:30:00Z', '2025-12-03T10:30:00Z', 60, 'complete',        'Implant',     1501, '2025-12-03T10:30:00Z', NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15009, 15005, 15002, 15002, '1500', '2025-12-10T14:00:00Z', '2025-12-10T14:30:00Z', 30, 'did_not_attend',  'Review',      1501, NULL,                    NULL,                    '2025-12-10T14:00:00Z', NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15010, 15004, 15002, 15002, '1500', '2026-02-10T09:00:00Z', '2026-02-10T10:30:00Z', 90, 'waiting',         'Implant crown',1501, NULL,                   NULL,                    NULL,                    NULL, 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -329,7 +335,9 @@ VALUES
     -- Dr Beth invoices
     (15003, 15004, '1500', 15002, 1200.00, 1200.00,   0.00, '2025-11-10', '2025-11-10', 'T15-0003', '2025-11-10T00:00:00Z', '2025-11-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15004, 15005, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-05', '2025-12-05', 'T15-0004', '2025-12-05T00:00:00Z', '2025-12-05T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15005, 15004, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-08', '2025-12-08', 'T15-0005', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15005, 15004, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-08', '2025-12-08', 'T15-0005', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Discounted invoice: Amount=£500 header vs £400 items = £100 discount
+    (15006, 15004, '1500', 15002,  500.00,  500.00,   0.00, '2025-12-12', '2025-12-12', 'T15-0006', '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -360,7 +368,10 @@ VALUES
     ('1500006', 15004, 15002, 15002, 'Teeth Whitening',      600.00, 1,  600.00, 0, 15006, '150009', '2025-12-05T00:00:00Z', '2025-12-05T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- Invoice 15005: Dr Beth, private
     ('1500007', 15005, 15002, 15002, 'Implant Crown Consult', 300.00, 1,  300.00, 0, 15007, '150010', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    ('1500008', 15005, 15002, 15002, 'Ceramic Crown Prep',   300.00, 1,  300.00, 0, 15008, '150011', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    ('1500008', 15005, 15002, 15002, 'Ceramic Crown Prep',   300.00, 1,  300.00, 0, 15008, '150011', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Invoice 15006: items total £400 vs invoice Amount=£500 → £100 discount
+    ('1500009', 15006, 15002, 15002, 'Hygiene Appointment',  250.00, 1,  250.00, 0, 15007, '150013', '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500010', 15006, 15002, 15002, 'Fluoride Treatment',   150.00, 1,  150.00, 0, 15007, '150014', '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -377,7 +388,9 @@ VALUES
     (15001, 15001, '1500', 15001, 15001, 1300.00, 0, 'card',  '2025-11-20', 'complete', 0, 1300.00, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15002, 15002, '1500', 15001, 15001,  500.00, 0, 'cash',  '2025-12-10', 'complete', 0,  500.00, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15003, 15004, '1500', 15002, 15002, 1200.00, 0, 'card',  '2025-11-10', 'complete', 0, 1200.00, 15003, 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15004, 15005, '1500', 15002, 15002, 1200.00, 0, 'card',  '2025-12-08', 'complete', 0, 1200.00, 15004, 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15004, 15005, '1500', 15002, 15002, 1200.00, 0, 'card',  '2025-12-08', 'complete', 0, 1200.00, 15004, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Deposit payment: fully unallocated → Is_Deposit=1, Deposit_Amount=£400
+    (15005, 15003, '1500', 15001, 15001,  400.00, 400.00, 'bank_transfer', '2025-12-01', 'partial', 0, 0.00,   NULL,  15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 DELETE FROM Bronze.Payment_Allocations WHERE Tenant_ID = 15;
@@ -462,6 +475,8 @@ VALUES
     (15, NULL, NULL, 'revenue_per_clinical_hour',      'all_time', 'all',   150.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     (15, NULL, NULL, 'revenue_per_dentist_hour',       'all_time', 'all',   180.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     (15, NULL, NULL, 'deposit_ratio',                  'all_time', 'all',     0.80,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction
+    (15, NULL, NULL, 'discounts',                      'all_time', 'all',   150.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- £150 target; actual £100 = strong green
+    (15, NULL, NULL, 'deposit_value',                  'all_time', 'all',   300.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- £300 target; actual £400 = strong green
     (15, NULL, NULL, 'open_courses_value',             'all_time', 'all',   500.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     -- ── Patients (cumulative) ─────────────────────────────────────────────────
     (15, NULL, NULL, 'new_patients',                   'all_time', 'all',    20.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
@@ -472,6 +487,7 @@ VALUES
     (15, NULL, NULL, 'patient_retention',              'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100
     (15, NULL, NULL, 'recalls_overdue_not_sent',       'all_time', 'all',    10.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100, lower=better
     (15, NULL, NULL, 'retention_outlook',              'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100
+    (15, NULL, NULL, 'lapsed_patients',                'all_time', 'all',     3.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better; 2 actual = light green
     -- ── Scheduling ────────────────────────────────────────────────────────────
     (15, NULL, NULL, 'chair_utilisation',              'all_time', 'all',     0.85,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction
     (15, NULL, NULL, 'dna_rate',                       'all_time', 'all',     0.05,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction, lower=better
@@ -490,8 +506,158 @@ VALUES
     (15, NULL, NULL, 'overdue_recalls',                'all_time', 'all',      5.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better
     (15, NULL, NULL, 'email_details_rate',             'all_time', 'all',     0.60,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction; matches 3/5 patients
     (15, NULL, NULL, 'phone_details_rate',             'all_time', 'all',     0.80,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction; matches 4/5 patients
+    -- ── NHS ───────────────────────────────────────────────────────────────────
+    (15, NULL, NULL, 'nhs_uda_completion_rate',        'all_time', 'all',     0.90,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- fraction; band in pp
     -- ── Spider-only (read directly by DAX, not shown in targets UI) ───────────
     (15, NULL, NULL, 'outstanding_invoices',           'all_time', 'all',   600.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3)));  -- lower=better
+GO
+
+-- =============================================================================
+-- 19. PATIENT STATS  (drives New Patients, Lapsed Patients, Active/Retained)
+--
+-- First_Appointment_Date → New_Patient flag in Aggregate_Site_Patient_Practitioner_Daily
+-- Last_Exam_Date         → Lapsed_Patients DAX (EDATE +24m in window)
+-- Next_Appointment_Date  → Future_Appointment flag in Aggregate_Site_Patient_Current
+--
+-- Patients 15001 + 15004 → new in Nov 2025 (First_Appointment_Date in period)
+-- Patient  15003          → last exam Nov 2023 → lapses Nov 2025
+-- Patient  15005          → last exam Dec 2023 → lapses Dec 2025
+-- Patients 15001 + 15004 → have future recall appointments (Jun 2026)
+-- =============================================================================
+
+DELETE FROM Bronze.Patient_Stats WHERE Tenant_ID = 15;
+INSERT INTO Bronze.Patient_Stats
+    (Patient_ID, First_Appointment_Date, First_Exam_Date,
+     Last_Appointment_Date, Last_Exam_Date, Last_Scale_And_Polish_Date,
+     Next_Appointment_Date, Next_Exam_Date, Next_Scale_And_Polish_Date,
+     Last_FTA_Appointment_Date, Last_Cancelled_Appointment_Date,
+     Total_Paid, Total_Invoiced,
+     NHS_Exemption_Code,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    (15001, '2025-11-03', '2025-11-03', '2025-11-17', '2025-11-03', '2025-11-03', '2026-06-15', NULL, NULL, NULL, NULL, 1300.00, 1600.00, NULL, '2020-06-01T00:00:00Z', '2026-05-22T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15002, '2020-03-15', '2020-03-15', '2026-01-15', '2025-11-10', '2025-11-10', NULL,          NULL, NULL, NULL, NULL,  500.00,  500.00, NULL, '2021-01-15T00:00:00Z', '2026-05-22T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15003, '2019-05-20', '2019-05-20', '2025-11-17', '2023-11-20', '2023-11-20', NULL,          NULL, NULL, NULL, NULL,    0.00,    0.00, NULL, '2019-03-10T00:00:00Z', '2026-05-22T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15004, '2025-11-05', '2025-11-05', '2025-12-03', '2025-11-05', '2025-11-05', '2026-06-22', NULL, NULL, NULL, NULL, 1200.00, 1200.00, NULL, '2022-02-20T00:00:00Z', '2026-05-22T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15005, '2018-09-01', '2018-09-01', '2025-12-10', '2023-12-01', '2023-12-01', NULL,          NULL, NULL, NULL, NULL,    0.00,  600.00, NULL, '2018-07-05T00:00:00Z', '2026-05-22T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 20. RECALLS  (4 in-scope records; 2 overdue + unbooked, 2 overdue + booked)
+--
+-- Is_In_Scope (Gold): Due_Date within [-24m, +1m] of ETL run OR reminder sent.
+-- Is_Booked (Gold):   patient has a future non-cancelled appointment at ETL time.
+--   Patients 15001 + 15004 → future recall appointments added in section 22 → Is_Booked = 1
+--   Patients 15003 + 15005 → no future appointments                          → Is_Booked = 0
+--
+-- Expected outcomes (today = 2026-05-22):
+--   Overdue Recalls          = 2  (15003 + 15005, in-scope + not booked)
+--   Retention Outlook        = 2/4 = 50%
+--   Recall Effectiveness     = 4/4 = 100% (all have reminders sent)
+--   Recalls Overdue Not Sent = 0/4 = 0%   (all have been contacted)
+-- =============================================================================
+
+DELETE FROM Bronze.Recalls WHERE Tenant_ID = 15;
+INSERT INTO Bronze.Recalls
+    (ID, Patient_ID, Recall_Type, Recall_Method, Status,
+     Due_Date, First_Reminder_Sent_At, First_Reminder_Type,
+     Times_Contacted, Run_Date,
+     Workflow_Status,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    ('15001', 15001, 'dentist',   'sms', 'open', '2026-05-15', '2026-04-15T09:00:00Z', 'sms', 1, '2026-04-15', 'sent', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15002', 15004, 'hygienist', 'sms', 'open', '2026-05-10', '2026-04-10T09:00:00Z', 'sms', 1, '2026-04-10', 'sent', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15003', 15003, 'dentist',   'sms', 'open', '2025-11-20', '2025-10-20T09:00:00Z', 'sms', 2, '2025-10-20', 'sent', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15004', 15005, 'hygienist', 'sms', 'open', '2026-01-01', '2025-12-01T09:00:00Z', 'sms', 1, '2025-12-01', 'sent', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 21. PRACTITIONER DIARY
+--
+-- Unavailable = 0 means the session IS available (Silver inverts to Available=1).
+-- 09:00-17:00 = 480 mins; no breaks added → Available_Clinical_Mins = 480.
+--
+-- Past entries: match each appointment date so Chair Utilisation has a denominator.
+-- Future entries: drive Aggregate_Site_Practitioner_Current (Days Until Next Free).
+--   Dr Beth 2026-05-26 (4 days from today): first free slot practice-wide.
+--   Dr Alex 2026-06-02 (11 days): Alex's nearest free.
+--   Additional entries for the future recall appointment dates.
+--
+-- Chair Utilisation (Nov 2025, approx):
+--   Dr Alex: 180 min booked / 1440 min available (3 days) = 12.5%
+--   Dr Beth: 240 min booked / 1920 min available (4 days) = 12.5%
+--   (Low because test data has only a handful of appointments — expected.)
+-- =============================================================================
+
+DELETE FROM Bronze.Practitioner_Diary WHERE Tenant_ID = 15;
+INSERT INTO Bronze.Practitioner_Diary
+    (ID, Day, Start_Time, End_Time, Unavailable, Practitioner_ID, Tenant_ID, DW_Loaded_At)
+VALUES
+    -- Dr Alex NHS (15001) — past: matches appointment dates
+    ('T15-PD-001', '2025-11-03', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-002', '2025-11-10', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-003', '2025-11-17', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-004', '2026-01-15', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Dr Alex — future (Days Until Next Free + recall appointment date)
+    ('T15-PD-005', '2026-06-02', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-006', '2026-06-15', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Dr Beth Private (15002) — past: matches appointment dates
+    ('T15-PD-007', '2025-11-05', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-008', '2025-11-12', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-009', '2025-12-03', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-010', '2025-12-10', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-011', '2026-02-10', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Dr Beth — future (earliest free slot practice-wide + recall appointment date)
+    ('T15-PD-012', '2026-05-26', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-013', '2026-06-22', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 22. ADDITIONAL APPOINTMENTS  (future recall bookings + short-notice cancellation)
+--
+-- 15011, 15012: recall booking future appointments; Pending_At = date booked
+--   (= the completed appointment's Start date) so BBYL flag fires for patients
+--   15001 and 15004 in Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.
+--   Patients 15001 and 15004 also have these in Gold.Fact_Recalls as Is_Booked=1.
+--
+-- 15013: short-notice cancellation (cancelled <10 min before start).
+--   Cancellation_Reason_ID=2 ('Short Notice Cancellation') triggers Is_Short_Notice=1
+--   in Gold.Dim_Cancellation_Reasons.
+--   Short Notice Cancellation Rate = 1/2 = 50% (15013 short / 15004+15013 both cancelled)
+-- =============================================================================
+
+DELETE FROM Bronze.Appointments WHERE Tenant_ID = 15 AND ID IN (15011, 15012, 15013);
+INSERT INTO Bronze.Appointments
+    (ID, Patient_ID, Practitioner_ID, User_ID,
+     Room_ID,
+     Start_Time, Finish_Time, Duration, State,
+     Reason, Payment_Plan_ID,
+     Pending_At,
+     Completed_At, Cancelled_At, Did_Not_Attend_At,
+     Appointment_Cancellation_Reason_ID,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    -- BBYL future recall bookings; Pending_At matches the date they were booked
+    (15011, 15001, 15001, 15001, '1500', '2026-06-15T09:00:00Z', '2026-06-15T09:30:00Z', 30, 'waiting',   'Recall Exam',   1500, '2025-11-03T09:30:00Z', NULL, NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15012, 15004, 15002, 15002, '1500', '2026-06-22T10:00:00Z', '2026-06-22T11:00:00Z', 60, 'waiting',   'Recall Review', 1501, '2025-11-05T10:30:00Z', NULL, NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Short-notice cancellation (cancelled 5 min before start on 2026-03-10)
+    (15013, 15002, 15001, 15001, '1500', '2026-03-10T10:00:00Z', '2026-03-10T10:30:00Z', 30, 'cancelled', 'Check-up',      1500, NULL,                   NULL, '2026-03-10T09:55:00Z', NULL, 2, 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 23. CANCELLATION REASONS  (2 reasons for T15)
+--
+-- Is_Short_Notice is derived in Gold.usp_Load_Dim_Cancellation_Reasons:
+--   LOWER(Reason) LIKE '%short%notice%' → Is_Short_Notice = 1 for reason ID 2.
+-- =============================================================================
+
+DELETE FROM Bronze.Cancellation_Reasons WHERE Tenant_ID = 15;
+INSERT INTO Bronze.Cancellation_Reasons
+    (ID, Active, Reason, Reason_Type, Created_At, Updated_At, Tenant_ID, DW_Loaded_At)
+VALUES
+    ('1', 1, 'Standard Cancellation',    'patient', '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('2', 1, 'Short Notice Cancellation','patient', '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 PRINT 'T15 Bronze seed complete. Run Silver.usp_Load_All then Gold pipeline SPs to propagate data.';

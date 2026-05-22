@@ -5,6 +5,7 @@
 --  Initital Date    :  21/05/2026
 --  History          :
 --    *01     21/05/2026  AIH Initial Release
+--    *02     22/05/2026  AIH Add Cancellation_Reason_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run           :   DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Dim_Cancellation_Reasons @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Cancellation_Reasons]    Script Date: 21/05/2026 ******/
@@ -41,7 +42,8 @@ BEGIN
             CAST(CASE WHEN Archived = 1 THEN 0 ELSE 1 END AS BIT)                                  AS Is_Active,
             LEFT(Reason, 255)                                                                       AS Reason,
             LEFT(Reason_Type, 50)                                                                   AS Reason_Type,
-            CAST(CASE WHEN LOWER(ISNULL(Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice
+            CAST(CASE WHEN LOWER(ISNULL(Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice,
+            CAST(1 AS INT)                                                                                        AS Cancellation_Reason_Count
         INTO #src
         FROM Silver.Appointment_Cancellation_Reasons
         WHERE Cancellation_Reason_ID IS NOT NULL;
@@ -86,13 +88,13 @@ BEGIN
         INSERT INTO Gold.Dim_Cancellation_Reasons (
             pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID,
             Is_Active, Reason, Reason_Type, Is_Short_Notice,
-            DW_Created_At, DW_Updated_At
+            Cancellation_Reason_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Cancellation_Reason_ID),
             src.Tenant_ID, src.Cancellation_Reason_ID,
             src.Is_Active, src.Reason, src.Reason_Type, src.Is_Short_Notice,
-            SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Cancellation_Reason_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (
             SELECT 1 FROM Gold.Dim_Cancellation_Reasons tgt
@@ -104,8 +106,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists
-        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason = -1);
 
         --*********************************

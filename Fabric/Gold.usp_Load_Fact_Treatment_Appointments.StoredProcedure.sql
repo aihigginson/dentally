@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *04     22/05/2026  AIH Add Tenant_ID filter to Silver.Appointments join to prevent cross-tenant duplicate rows
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -55,7 +56,7 @@ BEGIN
         FROM Silver.Treatment_Appointments ta
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID        = ta.Patient_ID        AND dpat.Tenant_ID = ta.Tenant_ID
         LEFT JOIN Gold.Dim_Treatment_Plans dtp  ON dtp.Treatment_Plan_ID  = ta.Treatment_Plan_ID AND dtp.Tenant_ID = ta.Tenant_ID
-        LEFT JOIN Silver.Appointments ba        ON ba.Appointment_ID      = ta.Appointment_ID
+        LEFT JOIN Silver.Appointments ba        ON ba.Appointment_ID      = ta.Appointment_ID      AND ba.Tenant_ID = ta.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_a            ON dd_a.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date         = TRY_CAST(NULLIF(TRIM(ba.Start_Time),'') AS DATE)
         WHERE ta.Id IS NOT NULL;

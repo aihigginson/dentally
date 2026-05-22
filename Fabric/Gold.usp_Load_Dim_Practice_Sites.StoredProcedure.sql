@@ -8,6 +8,7 @@
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, Mon/Tue/etc. -> Monday/Tuesday/etc., lowercase Silver.Sites cols)
+--    *05     22/05/2026  AIH Add Practice_Site_Count (1 real, 0 sentinel) for SUM-based measures
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practice_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practice_Sites]    Script Date: 20/04/2026 10:15:06 ******/
@@ -71,7 +72,8 @@ BEGIN
             NULLIF(TRIM(p.Email_Address),'')                        AS Practice_Email,
             NULLIF(TRIM(p.Website),'')                              AS Practice_Website,
             CAST(ISNULL(p.NHS,0) AS BIT)                            AS Practice_NHS,
-            NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone
+            NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone,
+            CAST(1 AS INT)                                          AS Practice_Site_Count
         INTO #src
         FROM Silver.Sites s
         LEFT JOIN Silver.Practice p ON p.Practice_ID = s.Practice_ID AND p.Tenant_ID = s.Tenant_ID
@@ -197,7 +199,7 @@ BEGIN
             Thursday_Open, Thursday_Close, Friday_Open, Friday_Close,
             Practice_ID, Practice_Name, Practice_Address_Line_1, Practice_Address_Line_2,
             Practice_Town, Practice_Postcode, Practice_Phone, Practice_Email,
-            Practice_Website, Practice_NHS, Practice_Time_Zone, DW_Created_At, DW_Updated_At
+            Practice_Website, Practice_NHS, Practice_Time_Zone, Practice_Site_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Practice_Site_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Site_ID),
@@ -208,7 +210,7 @@ BEGIN
             src.Thursday_Open, src.Thursday_Close, src.Friday_Open, src.Friday_Close,
             src.Practice_ID, src.Practice_Name, src.Practice_Address_Line_1, src.Practice_Address_Line_2,
             src.Practice_Town, src.Practice_Postcode, src.Practice_Phone, src.Practice_Email,
-            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, src.Practice_Site_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites tgt WHERE tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
@@ -216,8 +218,8 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, Practice_Site_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1);
         --*********************************
         --**** Procedure logic ends    ****

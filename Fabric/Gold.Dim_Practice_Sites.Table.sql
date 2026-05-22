@@ -40,6 +40,7 @@ CREATE TABLE [Gold].[Dim_Practice_Sites](
 	[Practice_Website] [VARCHAR](255) NULL,
 	[Practice_NHS] [bit] NULL,
 	[Practice_Time_Zone] [VARCHAR](100) NULL,
+	[Practice_Site_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

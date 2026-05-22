@@ -9,6 +9,12 @@
 --                             Fix: Fact_Treatment_Plan_Items has no fk_Practice_Site column;
 --                                  TPI aggregated by patient/practitioner/date only
 --    *03     20/05/2026  AIH  Column naming convention fixes (NHS)
+--    *04     22/05/2026  AIH  BBYL: use fk_Date_Pending (booking date) not fk_Date_Created
+--                             (Silver.Appointments.Created_At is always NULL — not in Dentally API)
+--    *05     22/05/2026  AIH  Add Cancelled_Appointments + Short_Notice_Cancellations columns.
+--                             Cancellation rows excluded from the appointment spine are aggregated
+--                             separately and included via LEFT JOIN (matched dates) or a second
+--                             INSERT (cancellation-only dates with no other appointment on that day)
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -66,7 +72,7 @@ BEGIN
                         FROM   Gold.Fact_Appointments na
                         WHERE  na.fk_Patient     = apt.fk_Patient
                         AND    na.Tenant_ID      = apt.Tenant_ID
-                        AND    na.fk_Date_Created = apt.fk_Date_Start
+                        AND    na.fk_Date_Pending = apt.fk_Date_Start
                         AND    na.fk_Date_Start  > apt.fk_Date_Start
                  )
                 THEN 1 ELSE 0
@@ -74,6 +80,30 @@ BEGIN
         INTO #bbyl
         FROM Gold.Fact_Appointments apt
         WHERE apt.Is_Cancelled = 0;
+
+        -- ── Cancellation counts (per site-patient-practitioner-date) ────────────
+        -- Built separately because cancelled appointments are excluded from the
+        -- appointment spine.  Is_Short_Notice comes from Dim_Cancellation_Reasons.
+        SELECT
+            apt.fk_Practice_Site                                                AS fk_Site,
+            apt.fk_Patient,
+            apt.fk_Practitioner,
+            apt.fk_Date_Start                                                   AS fk_Date,
+            apt.Tenant_ID,
+            COUNT(*)                                                            AS Cancelled_Appointments,
+            SUM(CAST(ISNULL(dcr.Is_Short_Notice, 0) AS INT))                   AS Short_Notice_Cancellations
+        INTO #cancel_agg
+        FROM Gold.Fact_Appointments apt
+        LEFT JOIN Gold.Dim_Cancellation_Reasons dcr
+            ON  dcr.pk_Cancellation_Reason = apt.fk_Cancellation_Reason
+            AND dcr.pk_Cancellation_Reason > 0
+        WHERE apt.Is_Cancelled = 1
+        GROUP BY
+            apt.fk_Practice_Site,
+            apt.fk_Patient,
+            apt.fk_Practitioner,
+            apt.fk_Date_Start,
+            apt.Tenant_ID;
 
         -- ── Appointment spine ────────────────────────────────────────────────
         -- One row per (Site, Patient, Practitioner, Date, Tenant).
@@ -186,6 +216,7 @@ BEGIN
             Open_Treatment_Plan, Future_Appointment,
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
+            Cancelled_Appointments, Short_Notice_Cancellations,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -210,28 +241,82 @@ BEGIN
             CAST(a.New_Patient AS BIT)                         AS New_Patient,
             d.Worked_Hours,
             a.Appointment_Hours,
+            ISNULL(c.Cancelled_Appointments,     0)            AS Cancelled_Appointments,
+            ISNULL(c.Short_Notice_Cancellations, 0)            AS Short_Notice_Cancellations,
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #apt_agg a
-        LEFT JOIN #rev_agg   r  ON  r.fk_Site         = a.fk_Site
-                                AND r.fk_Patient       = a.fk_Patient
-                                AND r.fk_Practitioner  = a.fk_Practitioner
-                                AND r.fk_Date          = a.fk_Date
-                                AND r.Tenant_ID        = a.Tenant_ID
-        LEFT JOIN #tpi_agg   t  ON  t.fk_Patient      = a.fk_Patient
-                                AND t.fk_Practitioner  = a.fk_Practitioner
-                                AND t.fk_Date          = a.fk_Date
-                                AND t.Tenant_ID        = a.Tenant_ID
-        LEFT JOIN #diary_agg d  ON  d.fk_Practitioner = a.fk_Practitioner
-                                AND d.fk_Date          = a.fk_Date
-                                AND d.Tenant_ID        = a.Tenant_ID;
+        LEFT JOIN #rev_agg    r  ON  r.fk_Site         = a.fk_Site
+                                 AND r.fk_Patient       = a.fk_Patient
+                                 AND r.fk_Practitioner  = a.fk_Practitioner
+                                 AND r.fk_Date          = a.fk_Date
+                                 AND r.Tenant_ID        = a.Tenant_ID
+        LEFT JOIN #tpi_agg    t  ON  t.fk_Patient      = a.fk_Patient
+                                 AND t.fk_Practitioner  = a.fk_Practitioner
+                                 AND t.fk_Date          = a.fk_Date
+                                 AND t.Tenant_ID        = a.Tenant_ID
+        LEFT JOIN #diary_agg  d  ON  d.fk_Practitioner = a.fk_Practitioner
+                                 AND d.fk_Date          = a.fk_Date
+                                 AND d.Tenant_ID        = a.Tenant_ID
+        LEFT JOIN #cancel_agg c  ON  c.fk_Site         = a.fk_Site
+                                 AND c.fk_Patient       = a.fk_Patient
+                                 AND c.fk_Practitioner  = a.fk_Practitioner
+                                 AND c.fk_Date          = a.fk_Date
+                                 AND c.Tenant_ID        = a.Tenant_ID;
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- Insert cancellation-only rows: dates where a practitioner had a
+        -- cancellation but no non-cancelled appointment (so not in the spine).
+        DECLARE @pk_cancel_base BIGINT = ISNULL(
+            (SELECT MAX(pk_Site_Patient_Practitioner_Daily)
+             FROM Gold.Aggregate_Site_Patient_Practitioner_Daily), 0);
+
+        INSERT INTO Gold.Aggregate_Site_Patient_Practitioner_Daily (
+            pk_Site_Patient_Practitioner_Daily,
+            fk_Site, fk_Patient, fk_Practitioner, fk_Date, Tenant_ID,
+            NHS_UDAs, NHS_UOAs,
+            Appointments, DNA_Appointments, BBYL_Appointments,
+            NHS_Revenue, Private_Revenue,
+            Open_Treatment_Plan, Future_Appointment,
+            Exam_Count, Treatment_Count, New_Patient,
+            Worked_Hours, Appointment_Hours,
+            Cancelled_Appointments, Short_Notice_Cancellations,
+            DW_Created_At, DW_Updated_At
+        )
+        SELECT
+            @pk_cancel_base + ROW_NUMBER() OVER (ORDER BY c.Tenant_ID, c.fk_Date, c.fk_Site, c.fk_Practitioner, c.fk_Patient)
+                                                               AS pk_Site_Patient_Practitioner_Daily,
+            c.fk_Site, c.fk_Patient, c.fk_Practitioner, c.fk_Date, c.Tenant_ID,
+            NULL, NULL,              -- NHS_UDAs, NHS_UOAs
+            0, 0, 0,                 -- Appointments, DNA_Appointments, BBYL_Appointments
+            0, 0,                    -- NHS_Revenue, Private_Revenue
+            0,                       -- Open_Treatment_Plan
+            CAST(0 AS BIT),          -- Future_Appointment
+            0, 0,                    -- Exam_Count, Treatment_Count
+            CAST(0 AS BIT),          -- New_Patient
+            NULL, 0,                 -- Worked_Hours, Appointment_Hours
+            c.Cancelled_Appointments,
+            c.Short_Notice_Cancellations,
+            SYSUTCDATETIME(),
+            SYSUTCDATETIME()
+        FROM #cancel_agg c
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM #apt_agg a
+            WHERE a.fk_Site        = c.fk_Site
+              AND a.fk_Patient     = c.fk_Patient
+              AND a.fk_Practitioner = c.fk_Practitioner
+              AND a.fk_Date        = c.fk_Date
+              AND a.Tenant_ID      = c.Tenant_ID
+        );
+        SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
         DROP TABLE #bbyl;
         DROP TABLE #apt_agg;
         DROP TABLE #rev_agg;
         DROP TABLE #tpi_agg;
         DROP TABLE #diary_agg;
+        DROP TABLE #cancel_agg;
 
         --*********************************
         --**** Procedure logic ends    ****

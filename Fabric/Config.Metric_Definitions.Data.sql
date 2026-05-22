@@ -15,6 +15,8 @@ USING (VALUES
     ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)',  1, 1, 1, 14, 'above', 'rate'),
     ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist and orthodontist time only',        1, 1, 1, 15, 'above', 'rate'),
     ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Percentage of open treatment plan items that have an invoice raised',     1, 1, 1, 16, 'above', 'point_in_time'),
+    ('discounts',                  'Discounts',                          'revenue',    'currency', 'Total discounts applied to invoices (invoice header minus items sum)',    1, 1, 1, 17, 'below', 'cumulative'),
+    ('deposit_value',              'Deposit Value',                      'revenue',    'currency', 'Unallocated payment amounts and allocations on incomplete treatment plans', 1, 1, 1, 18, 'above', 'cumulative'),
 -- Patients
     ('net_patient_growth',         'Net Patient Growth',                 'patients',   'count',    'New patients minus lapsed patients in the period',                        1, 0, 1, 19, 'above', 'cumulative'),
     ('new_patients',               'New Patients',                       'patients',   'count',    'Number of new patient registrations',                                     1, 1, 1, 20, 'above', 'cumulative'),
@@ -23,6 +25,7 @@ USING (VALUES
     ('patient_retention',          'Patient Retention',                  'patients',   'percent',  'Percentage of patients who returned within the recall period',            1, 0, 1, 23, 'above', 'rate'),
     ('recalls_overdue_not_sent',   'Recalls Overdue Not Sent',           'patients',   'percent',  'Percentage of overdue recalls where no recall notice has been sent',      1, 0, 1, 24, 'below', 'point_in_time'),
     ('retention_outlook',          'Retention Outlook',                  'patients',   'percent',  'Percentage of patients with an active recall who have a future appointment booked', 1, 0, 1, 25, 'above', 'point_in_time'),
+    ('lapsed_patients',            'Lapsed Patients',                    'patients',   'count',    'Patients whose 24-month exam clock expired in the period',                1, 0, 1, 26, 'below', 'point_in_time'),
 -- Treatment (section now called Clinical in the app)
     ('acceptance_rate',            'Treatment Acceptance Rate',          'treatment',  'percent',  'Percentage of presented plans accepted by patients',                      1, 1, 1, 30, 'above', 'rate'),
     ('open_courses',               'Open Courses',                       'treatment',  'count',    'Number of open courses of treatment',                                     1, 1, 1, 32, 'below', 'point_in_time'),
@@ -36,7 +39,9 @@ USING (VALUES
     ('book_before_you_leave',      'Book Before You Leave',              'scheduling', 'percent',  'Percentage of completed appointments where a follow-up was booked',       1, 0, 1, 44, 'above', 'rate'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'home',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time'),
-    ('dna_revenue_lost',           'DNA Revenue Lost',                   'home',       'currency', 'Estimated revenue lost to did-not-attend appointments in the period',    1, 1, 1, 51, 'below', 'cumulative')
+    ('dna_revenue_lost',           'DNA Revenue Lost',                   'home',       'currency', 'Estimated revenue lost to did-not-attend appointments in the period',    1, 1, 1, 51, 'below', 'cumulative'),
+-- NHS
+    ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'above', 'rate')
 ) AS src (
     [Metric_Key], [Display_Name], [Section], [Format_Type], [Description],
     [Supports_Site], [Supports_Practitioner], [Is_Active], [Display_Order], [Range_Type], [Target_Type]

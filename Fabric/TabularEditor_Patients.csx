@@ -154,6 +154,23 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
+add("Lapsed Patients Target",
+    @"MAXX(
+    FILTER('_Targets', '_Targets'[Metric] = ""lapsed_patients""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Lapsed Patients vs Target",
+    @"VAR actual = [Lapsed Patients]
+VAR target = [Lapsed Patients Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
 add("Active Patients Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""active_patients""),
@@ -253,6 +270,19 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")",
     "");
 
+add("Lapsed Patients BG",
+    @"VAR actual = [Lapsed Patients]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""lapsed_patients""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""lapsed_patients""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
 add("Active Patients BG",
     @"VAR actual   = [Active Patients]
 VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""active_patients""), '_Targets'[Target Value])
@@ -334,6 +364,124 @@ RETURN SWITCH( TRUE(),
     diff_pp >= 0,      ""#6abf7b"",
     diff_pp >= -band,  ""#f4a261"",
                        ""#c0392b"" )",
+    "");
+
+// ── Home Detail measures ──────────────────────────────────────────────────────
+
+// Overdue Recalls: in-scope recalls (due and/or reminded) with no booking.
+// REMOVEFILTERS('List Date') keeps the count current, independent of date slicer.
+add("Overdue Recalls",
+    @"CALCULATE(
+    COUNTROWS('_Recalls'),
+    '_Recalls'[Is In Scope] = TRUE(),
+    '_Recalls'[Is Booked]   = FALSE(),
+    REMOVEFILTERS('List Date'))",
+    "#,##0");
+
+// Email Details Rate: % of patients with a non-blank email address
+add("Email Details Rate",
+    @"DIVIDE(
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        NOT ISBLANK('List Patients'[Email Address])),
+    SUM('List Patients'[Patient Count]))",
+    "#,##0.0%");
+
+// Phone Details Rate: % of patients with at least one phone number (mobile or home)
+add("Phone Details Rate",
+    @"DIVIDE(
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        NOT ISBLANK('List Patients'[Mobile Phone])
+        || NOT ISBLANK('List Patients'[Home Phone])),
+    SUM('List Patients'[Patient Count]))",
+    "#,##0.0%");
+
+add("Overdue Recalls Target",
+    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""overdue_recalls""),
+    '_Targets'[Target Value])",
+    "#,##0");
+
+add("Overdue Recalls vs Target",
+    @"VAR actual = [Overdue Recalls]
+VAR target = [Overdue Recalls Target]
+VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(pct >= 0,
+        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    "");
+
+add("Email Details Rate Target",
+    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Email Details Rate vs Target",
+    @"VAR actual  = [Email Details Rate]
+VAR target  = [Email Details Rate Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Phone Details Rate Target",
+    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""),
+    '_Targets'[Target Value])",
+    "#,##0.0%");
+
+add("Phone Details Rate vs Target",
+    @"VAR actual  = [Phone Details Rate]
+VAR target  = [Phone Details Rate Target]
+VAR diff_pp = (actual - target) * 100
+RETURN IF(
+    ISBLANK(target), BLANK(),
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
+    "");
+
+add("Overdue Recalls BG",
+    @"VAR actual = [Overdue Recalls]
+VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""overdue_recalls""), '_Targets'[Target Value])
+VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""overdue_recalls""), '_Targets'[Variance])
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
+    "");
+
+add("Email Details Rate BG",
+    @"VAR actual  = [Email Details Rate]
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""), '_Targets'[Target Value])
+VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""), '_Targets'[Variance])
+VAR diff_pp = (actual - target) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
+    "");
+
+add("Phone Details Rate BG",
+    @"VAR actual  = [Phone Details Rate]
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""), '_Targets'[Target Value])
+VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""), '_Targets'[Variance])
+VAR diff_pp = (actual - target) * 100
+RETURN SWITCH(TRUE(),
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 Info("Patients KPI measures created.");

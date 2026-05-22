@@ -30,6 +30,7 @@ CREATE TABLE [Gold].[Dim_Practitioners](
 	[Last_Login_Date] [date] NULL,
 	[Created_Date] [datetime2](3) NULL,
 	[Updated_Date] [datetime2](3) NULL,
+	[Practitioner_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )
