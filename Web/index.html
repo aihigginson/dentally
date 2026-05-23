@@ -161,21 +161,20 @@
         .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 
-        /* ── Secondary page nav bar ── */
-        .subnav-bar {
-            background: white; border-bottom: 1px solid var(--border);
-            padding: 0 24px; display: none; align-items: center;
-            overflow-x: auto; overflow-y: hidden; flex-shrink: 0;
+        /* ── Page dropdown ── */
+        .page-dropdown {
+            position: fixed; z-index: 500;
+            background: white; border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.10); min-width: 160px;
+            padding: 4px 0; overflow: hidden;
         }
-        .subnav-bar.visible { display: flex; }
-        .page-tab {
-            padding: 9px 14px; font-size: 12px; font-weight: 500; color: var(--text-2);
-            cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
-            white-space: nowrap; user-select: none; flex-shrink: 0; background: none; border-top: none; border-left: none; border-right: none;
-            font-family: var(--font); transition: color 0.12s, border-color 0.12s;
+        .page-dropdown-item {
+            display: block; width: 100%; text-align: left; background: none; border: none;
+            padding: 9px 18px; font-size: 13px; font-family: var(--font); color: var(--text);
+            cursor: pointer; white-space: nowrap; transition: background 0.1s, color 0.1s;
         }
-        .page-tab:hover  { color: var(--navy); }
-        .page-tab.active { color: var(--navy); border-bottom-color: var(--teal-bright); }
+        .page-dropdown-item:hover  { background: var(--bg-page); color: var(--navy); }
+        .page-dropdown-item.active { color: var(--navy); font-weight: 600; }
 
         /* ── Fullscreen button ── */
         .page-tile {
@@ -200,7 +199,6 @@
         /* ── Fullscreen mode ── */
         body.is-fullscreen .header,
         body.is-fullscreen .nav,
-        body.is-fullscreen .subnav-bar,
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
@@ -294,8 +292,6 @@
             .header-org { display: none; }
             .nav { padding: 0 8px; }
             .nav-tab { padding: 10px 11px; font-size: 12px; }
-            .subnav-bar { padding: 0 8px; }
-            .page-tab { padding: 8px 10px; font-size: 11px; }
             .main { padding: 0; }
             .section-header { padding: 0 12px; }
             .nav-report-controls { padding-left: 8px; gap: 4px; }
@@ -371,9 +367,6 @@
         </button>
     </div>
 </nav>
-
-<!-- ════════════════ SECONDARY PAGE NAV ════════════════ -->
-<nav class="subnav-bar" id="subnav-bar"></nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
 <div class="filter-bar" id="filter-bar">
@@ -626,14 +619,24 @@
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', e => {
+            e.stopPropagation();
+            const key = tab.dataset.section;
+            const alreadyActive = key === activeSection;
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            activateSection(tab.dataset.section);
+            activateSection(key);
+            // Toggle dropdown: show on first click, close if already open for this tab
+            if (activeDropdown && activeDropdown.sectionKey === key) {
+                closePageDropdown();
+            } else {
+                showPageDropdown(key, tab);
+            }
         });
     });
 
     function activateSection(key) {
+        if (key !== activeSection) closePageDropdown();
         activeSection = key;
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         const el = document.getElementById('section-' + key);
@@ -644,14 +647,12 @@
         if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
 
         if (key === 'targets') {
-            document.getElementById('subnav-bar').classList.remove('visible');
             filterBar.classList.remove('open');
             filterToggleBtn.classList.remove('active');
             filterToggleBtn.style.visibility = 'hidden';
             loadTargets();
         } else {
             filterToggleBtn.style.visibility = '';
-            renderSubnavBar(key);
             loadEmbedsInSection(key);
         }
     }
@@ -672,41 +673,54 @@
         if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
     });
 
-    // ── PBI page sub-nav ─────────────────────────────────────────────────────
+    // ── PBI page dropdown ────────────────────────────────────────────────────
     const sectionSubnavData = {};
+    let activeDropdown = null;
 
-    function renderSubnavBar(sectionKey) {
-        const bar  = document.getElementById('subnav-bar');
+    function showPageDropdown(sectionKey, anchorEl) {
+        closePageDropdown();
         const data = sectionSubnavData[sectionKey];
-        bar.innerHTML = '';
-        if (!data || data.pages.length <= 1) { bar.classList.remove('visible'); return; }
-        bar.classList.add('visible');
+        if (!data || data.pages.length <= 1) return;
+
+        const dd = document.createElement('div');
+        dd.className = 'page-dropdown';
         data.pages.forEach(page => {
             const btn = document.createElement('button');
-            btn.className = 'page-tab' + (page.name === data.activePage ? ' active' : '');
+            btn.className = 'page-dropdown-item' + (page.name === data.activePage ? ' active' : '');
             btn.textContent = page.displayName;
-            btn.dataset.pageName = page.name;
-            btn.addEventListener('click', () => {
-                bar.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
-                btn.classList.add('active');
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
                 sectionSubnavData[sectionKey].activePage = page.name;
                 data.report.setPage(page.name);
+                closePageDropdown();
             });
-            bar.appendChild(btn);
+            dd.appendChild(btn);
         });
+        document.body.appendChild(dd);
+
+        const rect = anchorEl.getBoundingClientRect();
+        dd.style.left = rect.left + 'px';
+        dd.style.top  = rect.bottom + 'px';
+
+        activeDropdown = { sectionKey, el: dd };
     }
+
+    function closePageDropdown() {
+        if (activeDropdown) { activeDropdown.el.remove(); activeDropdown = null; }
+    }
+
+    document.addEventListener('click', () => closePageDropdown());
 
     function buildSubnav(sectionKey, pages, report) {
         const prev = sectionSubnavData[sectionKey];
         sectionSubnavData[sectionKey] = { pages, report, activePage: prev?.activePage || pages[0]?.name };
-        if (sectionKey === activeSection) renderSubnavBar(sectionKey);
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
             if (sectionSubnavData[sectionKey]) sectionSubnavData[sectionKey].activePage = active;
-            if (sectionKey === activeSection) {
-                document.getElementById('subnav-bar').querySelectorAll('.page-tab').forEach(btn => {
-                    btn.classList.toggle('active', btn.dataset.pageName === active);
+            if (activeDropdown?.sectionKey === sectionKey) {
+                activeDropdown.el.querySelectorAll('.page-dropdown-item').forEach(btn => {
+                    btn.classList.toggle('active', btn.textContent === pages.find(p => p.name === active)?.displayName);
                 });
             }
         });
