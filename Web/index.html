@@ -161,15 +161,29 @@
         .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 
-        /* ── PBI page sub-nav (in section header) ── */
-        .report-subnav { display: none; gap: 6px; }
+        /* ── Secondary page nav bar ── */
+        .subnav-bar {
+            background: white; border-bottom: 1px solid var(--border);
+            padding: 0 24px; display: none; align-items: center;
+            overflow-x: auto; overflow-y: hidden; flex-shrink: 0;
+        }
+        .subnav-bar.visible { display: flex; }
+        .page-tab {
+            padding: 9px 14px; font-size: 12px; font-weight: 500; color: var(--text-2);
+            cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+            white-space: nowrap; user-select: none; flex-shrink: 0; background: none; border-top: none; border-left: none; border-right: none;
+            font-family: var(--font); transition: color 0.12s, border-color 0.12s;
+        }
+        .page-tab:hover  { color: var(--navy); }
+        .page-tab.active { color: var(--navy); border-bottom-color: var(--teal-bright); }
+
+        /* ── Fullscreen button ── */
         .page-tile {
-            width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
             background: white; border: 1px solid var(--border); border-radius: var(--radius);
             cursor: pointer; color: var(--text-2); transition: border-color 0.12s, background 0.12s, color 0.12s; flex-shrink: 0;
         }
-        .page-tile:hover  { border-color: var(--navy); color: var(--navy); }
-        .page-tile.active { background: var(--navy); border-color: var(--navy); color: white; }
+        .page-tile:hover { border-color: var(--navy); color: var(--navy); }
 
         /* ── Fullscreen close button ── */
         .fullscreen-close {
@@ -186,6 +200,7 @@
         /* ── Fullscreen mode ── */
         body.is-fullscreen .header,
         body.is-fullscreen .nav,
+        body.is-fullscreen .subnav-bar,
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
@@ -279,6 +294,8 @@
             .header-org { display: none; }
             .nav { padding: 0 8px; }
             .nav-tab { padding: 10px 11px; font-size: 12px; }
+            .subnav-bar { padding: 0 8px; }
+            .page-tab { padding: 8px 10px; font-size: 11px; }
             .main { padding: 0; }
             .section-header { padding: 0 12px; }
             .nav-report-controls { padding-left: 8px; gap: 4px; }
@@ -349,17 +366,14 @@
         Filters
     </button>
     <div class="nav-report-controls" id="nav-report-controls">
-        <div class="report-subnav" id="subnav-home"></div>
-        <div class="report-subnav" id="subnav-revenue"></div>
-        <div class="report-subnav" id="subnav-patient"></div>
-        <div class="report-subnav" id="subnav-scheduling"></div>
-        <div class="report-subnav" id="subnav-clinical"></div>
-        <div class="report-subnav" id="subnav-nhs"></div>
         <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
     </div>
 </nav>
+
+<!-- ════════════════ SECONDARY PAGE NAV ════════════════ -->
+<nav class="subnav-bar" id="subnav-bar"></nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
 <div class="filter-bar" id="filter-bar">
@@ -367,12 +381,11 @@
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
-            <option value="all">All periods</option>
             <option value="FY 2026/27 (YTD)">FY 2026/27 (YTD)</option>
             <option value="FY 2025/26">FY 2025/26</option>
             <option value="FY 2024/25">FY 2024/25</option>
             <option value="Last 12 Months">Last 12 Months</option>
-            <option value="Last 3 Months">Last 3 Months</option>
+            <option value="Last 3 Months" selected>Last 3 Months</option>
         </select>
     </div>
     <div class="filter-sep"></div>
@@ -389,7 +402,7 @@
     <label class="filter-check" for="f-active-only">
         <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-    <div class="filter-badge" id="filter-badge">All periods &middot; All sites &middot; All practitioners</div>
+    <div class="filter-badge" id="filter-badge">Last 3 Months &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
@@ -608,33 +621,6 @@
         'nhs':       'nhs',
     };
 
-    const PAGE_ICON_MAP = {
-        'Performed':   'chart-bar',  'Open':        'clipboard',
-        'Acceptance':  'trend-up',   'Acquisition': 'person-add',
-        'Retention':   'refresh',    'Value':       'currency',
-        'Utilisation': 'calendar',   'Planning':    'forward',
-        'Performance': 'chart-line', 'Cashflow':    'chart-line',
-        'Discount':    'percent',    '_default':    'chart-bar',
-    };
-
-    const ICONS = {
-        'chart-bar':  '<rect x="4" y="10" width="4" height="11" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="16" y="3" width="4" height="18" rx="1"/>',
-        'chart-line': '<polyline points="3 18 9 12 13 16 21 6" stroke-linecap="round" stroke-linejoin="round"/>',
-        'clipboard':  '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/>',
-        'trend-up':   '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 6 23 6 23 12" stroke-linecap="round" stroke-linejoin="round"/>',
-        'person-add': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14" stroke-linecap="round"/><line x1="16" y1="11" x2="22" y2="11" stroke-linecap="round"/>',
-        'refresh':    '<polyline points="23 4 23 10 17 10" stroke-linecap="round" stroke-linejoin="round"/><polyline points="1 20 1 14 7 14" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round"/>',
-        'currency':   '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 10a3 3 0 0 1 6 0c0 3-6 3-6 6a3 3 0 0 0 6 0" stroke-linecap="round"/>',
-        'calendar':   '<rect x="3" y="5" width="18" height="17" rx="1"/><path d="M3 11h18M8 3v4M16 3v4" stroke-linecap="round"/>',
-        'forward':    '<polyline points="5 12 19 12" stroke-linecap="round" stroke-linejoin="round"/><polyline points="13 6 19 12 13 18" stroke-linecap="round" stroke-linejoin="round"/>',
-        'percent':    '<line x1="19" y1="5" x2="5" y2="19" stroke-linecap="round"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
-    };
-
-    function svgIcon(key, size) {
-        size = size || 18;
-        return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8">${ICONS[key] || ICONS['chart-bar']}</svg>`;
-    }
-
     // ── State ────────────────────────────────────────────────────────────────
     let activeSection = 'home';
 
@@ -656,17 +642,16 @@
 
         const navControls = document.getElementById('nav-report-controls');
         if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
-        document.querySelectorAll('.report-subnav').forEach(s => s.style.display = 'none');
-        const activeSubnav = document.getElementById('subnav-' + key);
-        if (activeSubnav && activeSubnav.children.length > 0) activeSubnav.style.display = 'flex';
 
         if (key === 'targets') {
+            document.getElementById('subnav-bar').classList.remove('visible');
             filterBar.classList.remove('open');
             filterToggleBtn.classList.remove('active');
             filterToggleBtn.style.visibility = 'hidden';
             loadTargets();
         } else {
             filterToggleBtn.style.visibility = '';
+            renderSubnavBar(key);
             loadEmbedsInSection(key);
         }
     }
@@ -688,29 +673,42 @@
     });
 
     // ── PBI page sub-nav ─────────────────────────────────────────────────────
-    function buildSubnav(sectionKey, pages, report) {
-        const el = document.getElementById('subnav-' + sectionKey);
-        if (!el || pages.length <= 1) { if (el) el.style.display = 'none'; return; }
-        el.innerHTML = '';
-        if (sectionKey === activeSection) el.style.display = 'flex';
-        pages.forEach((page, i) => {
+    const sectionSubnavData = {};
+
+    function renderSubnavBar(sectionKey) {
+        const bar  = document.getElementById('subnav-bar');
+        const data = sectionSubnavData[sectionKey];
+        bar.innerHTML = '';
+        if (!data || data.pages.length <= 1) { bar.classList.remove('visible'); return; }
+        bar.classList.add('visible');
+        data.pages.forEach(page => {
             const btn = document.createElement('button');
-            btn.className = 'page-tile' + (i === 0 ? ' active' : '');
-            btn.title     = page.displayName;
-            btn.innerHTML = svgIcon(PAGE_ICON_MAP[page.displayName] || PAGE_ICON_MAP['_default']);
+            btn.className = 'page-tab' + (page.name === data.activePage ? ' active' : '');
+            btn.textContent = page.displayName;
+            btn.dataset.pageName = page.name;
             btn.addEventListener('click', () => {
-                el.querySelectorAll('.page-tile').forEach(t => t.classList.remove('active'));
+                bar.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
                 btn.classList.add('active');
-                report.setPage(page.name);
+                sectionSubnavData[sectionKey].activePage = page.name;
+                data.report.setPage(page.name);
             });
-            el.appendChild(btn);
+            bar.appendChild(btn);
         });
+    }
+
+    function buildSubnav(sectionKey, pages, report) {
+        const prev = sectionSubnavData[sectionKey];
+        sectionSubnavData[sectionKey] = { pages, report, activePage: prev?.activePage || pages[0]?.name };
+        if (sectionKey === activeSection) renderSubnavBar(sectionKey);
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
-            el.querySelectorAll('.page-tile').forEach((t, i) => {
-                t.classList.toggle('active', pages[i] && pages[i].name === active);
-            });
+            if (sectionSubnavData[sectionKey]) sectionSubnavData[sectionKey].activePage = active;
+            if (sectionKey === activeSection) {
+                document.getElementById('subnav-bar').querySelectorAll('.page-tab').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.pageName === active);
+                });
+            }
         });
     }
 
@@ -930,7 +928,7 @@
                 const r = window.powerbi.embed(slot, cfg);
                 embeddedReports[sectionKey] = r;
                 attachEmbedOverlay(slot, r);
-                r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} });
+                r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} applyFilters(); });
             });
         }, 300);
     });
@@ -969,6 +967,7 @@
             attachEmbedOverlay(slot, r);
             r.on('loaded', async () => {
                 try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {}
+                applyFilters();
             });
             return r;
         }
@@ -991,7 +990,7 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'all', site: 'all', pract: 'all' };
+    const filterState = { period: 'Last 3 Months', site: 'all', pract: 'all' };
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
     const selPract    = document.getElementById('f-pract');
