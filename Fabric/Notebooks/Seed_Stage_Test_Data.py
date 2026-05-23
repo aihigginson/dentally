@@ -14,7 +14,7 @@
 #
 # | Tenant | Practice | Location | Type | Patients |
 # |--------|----------|----------|------|----------|
-# | 11 | Valley Dental Group | Bristol | NHS + ortho, 3 sites | 15,000 |
+# | 11 | Valley Dental Group | Bristol | NHS + ortho, 3 sites | 3,700 |
 # | 12 | Elara Dental | Edinburgh | Private, 1 site | 7,500 |
 # | 13 | NorthCity Dental | Leeds | NHS + private, 2 sites | 7,500 |
 # | 14 | Eastside Dental | Nottingham | NHS + private, 1 site | 5,000 |
@@ -101,7 +101,7 @@ def write_stage(records, table_name, tenant_id):
 # -----------------------------------------------------------------------------
 
 T11 = {
-    "tenant_id": 11, "nhs": True, "has_ortho": True, "price_mult": 1.0, "n_patients": 15000,
+    "tenant_id": 11, "nhs": True, "has_ortho": True, "price_mult": 1.0, "n_patients": 3700,
     "domain": "valleydental.co.uk",
     "practice": {
         "id": _u5("practice", 11), "name": "Valley Dental Group", "nhs": True,
@@ -269,6 +269,24 @@ T11 = {
          "late_days": [], "late_end": None, "pp_ids": [2,3], "performs_nhs": False, "active": True},
     ],
     "_site_patient_split": {"t11-cl": 0.45, "t11-hb": 0.30, "t11-bm": 0.25},
+    "_params": {
+        # Scale: 3700 patients × 0.95 active ≈ 3,515 ≈ target 3,500
+        "active_rate": 0.95,
+        # New patients: 3700 × 0.223 ≈ 825 join during 3yr window → ~275/year
+        "new_patient_rate": 0.223,
+        # DNA rate: target 3%; ~2.8% gives headroom within 20% band
+        "dna_rate": 0.028,
+        "cancel_rate": 0.025,
+        # Treatment mix: 2 attempts per exam at 80% → exam ratio ~30% (target 28%)
+        "treatment_followup_rate": 0.80,
+        "max_tx_followups": 2,
+        # BBYL: target 72%; high rates in data ready for when pipeline col is confirmed
+        "bbyl_rate_tx": 0.78,
+        "bbyl_rate_hyg": 0.78,
+        "recall_booking_rate": 0.78,
+        # Acceptance rate: target 65%
+        "plan_acceptance_rate": 0.65,
+    },
 }
 
 # %% [markdown]

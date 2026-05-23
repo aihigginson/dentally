@@ -926,6 +926,9 @@ def gen_patients(tdef, rng):
     split = tdef["_site_patient_split"]
     prac_defs = tdef["_prac_defs"]
     acq_ids = [a["id"] for a in tdef["acquisition_sources"]]
+    params = tdef.get("_params", {})
+    active_rate = params.get("active_rate", 0.95)
+    new_patient_rate = params.get("new_patient_rate", 0.0)  # fraction of patients who joined after START
     # Build site → dentist list and site → hygienist list
     site_dentists = {}
     site_hygienists = {}
@@ -1001,9 +1004,14 @@ def gen_patients(tdef, rng):
         pc_area = postcode_map.get(site_id, "SW1")
         postcode = f"{pc_area} {rng.randint(1,9)}{rng.choice('ABCDEFGH')}{rng.choice('ABCDEFGHJKLMNPQRSTUVWXY')}"
 
-        # Created date: uniform between START-5yrs and START
-        created_offset = rng.randint(0, 365*5)
-        created = START - timedelta(days=created_offset)
+        # Created date: legacy patients joined before START; new patients (new_patient_rate)
+        # joined during the data window so their first exam falls within it
+        if new_patient_rate > 0 and rng.random() < new_patient_rate:
+            max_days = max(1, (TODAY - START - timedelta(days=90)).days)
+            created = START + timedelta(days=rng.randint(1, max_days))
+        else:
+            created_offset = rng.randint(0, 365*5)
+            created = START - timedelta(days=created_offset)
 
         # Ethnicity
         ethnicity = rng.choice(_ET)
@@ -1035,8 +1043,8 @@ def gen_patients(tdef, rng):
         else:
             ec_rel = None; ec_name = None; ec_phone = None
 
-        # archived_reason: only for inactive patients (~5%)
-        is_active = rng.random() > 0.05
+        # archived_reason: only for inactive patients
+        is_active = rng.random() < active_rate
         archived_reason = rng.choice(["Moved away","Deceased","No longer a patient",None]) if not is_active else None
 
         patients.append({
@@ -1084,6 +1092,16 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     care_plan_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp["name"]=="Care Plan"), None)
     cr_ids = [c["id"] for c in tdef["cancellation_reasons"]]
+    params = tdef.get("_params", {})
+    dna_rate              = params.get("dna_rate", 0.05)
+    cancel_rate           = params.get("cancel_rate", 0.03)
+    treatment_followup_rate = params.get("treatment_followup_rate", 0.35)
+    max_tx_followups      = params.get("max_tx_followups", 1)
+    bbyl_rate_tx          = params.get("bbyl_rate_tx", 0.35)
+    hygiene_rate_nhs      = params.get("hygiene_rate_nhs", 0.8)
+    hygiene_rate_private  = params.get("hygiene_rate_private", 0.4)
+    bbyl_rate_hyg         = params.get("bbyl_rate_hyg", 0.40)
+    recall_booking_rate   = params.get("recall_booking_rate", 0.35)
 
     appointments = []
     apt_id = 0
@@ -1142,17 +1160,27 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             continue
         pdates = prac_dates[pid]
 
-        # How many exam appointments over 3 years?
+        # Scheduling anchor: new patients (created_at > START) start from their join date
+        pat_created_str = pat.get("created_at", "")[:10]
+        try:
+            pat_start = max(START, date.fromisoformat(pat_created_str))
+        except ValueError:
+            pat_start = START
         recall_months = 6 if is_nhs else 12
-        n_exams = (36 // recall_months) + rng.randint(0,1)
+        months_in_practice = max(recall_months, (TODAY - pat_start).days // 30)
+        n_exams = (months_in_practice // recall_months) + rng.randint(0, 1)
+        n_exams = min(n_exams, (36 // recall_months) + 2)  # cap at ~3.5 years
 
         # Spread exams across START..TODAY
         exam_codes_used = []
         prev_exam_date = None
 
         for exam_num in range(n_exams):
-            # Target date
-            target = START + timedelta(days=int(exam_num * (36/n_exams) * 30.5))
+            # Target date — new patients use pat_start as anchor; legacy use even distribution
+            if pat_start > START:
+                target = pat_start + timedelta(days=int(exam_num * recall_months * 30))
+            else:
+                target = START + timedelta(days=int(exam_num * (36 / n_exams) * 30.5))
             if target >= TODAY:
                 # Future exam
                 target = TODAY + timedelta(days=rng.randint(7, 180))
@@ -1175,9 +1203,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             is_past = d < TODAY
             if is_past:
                 r = rng.random()
-                if r < 0.05:   state = "did_not_attend"
-                elif r < 0.08: state = "cancelled"
-                else:          state = "completed"
+                if r < dna_rate:                    state = "did_not_attend"
+                elif r < dna_rate + cancel_rate:    state = "cancelled"
+                else:                               state = "completed"
             else:
                 state = "booked"
 
@@ -1205,45 +1233,49 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
 
             if state == "completed":
                 prev_exam_date = d
-                # Possibly add a treatment appointment (30% chance) or hygiene
-                if rng.random() < 0.35 and is_past:
-                    # Treatment follow-up 1-3 weeks later; ~12% chance is a Review-type appointment
-                    if rng.random() < 0.12:
-                        tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
-                    else:
-                        tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
-                    ttx = tx_by_code.get(tx_code)
-                    tdur = 30
-                    td = _book_slot(pid, pdates,
-                                    after_date=d + timedelta(3),
-                                    before_date=d + timedelta(42))
-                    if td:
-                        ts_t, te_t = _slot_times(td, rng.randint(0,6), tdur)
-                        tx_state  = "completed" if td < TODAY else "booked"
-                        tx_bbyl   = rng.random() < 0.35
-                        tx_online = (not tx_bbyl) and rng.random() < 0.20
-                        apt_id += 1
-                        appointments.append({
-                            "id": apt_id,
-                            "patient_id": pat_id,
-                            "practitioner_id": pid,
-                            "room_id": None,
-                            "start_time": _iso(td, ts_t),
-                            "end_time": _iso(td, te_t),
-                            "state": tx_state,
-                            "reason": ttx["description"] if ttx else "Treatment",
-                            "treatment_id": ttx["id"] if ttx else None,
-                            "appointment_cancellation_reason_id": None,
-                            "online_booking": tx_online,
-                            "booked_via_api": tx_bbyl or tx_online,
-                            "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
-                            "cancelled_at": None,
-                            "did_not_attend_at": None,
-                        })
+                # Treatment follow-ups: loop max_tx_followups times; each is independent
+                tx_last_date = d
+                for _tx_i in range(max_tx_followups):
+                    if rng.random() < treatment_followup_rate and is_past:
+                        # ~12% chance is a Review-type appointment
+                        if rng.random() < 0.12:
+                            tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                        else:
+                            tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
+                        ttx = tx_by_code.get(tx_code)
+                        tdur = 30
+                        td = _book_slot(pid, pdates,
+                                        after_date=tx_last_date + timedelta(3),
+                                        before_date=tx_last_date + timedelta(42))
+                        if td:
+                            ts_t, te_t = _slot_times(td, rng.randint(0,6), tdur)
+                            tx_state  = "completed" if td < TODAY else "booked"
+                            tx_bbyl   = rng.random() < bbyl_rate_tx
+                            tx_online = (not tx_bbyl) and rng.random() < 0.20
+                            apt_id += 1
+                            appointments.append({
+                                "id": apt_id,
+                                "patient_id": pat_id,
+                                "practitioner_id": pid,
+                                "room_id": None,
+                                "start_time": _iso(td, ts_t),
+                                "end_time": _iso(td, te_t),
+                                "state": tx_state,
+                                "reason": ttx["description"] if ttx else "Treatment",
+                                "treatment_id": ttx["id"] if ttx else None,
+                                "appointment_cancellation_reason_id": None,
+                                "online_booking": tx_online,
+                                "booked_via_api": tx_bbyl or tx_online,
+                                "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
+                                "cancelled_at": None,
+                                "did_not_attend_at": None,
+                            })
+                            tx_last_date = td
 
                 # Hygiene appointment (every 6 months for care plan / NHS, annually for private)
                 hyg_pids = site_hygienists.get(site_id, [])
-                if hyg_pids and rng.random() < (0.8 if (is_nhs or is_care) else 0.4):
+                hyg_chance = hygiene_rate_nhs if (is_nhs or is_care) else hygiene_rate_private
+                if hyg_pids and rng.random() < hyg_chance:
                     hpid = rng.choice(hyg_pids)
                     if hpid in prac_dates:
                         hd = _book_slot(hpid, prac_dates[hpid],
@@ -1253,7 +1285,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                             hs_t, he_t = _slot_times(hd, rng.randint(0,5), 30)
                             htx = tx_by_code.get(1001)
                             hyg_state  = "completed" if hd < TODAY else "booked"
-                            hyg_bbyl   = rng.random() < 0.40
+                            hyg_bbyl   = rng.random() < bbyl_rate_hyg
                             hyg_online = (not hyg_bbyl) and rng.random() < 0.25
                             apt_id += 1
                             appointments.append({
@@ -1274,9 +1306,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "did_not_attend_at": None,
                             })
 
-        # ~35% of patients who have had exams get a future booked recall appointment.
+        # recall_booking_rate of patients who have had exams get a future booked recall appointment.
         # Simulates patients who have already scheduled their next recall visit.
-        if prev_exam_date is not None and rng.random() < 0.35:
+        if prev_exam_date is not None and rng.random() < recall_booking_rate:
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
             after_d  = max(TODAY, due_date - timedelta(14))
             before_d = min(FWD_END, due_date + timedelta(60))
@@ -1314,6 +1346,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pat_pp = {p["id"]: p["payment_plan_id"] for p in patients}
+    plan_acceptance_rate = tdef.get("_params", {}).get("plan_acceptance_rate", 1.0)
 
     # Band UDA values
     uda_for_band = {1:1.0, 2:3.0, 3:5.0, 4:7.0, 5:12.0}
@@ -1437,6 +1470,12 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 tx0 = tx_by_id.get(cluster[0].get("treatment_id"), {})
                 nickname = f"{tx0.get('description','Treatment')} - {month_str}"
 
+            # plan_acceptance_rate: non-hygiene plans have a chance of no start_date (not accepted)
+            if not is_hygiene_plan and plan_acceptance_rate < 1.0 and rng.random() > plan_acceptance_rate:
+                start_date_val = None
+            else:
+                start_date_val = _iso(first_date)
+
             plans.append({
                 "id": plan_id,
                 "patient_id": pat_id,
@@ -1445,7 +1484,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 "nickname": nickname,
                 "completed": completed,
                 "completed_at": completed_at,
-                "start_date": _iso(first_date),
+                "start_date": start_date_val,
                 "end_date": _iso(last_date) if completed else None,
                 "nhs_uda_value": uda_str,
                 "nhs_completed_uda_value": uda_str if completed else "0",
