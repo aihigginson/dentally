@@ -415,7 +415,7 @@ RETURN IF(
 
 add("Email Details Rate Target",
     @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Email Details Rate vs Target",
@@ -431,7 +431,7 @@ RETURN IF(
 
 add("Phone Details Rate Target",
     @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Phone Details Rate vs Target",
@@ -460,7 +460,7 @@ RETURN SWITCH(TRUE(),
 
 add("Email Details Rate BG",
     @"VAR actual  = [Email Details Rate]
-VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""), '_Targets'[Target Value])
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""), '_Targets'[Target Value]) / 100
 VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""email_details_rate""), '_Targets'[Variance])
 VAR diff_pp = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -473,7 +473,7 @@ RETURN SWITCH(TRUE(),
 
 add("Phone Details Rate BG",
     @"VAR actual  = [Phone Details Rate]
-VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""), '_Targets'[Target Value])
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""), '_Targets'[Target Value]) / 100
 VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""phone_details_rate""), '_Targets'[Variance])
 VAR diff_pp = (actual - target) * 100
 RETURN SWITCH(TRUE(),

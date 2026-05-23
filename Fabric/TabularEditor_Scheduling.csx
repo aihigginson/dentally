@@ -55,7 +55,7 @@ add("Book Before You Leave",
 add("Chair Utilisation Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""chair_utilisation""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Chair Utilisation vs Target",
@@ -72,7 +72,7 @@ RETURN IF(
 add("DNA Rate Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""dna_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("DNA Rate vs Target",
@@ -123,7 +123,7 @@ RETURN IF(
 add("Book Before You Leave Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""book_before_you_leave""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Book Before You Leave vs Target",
@@ -146,7 +146,7 @@ RETURN IF(
 
 add("Chair Utilisation BG",
     @"VAR actual   = [Chair Utilisation]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""chair_utilisation""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""chair_utilisation""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""chair_utilisation""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -159,7 +159,7 @@ RETURN SWITCH(TRUE(),
 
 add("DNA Rate BG",
     @"VAR actual   = [DNA Rate]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_rate""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_rate""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_rate""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -198,7 +198,7 @@ RETURN SWITCH(TRUE(),
 
 add("Book Before You Leave BG",
     @"VAR actual   = [Book Before You Leave]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""book_before_you_leave""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""book_before_you_leave""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""book_before_you_leave""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -242,7 +242,7 @@ RETURN IF(
 
 add("Short Notice Cancellation Rate Target",
     @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Short Notice Cancellation Rate vs Target",
@@ -271,7 +271,7 @@ RETURN SWITCH(TRUE(),
 
 add("Short Notice Cancellation Rate BG",
     @"VAR actual  = [Short Notice Cancellation Rate]
-VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Target Value])
+VAR target  = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Target Value]) / 100
 VAR band    = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Variance])
 VAR diff_pp = (actual - target) * 100
 RETURN SWITCH(TRUE(),

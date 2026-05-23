@@ -93,7 +93,7 @@ RETURN IF(
 add("NHS UDA Completion Rate Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("NHS UDA Completion Rate vs Target",
@@ -140,7 +140,7 @@ RETURN SWITCH(TRUE(),
 
 add("NHS UDA Completion Rate BG",
     @"VAR actual   = [NHS UDA Completion Rate]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),

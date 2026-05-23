@@ -48,7 +48,7 @@ add("Exam Ratio",
 add("Treatment Acceptance Rate Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Treatment Acceptance Rate vs Target",
@@ -99,7 +99,7 @@ RETURN IF(
 add("Exam Ratio Target",
     @"MAXX(
     FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""),
-    '_Targets'[Target Value])",
+    '_Targets'[Target Value]) / 100",
     "#,##0.0%");
 
 add("Exam Ratio vs Target",
@@ -121,7 +121,7 @@ RETURN IF(
 
 add("Treatment Acceptance Rate BG",
     @"VAR actual   = [Treatment Acceptance Rate]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""), '_Targets'[Variance])
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -161,7 +161,7 @@ RETURN SWITCH(TRUE(),
 // within: deviation from target — being close is good
 add("Exam Ratio BG",
     @"VAR actual   = [Exam Ratio]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""), '_Targets'[Target Value])
+VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""), '_Targets'[Target Value]) / 100
 VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""), '_Targets'[Variance])
 VAR dev      = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
