@@ -88,7 +88,7 @@ def _pbi_delegated_token():
     return result['access_token']
 
 
-def _fabric_conn():
+def _fabric_conn(autocommit=False):
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={FABRIC_SERVER},1433;"
@@ -99,7 +99,7 @@ def _fabric_conn():
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
     )
-    return pyodbc.connect(conn_str)
+    return pyodbc.connect(conn_str, autocommit=autocommit)
 
 # ── Public routes ─────────────────────────────────────────────────────────────
 
@@ -742,9 +742,8 @@ def save_targets():
     if err:
         return err
     try:
-        conn            = _fabric_conn()
-        conn.autocommit = True   # Fabric Warehouse requires autocommit for DML
-        cur             = conn.cursor()
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
         _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
@@ -780,7 +779,9 @@ def save_targets():
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        print(f"[save_targets] ERROR: {repr(e)}\n{traceback.format_exc()}", flush=True)
+        return jsonify({'error': repr(e)}), 500
 
 
 
