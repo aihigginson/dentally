@@ -1093,6 +1093,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     care_plan_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp["name"]=="Care Plan"), None)
     cr_ids = [c["id"] for c in tdef["cancellation_reasons"]]
+    pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     params = tdef.get("_params", {})
     dna_rate              = params.get("dna_rate", 0.05)
     cancel_rate           = params.get("cancel_rate", 0.03)
@@ -1137,7 +1138,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             key = (pid, dstr)
             used = used_slots.setdefault(pid, {})
             count = used.get(dstr, 0)
-            if count < 8:
+            if count < 20:
                 used[dstr] = count + 1
                 return d
         return None
@@ -1199,7 +1200,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             exam_code = 111 if is_first else 101
             tx = tx_by_code.get(exam_code)
             tx_id = tx["id"] if tx else None
-            dur = 30 if is_first else 20
+            pp_exam_dur = pp_by_id.get(pp_id, {}).get("exam_dur", 20)
+            dur = pp_exam_dur if is_first else max(10, pp_exam_dur - 5)
 
             is_past = d < TODAY
             if is_past:
@@ -1212,7 +1214,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
 
             cancel_id = rng.choice(cr_ids) if state in ("cancelled","did_not_attend") else None
             slot_n = used_slots.get(pid, {})
-            start_t, end_t = _slot_times(d, rng.randint(0,6), dur)
+            start_t, end_t = _slot_times(d, rng.randint(0,14), dur)
             apt_id += 1
             appointments.append({
                 "id": apt_id,
@@ -1250,7 +1252,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                         after_date=tx_last_date + timedelta(3),
                                         before_date=tx_last_date + timedelta(42))
                         if td:
-                            ts_t, te_t = _slot_times(td, rng.randint(0,6), tdur)
+                            ts_t, te_t = _slot_times(td, rng.randint(0,14), tdur)
                             tx_state  = "completed" if td < TODAY else "booked"
                             tx_bbyl   = rng.random() < bbyl_rate_tx
                             tx_online = (not tx_bbyl) and rng.random() < 0.20
@@ -1286,7 +1288,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                         after_date=d + timedelta(14),
                                         before_date=d + timedelta(90))
                         if hd:
-                            hs_t, he_t = _slot_times(hd, rng.randint(0,5), 30)
+                            hs_t, he_t = _slot_times(hd, rng.randint(0,14), 30)
                             htx = tx_by_code.get(1001)
                             hyg_state  = "completed" if hd < TODAY else "booked"
                             hyg_bbyl   = rng.random() < bbyl_rate_hyg
@@ -1320,7 +1322,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             before_d = min(FWD_END, due_date + timedelta(60))
             fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
             if fd is not None and fd >= TODAY:
-                fs_t, fe_t = _slot_times(fd, rng.randint(0, 6), 20)
+                fs_t, fe_t = _slot_times(fd, rng.randint(0, 14), 20)
                 booked_on  = TODAY - timedelta(days=rng.randint(1, 30))
                 online     = rng.random() < 0.35
                 apt_id    += 1
