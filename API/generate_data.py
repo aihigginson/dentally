@@ -1272,7 +1272,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": tx_online,
                                 "booked_via_api": tx_online,
-                                "pending_at": _iso(d) if tx_bbyl else None,
+                                "pending_at": _iso(tx_last_date) if tx_bbyl else None,
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
@@ -1320,11 +1320,11 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
         if prev_exam_date is not None and rng.random() < recall_booking_rate:
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
             after_d  = max(TODAY, due_date - timedelta(14))
-            before_d = min(FWD_END, due_date + timedelta(60))
+            before_d = FWD_END
             fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
             if fd is not None and fd >= TODAY:
                 fs_t, fe_t = _slot_times(fd, rng.randint(0, 14), 20)
-                booked_on  = TODAY - timedelta(days=rng.randint(1, 30))
+                booked_on  = tx_last_date
                 online     = rng.random() < 0.35
                 apt_id    += 1
                 appointments.append({
@@ -1676,6 +1676,8 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
     admin_user = 0
     payments, explanations, allocations = [], [], []
     methods = ["card","card","card","card","card","card","card","card","cash","bank_transfer","insurance","finance"]
+    pay_seq = 0
+    exp_seq = 0
 
     for inv in invoices:
         total = float(inv["amount"])
@@ -1685,8 +1687,10 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
         is_lab = False  # simplified: single payment for all
 
         method = rng.choice(methods)
-        pay_id = _u5("pay", tid, inv["id"])
-        exp_id = _u5("exp", tid, inv["id"])
+        pay_seq += 1
+        pay_id = pay_seq
+        exp_seq += 1
+        exp_id = exp_seq
 
         payments.append({
             "id": pay_id,
@@ -1704,7 +1708,7 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
             "deleted": False,
             "fully_explained": True,
             "reference": None,
-            "transaction_number": _u5("txn", tid, inv["id"])[:12].replace("-",""),
+            "transaction_number": str(pay_id),
             "explanation_amount": _fmt(total),
             "explanation_comments": None,
             "explanation_id": exp_id,
@@ -1756,7 +1760,8 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
             dep_amount = pv * rng.uniform(0.2, 0.5)
             plan_date = date.fromisoformat(plan["created_at"][:10])
             dep_date = plan_date + timedelta(days=rng.randint(1, 14))
-            dep_id = _u5("dep", tid, plan["id"])
+            pay_seq += 1
+            dep_id = pay_seq
             pat = patients_by_id.get(plan["patient_id"])
             payments.append({
                 "id": dep_id,
@@ -1774,7 +1779,7 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
                 "deleted": False,
                 "fully_explained": False,
                 "reference": None,
-                "transaction_number": dep_id[:12].replace("-",""),
+                "transaction_number": str(dep_id),
                 "explanation_amount": "0.00",
                 "explanation_comments": None,
                 "explanation_id": None,
