@@ -254,11 +254,11 @@ T1 = {
         _acq("acq-1-09","School / Employer Scheme"),_acq("acq-1-10","Returning Patient"),
     ],
     "cancellation_reasons": [
-        _cr("cr-1-01","Patient cancelled - short notice"),_cr("cr-1-02","Patient cancelled - in advance"),
-        _cr("cr-1-03","Patient DNA (did not attend)"),_cr("cr-1-04","Patient unwell"),
-        _cr("cr-1-05","Practice cancelled - practitioner unwell"),_cr("cr-1-06","Practice cancelled - emergency"),
-        _cr("cr-1-07","Work completed at previous visit"),_cr("cr-1-08","Treatment no longer required"),
-        _cr("cr-1-09","Patient request"),_cr("cr-1-10","System error / admin"),
+        _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
+        _cr(3,"Patient DNA (did not attend)"),_cr(4,"Patient unwell"),
+        _cr(5,"Practice cancelled - practitioner unwell"),_cr(6,"Practice cancelled - emergency"),
+        _cr(7,"Work completed at previous visit"),_cr(8,"Treatment no longer required"),
+        _cr(9,"Patient request"),_cr(10,"System error / admin"),
     ],
     "sundries": (
         [_sundry(1,"site-hs",n,p) for n,p in [
@@ -382,9 +382,9 @@ T2 = {
         _acq("acq-2-07","Instagram / Ads"),_acq("acq-2-08","Local Dentist Referral"),
     ],
     "cancellation_reasons": [
-        _cr("cr-2-01","Patient cancelled - short notice"),_cr("cr-2-02","Patient cancelled - in advance"),
-        _cr("cr-2-03","Patient DNA"),_cr("cr-2-04","Practice cancelled - practitioner unwell"),
-        _cr("cr-2-05","Treatment no longer required"),
+        _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
+        _cr(3,"Patient DNA"),_cr(4,"Practice cancelled - practitioner unwell"),
+        _cr(5,"Treatment no longer required"),
     ],
     "sundries": [_sundry(2,"site-bd",n,p) for n,p in [
         ("Premium Electric Toothbrush",89.99),("Air Flosser",49.99),
@@ -489,9 +489,9 @@ T3 = {
         _acq("acq-3-07","Social Media"),
     ],
     "cancellation_reasons": [
-        _cr("cr-3-01","Patient cancelled - short notice"),_cr("cr-3-02","Patient cancelled - in advance"),
-        _cr("cr-3-03","Patient DNA"),_cr("cr-3-04","Patient unwell"),
-        _cr("cr-3-05","Practice cancelled - practitioner unwell"),_cr("cr-3-06","Treatment no longer required"),
+        _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
+        _cr(3,"Patient DNA"),_cr(4,"Patient unwell"),
+        _cr(5,"Practice cancelled - practitioner unwell"),_cr(6,"Treatment no longer required"),
     ],
     "sundries": [_sundry(3,"site-ma",n,p) for n,p in [
         ("Electric Toothbrush",44.99),("Interdental Brushes",4.99),
@@ -574,9 +574,9 @@ T4 = {
         _acq("acq-4-05","Patient Referral"),_acq("acq-4-06","Website / Online"),
     ],
     "cancellation_reasons": [
-        _cr("cr-4-01","Patient cancelled - short notice"),_cr("cr-4-02","Patient cancelled - in advance"),
-        _cr("cr-4-03","Patient DNA"),_cr("cr-4-04","Patient unwell"),
-        _cr("cr-4-05","Practice cancelled - practitioner unwell"),
+        _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
+        _cr(3,"Patient DNA"),_cr(4,"Patient unwell"),
+        _cr(5,"Practice cancelled - practitioner unwell"),
     ],
     "sundries": [_sundry(4,"site-bm",n,p) for n,p in [
         ("Electric Toothbrush",39.99),("Interdental Brushes",4.49),
