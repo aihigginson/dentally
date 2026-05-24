@@ -930,6 +930,7 @@ def gen_patients(tdef, rng):
     active_rate = params.get("active_rate", 0.95)
     new_patient_rate = params.get("new_patient_rate", 0.0)  # fraction of patients who joined after START
     email_rate = params.get("email_rate", 1.0)
+    phone_rate = params.get("phone_rate", 0.92)
     # Build site → dentist list and site → hygienist list
     site_dentists = {}
     site_hygienists = {}
@@ -1057,7 +1058,7 @@ def gen_patients(tdef, rng):
             "last_name": last,
             "date_of_birth": str(dob),
             "email_address": f"{first.lower()}.{last.lower()}{i}@example.com" if rng.random() < email_rate else None,
-            "phone_number": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}",
+            "mobile_phone": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}" if rng.random() < phone_rate else None,
             "work_phone": work_phone,
             "address_line_1": f"{house_num} {street}",
             "address_line_2": None,
@@ -1424,13 +1425,14 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             last_date = date.fromisoformat(last_apt["start_time"][:10])
 
             would_complete = last_date < TODAY - timedelta(days=7)
-            # ~15% of multi-appointment plans completed within the last 6 months
-            # are kept open to represent in-progress courses of treatment
+            # Private plans have higher in-progress rate (30%) to generate open course value.
+            # NHS plans nearly always complete (3%) since item price=0 produces no open courses value.
+            ip_prob = 0.03 if is_nhs else 0.30
             in_progress = (
                 would_complete
                 and (TODAY - last_date).days < 180
                 and len(cluster) > 1
-                and rng.random() < 0.15
+                and rng.random() < ip_prob
             )
             completed = would_complete and not in_progress
             completed_at = _iso(last_date) if completed else None
@@ -1592,13 +1594,16 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             exempt = pat.get("nhs_exemption_code") is not None
             patient_charge = 0.0 if exempt else band_charge
             total_amount = patient_charge
+            disc_rate = 0.0
         else:
             total_amount = sum(float(pi["price"]) for pi in plan_items)
+            # ~10% of private invoices get a discount (5–15%); invoice.amount stays gross
+            disc_rate = rng.uniform(0.05, 0.15) if rng.random() < 0.10 else 0.0
+            patient_charge = total_amount * (1 - disc_rate)
             band_num = None
-            patient_charge = total_amount
 
         is_paid = completed_date < TODAY - timedelta(days=30)
-        outstanding = 0.0 if is_paid else total_amount
+        outstanding = 0.0 if is_paid else patient_charge
 
         invoices.append({
             "id": inv_id,
@@ -1607,7 +1612,7 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             "site_id": plan["site_id"],
             "user_id": admin_user_id,
             "reference": inv_ref,
-            "amount": _fmt(total_amount),
+            "amount": _fmt(total_amount),   # gross; items are reduced when disc_rate > 0
             "amount_outstanding": _fmt(outstanding),
             "paid": is_paid,
             "paid_on": str(completed_date) if is_paid else None,
@@ -1623,7 +1628,7 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
 
         # Invoice items
         for pos, pi in enumerate(plan_items):
-            item_price = float(pi["price"])
+            item_price = float(pi["price"]) * (1 - disc_rate)
             iitem_id = _u5("ii", tid, inv_id, pos)
             items.append({
                 "id": iitem_id,
@@ -1666,7 +1671,7 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
 
 # ─── PAYMENTS ─────────────────────────────────────────────────────────────────
 
-def gen_payments(tdef, invoices, rng):
+def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
     tid = tdef["tenant_id"]
     admin_user = 0
     payments, explanations, allocations = [], [], []
@@ -1736,6 +1741,50 @@ def gen_payments(tdef, invoices, rng):
             "created_at": _iso(inv_date),
             "updated_at": _iso(inv_date),
         })
+
+    # Advance deposits for open private plans (~40% chance per qualifying plan)
+    if plans and patients_by_id:
+        nhs_pp_id_local = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
+        for plan in plans:
+            if plan["completed"]:
+                continue
+            if plan["payment_plan_id"] == nhs_pp_id_local:
+                continue
+            pv = float(plan.get("private_treatment_value") or "0")
+            if pv < 50.0 or rng.random() > 0.40:
+                continue
+            dep_amount = pv * rng.uniform(0.2, 0.5)
+            plan_date = date.fromisoformat(plan["created_at"][:10])
+            dep_date = plan_date + timedelta(days=rng.randint(1, 14))
+            dep_id = _u5("dep", tid, plan["id"])
+            pat = patients_by_id.get(plan["patient_id"])
+            payments.append({
+                "id": dep_id,
+                "account_id": pat["account_id"] if pat else None,
+                "patient_id": plan["patient_id"],
+                "site_id": plan["site_id"],
+                "user_id": admin_user,
+                "practitioner_id": None,
+                "payment_plan_id": None,
+                "amount": _fmt(dep_amount),
+                "amount_unexplained": _fmt(dep_amount),
+                "method": rng.choice(["card","card","card","cash","bank_transfer"]),
+                "dated_on": str(dep_date),
+                "status": "completed",
+                "deleted": False,
+                "fully_explained": False,
+                "reference": None,
+                "transaction_number": dep_id[:12].replace("-",""),
+                "explanation_amount": "0.00",
+                "explanation_comments": None,
+                "explanation_id": None,
+                "explanation_invoice_id": None,
+                "explanation_invoice_reference": None,
+                "explanation_payment_reference": None,
+                "explanation_user_id": None,
+                "created_at": _iso(dep_date),
+                "updated_at": _iso(dep_date),
+            })
 
     return payments, explanations, allocations
 
@@ -2026,7 +2075,7 @@ def generate_tenant(tdef):
     patients_by_id = {p["id"]: p for p in patients}
     invoices, inv_items = gen_invoices_and_items(tdef, plans, pibp, patients_by_id, rng)
 
-    payments, explanations, allocations = gen_payments(tdef, invoices, rng)
+    payments, explanations, allocations = gen_payments(tdef, invoices, rng, plans=plans, patients_by_id=patients_by_id)
 
     contracts_by_site = {c["site_id"]: c for c in tdef.get("contracts",[]) if c.get("active")
                          and float(c.get("target","0")) > 0}
