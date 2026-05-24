@@ -1533,7 +1533,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "region": tx.get("region",""),
                     "surfaces": None,
                     "teeth": None,
-                    "created_at": _iso(date.fromisoformat(apt["start_time"][:10])),
+                    "created_at": _iso(first_date),
                     "updated_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                 })
 
