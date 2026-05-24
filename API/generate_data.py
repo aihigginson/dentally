@@ -929,6 +929,7 @@ def gen_patients(tdef, rng):
     params = tdef.get("_params", {})
     active_rate = params.get("active_rate", 0.95)
     new_patient_rate = params.get("new_patient_rate", 0.0)  # fraction of patients who joined after START
+    email_rate = params.get("email_rate", 1.0)
     # Build site → dentist list and site → hygienist list
     site_dentists = {}
     site_hygienists = {}
@@ -1055,7 +1056,7 @@ def gen_patients(tdef, rng):
             "middle_name": None,
             "last_name": last,
             "date_of_birth": str(dob),
-            "email_address": f"{first.lower()}.{last.lower()}{i}@example.com",
+            "email_address": f"{first.lower()}.{last.lower()}{i}@example.com" if rng.random() < email_rate else None,
             "phone_number": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}",
             "work_phone": work_phone,
             "address_line_1": f"{house_num} {street}",
@@ -1220,6 +1221,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                 "room_id": None,
                 "start_time": _iso(d, start_t),
                 "end_time": _iso(d, end_t),
+                "duration": dur,
                 "state": state,
                 "reason": "New Patient Examination" if is_first else "Routine Examination",
                 "treatment_id": tx_id,
@@ -1260,12 +1262,14 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "room_id": None,
                                 "start_time": _iso(td, ts_t),
                                 "end_time": _iso(td, te_t),
+                                "duration": tdur,
                                 "state": tx_state,
                                 "reason": ttx["description"] if ttx else "Treatment",
                                 "treatment_id": ttx["id"] if ttx else None,
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": tx_online,
-                                "booked_via_api": tx_bbyl or tx_online,
+                                "booked_via_api": tx_online,
+                                "pending_at": _iso(d) if tx_bbyl else None,
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
@@ -1295,12 +1299,14 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "room_id": None,
                                 "start_time": _iso(hd, hs_t),
                                 "end_time": _iso(hd, he_t),
+                                "duration": 30,
                                 "state": hyg_state,
                                 "reason": "Scale & Polish",
                                 "treatment_id": htx["id"] if htx else None,
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": hyg_online,
-                                "booked_via_api": hyg_bbyl or hyg_online,
+                                "booked_via_api": hyg_online,
+                                "pending_at": _iso(d) if hyg_bbyl else None,
                                 "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
@@ -1325,6 +1331,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                     "room_id":                None,
                     "start_time":             _iso(fd, fs_t),
                     "end_time":               _iso(fd, fe_t),
+                    "duration":               20,
                     "state":                  "booked",
                     "reason":                 "Recall Examination",
                     "treatment_id":           None,
