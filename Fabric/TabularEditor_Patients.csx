@@ -163,7 +163,7 @@ add("Lapsed Patients Target",
 add("Lapsed Patients vs Target",
     @"VAR actual = [Lapsed Patients]
 VAR target = [Lapsed Patients Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -231,7 +231,7 @@ add("Recalls Overdue Not Sent Target",
 add("Recalls Overdue Not Sent vs Target",
     @"VAR actual  = [Recalls Overdue Not Sent]
 VAR target  = [Recalls Overdue Not Sent Target]
-VAR diff_pp = (target - actual) * 100
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
@@ -405,7 +405,7 @@ add("Overdue Recalls Target",
 add("Overdue Recalls vs Target",
     @"VAR actual = [Overdue Recalls]
 VAR target = [Overdue Recalls Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,

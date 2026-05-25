@@ -78,7 +78,7 @@ add("DNA Rate Target",
 add("DNA Rate vs Target",
     @"VAR actual  = [DNA Rate]
 VAR target  = [DNA Rate Target]
-VAR diff_pp = (target - actual) * 100
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
@@ -95,7 +95,7 @@ add("Days Until Next 30 Minute Free Target",
 add("Days Until Next 30 Minute Free vs Target",
     @"VAR actual = [Days Until Next 30 Minute Free]
 VAR target = [Days Until Next 30 Minute Free Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -112,7 +112,7 @@ add("Days Until Next 1 Hour Free Target",
 add("Days Until Next 1 Hour Free vs Target",
     @"VAR actual = [Days Until Next 1 Hour Free]
 VAR target = [Days Until Next 1 Hour Free Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -232,7 +232,7 @@ add("Cancellation Frequency Target",
 add("Cancellation Frequency vs Target",
     @"VAR actual = [Cancellation Frequency]
 VAR target = [Cancellation Frequency Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -248,7 +248,7 @@ add("Short Notice Cancellation Rate Target",
 add("Short Notice Cancellation Rate vs Target",
     @"VAR actual  = [Short Notice Cancellation Rate]
 VAR target  = [Short Notice Cancellation Rate Target]
-VAR diff_pp = (target - actual) * 100
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,

@@ -71,7 +71,7 @@ add("Open Courses Target",
 add("Open Courses vs Target",
     @"VAR actual = [Open Courses]
 VAR target = [Open Courses Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -88,7 +88,7 @@ add("Open Courses Without Appointment Target",
 add("Open Courses Without Appointment vs Target",
     @"VAR actual = [Open Courses Without Appointment]
 VAR target = [Open Courses Without Appointment Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,

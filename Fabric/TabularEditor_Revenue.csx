@@ -139,7 +139,7 @@ add("Outstanding Invoices Target",
 add("Outstanding Invoices vs Target",
     @"VAR actual = [Outstanding Invoices]
 VAR target = [Outstanding Invoices Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
@@ -360,7 +360,7 @@ add("Discounts Target",
 add("Discounts vs Target",
     @"VAR actual = [Discounts]
 VAR target = [Discounts Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,
