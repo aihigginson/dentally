@@ -18,27 +18,41 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
-// Lapsed: pre-existing patients whose 24-month exam clock expired during the period.
-// Uses Last Exam Date + 24 months as the lapse trigger — objective NHS standard,
-// no dependency on the practice managing the Active flag in Dentally.
+// Lapsed: point-in-time stock count from KPI Snapshot (A3).
+// Value = patients whose 24-month exam clock has expired as of the snapshot date.
 add("Lapsed Patients",
-    @"VAR period_start = MIN('List Date'[Full Date])
-VAR period_end   = MAX('List Date'[Full Date])
-RETURN
-COUNTROWS(
-    FILTER(
-        ALL('List Patients'),
-        NOT ISBLANK('List Patients'[Last Exam Date])
-        && EDATE('List Patients'[Last Exam Date], 24) >= period_start
-        && EDATE('List Patients'[Last Exam Date], 24) <= period_end
-        && NOT ISBLANK('List Patients'[First Appointment Date])
-        && 'List Patients'[First Appointment Date] < period_start
+    @"VAR snap_fk =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
     )
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = snap_fk,
+    '_KPI Snapshot'[Metric]         = ""lapsed_patients"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
 )",
     "#,##0");
 
+// Net Patient Growth uses an inline lapsed-in-period calculation so it remains
+// a flow metric (new arrivals minus exits in the period) independent of the
+// point-in-time Lapsed Patients snapshot measure above.
 add("Net Patient Growth",
-    @"[New Patients] - [Lapsed Patients]",
+    @"VAR period_start = MIN('List Date'[Full Date])
+VAR period_end   = MAX('List Date'[Full Date])
+VAR lapsed_flow  =
+    COUNTROWS(
+        FILTER(
+            ALL('List Patients'),
+            NOT ISBLANK('List Patients'[Last Exam Date])
+            && EDATE('List Patients'[Last Exam Date], 24) >= period_start
+            && EDATE('List Patients'[Last Exam Date], 24) <= period_end
+            && NOT ISBLANK('List Patients'[First Appointment Date])
+            && 'List Patients'[First Appointment Date] < period_start
+        )
+    )
+RETURN [New Patients] - lapsed_flow",
     "#,##0");
 
 // Retention Outlook: % of in-scope recall patients who have a booking.
@@ -63,10 +77,20 @@ VAR booked =
 RETURN DIVIDE( booked, due )",
     "#,##0.0%");
 
+// Active Patients: point-in-time count from KPI Snapshot (A3).
 add("Active Patients",
-    @"COUNTROWS(
-    FILTER('Aggregate Site Patient Current',
-        'Aggregate Site Patient Current'[Active Patients] = TRUE()))",
+    @"VAR snap_fk =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
+    )
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = snap_fk,
+    '_KPI Snapshot'[Metric]         = ""active_patients"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+)",
     "#,##0");
 
 // Recall Effectiveness: % of in-scope open recalls where at least one reminder
@@ -165,10 +189,11 @@ add("Lapsed Patients vs Target",
 VAR target = [Lapsed Patients Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Active Patients Target",
@@ -182,10 +207,11 @@ add("Active Patients vs Target",
 VAR target = [Active Patients Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Recall Effectiveness Target",
@@ -276,6 +302,7 @@ VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""lapsed_patients""), 
 VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""lapsed_patients""), '_Targets'[Variance])
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
@@ -286,13 +313,14 @@ RETURN SWITCH(TRUE(),
 add("Active Patients BG",
     @"VAR actual   = [Active Patients]
 VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""active_patients""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""active_patients""), '_Targets'[Variance])
+VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""active_patients""), '_Targets'[Variance])
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual),   ""#E0E0E0"",
     ISBLANK(target),   ""#FFFFFF"",
-    pct >= band,   ""#1a7f3c"",
+    pct >= band,       ""#1a7f3c"",
     pct >= 0,          ""#6abf7b"",
-    pct >= -band,  ""#f4a261"",
+    pct >= -band,      ""#f4a261"",
                        ""#c0392b"")",
     "");
 
@@ -347,10 +375,11 @@ add("Retention Outlook vs Target",
 VAR target  = [Retention Outlook Target]
 VAR diff_pp = ( actual - target ) * 100
 RETURN IF(
-    ISBLANK( target ), BLANK(),
+    ISBLANK( actual ), ""No data"",
+    IF( ISBLANK( target ), BLANK(),
     IF( diff_pp >= 0,
         ""▲ "" & FORMAT( diff_pp,      ""0.0"" ) & ""pp"",
-        ""▼ "" & FORMAT( ABS(diff_pp), ""0.0"" ) & ""pp"" ))",
+        ""▼ "" & FORMAT( ABS(diff_pp), ""0.0"" ) & ""pp"" )))",
     "");
 
 add("Retention Outlook BG",
@@ -359,6 +388,7 @@ VAR target  = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""retention_outlook
 VAR band    = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""retention_outlook"" ), '_Targets'[Variance] )
 VAR diff_pp = ( actual - target ) * 100
 RETURN SWITCH( TRUE(),
+    ISBLANK( actual ), ""#E0E0E0"",
     ISBLANK( target ), ""#FFFFFF"",
     diff_pp >= band,   ""#1a7f3c"",
     diff_pp >= 0,      ""#6abf7b"",
@@ -368,14 +398,20 @@ RETURN SWITCH( TRUE(),
 
 // ── Home Detail measures ──────────────────────────────────────────────────────
 
-// Overdue Recalls: in-scope recalls (due and/or reminded) with no booking.
-// REMOVEFILTERS('List Date') keeps the count current, independent of date slicer.
+// Overdue Recalls: point-in-time count from KPI Snapshot (A3).
 add("Overdue Recalls",
-    @"CALCULATE(
-    COUNTROWS('_Recalls'),
-    '_Recalls'[Is In Scope] = TRUE(),
-    '_Recalls'[Is Booked]   = FALSE(),
-    REMOVEFILTERS('List Date'))",
+    @"VAR snap_fk =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
+    )
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = snap_fk,
+    '_KPI Snapshot'[Metric]         = ""overdue_recalls"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+)",
     "#,##0");
 
 // Email Details Rate: % of patients with a non-blank email address
@@ -407,10 +443,11 @@ add("Overdue Recalls vs Target",
 VAR target = [Overdue Recalls Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Email Details Rate Target",
@@ -451,6 +488,7 @@ VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""overdue_recalls""), 
 VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""overdue_recalls""), '_Targets'[Variance])
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",

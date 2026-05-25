@@ -33,11 +33,18 @@ add("Private Revenue",
     "£#,##0");
 
 add("Outstanding Invoices",
-    @"SUMX(
-    SUMMARIZE('_Invoice Items',
-        '_Invoice Items'[Invoice ID],
-        ""_oa"", MAX('_Invoice Items'[Invoice Amount Outstanding])),
-    [_oa])",
+    @"VAR snap_fk =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
+    )
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = snap_fk,
+    '_KPI Snapshot'[Metric]         = ""outstanding_invoices"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+)",
     "£#,##0");
 
 add("Revenue Per Patient",
@@ -141,10 +148,11 @@ add("Outstanding Invoices vs Target",
 VAR target = [Outstanding Invoices Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Revenue Per Patient Target",
@@ -247,10 +255,11 @@ VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoic
 VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices""), '_Targets'[Variance])
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual),  ""#E0E0E0"",
     ISBLANK(target),  ""#FFFFFF"",
-    pct >= band,      ""#1a7f3c"",
-    pct >= 0,         ""#6abf7b"",
-    pct >= -band,     ""#f4a261"",
+    pct <= -band,     ""#1a7f3c"",
+    pct <= 0,         ""#6abf7b"",
+    pct <= band,      ""#f4a261"",
                       ""#c0392b"")",
     "");
 
@@ -390,7 +399,7 @@ add("DNA Revenue Lost Target",
 add("DNA Revenue Lost vs Target",
     @"VAR actual = [DNA Revenue Lost]
 VAR target = [DNA Revenue Lost Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
     IF(pct >= 0,

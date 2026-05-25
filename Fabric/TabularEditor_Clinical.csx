@@ -20,12 +20,20 @@ add("Treatment Acceptance Rate",
     SUM('List Treatment Plans'[Treatment Plan Count]))",
     "#,##0.0%");
 
-// Open courses: plans not yet completed
+// Open courses: point-in-time count from KPI Snapshot (A1) — most recent weekly snapshot in slicer
 add("Open Courses",
-    @"SUMX(
-    FILTER('List Treatment Plans',
-        'List Treatment Plans'[Completed] = FALSE()),
-    'List Treatment Plans'[Treatment Plan Count])",
+    @"VAR snap_fk =
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
+    )
+RETURN
+CALCULATE(
+    SUM( '_KPI Snapshot'[Value] ),
+    '_KPI Snapshot'[fk Date]        = snap_fk,
+    '_KPI Snapshot'[Metric]         = ""open_courses"",
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+)",
     "#,##0");
 
 // Open courses with no future appointment booked
@@ -73,10 +81,11 @@ add("Open Courses vs Target",
 VAR target = [Open Courses Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Open Courses Without Appointment Target",
@@ -135,13 +144,14 @@ RETURN SWITCH(TRUE(),
 add("Open Courses BG",
     @"VAR actual   = [Open Courses]
 VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Variance])
+VAR band     = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Variance])
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual),   ""#E0E0E0"",
     ISBLANK(target),   ""#FFFFFF"",
-    pct <= -band,  ""#1a7f3c"",
+    pct <= -band,      ""#1a7f3c"",
     pct <= 0,          ""#6abf7b"",
-    pct <= band,   ""#f4a261"",
+    pct <= band,       ""#f4a261"",
                        ""#c0392b"")",
     "");
 
@@ -211,10 +221,11 @@ add("Open Courses Value vs Target",
 VAR target = [Open Courses Value Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Average Plan Value Target",
@@ -239,6 +250,7 @@ VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""
 VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Variance])
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
+    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
     pct >= band,     ""#1a7f3c"",
     pct >= 0,        ""#6abf7b"",
