@@ -45,4 +45,12 @@ VAR elapsed = CALCULATE(
 RETURN IF(is_ytd && fy_working > 0, DIVIDE(elapsed, fy_working), 1.0)",
     "");
 
+// ── _Is Practitioner Filtered ─────────────────────────────────────────────────
+// Returns 1 when the practitioner slicer has a selection, 0 otherwise.
+// Used to show ⚠ in variance text for Supports_Practitioner = 0 metrics.
+
+add("_Is Practitioner Filtered",
+    @"IF(ISFILTERED('List Practitioners'[pk_Practitioner]), 1, 0)",
+    "");
+
 Info("Period helper measures created. Run this script once before any tab script.");
