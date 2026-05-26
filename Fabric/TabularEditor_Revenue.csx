@@ -143,10 +143,10 @@ RETURN IF(
     "");
 
 add("Outstanding Invoices Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Outstanding Invoices vs Target",
@@ -163,10 +163,10 @@ RETURN IF(
     "");
 
 add("Revenue Per Patient Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Revenue Per Patient vs Target",
@@ -181,10 +181,10 @@ RETURN IF(
     "");
 
 add("Revenue Per Clinical Hour Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Revenue Per Clinical Hour vs Target",
@@ -199,10 +199,10 @@ RETURN IF(
     "");
 
 add("Revenue Per Dentist Hour Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Revenue Per Dentist Hour vs Target",
@@ -223,10 +223,10 @@ RETURN IF(
 add("Total Revenue BG",
     @"VAR actual   = [Total Revenue]
 VAR target   = [Total Revenue Target]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""total_revenue"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -239,10 +239,10 @@ RETURN SWITCH(TRUE(),
 add("NHS Revenue BG",
     @"VAR actual   = [NHS Revenue]
 VAR target   = [NHS Revenue Target]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -255,10 +255,10 @@ RETURN SWITCH(TRUE(),
 add("Private Revenue BG",
     @"VAR actual   = [Private Revenue]
 VAR target   = [Private Revenue Target]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""private_revenue"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -270,13 +270,13 @@ RETURN SWITCH(TRUE(),
 
 add("Outstanding Invoices BG",
     @"VAR actual   = [Outstanding Invoices]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""outstanding_invoices"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual),  ""#E0E0E0"",
@@ -289,13 +289,13 @@ RETURN SWITCH(TRUE(),
 
 add("Revenue Per Patient BG",
     @"VAR actual   = [Revenue Per Patient]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_patient"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -307,13 +307,13 @@ RETURN SWITCH(TRUE(),
 
 add("Revenue Per Clinical Hour BG",
     @"VAR actual   = [Revenue Per Clinical Hour]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_clinical_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -325,13 +325,13 @@ RETURN SWITCH(TRUE(),
 
 add("Revenue Per Dentist Hour BG",
     @"VAR actual   = [Revenue Per Dentist Hour]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""revenue_per_dentist_hour"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -377,10 +377,10 @@ add("Discounts",
     "£#,##0");
 
 add("Deposit Value Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Deposit Value vs Target",
@@ -396,13 +396,13 @@ RETURN IF(
 
 add("Deposit Value BG",
     @"VAR actual   = [Deposit Value]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""deposit_value"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -413,10 +413,10 @@ RETURN SWITCH(TRUE(),
     "");
 
 add("Discounts Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("Discounts vs Target",
@@ -432,13 +432,13 @@ RETURN IF(
 
 add("Discounts BG",
     @"VAR actual   = [Discounts]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""discounts"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -449,10 +449,10 @@ RETURN SWITCH(TRUE(),
     "");
 
 add("DNA Revenue Lost Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))",
     "£#,##0");
 
 add("DNA Revenue Lost vs Target",
@@ -469,13 +469,13 @@ RETURN IF(
 
 add("DNA Revenue Lost BG",
     @"VAR actual   = [DNA Revenue Lost]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk_Practice_Site], -1)
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""dna_revenue_lost"" && '_Targets'[fk_Practice_Site] = -1), '_Targets'[Variance]))
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
