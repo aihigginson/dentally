@@ -149,10 +149,11 @@ RETURN IF(
 
 add("Outstanding Invoices Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""outstanding_invoices"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -170,10 +171,11 @@ RETURN IF(
 
 add("Revenue Per Patient Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""revenue_per_patient"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -190,10 +192,11 @@ RETURN IF(
 
 add("Revenue Per Clinical Hour Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""revenue_per_clinical_hour"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -210,10 +213,11 @@ RETURN IF(
 
 add("Revenue Per Dentist Hour Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""revenue_per_dentist_hour"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -367,10 +371,11 @@ add("Discounts",
 
 add("Deposit Value Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""deposit_value"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -401,10 +406,11 @@ RETURN SWITCH(TRUE(),
 
 add("Discounts Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""discounts"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
@@ -435,10 +441,11 @@ RETURN SWITCH(TRUE(),
 
 add("DNA Revenue Lost Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key   = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""dna_revenue_lost"",
-    '_Effective Targets'[Period Value] = [_Target FY Key],
+    '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
