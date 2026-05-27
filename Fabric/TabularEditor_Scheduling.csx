@@ -245,8 +245,10 @@ RETURN SWITCH(TRUE(),
 // to avoid cross-table relationship dependency on _Appointments[Is Cancelled].
 
 add("Cancellation Frequency",
-    @"SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments])",
-    "#,##0");
+    @"DIVIDE(
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]),
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    "0.0%");
 
 add("Short Notice Cancellation Rate",
     @"DIVIDE(
@@ -258,18 +260,18 @@ add("Cancellation Frequency Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 RETURN COALESCE(
     MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
-    "#,##0");
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+    "0.0%");
 
 add("Cancellation Frequency vs Target",
-    @"VAR actual = [Cancellation Frequency]
-VAR target = [Cancellation Frequency Target]
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual  = [Cancellation Frequency]
+VAR target  = [Cancellation Frequency Target]
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
-    IF(pct >= 0,
-        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
     "");
 
 add("Short Notice Cancellation Rate Target",
@@ -295,17 +297,17 @@ add("Cancellation Frequency BG",
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR target   = COALESCE(
     MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
 VAR band     = COALESCE(
     MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
     MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target), ""#FFFFFF"",
-    pct <= -band,    ""#1a7f3c"",
-    pct <= 0,        ""#6abf7b"",
-    pct <= band,     ""#f4a261"",
-                     ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp <= -band, ""#1a7f3c"",
+    diff_pp <= 0,     ""#6abf7b"",
+    diff_pp <= band,  ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Short Notice Cancellation Rate BG",

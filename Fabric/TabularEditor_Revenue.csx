@@ -366,17 +366,19 @@ RETURN dna_count * avg_appt_value",
     "£#,##0");
 
 add("Deposit Value",
-    @"SUM('_Payments'[Deposit Amount])",
-    "£#,##0");
+    @"DIVIDE(SUM('_Payments'[Deposit Amount]), [Total Revenue])",
+    "0.0%");
 
 add("Discounts",
-    @"SUMX(
-    SUMMARIZE('_Invoice Items',
-        '_Invoice Items'[Invoice ID],
-        ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
-        ""_items"", SUM('_Invoice Items'[Total Price])),
-    IF([_inv] > [_items], [_inv] - [_items], 0))",
-    "£#,##0");
+    @"DIVIDE(
+    SUMX(
+        SUMMARIZE('_Invoice Items',
+            '_Invoice Items'[Invoice ID],
+            ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
+            ""_items"", SUM('_Invoice Items'[Total Price])),
+        IF([_inv] > [_items], [_inv] - [_items], 0)),
+    [Total Revenue])",
+    "0.0%");
 
 add("Deposit Value Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
@@ -385,32 +387,32 @@ RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""deposit_value"",
     '_Effective Targets'[Period Value] = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site)",
-    "£#,##0");
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
+    "0.0%");
 
 add("Deposit Value vs Target",
-    @"VAR actual = [Deposit Value]
-VAR target = [Deposit Value Target]
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual  = [Deposit Value]
+VAR target  = [Deposit Value Target]
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
-    IF(pct >= 0,
-        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
     "");
 
 add("Deposit Value BG",
     @"VAR actual   = [Deposit Value]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Metric] = ""deposit_value"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Metric] = ""deposit_value"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site) / 100
 VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Metric] = ""deposit_value"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site)
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target), ""#FFFFFF"",
-    pct >= band,     ""#1a7f3c"",
-    pct >= 0,        ""#6abf7b"",
-    pct >= -band,    ""#f4a261"",
-                     ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Discounts Target",
@@ -420,32 +422,32 @@ RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Metric]      = ""discounts"",
     '_Effective Targets'[Period Value] = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site)",
-    "£#,##0");
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
+    "0.0%");
 
 add("Discounts vs Target",
-    @"VAR actual = [Discounts]
-VAR target = [Discounts Target]
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual  = [Discounts]
+VAR target  = [Discounts Target]
+VAR diff_pp = (actual - target) * 100
 RETURN IF(
     ISBLANK(target), BLANK(),
-    IF(pct >= 0,
-        ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+    IF(diff_pp >= 0,
+        ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
     "");
 
 add("Discounts BG",
     @"VAR actual   = [Discounts]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Metric] = ""discounts"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Metric] = ""discounts"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site) / 100
 VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Metric] = ""discounts"", '_Effective Targets'[Period Type] = ""all_time"", '_Effective Targets'[fk Practice Site] = sel_site)
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target), ""#FFFFFF"",
-    pct <= -band,    ""#1a7f3c"",
-    pct <= 0,        ""#6abf7b"",
-    pct <= band,     ""#f4a261"",
-                     ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp <= -band, ""#1a7f3c"",
+    diff_pp <= 0,     ""#6abf7b"",
+    diff_pp <= band,  ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("DNA Revenue Lost Target",
