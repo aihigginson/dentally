@@ -89,6 +89,7 @@ add("Total Revenue Target",
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""total_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
     '_Daily Targets'[fk Practitioner]  = sel_prac)",
@@ -110,6 +111,7 @@ add("NHS Revenue Target",
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""nhs_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
     '_Daily Targets'[fk Practitioner]  = sel_prac)",
@@ -131,6 +133,7 @@ add("Private Revenue Target",
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""private_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
     '_Daily Targets'[fk Practitioner]  = sel_prac)",
