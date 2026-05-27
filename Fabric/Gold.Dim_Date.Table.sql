@@ -29,7 +29,7 @@ CREATE TABLE [Gold].[Dim_Date](
 	[Relative_Quarter] [int] NOT NULL,
 	[Relative_Year] [int] NOT NULL,
 	[Financial_Year] [smallint] NOT NULL,
-	[Financial_Year_Name] [char](9) NOT NULL,
+	[Financial_Year_Name] [char](10) NOT NULL,
 	[Financial_Quarter] [smallint] NOT NULL,
 	[Financial_Quarter_Name] [varchar](11) NOT NULL,
 	[Financial_Month] [smallint] NOT NULL,

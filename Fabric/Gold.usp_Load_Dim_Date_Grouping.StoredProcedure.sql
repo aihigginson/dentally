@@ -46,23 +46,23 @@ BEGIN
         );
 
         INSERT INTO Gold.Dim_Date_Grouping (Date_Grouping, fk_Date, fk_Date_Previous_Year)
-        SELECT 'FY 2025/26', d.pk_Date, p.pk_Date
+        SELECT 'FY 2025-26', d.pk_Date, p.pk_Date
           FROM Gold.Dim_Date d
           JOIN Gold.Dim_Date p ON d.Financial_Year = p.Financial_Year - 1
                                AND d.Financial_Day_Of_Year = p.Financial_Day_Of_Year
-         WHERE d.Financial_Year_Name = 'FY2025/26'
+         WHERE d.Financial_Year_Name = 'FY 2025-26'
         UNION ALL
-        SELECT 'FY 2024/25', d.pk_Date, p.pk_Date
+        SELECT 'FY 2024-25', d.pk_Date, p.pk_Date
           FROM Gold.Dim_Date d
           JOIN Gold.Dim_Date p ON d.Financial_Year = p.Financial_Year - 1
                                AND d.Financial_Day_Of_Year = p.Financial_Day_Of_Year
-         WHERE d.Financial_Year_Name = 'FY2024/25'
+         WHERE d.Financial_Year_Name = 'FY 2024-25'
         UNION ALL
-        SELECT 'FY 2026/27 (YTD)', d.pk_Date, p.pk_Date
+        SELECT 'FY 2026-27 (YTD)', d.pk_Date, p.pk_Date
           FROM Gold.Dim_Date d
           JOIN Gold.Dim_Date p ON d.Financial_Year = p.Financial_Year - 1
                                AND d.Financial_Day_Of_Year = p.Financial_Day_Of_Year
-         WHERE d.Financial_Year_Name = 'FY2026/27'
+         WHERE d.Financial_Year_Name = 'FY 2026-27'
         UNION ALL
         SELECT 'Last 12 Months', d.pk_Date, p.pk_Date
           FROM Gold.Dim_Date d

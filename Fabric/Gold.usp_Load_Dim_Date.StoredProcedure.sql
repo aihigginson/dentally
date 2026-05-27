@@ -5,6 +5,7 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     27/05/2026  AIH Financial_Year_Name format changed from 'FY2024/25' to 'FY 2024-25'
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Date @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Date]    Script Date: 20/04/2026 10:15:06 ******/
@@ -83,7 +84,7 @@ BEGIN
 
         -- Financial Year (April-March)
         Financial_Year                  SMALLINT        NOT NULL,   -- Starting year, e.g. 2024 for FY2024/25
-        Financial_Year_Name             CHAR(9)         NOT NULL,   -- 'FY2024/25'
+        Financial_Year_Name             CHAR(10)        NOT NULL,   -- 'FY 2024-25'
         Financial_Quarter               smallint         NOT NULL,   -- 1-4
         Financial_Quarter_Name          VARCHAR(11)     NOT NULL,   -- 'FY2024 Q1'
         Financial_Month                 smallint         NOT NULL,   -- 1-12 (1 = April)
@@ -215,7 +216,7 @@ BEGIN
 
         -- Financial Year
         fy_yr,
-        'FY' + CAST(fy_yr AS CHAR(4)) + '/' + RIGHT(CAST(fy_yr + 1 AS CHAR(4)), 2),
+        'FY ' + CAST(fy_yr AS CHAR(4)) + '-' + RIGHT(CAST(fy_yr + 1 AS CHAR(4)), 2),
 
         -- Financial Quarter
         fin_qtr,

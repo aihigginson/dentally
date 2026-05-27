@@ -28,16 +28,15 @@ add("_Period Run Rate",
     @"VAR period_key = [_FY Period Key]
 VAR raw        = SELECTEDVALUE('List Date Grouping'[Date Grouping], """")
 VAR is_ytd     = CONTAINSSTRING(raw, ""(YTD)"")
-VAR fy_name    = SUBSTITUTE(period_key, "" "", """")
 VAR fy_working = CALCULATE(
     COUNTROWS('List Date'),
-    'List Date'[Financial Year Name] = fy_name,
+    'List Date'[Financial Year Name] = period_key,
     'List Date'[Is Weekend] = FALSE(),
     'List Date'[Is England Wales Bank Holiday] = FALSE(),
     ALL('List Date'))
 VAR elapsed = CALCULATE(
     COUNTROWS('List Date'),
-    'List Date'[Financial Year Name] = fy_name,
+    'List Date'[Financial Year Name] = period_key,
     'List Date'[Full Date] <= TODAY(),
     'List Date'[Is Weekend] = FALSE(),
     'List Date'[Is England Wales Bank Holiday] = FALSE(),
@@ -51,6 +50,19 @@ RETURN IF(is_ytd && fy_working > 0, DIVIDE(elapsed, fy_working), 1.0)",
 
 add("_Is Practitioner Filtered",
     @"IF(ISFILTERED('List Practitioners'[pk_Practitioner]), 1, 0)",
+    "");
+
+// ── _Target FY Key ────────────────────────────────────────────────────────────
+// Returns the FY key to use for target lookups.
+// When an FY grouping is selected: returns that key, e.g. "FY 2025-26".
+// When a non-FY grouping is selected (Last 12M, Last 3M): falls back to the
+// current financial year so cards always show a relevant target.
+
+add("_Target FY Key",
+    @"VAR selected = [_FY Period Key]
+VAR base     = IF(MONTH(TODAY()) >= 4, YEAR(TODAY()), YEAR(TODAY()) - 1)
+VAR cur_fy   = ""FY "" & base & ""-"" & RIGHT(TEXT(base + 1, ""0000""), 2)
+RETURN IF(selected <> """", selected, cur_fy)",
     "");
 
 Info("Period helper measures created. Run this script once before any tab script.");
