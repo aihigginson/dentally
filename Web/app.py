@@ -780,8 +780,9 @@ def save_targets():
         return jsonify({'ok': True})
     except Exception as e:
         import traceback
-        print(f"[save_targets] ERROR: {repr(e)}\n{traceback.format_exc()}", flush=True)
-        return jsonify({'error': repr(e)}), 500
+        tb = traceback.format_exc()
+        print(f"[save_targets] ERROR: {repr(e)}\n{tb}", flush=True)
+        return jsonify({'error': repr(e), 'traceback': tb}), 500
 
 
 
