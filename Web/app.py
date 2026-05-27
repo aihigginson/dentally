@@ -752,37 +752,40 @@ def save_targets():
         rows         = request.get_json(force=True) or []
         allowed_tids = set(tids)
 
-        for row in rows:
-            tid      = int(row['tenant_id'])
-            metric   = str(row['metric'])
-            value    = row.get('value')
-            variance = row.get('variance')
-            if tid not in allowed_tids:
-                continue
-            cur.execute(
+        valid = [
+            (int(r['tenant_id']), str(r['metric']), r.get('value'), r.get('variance'))
+            for r in rows if int(r['tenant_id']) in allowed_tids
+        ]
+
+        if valid:
+            cur.fast_executemany = True
+            cur.executemany(
                 "DELETE FROM Input.Targets "
                 "WHERE Tenant_ID = ? AND Metric = ? "
                 "AND Period_Type = 'all_time' AND Period_Value = 'all' "
                 "AND Site_ID IS NULL AND Practitioner_ID IS NULL",
-                [tid, metric],
+                [(tid, metric) for tid, metric, _, _ in valid],
             )
-            if value is not None:
-                cur.execute(
+            inserts = [
+                (tid, metric, float(value),
+                 float(variance) if variance is not None else None)
+                for tid, metric, value, variance in valid if value is not None
+            ]
+            if inserts:
+                cur.executemany(
                     "INSERT INTO Input.Targets "
                     "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
                     " Target_Value, Variance, DW_Created_At, DW_Updated_At) "
                     "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, ?, GETUTCDATE(), GETUTCDATE())",
-                    [tid, metric, float(value),
-                     float(variance) if variance is not None else None],
+                    inserts,
                 )
 
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
-        print(f"[save_targets] ERROR: {repr(e)}\n{tb}", flush=True)
-        return jsonify({'error': repr(e), 'traceback': tb}), 500
+        print(f"[save_targets] ERROR: {repr(e)}\n{traceback.format_exc()}", flush=True)
+        return jsonify({'error': str(e)}), 500
 
 
 

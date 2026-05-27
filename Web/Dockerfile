@@ -19,4 +19,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 app:app
+CMD gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 app:app
