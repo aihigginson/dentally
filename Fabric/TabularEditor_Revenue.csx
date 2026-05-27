@@ -86,10 +86,12 @@ RETURN DIVIDE([Total Revenue], total_worked)",
 
 add("Total Revenue Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     '_Daily Targets'[Metric]           = ""total_revenue"",
-    '_Daily Targets'[fk Practice Site] = sel_site)",
+    '_Daily Targets'[fk Practice Site] = sel_site,
+    '_Daily Targets'[fk Practitioner]  = sel_prac)",
     "£#,##0");
 
 add("Total Revenue vs Target",
@@ -105,10 +107,12 @@ RETURN IF(
 
 add("NHS Revenue Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     '_Daily Targets'[Metric]           = ""nhs_revenue"",
-    '_Daily Targets'[fk Practice Site] = sel_site)",
+    '_Daily Targets'[fk Practice Site] = sel_site,
+    '_Daily Targets'[fk Practitioner]  = sel_prac)",
     "£#,##0");
 
 add("NHS Revenue vs Target",
@@ -124,10 +128,12 @@ RETURN IF(
 
 add("Private Revenue Target",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     '_Daily Targets'[Metric]           = ""private_revenue"",
-    '_Daily Targets'[fk Practice Site] = sel_site)",
+    '_Daily Targets'[fk Practice Site] = sel_site,
+    '_Daily Targets'[fk Practitioner]  = sel_prac)",
     "£#,##0");
 
 add("Private Revenue vs Target",
