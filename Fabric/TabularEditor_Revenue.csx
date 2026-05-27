@@ -85,14 +85,16 @@ RETURN DIVIDE([Total Revenue], total_worked)",
 // Rate/point-in-time metrics use _Effective Targets (single threshold).
 
 add("Total Revenue Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-RETURN CALCULATE(
+    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac    = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR run_rate    = [_Period Run Rate]
+VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""total_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
-    '_Daily Targets'[fk Practitioner]  = sel_prac)",
+    '_Daily Targets'[fk Practitioner]  = sel_prac)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
     "£#,##0");
 
 add("Total Revenue vs Target",
@@ -107,14 +109,16 @@ RETURN IF(
     "");
 
 add("NHS Revenue Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-RETURN CALCULATE(
+    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac    = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR run_rate    = [_Period Run Rate]
+VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""nhs_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
-    '_Daily Targets'[fk Practitioner]  = sel_prac)",
+    '_Daily Targets'[fk Practitioner]  = sel_prac)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
     "£#,##0");
 
 add("NHS Revenue vs Target",
@@ -129,14 +133,16 @@ RETURN IF(
     "");
 
 add("Private Revenue Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-RETURN CALCULATE(
+    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac    = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR run_rate    = [_Period Run Rate]
+VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]           = ""private_revenue"",
     '_Daily Targets'[fk Practice Site] = sel_site,
-    '_Daily Targets'[fk Practitioner]  = sel_prac)",
+    '_Daily Targets'[fk Practitioner]  = sel_prac)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
     "£#,##0");
 
 add("Private Revenue vs Target",
