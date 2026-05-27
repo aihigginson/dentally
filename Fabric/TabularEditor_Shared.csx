@@ -49,7 +49,7 @@ RETURN IF(is_ytd && fy_working > 0, DIVIDE(elapsed, fy_working), 1.0)",
 // Used to show ⚠ in variance text for Supports_Practitioner = 0 metrics.
 
 add("_Is Practitioner Filtered",
-    @"IF(ISFILTERED('List Practitioners'[pk_Practitioner]), 1, 0)",
+    @"IF(ISFILTERED('List Practitioners'[pk Practitioner]), 1, 0)",
     "");
 
 // ── _Target FY Key ────────────────────────────────────────────────────────────
@@ -60,8 +60,8 @@ add("_Is Practitioner Filtered",
 
 add("_Target FY Key",
     @"VAR selected = [_FY Period Key]
-VAR base     = IF(MONTH(TODAY()) >= 4, YEAR(TODAY()), YEAR(TODAY()) - 1)
-VAR cur_fy   = ""FY "" & base & ""-"" & RIGHT(TEXT(base + 1, ""0000""), 2)
+VAR fy_year  = IF(MONTH(TODAY()) >= 4, YEAR(TODAY()), YEAR(TODAY()) - 1)
+VAR cur_fy   = ""FY "" & fy_year & ""-"" & RIGHT("""" & (fy_year + 1), 2)
 RETURN IF(selected <> """", selected, cur_fy)",
     "");
 
