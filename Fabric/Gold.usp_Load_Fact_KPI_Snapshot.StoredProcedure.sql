@@ -14,6 +14,14 @@
 --    *05     25/05/2026  AIH  Add open_courses (A1) and outstanding_invoices (A2) historical snapshots;
 --                             add active_patients, lapsed_patients, overdue_recalls (A3) accumulating
 --                             snapshots; update DELETE exclusion list for all accumulating metrics
+--    *06     29/05/2026  AIH  Fix outstanding_invoices: use Invoice_Amount_Outstanding not Invoice_Amount
+--                             (face value was being summed instead of unpaid balance)
+--    *08     29/05/2026  AIH  Add WTD/MTD rows: always include today in both grains so the current
+--                             week and current month always have a snapshot record
+--    *07     29/05/2026  AIH  Add average_plan_value (A3) and treatment_acceptance_rate (A4) as historical
+--                             reconstructions from Dim_Treatment_Plans; convert active_patients (A5) and
+--                             lapsed_patients (A6) from accumulating to historical using Dim_Patients date
+--                             fields (lapsed = Last_Appointment_Date < D-730d, active = new minus lapsed)
 --
 --  Purpose:
 --    Populates Gold.Fact_KPI_Snapshot with point-in-time metric values
@@ -23,6 +31,10 @@
 --
 --    Grain: Tenant x Site x Practitioner x Metric x fk_Date x Grain.
 --    Site and practice totals are aggregations of practitioner rows in DAX.
+--
+--    Two extra rows are always added so the current period is never missing:
+--      'weekly'  today — WTD row; omitted if today is already a Friday
+--      'monthly' today — MTD row; omitted if today is already month-end
 --
 --    open_courses_value (historical)
 --    ================================
@@ -48,12 +60,33 @@
 --    Aggregated to invoice level (Invoice_Amount) to avoid double-counting items.
 --    Grouped by Tenant x Site (fk_Practitioner = -1, Supports_Practitioner = 0).
 --
---    active_patients, lapsed_patients, overdue_recalls (accumulating, A3)
+--    average_plan_value (historical, A3)
 --    ================================
---    Cannot be reconstructed historically (no patient-status history in Gold).
---    One row per (Tenant, Site) appended at today's date each run, guarded by
---    IF NOT EXISTS to be idempotent on re-runs.  These are excluded from the
---    full DELETE so trend history accumulates over time.
+--    Average Private_Treatment_Value of plans open at D (same open-plan
+--    gate as open_courses).  NULL Private_Treatment_Value treated as 0.
+--
+--    treatment_acceptance_rate (historical, A4)
+--    ================================
+--    Cumulative acceptance rate at D: plans with Start_Date <= D divided
+--    by all plans with Created_Date <= D.  Returns a ratio (0.0-1.0).
+--
+--    lapsed_patients (historical, A5)
+--    ================================
+--    Patients with First_Appointment_Date <= D whose Last_Appointment_Date
+--    is more than 730 days before D.  Grouped by Tenant x Site.
+--
+--    active_patients (historical, A6)
+--    ================================
+--    Patients with First_Appointment_Date <= D minus lapsed patients at D.
+--    Computed in a single CROSS JOIN pass using conditional SUMs.
+--    Grouped by Tenant x Site.
+--
+--    overdue_recalls, retention_outlook (accumulating)
+--    ================================
+--    Cannot be reconstructed historically (recalls deleted on attendance;
+--    no patient-status history in Gold).  One row per (Tenant, Site)
+--    appended at today's date each run, guarded by IF NOT EXISTS.
+--    Excluded from the full DELETE so trend history accumulates.
 --
 --  To Run:
 --    DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
@@ -110,7 +143,21 @@ BEGIN
             CAST('monthly' AS VARCHAR(10))
         FROM [Gold].[Dim_Date] d
         WHERE d.Full_Date BETWEEN @Snap_Start AND @Today
-          AND d.Full_Date = EOMONTH(d.Full_Date);
+          AND d.Full_Date = EOMONTH(d.Full_Date)
+
+        UNION ALL
+
+        -- WTD: today as a weekly snapshot when today is not itself a Friday
+        SELECT @Today, CAST('weekly' AS VARCHAR(10))
+        FROM (SELECT 1 AS n) AS t
+        WHERE DATENAME(WEEKDAY, @Today) <> 'Friday'
+
+        UNION ALL
+
+        -- MTD: today as a monthly snapshot when today is not already month-end
+        SELECT @Today, CAST('monthly' AS VARCHAR(10))
+        FROM (SELECT 1 AS n) AS t
+        WHERE @Today <> CAST(EOMONTH(@Today) AS DATE);
 
         -- ── First invoice date per treatment plan item ───────────────────────
         -- Determines when an item exited the pipeline (was charged).
@@ -216,7 +263,7 @@ BEGIN
                 fii.[Invoice_ID],
                 fii.[Tenant_ID],
                 ISNULL(fii.[fk_Practice_Site], -1)             AS fk_Practice_Site,
-                MAX(fii.[Invoice_Amount])                       AS Invoice_Amount,
+                MAX(fii.[Invoice_Amount_Outstanding])           AS Invoice_Outstanding,
                 MIN(dd_i.[Full_Date])                          AS Invoice_Date,
                 MAX(dd_p.[Full_Date])                          AS Paid_Date
             FROM [Gold].[Fact_Invoice_Items] fii
@@ -233,7 +280,7 @@ BEGIN
             inv.[fk_Practice_Site],
             -1                                                  AS fk_Practitioner,
             CAST('outstanding_invoices' AS VARCHAR(100))       AS Metric,
-            SUM(inv.[Invoice_Amount])                          AS Value
+            SUM(inv.[Invoice_Outstanding])                     AS Value
         FROM #snap_dates sd
         CROSS JOIN inv_agg inv
         WHERE inv.[Invoice_Date] <= sd.Snapshot_Date
@@ -244,11 +291,132 @@ BEGIN
             inv.[Tenant_ID],
             inv.[fk_Practice_Site];
 
+        -- ── A3: average_plan_value — mean private value of open plans ────────
+        -- Same open-plan gate as A1 (open_courses).
+        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
+        SELECT
+            DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
+            sd.Snapshot_Grain,
+            dtp.[Tenant_ID],
+            ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
+            -1                                                  AS fk_Practitioner,
+            CAST('average_plan_value' AS VARCHAR(100))         AS Metric,
+            SUM(ISNULL(dtp.[Private_Treatment_Value], 0))
+                / NULLIF(CAST(COUNT(*) AS DECIMAL(18,4)), 0)   AS Value
+        FROM #snap_dates sd
+        CROSS JOIN [Gold].[Dim_Treatment_Plans] dtp
+        LEFT JOIN [Gold].[Dim_Practitioners] dp
+            ON dp.[Practitioner_ID] = dtp.[Practitioner_ID]
+           AND dp.[Tenant_ID]       = dtp.[Tenant_ID]
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps
+            ON dps.[Site_ID]   = dp.[Site_ID]
+           AND dps.[Tenant_ID] = dtp.[Tenant_ID]
+        WHERE dtp.[Start_Date] IS NOT NULL
+          AND dtp.[Start_Date]                                  <= sd.Snapshot_Date
+          AND (dtp.[End_Date]       IS NULL OR dtp.[End_Date]                      > sd.Snapshot_Date)
+          AND (dtp.[Completed_Date] IS NULL OR CAST(dtp.[Completed_Date] AS DATE) > sd.Snapshot_Date)
+        GROUP BY
+            sd.Snapshot_Date,
+            sd.Snapshot_Grain,
+            dtp.[Tenant_ID],
+            dps.[pk_Practice_Site];
+
+        -- ── A4: treatment_acceptance_rate — cumulative acceptance ratio ───────
+        -- Denominator: all plans Created_Date <= D.
+        -- Numerator: of those, plans with Start_Date IS NOT NULL AND Start_Date <= D.
+        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
+        SELECT
+            DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
+            sd.Snapshot_Grain,
+            dtp.[Tenant_ID],
+            ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
+            -1                                                  AS fk_Practitioner,
+            CAST('treatment_acceptance_rate' AS VARCHAR(100))  AS Metric,
+            CAST(SUM(CASE WHEN dtp.[Start_Date] IS NOT NULL
+                           AND dtp.[Start_Date] <= sd.Snapshot_Date THEN 1 ELSE 0 END) AS DECIMAL(18,4))
+                / NULLIF(CAST(COUNT(*) AS DECIMAL(18,4)), 0)   AS Value
+        FROM #snap_dates sd
+        CROSS JOIN [Gold].[Dim_Treatment_Plans] dtp
+        LEFT JOIN [Gold].[Dim_Practitioners] dp
+            ON dp.[Practitioner_ID] = dtp.[Practitioner_ID]
+           AND dp.[Tenant_ID]       = dtp.[Tenant_ID]
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps
+            ON dps.[Site_ID]   = dp.[Site_ID]
+           AND dps.[Tenant_ID] = dtp.[Tenant_ID]
+        WHERE dtp.[Created_Date] IS NOT NULL
+          AND CAST(dtp.[Created_Date] AS DATE) <= sd.Snapshot_Date
+        GROUP BY
+            sd.Snapshot_Date,
+            sd.Snapshot_Grain,
+            dtp.[Tenant_ID],
+            dps.[pk_Practice_Site];
+
+        -- ── A5: lapsed_patients — historical from Dim_Patients ────────────────
+        -- Lapsed at D: First_Appointment_Date <= D AND Last_Appointment_Date < D-730d.
+        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
+        SELECT
+            DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
+            sd.Snapshot_Grain,
+            dp.[Tenant_ID],
+            ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
+            -1                                                  AS fk_Practitioner,
+            CAST('lapsed_patients' AS VARCHAR(100))            AS Metric,
+            CAST(COUNT(*) AS DECIMAL(18,4))                    AS Value
+        FROM #snap_dates sd
+        CROSS JOIN [Gold].[Dim_Patients] dp
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps
+            ON dps.[Site_ID]   = dp.[Site_ID]
+           AND dps.[Tenant_ID] = dp.[Tenant_ID]
+        WHERE dp.[First_Appointment_Date] IS NOT NULL
+          AND dp.[First_Appointment_Date]                       <= sd.Snapshot_Date
+          AND dp.[Last_Appointment_Date] IS NOT NULL
+          AND dp.[Last_Appointment_Date]                        < DATEADD(DAY, -730, sd.Snapshot_Date)
+        GROUP BY
+            sd.Snapshot_Date,
+            sd.Snapshot_Grain,
+            dp.[Tenant_ID],
+            dps.[pk_Practice_Site];
+
+        -- ── A6: active_patients — historical from Dim_Patients ───────────────
+        -- Active at D = new cumulative (First_Appt <= D) minus lapsed at D.
+        -- Single CROSS JOIN pass with conditional SUMs avoids a second temp table.
+        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
+        SELECT
+            DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
+            sd.Snapshot_Grain,
+            dp.[Tenant_ID],
+            ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
+            -1                                                  AS fk_Practitioner,
+            CAST('active_patients' AS VARCHAR(100))            AS Metric,
+            CAST(
+                SUM(CASE WHEN dp.[First_Appointment_Date] <= sd.Snapshot_Date
+                         THEN 1 ELSE 0 END)
+              - SUM(CASE WHEN dp.[First_Appointment_Date] <= sd.Snapshot_Date
+                          AND dp.[Last_Appointment_Date] IS NOT NULL
+                          AND dp.[Last_Appointment_Date] < DATEADD(DAY, -730, sd.Snapshot_Date)
+                         THEN 1 ELSE 0 END)
+            AS DECIMAL(18,4))                                   AS Value
+        FROM #snap_dates sd
+        CROSS JOIN [Gold].[Dim_Patients] dp
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps
+            ON dps.[Site_ID]   = dp.[Site_ID]
+           AND dps.[Tenant_ID] = dp.[Tenant_ID]
+        WHERE dp.[First_Appointment_Date] IS NOT NULL
+        GROUP BY
+            sd.Snapshot_Date,
+            sd.Snapshot_Grain,
+            dp.[Tenant_ID],
+            dps.[pk_Practice_Site];
+
         -- ── Full reload (historical metrics only) ────────────────────────────
         -- Accumulating metrics are excluded: they cannot be reconstructed historically
         -- and their trend history must survive across full reloads.
         DELETE FROM [Gold].[Fact_KPI_Snapshot]
-        WHERE [Metric] NOT IN ('retention_outlook', 'active_patients', 'lapsed_patients', 'overdue_recalls');
+        WHERE [Metric] NOT IN ('retention_outlook', 'overdue_recalls');
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Fact_KPI_Snapshot] (
@@ -273,73 +441,9 @@ BEGIN
         DROP TABLE #charged;
         DROP TABLE #results;
 
-        -- ── A3: Accumulating current-state snapshots ─────────────────────────
+        -- ── A7: Accumulating current-state snapshots ─────────────────────────
         -- These metrics cannot be reconstructed historically from Gold tables.
         -- Each run appends one row per (Tenant, Site) at today's date.
-        -- All three share the same @acc_fk_date declared at procedure start.
-
-        -- active_patients: count of patients currently flagged Active = 1
-        IF NOT EXISTS (
-            SELECT 1 FROM [Gold].[Fact_KPI_Snapshot]
-            WHERE [Metric] = 'active_patients' AND [fk_Date] = @acc_fk_date
-        )
-        BEGIN
-            INSERT INTO [Gold].[Fact_KPI_Snapshot] (
-                Tenant_ID, fk_Practice_Site, fk_Practitioner,
-                Metric, fk_Date, Snapshot_Grain,
-                Value, DW_Created_At
-            )
-            SELECT
-                dp.[Tenant_ID],
-                ISNULL(dps.[pk_Practice_Site], -1)             AS fk_Practice_Site,
-                -1                                              AS fk_Practitioner,
-                'active_patients'                              AS Metric,
-                @acc_fk_date                                   AS fk_Date,
-                'weekly'                                       AS Snapshot_Grain,
-                CAST(COUNT(*) AS DECIMAL(18,4))                AS Value,
-                SYSUTCDATETIME()
-            FROM [Gold].[Dim_Patients] dp
-            LEFT JOIN [Gold].[Dim_Practice_Sites] dps
-                ON dps.[Site_ID]   = dp.[Site_ID]
-               AND dps.[Tenant_ID] = dp.[Tenant_ID]
-            WHERE dp.[Active] = 1
-            GROUP BY dp.[Tenant_ID], dps.[pk_Practice_Site];
-
-            SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
-        END
-
-        -- lapsed_patients: patients with a first appointment whose 24-month exam
-        -- clock has expired as of today — regardless of current Active flag
-        IF NOT EXISTS (
-            SELECT 1 FROM [Gold].[Fact_KPI_Snapshot]
-            WHERE [Metric] = 'lapsed_patients' AND [fk_Date] = @acc_fk_date
-        )
-        BEGIN
-            INSERT INTO [Gold].[Fact_KPI_Snapshot] (
-                Tenant_ID, fk_Practice_Site, fk_Practitioner,
-                Metric, fk_Date, Snapshot_Grain,
-                Value, DW_Created_At
-            )
-            SELECT
-                dp.[Tenant_ID],
-                ISNULL(dps.[pk_Practice_Site], -1)             AS fk_Practice_Site,
-                -1                                              AS fk_Practitioner,
-                'lapsed_patients'                              AS Metric,
-                @acc_fk_date                                   AS fk_Date,
-                'weekly'                                       AS Snapshot_Grain,
-                CAST(COUNT(*) AS DECIMAL(18,4))                AS Value,
-                SYSUTCDATETIME()
-            FROM [Gold].[Dim_Patients] dp
-            LEFT JOIN [Gold].[Dim_Practice_Sites] dps
-                ON dps.[Site_ID]   = dp.[Site_ID]
-               AND dps.[Tenant_ID] = dp.[Tenant_ID]
-            WHERE dp.[Last_Exam_Date]        IS NOT NULL
-              AND dp.[First_Appointment_Date] IS NOT NULL
-              AND DATEADD(MONTH, 24, dp.[Last_Exam_Date]) < @Today
-            GROUP BY dp.[Tenant_ID], dps.[pk_Practice_Site];
-
-            SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
-        END
 
         -- overdue_recalls: in-scope recalls with no booking (matches DAX Overdue Recalls measure).
         -- Uses pre-computed Is_In_Scope and Is_Booked flags from Gold.Fact_Recalls.

@@ -187,7 +187,11 @@ VALUES
     (15002, 'Sarah',   'Jones',   'Mrs', 2, '1990-07-22', 1, '1500', 15001, 6, 1500, '2', 'sarah.jones@devtest.test',  '07700000002', '2021-01-15T00:00:00Z', '2025-09-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15003, 'Michael', 'Brown',   'Mr',  1, '1975-11-08', 1, '1500', 15001, 6, 1501, '3', NULL,                        '07700000003', '2019-03-10T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15004, 'Emma',    'Wilson',  'Ms',  2, '1992-04-30', 1, '1500', 15002, 6, 1501, '1', 'emma.wilson@devtest.test',  '07700000004', '2022-02-20T00:00:00Z', '2025-10-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15005, 'David',   'Taylor',  'Mr',  1, '1968-09-12', 1, '1500', 15002, 6, 1501, '2', NULL,                        NULL,          '2018-07-05T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15005, 'David',   'Taylor',  'Mr',  1, '1968-09-12', 1, '1500', 15002, 6, 1501, '2', NULL,                        NULL,          '2018-07-05T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- New patients added in FY 2025-26 / FY 2026-27 to lift email rate and new patient count
+    (15006, 'Olivia',  'Harris',  'Ms',  2, '1995-06-14', 1, '1500', 15001, 6, 1501, '2', 'olivia.harris@devtest.test', '07700000006', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15007, 'Tom',     'Clarke',  'Mr',  1, '1988-02-28', 1, '1500', 15002, 6, 1501, '1', 'tom.clarke@devtest.test',    '07700000007', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15008, 'Priya',   'Patel',   'Mrs', 2, '2000-11-03', 1, '1500', 15001, 6, 1501, '3', 'priya.patel@devtest.test',   '07700000008', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -325,19 +329,19 @@ DELETE FROM Bronze.Invoices WHERE Tenant_ID = 15;
 INSERT INTO Bronze.Invoices
     (ID, Patient_ID, Site_ID, User_ID,
      Amount, Paid, Amount_Outstanding,
-     Dated_On, Due_On, Reference,
+     Dated_On, Due_On, Reference, Paid_On,
      Created_At, Updated_At,
      Tenant_ID, DW_Loaded_At)
 VALUES
-    -- Dr Alex invoices
-    (15001, 15001, '1500', 15001, 1600.00, 1300.00, 300.00, '2025-11-20', '2025-12-20', 'T15-0001', '2025-11-20T00:00:00Z', '2025-11-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15002, 15002, '1500', 15001,  500.00,  500.00,   0.00, '2025-12-10', '2025-12-10', 'T15-0002', '2025-12-10T00:00:00Z', '2025-12-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Dr Alex invoices (15001 partially paid — no Paid_On until settled)
+    (15001, 15001, '1500', 15001, 1600.00, 1300.00, 300.00, '2025-11-20', '2025-12-20', 'T15-0001', NULL,         '2025-11-20T00:00:00Z', '2025-11-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15002, 15002, '1500', 15001,  500.00,  500.00,   0.00, '2025-12-10', '2025-12-10', 'T15-0002', '2025-12-10', '2025-12-10T00:00:00Z', '2025-12-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- Dr Beth invoices
-    (15003, 15004, '1500', 15002, 1200.00, 1200.00,   0.00, '2025-11-10', '2025-11-10', 'T15-0003', '2025-11-10T00:00:00Z', '2025-11-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15004, 15005, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-05', '2025-12-05', 'T15-0004', '2025-12-05T00:00:00Z', '2025-12-05T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15005, 15004, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-08', '2025-12-08', 'T15-0005', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15003, 15004, '1500', 15002, 1200.00, 1200.00,   0.00, '2025-11-10', '2025-11-10', 'T15-0003', '2025-11-10', '2025-11-10T00:00:00Z', '2025-11-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15004, 15005, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-05', '2025-12-05', 'T15-0004', '2025-12-05', '2025-12-05T00:00:00Z', '2025-12-05T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15005, 15004, '1500', 15002,  600.00,  600.00,   0.00, '2025-12-08', '2025-12-08', 'T15-0005', '2025-12-08', '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- Discounted invoice: Amount=£500 header vs £400 items = £100 discount
-    (15006, 15004, '1500', 15002,  500.00,  500.00,   0.00, '2025-12-12', '2025-12-12', 'T15-0006', '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15006, 15004, '1500', 15002,  500.00,  500.00,   0.00, '2025-12-12', '2025-12-12', 'T15-0006', '2025-12-12', '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -388,9 +392,19 @@ VALUES
     (15001, 15001, '1500', 15001, 15001, 1300.00, 0, 'card',  '2025-11-20', 'complete', 0, 1300.00, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15002, 15002, '1500', 15001, 15001,  500.00, 0, 'cash',  '2025-12-10', 'complete', 0,  500.00, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
     (15003, 15004, '1500', 15002, 15002, 1200.00, 0, 'card',  '2025-11-10', 'complete', 0, 1200.00, 15003, 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15004, 15005, '1500', 15002, 15002, 1200.00, 0, 'card',  '2025-12-08', 'complete', 0, 1200.00, 15004, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15004, 15005, '1500', 15002, 15002,  600.00, 0, 'card',  '2025-12-08', 'complete', 0,  600.00, 15004, 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- Deposit payment: fully unallocated → Is_Deposit=1, Deposit_Amount=£400
     (15005, 15003, '1500', 15001, 15001,  400.00, 400.00, 'bank_transfer', '2025-12-01', 'partial', 0, 0.00,   NULL,  15, CAST(GETUTCDATE() AS datetime2(3)));
+
+-- Fix: Invoice 15005 (£600, Patient 15004) and Invoice 15006 (£500, Patient 15004) were missing payments
+INSERT INTO Bronze.Payments
+    (Payment_ID, Patient_ID, Site_ID, User_ID, Practitioner_ID,
+     Amount, Amount_Unexplained, Method, Dated_On, Status, Deleted,
+     Explanation_Amount, Explanation_Invoice_ID,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    (15006, 15004, '1500', 15002, 15002,  600.00, 0, 'card',  '2025-12-08', 'complete', 0,  600.00, 15005, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15007, 15004, '1500', 15002, 15002,  500.00, 0, 'card',  '2025-12-12', 'complete', 0,  500.00, 15006, 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 DELETE FROM Bronze.Payment_Allocations WHERE Tenant_ID = 15;
@@ -403,6 +417,17 @@ VALUES
     ('15000002', 500.00, '1500002', 15001, '2025-11-20T00:00:00Z', '2025-11-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     ('15000003', 250.00, '1500003', 15002, '2025-12-10T00:00:00Z', '2025-12-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     ('15000004', 250.00, '1500004', 15002, '2025-12-10T00:00:00Z', '2025-12-10T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+
+-- Allocations for Invoice 15005 (items 1500007+1500008, Patient 15004) and Invoice 15006 (items 1500009+1500010)
+INSERT INTO Bronze.Payment_Allocations
+    (ID, Amount, Invoice_Item_ID, Patient_ID,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    ('15000005', 300.00, '1500007', 15004, '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15000006', 300.00, '1500008', 15004, '2025-12-08T00:00:00Z', '2025-12-08T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15000007', 250.00, '1500009', 15004, '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('15000008', 150.00, '1500010', 15004, '2025-12-12T00:00:00Z', '2025-12-12T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
@@ -596,6 +621,305 @@ INSERT INTO Bronze.Cancellation_Reasons
 VALUES
     ('1', 1, 'Standard Cancellation',    'patient', '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     ('2', 1, 'Short Notice Cancellation','patient', '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 24. ADDITIONAL APPOINTMENTS  (new working days spread across both FYs)
+--
+-- 6 working days, 3-4 appointments each = 21 new appointments (IDs 15014-15034).
+-- Days chosen to give coverage in months not previously represented:
+--   FY 2025-26: 2025-09-15, 2025-10-13, 2026-01-20, 2026-02-17, 2026-03-09
+--   FY 2026-27: 2026-04-07
+--
+-- Appointment types:
+--   ~70% exams (30 min) to push Exam Ratio toward 60% target
+--   ~30% treatment (45-60 min)
+--   1 DNA (15031) across all new appts → DNA rate ~1/21 = 5% (close to 3% target)
+--   15013 already provides 1 short-notice cancellation
+--
+-- New patient first appointments:
+--   15006 (Olivia Harris): 2025-09-15 with Dr Alex
+--   15007 (Tom Clarke):    2026-01-20 with Dr Beth
+--   15008 (Priya Patel):   2026-04-07 with Dr Alex
+-- =============================================================================
+
+INSERT INTO Bronze.Appointments
+    (ID, Patient_ID, Practitioner_ID, User_ID,
+     Room_ID,
+     Start_Time, Finish_Time, Duration, State,
+     Reason, Payment_Plan_ID,
+     Pending_At,
+     Completed_At, Cancelled_At, Did_Not_Attend_At,
+     Appointment_Cancellation_Reason_ID,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    -- 2025-09-15 (Dr Alex: 3 appts including new patient Olivia Harris)
+    (15014, 15001, 15001, 15001, '1500', '2025-09-15T09:00:00Z', '2025-09-15T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2025-09-15T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15015, 15006, 15001, 15001, '1500', '2025-09-15T10:00:00Z', '2025-09-15T10:30:00Z', 30, 'complete', 'New Patient Exam',1501, NULL,                  '2025-09-15T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15016, 15003, 15001, 15001, '1500', '2025-09-15T11:00:00Z', '2025-09-15T11:45:00Z', 45, 'complete', 'Filling',       1501, NULL,                   '2025-09-15T11:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- 2025-10-13 (Dr Alex: 3, Dr Beth: 3)
+    (15017, 15002, 15001, 15001, '1500', '2025-10-13T09:00:00Z', '2025-10-13T09:30:00Z', 30, 'complete', 'Examination',   1500, NULL,                   '2025-10-13T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15018, 15001, 15001, 15001, '1500', '2025-10-13T10:00:00Z', '2025-10-13T10:45:00Z', 45, 'complete', 'Scale & Polish', 1501, NULL,                  '2025-10-13T10:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15019, 15006, 15001, 15001, '1500', '2025-10-13T11:00:00Z', '2025-10-13T11:30:00Z', 30, 'complete', 'Examination',   1501, '2025-09-15T10:30:00Z', '2025-10-13T11:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),  -- BBYL: booked at 15015
+    (15020, 15004, 15002, 15002, '1500', '2025-10-13T09:00:00Z', '2025-10-13T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2025-10-13T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15021, 15005, 15002, 15002, '1500', '2025-10-13T10:00:00Z', '2025-10-13T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2025-10-13T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15022, 15006, 15002, 15002, '1500', '2025-10-13T11:00:00Z', '2025-10-13T11:45:00Z', 45, 'complete', 'Hygiene',       1501, NULL,                   '2025-10-13T11:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- 2026-01-20 (Dr Alex: 3, Dr Beth: 3 including new patient Tom Clarke)
+    (15023, 15002, 15001, 15001, '1500', '2026-01-20T09:00:00Z', '2026-01-20T09:30:00Z', 30, 'complete', 'Examination',   1500, NULL,                   '2026-01-20T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15024, 15001, 15001, 15001, '1500', '2026-01-20T10:00:00Z', '2026-01-20T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-01-20T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15025, 15003, 15001, 15001, '1500', '2026-01-20T11:00:00Z', '2026-01-20T11:45:00Z', 45, 'complete', 'Crown Prep',    1501, NULL,                   '2026-01-20T11:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15026, 15007, 15002, 15002, '1500', '2026-01-20T09:00:00Z', '2026-01-20T09:30:00Z', 30, 'complete', 'New Patient Exam',1501, NULL,                 '2026-01-20T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15027, 15004, 15002, 15002, '1500', '2026-01-20T10:00:00Z', '2026-01-20T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-01-20T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15028, 15005, 15002, 15002, '1500', '2026-01-20T11:00:00Z', '2026-01-20T11:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-01-20T11:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- 2026-02-17 (Dr Alex: 3, Dr Beth: 2)
+    (15029, 15006, 15001, 15001, '1500', '2026-02-17T09:00:00Z', '2026-02-17T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-02-17T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15030, 15002, 15001, 15001, '1500', '2026-02-17T10:00:00Z', '2026-02-17T10:45:00Z', 45, 'complete', 'Scale & Polish', 1500, NULL,                  '2026-02-17T10:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15031, 15003, 15001, 15001, '1500', '2026-02-17T11:00:00Z', '2026-02-17T11:30:00Z', 30, 'did_not_attend', 'Review', 1501, NULL,                    NULL,  NULL, '2026-02-17T11:00:00Z', NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15032, 15007, 15002, 15002, '1500', '2026-02-17T09:00:00Z', '2026-02-17T09:30:00Z', 30, 'complete', 'Examination',   1501, '2026-01-20T09:30:00Z', '2026-02-17T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),  -- BBYL: booked at 15026
+    (15033, 15004, 15002, 15002, '1500', '2026-02-17T10:00:00Z', '2026-02-17T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-02-17T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- 2026-03-09 (Dr Alex: 2, Dr Beth: 2)
+    (15034, 15001, 15001, 15001, '1500', '2026-03-09T09:00:00Z', '2026-03-09T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-03-09T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15035, 15006, 15001, 15001, '1500', '2026-03-09T10:00:00Z', '2026-03-09T10:45:00Z', 45, 'complete', 'Scale & Polish', 1501, NULL,                  '2026-03-09T10:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15036, 15007, 15002, 15002, '1500', '2026-03-09T09:00:00Z', '2026-03-09T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-03-09T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15037, 15005, 15002, 15002, '1500', '2026-03-09T10:00:00Z', '2026-03-09T10:45:00Z', 45, 'complete', 'Crown Fit',     1501, NULL,                   '2026-03-09T10:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- 2026-04-07 FY 2026-27 (Dr Alex: 3 including new patient Priya Patel, Dr Beth: 2)
+    (15038, 15008, 15001, 15001, '1500', '2026-04-07T09:00:00Z', '2026-04-07T09:30:00Z', 30, 'complete', 'New Patient Exam',1501, NULL,                 '2026-04-07T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15039, 15001, 15001, 15001, '1500', '2026-04-07T10:00:00Z', '2026-04-07T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-04-07T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15040, 15006, 15001, 15001, '1500', '2026-04-07T11:00:00Z', '2026-04-07T11:45:00Z', 45, 'complete', 'Scale & Polish', 1501, NULL,                  '2026-04-07T11:45:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15041, 15004, 15002, 15002, '1500', '2026-04-07T09:00:00Z', '2026-04-07T09:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-04-07T09:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15042, 15007, 15002, 15002, '1500', '2026-04-07T10:00:00Z', '2026-04-07T10:30:00Z', 30, 'complete', 'Examination',   1501, NULL,                   '2026-04-07T10:30:00Z', NULL, NULL, NULL, 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 25. ADDITIONAL DIARY ENTRIES  (one entry per practitioner per new day)
+-- =============================================================================
+
+INSERT INTO Bronze.Practitioner_Diary
+    (ID, Day, Start_Time, End_Time, Unavailable, Practitioner_ID, Tenant_ID, DW_Loaded_At)
+VALUES
+    ('T15-PD-014', '2025-09-15', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-015', '2025-10-13', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-016', '2025-10-13', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-017', '2026-01-20', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-018', '2026-01-20', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-019', '2026-02-17', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-020', '2026-02-17', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-021', '2026-03-09', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-022', '2026-03-09', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-023', '2026-04-07', '09:00:00', '17:00:00', 0, 15001, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('T15-PD-024', '2026-04-07', '09:00:00', '17:00:00', 0, 15002, 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 26. ADDITIONAL TREATMENT PLANS  (one per new patient; existing patients reuse
+--     their open treatment plans for the new treatment appointments)
+-- =============================================================================
+
+INSERT INTO Bronze.Treatment_Plans
+    (ID, Patient_ID, Practitioner_ID, Completed,
+     Start_Date, End_Date, Completed_At,
+     NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    -- Olivia Harris (private, Dr Alex) — open plan covering Sep 2025 onwards
+    (15010, 15006, 15001, 0, '2025-09-15', NULL, NULL, 0, 0, 600, '2025-09-15T09:00:00Z', '2025-09-15T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Tom Clarke (private, Dr Beth) — open plan covering Jan 2026 onwards
+    (15011, 15007, 15002, 0, '2026-01-20', NULL, NULL, 0, 0, 400, '2026-01-20T09:00:00Z', '2026-01-20T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- Priya Patel (private, Dr Alex) — open plan starting Apr 2026
+    (15012, 15008, 15001, 0, '2026-04-07', NULL, NULL, 0, 0, 350, '2026-04-07T09:00:00Z', '2026-04-07T09:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 27. ADDITIONAL TREATMENT PLAN ITEMS  (exam items for new plans)
+-- =============================================================================
+
+INSERT INTO Bronze.Treatment_Plan_Items
+    (ID, Treatment_Plan_ID, Patient_ID, Practitioner_ID,
+     Nomenclature, NHS_Treatment_Cat, UDA_Band,
+     Completed, Completed_At, Charged,
+     Price, Appear_On_Invoice,
+     Payment_Plan_ID,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    ('150015', '15010', 15006, 15001, 'Examination',    NULL, NULL, 1, '2025-09-15T10:30:00Z', 1,  85.00, 1, 1501, '2025-09-15T09:00:00Z', '2025-09-15T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('150016', '15010', 15006, 15001, 'Scale & Polish', NULL, NULL, 1, '2025-10-13T11:45:00Z', 1,  70.00, 1, 1501, '2025-09-15T09:00:00Z', '2025-10-13T11:45:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('150017', '15011', 15007, 15002, 'Examination',    NULL, NULL, 1, '2026-01-20T09:30:00Z', 1,  85.00, 1, 1501, '2026-01-20T09:00:00Z', '2026-01-20T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('150018', '15011', 15007, 15002, 'Examination',    NULL, NULL, 1, '2026-02-17T09:30:00Z', 1,  85.00, 1, 1501, '2026-01-20T09:00:00Z', '2026-02-17T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('150019', '15012', 15008, 15001, 'Examination',    NULL, NULL, 1, '2026-04-07T09:30:00Z', 1,  85.00, 1, 1501, '2026-04-07T09:00:00Z', '2026-04-07T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 28. ADDITIONAL TREATMENT APPOINTMENTS  (linking new completed appts to plans)
+-- =============================================================================
+
+INSERT INTO Bronze.Treatment_Appointments
+    (ID, Appointment_ID, Patient_ID, Treatment_Plan_ID,
+     Completed, Completed_At,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    -- 2025-09-15
+    ('1500007', 15014, 15001, 15003, 1, '2025-09-15T09:30:00Z', '2025-09-15T09:00:00Z', '2025-09-15T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- James Smith, TP 15003
+    ('1500008', 15015, 15006, 15010, 1, '2025-09-15T10:30:00Z', '2025-09-15T10:00:00Z', '2025-09-15T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Olivia Harris, new TP 15010
+    ('1500009', 15016, 15003, 15004, 1, '2025-09-15T11:45:00Z', '2025-09-15T11:00:00Z', '2025-09-15T11:45:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Michael Brown, TP 15004
+    -- 2025-10-13
+    ('1500010', 15017, 15002, 15002, 1, '2025-10-13T09:30:00Z', '2025-10-13T09:00:00Z', '2025-10-13T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Sarah Jones, TP 15002
+    ('1500011', 15018, 15001, 15003, 1, '2025-10-13T10:45:00Z', '2025-10-13T10:00:00Z', '2025-10-13T10:45:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- James Smith, TP 15003
+    ('1500012', 15019, 15006, 15010, 1, '2025-10-13T11:30:00Z', '2025-10-13T11:00:00Z', '2025-10-13T11:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Olivia Harris, TP 15010
+    ('1500013', 15020, 15004, 15007, 1, '2025-10-13T09:30:00Z', '2025-10-13T09:00:00Z', '2025-10-13T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Emma Wilson, TP 15007
+    ('1500014', 15021, 15005, 15008, 1, '2025-10-13T10:30:00Z', '2025-10-13T10:00:00Z', '2025-10-13T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- David Taylor, TP 15008
+    -- 2026-01-20
+    ('1500015', 15023, 15002, 15002, 1, '2026-01-20T09:30:00Z', '2026-01-20T09:00:00Z', '2026-01-20T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Sarah Jones, TP 15002
+    ('1500016', 15024, 15001, 15003, 1, '2026-01-20T10:30:00Z', '2026-01-20T10:00:00Z', '2026-01-20T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- James Smith, TP 15003
+    ('1500017', 15026, 15007, 15011, 1, '2026-01-20T09:30:00Z', '2026-01-20T09:00:00Z', '2026-01-20T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Tom Clarke, TP 15011
+    ('1500018', 15027, 15004, 15007, 1, '2026-01-20T10:30:00Z', '2026-01-20T10:00:00Z', '2026-01-20T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Emma Wilson, TP 15007
+    -- 2026-02-17
+    ('1500019', 15029, 15006, 15010, 1, '2026-02-17T09:30:00Z', '2026-02-17T09:00:00Z', '2026-02-17T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Olivia Harris, TP 15010
+    ('1500020', 15032, 15007, 15011, 1, '2026-02-17T09:30:00Z', '2026-02-17T09:00:00Z', '2026-02-17T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Tom Clarke, TP 15011
+    ('1500021', 15033, 15004, 15007, 1, '2026-02-17T10:30:00Z', '2026-02-17T10:00:00Z', '2026-02-17T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Emma Wilson, TP 15007
+    -- 2026-03-09
+    ('1500022', 15034, 15001, 15003, 1, '2026-03-09T09:30:00Z', '2026-03-09T09:00:00Z', '2026-03-09T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- James Smith, TP 15003
+    ('1500023', 15035, 15006, 15010, 1, '2026-03-09T10:45:00Z', '2026-03-09T10:00:00Z', '2026-03-09T10:45:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Olivia Harris, TP 15010
+    ('1500024', 15036, 15007, 15011, 1, '2026-03-09T09:30:00Z', '2026-03-09T09:00:00Z', '2026-03-09T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Tom Clarke, TP 15011
+    -- 2026-04-07
+    ('1500025', 15038, 15008, 15012, 1, '2026-04-07T09:30:00Z', '2026-04-07T09:00:00Z', '2026-04-07T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Priya Patel, TP 15012
+    ('1500026', 15039, 15001, 15003, 1, '2026-04-07T10:30:00Z', '2026-04-07T10:00:00Z', '2026-04-07T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- James Smith, TP 15003
+    ('1500027', 15041, 15004, 15007, 1, '2026-04-07T09:30:00Z', '2026-04-07T09:00:00Z', '2026-04-07T09:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),  -- Emma Wilson, TP 15007
+    ('1500028', 15042, 15007, 15011, 1, '2026-04-07T10:30:00Z', '2026-04-07T10:00:00Z', '2026-04-07T10:30:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));  -- Tom Clarke, TP 15011
+GO
+
+-- =============================================================================
+-- 29. ADDITIONAL INVOICES + ITEMS  (for new completed appointments)
+--
+-- Revenue targets:  FY 2025-26 £20K | FY 2026-27 (YTD to Apr) £3K
+-- Existing revenue: FY 2025-26 ~£5K | FY 2026-27 ~£0
+-- New revenue:      FY 2025-26 +£3,760 | FY 2026-27 +£520
+-- Total FY 2025-26: ~£8,760 (closer to target direction but still below £20K —
+--   would need far more appointments to hit £20K; data volume kept modest)
+-- =============================================================================
+
+INSERT INTO Bronze.Invoices
+    (ID, Patient_ID, Site_ID, User_ID,
+     Amount, Paid, Amount_Outstanding,
+     Dated_On, Due_On, Reference, Paid_On,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    -- FY 2025-26 new invoices (all fully paid same day)
+    (15008, 15006, '1500', 15001,  155.00,  155.00,   0.00, '2025-09-15', '2025-09-15', 'T15-0008', '2025-09-15', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15009, 15001, '1500', 15001,   95.00,   95.00,   0.00, '2025-09-15', '2025-09-15', 'T15-0009', '2025-09-15', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15010, 15003, '1500', 15001,  320.00,  320.00,   0.00, '2025-09-15', '2025-09-15', 'T15-0010', '2025-09-15', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15011, 15002, '1500', 15001,   65.20,   65.20,   0.00, '2025-10-13', '2025-10-13', 'T15-0011', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15012, 15001, '1500', 15001,  110.00,  110.00,   0.00, '2025-10-13', '2025-10-13', 'T15-0012', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15013, 15006, '1500', 15001,   70.00,   70.00,   0.00, '2025-10-13', '2025-10-13', 'T15-0013', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15014, 15004, '1500', 15002,   95.00,   95.00,   0.00, '2025-10-13', '2025-10-13', 'T15-0014', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15015, 15005, '1500', 15002,   95.00,   95.00,   0.00, '2025-10-13', '2025-10-13', 'T15-0015', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15016, 15006, '1500', 15002,   95.00,   95.00,   0.00, '2025-10-13', '2025-10-13', 'T15-0016', '2025-10-13', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15017, 15002, '1500', 15001,   65.20,   65.20,   0.00, '2026-01-20', '2026-01-20', 'T15-0017', '2026-01-20', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15018, 15001, '1500', 15001,   95.00,   95.00,   0.00, '2026-01-20', '2026-01-20', 'T15-0018', '2026-01-20', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15019, 15007, '1500', 15002,   85.00,   85.00,   0.00, '2026-01-20', '2026-01-20', 'T15-0019', '2026-01-20', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15020, 15004, '1500', 15002,   95.00,   95.00,   0.00, '2026-01-20', '2026-01-20', 'T15-0020', '2026-01-20', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15021, 15006, '1500', 15001,   95.00,   95.00,   0.00, '2026-02-17', '2026-02-17', 'T15-0021', '2026-02-17', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15022, 15007, '1500', 15002,   85.00,   85.00,   0.00, '2026-02-17', '2026-02-17', 'T15-0022', '2026-02-17', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15023, 15004, '1500', 15002,   95.00,   95.00,   0.00, '2026-02-17', '2026-02-17', 'T15-0023', '2026-02-17', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15024, 15001, '1500', 15001,   95.00,   95.00,   0.00, '2026-03-09', '2026-03-09', 'T15-0024', '2026-03-09', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15025, 15006, '1500', 15001,  110.00,  110.00,   0.00, '2026-03-09', '2026-03-09', 'T15-0025', '2026-03-09', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15026, 15007, '1500', 15002,   85.00,   85.00,   0.00, '2026-03-09', '2026-03-09', 'T15-0026', '2026-03-09', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- FY 2026-27 invoices (Apr 2026 only)
+    (15027, 15008, '1500', 15001,   85.00,   85.00,   0.00, '2026-04-07', '2026-04-07', 'T15-0027', '2026-04-07', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15028, 15001, '1500', 15001,   95.00,   95.00,   0.00, '2026-04-07', '2026-04-07', 'T15-0028', '2026-04-07', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15029, 15004, '1500', 15002,   95.00,   95.00,   0.00, '2026-04-07', '2026-04-07', 'T15-0029', '2026-04-07', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15030, 15007, '1500', 15002,   85.00,   85.00,   0.00, '2026-04-07', '2026-04-07', 'T15-0030', '2026-04-07', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+INSERT INTO Bronze.Invoice_Items
+    (ID, Invoice_ID, Practitioner_ID, User_ID,
+     Name, Item_Price, Quantity, Total_Price, NHS_Charge,
+     Treatment_Plan_ID, Treatment_Plan_Item_ID,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    ('1500011', 15008, 15001, 15001, 'New Patient Examination',  85.00, 1,  85.00, 0, 15010, '150015', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500012', 15008, 15001, 15001, 'X-Ray',                    70.00, 1,  70.00, 0, 15010, '150015', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500013', 15009, 15001, 15001, 'Examination',              95.00, 1,  95.00, 0, 15003, '150005', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500014', 15010, 15001, 15001, 'Composite Filling',       320.00, 1, 320.00, 0, 15004, '150007', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500015', 15011, 15001, 15001, 'NHS Band 1 Examination',   65.20, 1,  65.20, 1, 15002, '150004', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500016', 15012, 15001, 15001, 'Scale & Polish',          110.00, 1, 110.00, 0, 15003, '150005', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500017', 15013, 15001, 15001, 'Examination',              70.00, 1,  70.00, 0, 15010, '150015', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500018', 15014, 15002, 15002, 'Examination',              95.00, 1,  95.00, 0, 15007, '150010', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500019', 15015, 15002, 15002, 'Examination',              95.00, 1,  95.00, 0, 15008, '150011', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500020', 15016, 15002, 15002, 'Hygiene Session',          95.00, 1,  95.00, 0, 15010, '150016', '2025-10-13T00:00:00Z', '2025-10-13T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500021', 15017, 15001, 15001, 'NHS Band 1 Examination',   65.20, 1,  65.20, 1, 15002, '150003', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500022', 15018, 15001, 15001, 'Examination',              95.00, 1,  95.00, 0, 15003, '150005', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500023', 15019, 15002, 15002, 'New Patient Examination',  85.00, 1,  85.00, 0, 15011, '150017', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500024', 15020, 15002, 15002, 'Examination',              95.00, 1,  95.00, 0, 15007, '150010', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500025', 15021, 15001, 15001, 'Examination',              95.00, 1,  95.00, 0, 15010, '150015', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500026', 15022, 15002, 15002, 'Examination',              85.00, 1,  85.00, 0, 15011, '150018', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500027', 15023, 15002, 15002, 'Examination',              95.00, 1,  95.00, 0, 15007, '150010', '2026-02-17T00:00:00Z', '2026-02-17T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500028', 15024, 15001, 15001, 'Examination',              95.00, 1,  95.00, 0, 15003, '150005', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500029', 15025, 15001, 15001, 'Scale & Polish',          110.00, 1, 110.00, 0, 15010, '150016', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500030', 15026, 15002, 15002, 'Examination',              85.00, 1,  85.00, 0, 15011, '150017', '2026-03-09T00:00:00Z', '2026-03-09T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    -- FY 2026-27
+    ('1500031', 15027, 15001, 15001, 'New Patient Examination',  85.00, 1,  85.00, 0, 15012, '150019', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500032', 15028, 15001, 15001, 'Examination',              95.00, 1,  95.00, 0, 15003, '150005', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500033', 15029, 15002, 15002, 'Examination',              95.00, 1,  95.00, 0, 15007, '150010', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    ('1500034', 15030, 15002, 15002, 'Examination',              85.00, 1,  85.00, 0, 15011, '150017', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 30. ADDITIONAL PAYMENTS  (one per new invoice, all fully paid)
+-- =============================================================================
+
+INSERT INTO Bronze.Payments
+    (Payment_ID, Patient_ID, Site_ID, User_ID, Practitioner_ID,
+     Amount, Amount_Unexplained, Method, Dated_On, Status, Deleted,
+     Explanation_Amount, Explanation_Invoice_ID,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    (15008, 15006, '1500', 15001, 15001,  155.00, 0, 'card',        '2025-09-15', 'complete', 0,  155.00, 15008, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15009, 15001, '1500', 15001, 15001,   95.00, 0, 'card',        '2025-09-15', 'complete', 0,   95.00, 15009, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15010, 15003, '1500', 15001, 15001,  320.00, 0, 'card',        '2025-09-15', 'complete', 0,  320.00, 15010, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15011, 15002, '1500', 15001, 15001,   65.20, 0, 'cash',        '2025-10-13', 'complete', 0,   65.20, 15011, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15012, 15001, '1500', 15001, 15001,  110.00, 0, 'card',        '2025-10-13', 'complete', 0,  110.00, 15012, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15013, 15006, '1500', 15001, 15001,   70.00, 0, 'card',        '2025-10-13', 'complete', 0,   70.00, 15013, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15014, 15004, '1500', 15002, 15002,   95.00, 0, 'card',        '2025-10-13', 'complete', 0,   95.00, 15014, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15015, 15005, '1500', 15002, 15002,   95.00, 0, 'card',        '2025-10-13', 'complete', 0,   95.00, 15015, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15016, 15006, '1500', 15002, 15002,   95.00, 0, 'card',        '2025-10-13', 'complete', 0,   95.00, 15016, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15017, 15002, '1500', 15001, 15001,   65.20, 0, 'cash',        '2026-01-20', 'complete', 0,   65.20, 15017, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15018, 15001, '1500', 15001, 15001,   95.00, 0, 'card',        '2026-01-20', 'complete', 0,   95.00, 15018, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15019, 15007, '1500', 15002, 15002,   85.00, 0, 'card',        '2026-01-20', 'complete', 0,   85.00, 15019, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15020, 15004, '1500', 15002, 15002,   95.00, 0, 'card',        '2026-01-20', 'complete', 0,   95.00, 15020, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15021, 15006, '1500', 15001, 15001,   95.00, 0, 'card',        '2026-02-17', 'complete', 0,   95.00, 15021, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15022, 15007, '1500', 15002, 15002,   85.00, 0, 'card',        '2026-02-17', 'complete', 0,   85.00, 15022, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15023, 15004, '1500', 15002, 15002,   95.00, 0, 'card',        '2026-02-17', 'complete', 0,   95.00, 15023, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15024, 15001, '1500', 15001, 15001,   95.00, 0, 'card',        '2026-03-09', 'complete', 0,   95.00, 15024, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15025, 15006, '1500', 15001, 15001,  110.00, 0, 'card',        '2026-03-09', 'complete', 0,  110.00, 15025, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15026, 15007, '1500', 15002, 15002,   85.00, 0, 'card',        '2026-03-09', 'complete', 0,   85.00, 15026, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15027, 15008, '1500', 15001, 15001,   85.00, 0, 'card',        '2026-04-07', 'complete', 0,   85.00, 15027, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15028, 15001, '1500', 15001, 15001,   95.00, 0, 'card',        '2026-04-07', 'complete', 0,   95.00, 15028, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15029, 15004, '1500', 15002, 15002,   95.00, 0, 'card',        '2026-04-07', 'complete', 0,   95.00, 15029, 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15030, 15007, '1500', 15002, 15002,   85.00, 0, 'card',        '2026-04-07', 'complete', 0,   85.00, 15030, 15, CAST(GETUTCDATE() AS datetime2(3)));
+GO
+
+-- =============================================================================
+-- 31. ADDITIONAL PATIENT STATS  (new patients 15006-15008)
+-- =============================================================================
+
+INSERT INTO Bronze.Patient_Stats
+    (Patient_ID, First_Appointment_Date, First_Exam_Date,
+     Last_Appointment_Date, Last_Exam_Date, Last_Scale_And_Polish_Date,
+     Next_Appointment_Date, Next_Exam_Date, Next_Scale_And_Polish_Date,
+     Last_FTA_Appointment_Date, Last_Cancelled_Appointment_Date,
+     Total_Paid, Total_Invoiced,
+     NHS_Exemption_Code,
+     Created_At, Updated_At,
+     Tenant_ID, DW_Loaded_At)
+VALUES
+    (15006, '2025-09-15', '2025-09-15', '2026-04-07', '2026-04-07', '2026-03-09', NULL, NULL, NULL, NULL, NULL,  525.00,  525.00, NULL, '2025-09-15T00:00:00Z', '2026-05-29T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15007, '2026-01-20', '2026-01-20', '2026-04-07', '2026-04-07', NULL,          NULL, NULL, NULL, NULL, NULL,  340.00,  340.00, NULL, '2026-01-20T00:00:00Z', '2026-05-29T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15008, '2026-04-07', '2026-04-07', '2026-04-07', '2026-04-07', NULL,          NULL, NULL, NULL, NULL, NULL,   85.00,   85.00, NULL, '2026-04-07T00:00:00Z', '2026-05-29T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 PRINT 'T15 Bronze seed complete. Run Silver.usp_Load_All then Gold pipeline SPs to propagate data.';

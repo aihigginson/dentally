@@ -6,6 +6,8 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     27/05/2026  AIH Financial_Year_Name format changed from 'FY2024/25' to 'FY 2024-25'
+--    *03     29/05/2026  AIH Add Calendar_Year_Week, Week_Commencing_Date, Week_Ending_Date,
+--                            Month_Commencing_Date, Month_Ending_Date
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Date @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Date]    Script Date: 20/04/2026 10:15:06 ******/
@@ -59,12 +61,17 @@ BEGIN
         -- Calendar Week
         Week_Of_Year                    smallint         NOT NULL,   -- ISO week 1-53
         Week_Of_Month                   smallint         NOT NULL,   -- 1-5
+        Calendar_Year_Week              INT              NOT NULL,   -- e.g. 202523
+        Week_Commencing_Date            DATE             NOT NULL,   -- Monday of the week
+        Week_Ending_Date                DATE             NOT NULL,   -- Sunday of the week
 
         -- Calendar Month
         Month_Number                    smallint         NOT NULL,   -- 1-12
         Month_Name                      VARCHAR(10)     NOT NULL,   -- 'January'
         Month_Name_Short                VARCHAR(3)         NOT NULL,   -- 'Jan'
         Month_Year                      VARCHAR(10)         NOT NULL,   -- 'Jan-2024'
+        Month_Commencing_Date           DATE             NOT NULL,   -- 1st of the month
+        Month_Ending_Date               DATE             NOT NULL,   -- Last day of the month
 
         -- Calendar Quarter
         Calendar_Quarter                smallint         NOT NULL,   -- 1-4
@@ -165,8 +172,8 @@ BEGIN
         pk_Date,
         Full_Date,
         Day_Name, Day_Of_Week, Day_Of_Month, Day_Of_Year,
-        Week_Of_Year, Week_Of_Month,
-        Month_Number, Month_Name, Month_Name_Short, Month_Year,
+        Week_Of_Year, Week_Of_Month, Calendar_Year_Week, Week_Commencing_Date, Week_Ending_Date,
+        Month_Number, Month_Name, Month_Name_Short, Month_Year, Month_Commencing_Date, Month_Ending_Date,
         Calendar_Quarter, Calendar_Quarter_Name,
         Calendar_Year, Calendar_Year_Month, Calendar_Year_Quarter,
         Relative_Day, Relative_Week, Relative_Month, Relative_Quarter, Relative_Year,
@@ -191,12 +198,17 @@ BEGIN
         -- Week
         DATEPART(ISO_WEEK, d),
         DATEDIFF(WEEK, DATEADD(DAY, -(DATEPART(WEEKDAY, month_start) + 5) % 7, month_start), d) + 1,
+        yr * 100 + DATEPART(ISO_WEEK, d),
+        row_week_mon,
+        DATEADD(DAY, 6, row_week_mon),
 
         -- Month
         mo,
         DATENAME(MONTH, d),
         LEFT(DATENAME(MONTH, d), 3),
         LEFT(DATENAME(MONTH, d), 3) + '-' + CAST(yr AS CHAR(4)),
+        month_start,
+        CAST(EOMONTH(d) AS DATE),
 
         -- Quarter
         cal_qtr,
