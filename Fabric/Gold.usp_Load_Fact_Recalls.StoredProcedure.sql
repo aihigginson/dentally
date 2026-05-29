@@ -10,6 +10,8 @@
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *05     20/05/2026  AIH Pre-compute Is_In_Scope, Is_Booked, Overdue_Band to replace heavy DAX;
 --                            join Silver.Patient_Stats for Is_Patient_Booked
+--    *08     29/05/2026  AIH Add Retention_Outlook_In_Scope and Retention_Outlook_Booked: pre-computed
+--                            flags for Retention Outlook; KPI Snapshot uses these instead of temp tables
 --    *07     29/05/2026  AIH Add Recall_Status: single derived status column (Booked / 2nd Reminder /
 --                            1st Reminder / Overdue / Not Yet Due) in precedence order
 --    *06     20/05/2026  AIH Is_Booked: patient-level lookup against Silver.Appointments
@@ -114,6 +116,17 @@ BEGIN
                 WHEN na.Patient_ID IS NOT NULL                                THEN 1
                 ELSE 0
             END AS BIT)                                                     AS Is_Booked,
+            -- Retention Outlook pre-computed flags (aggregated by KPI Snapshot SP per patient then per site)
+            CAST(CASE
+                WHEN NULLIF(TRIM(r.First_Reminder_Sent_At),'') IS NOT NULL    THEN 1
+                WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo                THEN 1
+                ELSE 0
+            END AS INT)                                                     AS Retention_Outlook_In_Scope,
+            CAST(CASE
+                WHEN NULLIF(TRIM(r.Appointment_ID),'') IS NOT NULL             THEN 1
+                WHEN na.Patient_ID IS NOT NULL                                  THEN 1
+                ELSE 0
+            END AS INT)                                                     AS Retention_Outlook_Booked,
             -- Overdue_Band: pre-bucketed for bar charts — avoids SWITCH on Days_Overdue in DAX
             CASE
                 WHEN r.Due_Date IS NULL                                                           THEN NULL
@@ -186,7 +199,9 @@ BEGIN
             Is_In_Scope              = src.Is_In_Scope,
             Is_Reminder_Sent         = src.Is_Reminder_Sent,
             Is_Booked_Via_Recall     = src.Is_Booked_Via_Recall,
-            Is_Booked                = src.Is_Booked,
+            Is_Booked                    = src.Is_Booked,
+            Retention_Outlook_In_Scope   = src.Retention_Outlook_In_Scope,
+            Retention_Outlook_Booked     = src.Retention_Outlook_Booked,
             Overdue_Band             = src.Overdue_Band,
             Recall_Status            = src.Recall_Status,
             fk_Date_Appt_Booked      = src.fk_Date_Appt_Booked,
@@ -220,7 +235,9 @@ BEGIN
            ISNULL(CAST(tgt.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Booked_Via_Recall]     AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Is_Booked]                AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Booked]                    AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Retention_Outlook_In_Scope]  AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Retention_Outlook_Booked]    AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Overdue_Band]             AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Recall_Status]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Appt_Booked]      AS VARCHAR(500)), ''),
@@ -252,7 +269,9 @@ BEGIN
            ISNULL(CAST(src.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Booked_Via_Recall]     AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Is_Booked]                AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Booked]                    AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Retention_Outlook_In_Scope]  AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Retention_Outlook_Booked]    AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Overdue_Band]             AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Recall_Status]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Appt_Booked]      AS VARCHAR(500)), ''),
@@ -272,7 +291,9 @@ BEGIN
             Appointment_ID, Recall_Type, Recall_Method, Status, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_Type, Second_Reminder_Type, Latest_Reminder_Type,
             Times_Contacted, Due_Date, Run_Date, Days_Overdue,
-            Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked, Overdue_Band, Recall_Status,
+            Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked,
+            Retention_Outlook_In_Scope, Retention_Outlook_Booked,
+            Overdue_Band, Recall_Status,
             fk_Date_Appt_Booked, Appt_State, Appt_Booked_Via_API, Appt_Start_Time, Days_Recall_To_Booking,
             DW_Created_At, DW_Updated_At
         )
@@ -284,7 +305,9 @@ BEGIN
             src.Appointment_ID, src.Recall_Type, src.Recall_Method, src.Status, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_Type, src.Second_Reminder_Type, src.Latest_Reminder_Type,
             src.Times_Contacted, src.Due_Date, src.Run_Date, src.Days_Overdue,
-            src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked, src.Overdue_Band, src.Recall_Status,
+            src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked,
+            src.Retention_Outlook_In_Scope, src.Retention_Outlook_Booked,
+            src.Overdue_Band, src.Recall_Status,
             src.fk_Date_Appt_Booked, src.Appt_State, src.Appt_Booked_Via_API, src.Appt_Start_Time, src.Days_Recall_To_Booking,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src

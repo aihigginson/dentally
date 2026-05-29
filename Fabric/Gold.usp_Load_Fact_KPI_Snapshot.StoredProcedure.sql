@@ -18,6 +18,9 @@
 --                             (face value was being summed instead of unpaid balance)
 --    *08     29/05/2026  AIH  Add WTD/MTD rows: always include today in both grains so the current
 --                             week and current month always have a snapshot record
+--    *09     29/05/2026  AIH  Retention_Outlook: remove #has_next_appt / #recall_scope temp tables;
+--                             use pre-computed Fact_Recalls columns (Retention_Outlook_In_Scope,
+--                             Retention_Outlook_Booked) populated by usp_Load_Fact_Recalls
 --    *07     29/05/2026  AIH  Add average_plan_value (A3) and treatment_acceptance_rate (A4) as historical
 --                             reconstructions from Dim_Treatment_Plans; convert active_patients (A5) and
 --                             lapsed_patients (A6) from accumulating to historical using Dim_Patients date
@@ -482,42 +485,11 @@ BEGIN
         END
 
         -- ── Retention Outlook snapshot (current state, accumulates) ─────────
-        -- Source: Fact_Recalls, which only contains open recall cycles.
-        -- Recalls are deleted from Dentally when the patient attends, so
-        -- historical reconstruction is impossible — each run captures today.
+        -- Source: Fact_Recalls.Retention_Outlook_In_Scope / Retention_Outlook_Booked,
+        -- pre-computed by usp_Load_Fact_Recalls. Collapsed to one row per patient
+        -- via MAX before site-level aggregation so multi-recall patients count once.
+        -- Historical reconstruction impossible (recalls deleted on attendance).
         -- Guard: skip if today's row already exists (idempotent on re-runs).
-        DECLARE @ro_back    DATE = DATEADD(MONTH, -24, @Today);
-        DECLARE @ro_ahead   DATE = DATEADD(MONTH,   1, @Today);
-
-        -- Patients who currently have any future non-cancelled appointment
-        SELECT dp.pk_Patient, dp.Tenant_ID
-        INTO #has_next_appt
-        FROM Gold.Dim_Patients dp
-        WHERE dp.Next_Appointment_Date IS NOT NULL;
-
-        -- In-scope recalls: first reminder sent OR due within [24 months back, 1 month ahead]
-        -- One row per patient (MAX collapses multiple recalls per patient)
-        SELECT
-            fr.Tenant_ID,
-            fr.fk_Patient,
-            MAX(CASE WHEN fr.Appointment_ID IS NOT NULL
-                       OR na.pk_Patient IS NOT NULL THEN 1 ELSE 0 END) AS Has_Booking
-        INTO #recall_scope
-        FROM [Gold].[Fact_Recalls] fr
-        LEFT JOIN #has_next_appt na
-            ON  na.pk_Patient = fr.fk_Patient
-            AND na.Tenant_ID  = fr.Tenant_ID
-        WHERE fr.fk_Patient IS NOT NULL
-        AND (
-            fr.fk_Date_First_Reminder IS NOT NULL
-            OR (
-                fr.Due_Date IS NOT NULL
-                AND fr.Due_Date >= @ro_back
-                AND fr.Due_Date <= @ro_ahead
-            )
-        )
-        GROUP BY fr.Tenant_ID, fr.fk_Patient;
-
         IF NOT EXISTS (
             SELECT 1 FROM [Gold].[Fact_KPI_Snapshot]
             WHERE [Metric] = 'retention_outlook' AND [fk_Date] = @acc_fk_date
@@ -530,15 +502,26 @@ BEGIN
             )
             SELECT
                 rs.Tenant_ID,
-                ISNULL(dps.pk_Practice_Site, -1)                         AS fk_Practice_Site,
-                -1                                                        AS fk_Practitioner,
-                'retention_outlook'                                       AS Metric,
-                @acc_fk_date                                              AS fk_Date,
-                'weekly'                                                  AS Snapshot_Grain,
-                CAST(SUM(rs.Has_Booking) AS DECIMAL(18,4))
-                    / NULLIF(CAST(COUNT(*) AS DECIMAL(18,4)), 0)         AS Value,
+                ISNULL(dps.pk_Practice_Site, -1)                              AS fk_Practice_Site,
+                -1                                                             AS fk_Practitioner,
+                'retention_outlook'                                            AS Metric,
+                @acc_fk_date                                                   AS fk_Date,
+                'weekly'                                                       AS Snapshot_Grain,
+                CAST(SUM(rs.Booked) AS DECIMAL(18,4))
+                    / NULLIF(CAST(SUM(rs.In_Scope) AS DECIMAL(18,4)), 0)      AS Value,
                 SYSUTCDATETIME()
-            FROM #recall_scope rs
+            FROM (
+                -- Collapse multiple recalls per patient to a single in-scope / booked flag
+                SELECT
+                    fr.Tenant_ID,
+                    fr.fk_Patient,
+                    MAX(fr.Retention_Outlook_In_Scope)  AS In_Scope,
+                    MAX(fr.Retention_Outlook_Booked)    AS Booked
+                FROM [Gold].[Fact_Recalls] fr
+                WHERE fr.fk_Patient IS NOT NULL
+                  AND fr.Retention_Outlook_In_Scope = 1
+                GROUP BY fr.Tenant_ID, fr.fk_Patient
+            ) rs
             LEFT JOIN Gold.Dim_Patients       dp  ON  dp.pk_Patient  = rs.fk_Patient
                                                   AND dp.Tenant_ID   = rs.Tenant_ID
             LEFT JOIN Gold.Dim_Practice_Sites dps ON  dps.Site_ID    = dp.Site_ID
@@ -547,9 +530,6 @@ BEGIN
 
             SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
         END
-
-        DROP TABLE #has_next_appt;
-        DROP TABLE #recall_scope;
 
         --*********************************
         --**** Procedure logic ends    ****
