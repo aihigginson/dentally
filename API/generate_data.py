@@ -1941,7 +1941,12 @@ def gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat):
 
 # ─── RECALLS ──────────────────────────────────────────────────────────────────
 
-def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id):
+def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.01, ramp_days=30):
+    """Linear ramp: rate_recent at day 0, rate_old at ramp_days+, flat thereafter."""
+    t = min(1.0, days_since_due / ramp_days)
+    return rate_recent + (rate_old - rate_recent) * t
+
+def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng):
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     today = date.today()
@@ -1967,11 +1972,32 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id):
             continue
         # Status — TitleCase to match real API
         status = "Overdue" if due_date < today else "Pending"
-        # Reminder dates — sent once the recall is within the reminder window
+        # Reminder dates — sent once the recall is within the reminder window.
+        # A small proportion are suppressed to simulate unactioned / partially-actioned recalls.
+        # Rate ramps from 15% (due this week / reminder newly due) down to 1% (30+ days ago).
         first_sent  = due_date - reminder_lead
         second_sent = due_date - second_lead
-        has_first  = first_sent  <= today
-        has_second = second_sent <= today and due_date < today   # 2nd only sent for overdue
+        has_first_window  = first_sent  <= today
+        has_second_window = second_sent <= today and due_date < today   # 2nd only sent for overdue
+
+        if has_first_window:
+            days_since_first = max(0, (today - first_sent).days)
+            p_skip_first = _suppress_rate(days_since_first)
+            suppress_first = rng.random() < p_skip_first
+        else:
+            suppress_first = False
+
+        has_first  = has_first_window  and not suppress_first
+
+        if has_second_window and has_first:
+            days_since_second = max(0, (today - second_sent).days)
+            p_skip_second = _suppress_rate(days_since_second)
+            suppress_second = rng.random() < p_skip_second
+        else:
+            suppress_second = False
+
+        has_second = has_second_window and has_first and not suppress_second
+
         first_sent_at  = _iso(first_sent)  if has_first  else None
         second_sent_at = _iso(second_sent) if has_second else None
         last_reminded  = second_sent_at if has_second else first_sent_at
@@ -2097,7 +2123,7 @@ def generate_tenant(tdef):
         pay_by_pat.setdefault(p["patient_id"], []).append(p)
 
     patient_stats      = gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat)
-    recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id)
+    recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng)
     patient_referrals  = gen_patient_referrals(tdef, patients, apts_by_pat, rng)
 
     return {
