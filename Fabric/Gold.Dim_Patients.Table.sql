@@ -39,6 +39,7 @@ CREATE TABLE [Gold].[Dim_Patients](
 	[Site_ID] [VARCHAR](50) NULL,
 	[Family_ID] [VARCHAR](255) NULL,
 	[Acquisition_Source_ID] [VARCHAR](50) NULL,
+	[fk_Acquisition_Source] [bigint] NULL,
 	[Dentist_Practitioner_ID] [int] NULL,
 	[Hygienist_Practitioner_ID] [int] NULL,
 	[Dentist_Recall_Date] [date] NULL,

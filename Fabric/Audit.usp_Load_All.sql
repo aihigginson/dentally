@@ -357,9 +357,15 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT   
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
+    SET @Step = 'Dim_Acquisition_Sources'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Dim_Acquisition_Sources @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
     SET @Step = 'Dim_Patients';        SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Dim_Patients @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 

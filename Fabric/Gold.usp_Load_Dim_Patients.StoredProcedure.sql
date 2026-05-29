@@ -11,6 +11,7 @@
 --    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --                             replaces Patient_Stats API value which cannot guarantee cancelled appts are excluded
 --    *06     22/05/2026  AIH Add Patient_Count (1 for real rows, 0 for sentinel) for use in SUM-based measures
+--    *07     29/05/2026  AIH Add fk_Acquisition_Source snowflake FK to Gold.Dim_Acquisition_Sources
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -82,6 +83,7 @@ BEGIN
             NULLIF(TRIM(p.Site_ID), '')                                                             AS Site_ID,
             NULLIF(TRIM(p.Family_ID), '')                                                           AS Family_ID,
             NULLIF(TRIM(p.Acquisition_Source_ID), '')                                               AS Acquisition_Source_ID,
+            ISNULL(das.pk_Acquisition_Source, -1)                                                   AS fk_Acquisition_Source,
             CAST(p.Dentist_Practitioner_ID AS INT)                                                  AS Dentist_Practitioner_ID,
             CAST(p.Hygienist_Practitioner_ID AS INT)                                                AS Hygienist_Practitioner_ID,
             CAST(p.Dentist_Recall_Date AS DATE)                                                     AS Dentist_Recall_Date,
@@ -120,6 +122,9 @@ BEGIN
             AND      TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''), 10) AS DATE) > CAST(SYSUTCDATETIME() AS DATE)
             GROUP BY a.Patient_ID, a.Tenant_ID
         ) next_apt ON next_apt.Patient_ID = p.Patient_ID AND next_apt.Tenant_ID = p.Tenant_ID
+        LEFT JOIN Gold.Dim_Acquisition_Sources das
+            ON das.Acquisition_Source_ID = NULLIF(TRIM(p.Acquisition_Source_ID), '')
+           AND das.Tenant_ID             = p.Tenant_ID
         WHERE p.Patient_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -164,6 +169,7 @@ BEGIN
             Hygienist_Recall_Interval_Months    = src.Hygienist_Recall_Interval_Months,
             Recall_Method                       = src.Recall_Method,
             Marketing_Consent                   = src.Marketing_Consent,
+            fk_Acquisition_Source               = src.fk_Acquisition_Source,
             First_Appointment_Date              = src.First_Appointment_Date,
             Last_Appointment_Date               = src.Last_Appointment_Date,
             Next_Appointment_Date               = src.Next_Appointment_Date,
@@ -290,7 +296,7 @@ BEGIN
             NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone,
             Address_Line_1, Address_Line_2, Town, County, Postcode,
             Active, Medical_Alert, Medical_Alert_Text, Payment_Plan_ID, Site_ID, Family_ID,
-            Acquisition_Source_ID, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
+            Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
             Dentist_Recall_Date, Dentist_Recall_Interval_Months,
             Hygienist_Recall_Date, Hygienist_Recall_Interval_Months,
             Recall_Method, Marketing_Consent, Custom_Field_1, Custom_Field_2,
@@ -309,7 +315,7 @@ BEGIN
             src.Home_Phone, src.Mobile_Phone, src.Work_Phone,
             src.Address_Line_1, src.Address_Line_2, src.Town, src.County, src.Postcode,
             src.Active, src.Medical_Alert, src.Medical_Alert_Text, src.Payment_Plan_ID, src.Site_ID, src.Family_ID,
-            src.Acquisition_Source_ID, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,
+            src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,
             src.Dentist_Recall_Date, src.Dentist_Recall_Interval_Months,
             src.Hygienist_Recall_Date, src.Hygienist_Recall_Interval_Months,
             src.Recall_Method, src.Marketing_Consent, src.Custom_Field_1, src.Custom_Field_2,
