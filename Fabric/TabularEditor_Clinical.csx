@@ -57,11 +57,10 @@ add("Exam Ratio",
 
 add("Treatment Acceptance Rate Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""acceptance_rate"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site) / 100",
@@ -80,11 +79,10 @@ RETURN IF(
 
 add("Open Courses Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""open_courses"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
@@ -104,11 +102,10 @@ RETURN IF(
 
 add("Open Courses Without Appointment Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""open_courses_without_appt"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
@@ -128,11 +125,10 @@ RETURN IF(
 
 add("Exam Ratio Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""exam_ratio"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site) / 100",
@@ -158,10 +154,9 @@ RETURN IF(
 add("Treatment Acceptance Rate BG",
     @"VAR actual    = [Treatment Acceptance Rate]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -174,10 +169,9 @@ RETURN SWITCH(TRUE(),
 add("Open Courses BG",
     @"VAR actual    = [Open Courses]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual),  ""#E0E0E0"",
@@ -191,10 +185,9 @@ RETURN SWITCH(TRUE(),
 add("Open Courses Without Appointment BG",
     @"VAR actual    = [Open Courses Without Appointment]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -208,10 +201,9 @@ RETURN SWITCH(TRUE(),
 add("Exam Ratio BG",
     @"VAR actual    = [Exam Ratio]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR dev        = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target),    ""#FFFFFF"",
@@ -251,11 +243,10 @@ add("Average Plan Value",
 
 add("Open Courses Value Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""open_courses_value"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
@@ -275,11 +266,10 @@ RETURN IF(
 
 add("Average Plan Value Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
-    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]           = ""avg_plan_value"",
     '_Effective Targets'[Period Value]     = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site)",
@@ -299,10 +289,9 @@ RETURN IF(
 add("Open Courses Value BG",
     @"VAR actual    = [Open Courses Value]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual),  ""#E0E0E0"",
@@ -316,10 +305,9 @@ RETURN SWITCH(TRUE(),
 add("Average Plan Value BG",
     @"VAR actual    = [Average Plan Value]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
