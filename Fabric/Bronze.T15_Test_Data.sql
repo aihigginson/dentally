@@ -473,9 +473,8 @@ VALUES
     (15, NULL, NULL, 'revenue_per_patient',            'all_time', 'all',   800.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     (15, NULL, NULL, 'revenue_per_clinical_hour',      'all_time', 'all',   150.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     (15, NULL, NULL, 'revenue_per_dentist_hour',       'all_time', 'all',   180.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'deposit_ratio',                  'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- % as whole number
-    (15, NULL, NULL, 'discounts',                      'all_time', 'all',   150.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- £150 target; actual £100 = strong green
-    (15, NULL, NULL, 'deposit_value',                  'all_time', 'all',   300.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- £300 target; actual £400 = strong green
+    (15, NULL, NULL, 'discounts',                      'all_time', 'all',     2.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; 2% of revenue; lower=better
+    (15, NULL, NULL, 'deposit_value',                  'all_time', 'all',    20.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; 20% deposit coverage target
     (15, NULL, NULL, 'open_courses_value',             'all_time', 'all',   500.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
     -- ── Patients (cumulative) ─────────────────────────────────────────────────
     (15, NULL, NULL, 'new_patients',                   'all_time', 'all',    20.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),

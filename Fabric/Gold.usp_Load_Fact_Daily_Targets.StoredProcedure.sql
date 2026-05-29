@@ -17,6 +17,8 @@
 --                            -1 = practice level) so PBI filter context works.
 --    *06     27/05/2026  AIH Replace Practitioner_ID with fk_Practitioner (surrogate
 --                            key, -1 = no practitioner) for consistency.
+--    *07     29/05/2026  AIH Add nhs_udas / nhs_uoas from Gold.Fact_Contracts at
+--                            Priority 2; shift all_time fallback to Priority 3.
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 --
 --  Purpose:
@@ -113,7 +115,7 @@ BEGIN
             w.FY_Name,
             t.[Target_Value],
             t.[Variance],
-            2                               AS Priority
+            3                               AS Priority
         FROM [Input].[Targets] t
         INNER JOIN [Config].[Metric_Definitions] cmd
             ON  cmd.[Metric_Key]  = t.[Metric]
@@ -121,6 +123,51 @@ BEGIN
         CROSS JOIN #wd w
         WHERE t.[Period_Type] = 'all_time'
           AND w.FY_Name BETWEEN @FY_Min AND @FY_Max;
+
+        -- NHS UDA / UOA annual targets derived from contracted values.
+        -- Priority 2: wins over all_time fallback; loses to a manual annual
+        --             Input.Targets row for the same metric/FY/site (Priority 1).
+        -- Contracts can span multiple years (e.g. 2023-04-01 to 2027-03-31);
+        -- each FY within the contract date range gets the same UDA/UOA target value.
+        -- FY start year extracted from FY_Name 'FY YYYY-YY' via SUBSTRING(w.FY_Name,4,4).
+        INSERT INTO #candidates (Tenant_ID, Site_ID, Practitioner_ID, Metric, FY_Name, Target_Value, Variance, Priority)
+        SELECT
+            fc.Tenant_ID,
+            ISNULL(fc.Site_ID, '')  AS Site_ID,
+            -1                      AS Practitioner_ID,
+            'nhs_udas'              AS Metric,
+            w.FY_Name,
+            fc.UDA_Target           AS Target_Value,
+            10                      AS Variance,
+            2                       AS Priority
+        FROM Gold.Fact_Contracts fc
+        INNER JOIN #wd w
+            ON  CAST(SUBSTRING(w.FY_Name, 4, 4) AS INT) >= YEAR(fc.Start_Date)
+            AND CAST(SUBSTRING(w.FY_Name, 4, 4) AS INT) <=
+                CASE WHEN MONTH(fc.End_Date) <= 3
+                     THEN YEAR(fc.End_Date) - 1
+                     ELSE YEAR(fc.End_Date) END
+        WHERE fc.UDA_Target > 0
+
+        UNION ALL
+
+        SELECT
+            fc.Tenant_ID,
+            ISNULL(fc.Site_ID, ''),
+            -1,
+            'nhs_uoas',
+            w.FY_Name,
+            fc.UOA_Target,
+            10,
+            2
+        FROM Gold.Fact_Contracts fc
+        INNER JOIN #wd w
+            ON  CAST(SUBSTRING(w.FY_Name, 4, 4) AS INT) >= YEAR(fc.Start_Date)
+            AND CAST(SUBSTRING(w.FY_Name, 4, 4) AS INT) <=
+                CASE WHEN MONTH(fc.End_Date) <= 3
+                     THEN YEAR(fc.End_Date) - 1
+                     ELSE YEAR(fc.End_Date) END
+        WHERE fc.UOA_Target > 0;
 
         -- Pick the highest-priority target per (Tenant, Site, Practitioner, Metric, FY).
         SELECT
