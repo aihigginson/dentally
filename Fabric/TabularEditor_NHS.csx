@@ -47,24 +47,29 @@ add("NHS UDA Completion Rate",
 add("NHS UDAs Target",
     @"VAR period_key = [_FY Period Key]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR annual     = COALESCE(
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_udas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_udas""
         && '_Targets'[Period Type] = ""annual""
         && '_Targets'[Period Value] = period_key
         && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_udas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_udas""
         && '_Targets'[Period Type] = ""annual""
         && '_Targets'[Period Value] = period_key
         && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 VAR all_time_target = COALESCE(
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_udas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_udas""
         && '_Targets'[Period Type] = ""all_time""
         && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_udas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_udas""
         && '_Targets'[Period Type] = ""all_time""
         && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
@@ -84,24 +89,29 @@ RETURN IF(
 add("NHS UOAs Target",
     @"VAR period_key = [_FY Period Key]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR annual     = COALESCE(
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_uoas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_uoas""
         && '_Targets'[Period Type] = ""annual""
         && '_Targets'[Period Value] = period_key
         && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_uoas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_uoas""
         && '_Targets'[Period Type] = ""annual""
         && '_Targets'[Period Value] = period_key
         && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 VAR all_time_target = COALESCE(
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_uoas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_uoas""
         && '_Targets'[Period Type] = ""all_time""
         && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
     MAXX(FILTER('_Targets',
-        '_Targets'[Metric] = ""nhs_uoas""
+        '_Targets'[Tenant ID] = sel_tenant
+        && '_Targets'[Metric] = ""nhs_uoas""
         && '_Targets'[Period Type] = ""all_time""
         && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
@@ -119,10 +129,11 @@ RETURN IF(
     "");
 
 add("NHS UDA Completion Rate Target",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
     "#,##0.0%");
 
 add("NHS UDA Completion Rate vs Target",
@@ -143,13 +154,14 @@ RETURN IF(
 
 add("NHS UDAs BG",
     @"VAR actual   = [NHS UDAs]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_udas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -161,13 +173,14 @@ RETURN SWITCH(TRUE(),
 
 add("NHS UOAs BG",
     @"VAR actual   = [NHS UOAs]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uoas"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -179,13 +192,14 @@ RETURN SWITCH(TRUE(),
 
 add("NHS UDA Completion Rate BG",
     @"VAR actual   = [NHS UDA Completion Rate]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
 VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),       ""#FFFFFF"",
