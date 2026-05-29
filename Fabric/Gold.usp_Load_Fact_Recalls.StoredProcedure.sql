@@ -10,6 +10,8 @@
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *05     20/05/2026  AIH Pre-compute Is_In_Scope, Is_Booked, Overdue_Band to replace heavy DAX;
 --                            join Silver.Patient_Stats for Is_Patient_Booked
+--    *07     29/05/2026  AIH Add Recall_Status: single derived status column (Booked / 2nd Reminder /
+--                            1st Reminder / Overdue / Not Yet Due) in precedence order
 --    *06     20/05/2026  AIH Is_Booked: patient-level lookup against Silver.Appointments
 --                            (any future non-cancelled appt); drop Is_Patient_Booked and
 --                            Appointment_ID-based join; drop enrichment cols
@@ -122,6 +124,14 @@ BEGIN
                 WHEN DATEDIFF(DAY, r.Due_Date, @Today) <= 180                                     THEN '91-180 Days'
                 ELSE                                                                               '181+ Days'
             END                                                             AS Overdue_Band,
+            -- Recall_Status: single actionable label in precedence order
+            CASE
+                WHEN na.Patient_ID IS NOT NULL  THEN 'Booked'
+                WHEN dd_sr.pk_Date > 0          THEN '2nd Reminder'
+                WHEN dd_fr.pk_Date > 0          THEN '1st Reminder'
+                WHEN r.Due_Date < @Today        THEN 'Overdue'
+                ELSE                                 'Not Yet Due'
+            END                                                             AS Recall_Status,
             -- ── Appointment enrichment ────────────────────────────────────────────
             dd_ab.pk_Date                                                   AS fk_Date_Appt_Booked,
             NULLIF(TRIM(na.State),'')                                       AS Appt_State,
@@ -178,6 +188,7 @@ BEGIN
             Is_Booked_Via_Recall     = src.Is_Booked_Via_Recall,
             Is_Booked                = src.Is_Booked,
             Overdue_Band             = src.Overdue_Band,
+            Recall_Status            = src.Recall_Status,
             fk_Date_Appt_Booked      = src.fk_Date_Appt_Booked,
             Appt_State               = src.Appt_State,
             Appt_Booked_Via_API      = src.Appt_Booked_Via_API,
@@ -211,6 +222,7 @@ BEGIN
            ISNULL(CAST(tgt.[Is_Booked_Via_Recall]     AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Booked]                AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Overdue_Band]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Recall_Status]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Appt_Booked]      AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Appt_State]               AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Appt_Booked_Via_API]      AS VARCHAR(500)), ''),
@@ -242,6 +254,7 @@ BEGIN
            ISNULL(CAST(src.[Is_Booked_Via_Recall]     AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Booked]                AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Overdue_Band]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Recall_Status]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Appt_Booked]      AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Appt_State]               AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Appt_Booked_Via_API]      AS VARCHAR(500)), ''),
@@ -259,7 +272,7 @@ BEGIN
             Appointment_ID, Recall_Type, Recall_Method, Status, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_Type, Second_Reminder_Type, Latest_Reminder_Type,
             Times_Contacted, Due_Date, Run_Date, Days_Overdue,
-            Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked, Overdue_Band,
+            Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked, Overdue_Band, Recall_Status,
             fk_Date_Appt_Booked, Appt_State, Appt_Booked_Via_API, Appt_Start_Time, Days_Recall_To_Booking,
             DW_Created_At, DW_Updated_At
         )
@@ -271,7 +284,7 @@ BEGIN
             src.Appointment_ID, src.Recall_Type, src.Recall_Method, src.Status, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_Type, src.Second_Reminder_Type, src.Latest_Reminder_Type,
             src.Times_Contacted, src.Due_Date, src.Run_Date, src.Days_Overdue,
-            src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked, src.Overdue_Band,
+            src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked, src.Overdue_Band, src.Recall_Status,
             src.fk_Date_Appt_Booked, src.Appt_State, src.Appt_Booked_Via_API, src.Appt_Start_Time, src.Days_Recall_To_Booking,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src

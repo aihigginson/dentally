@@ -34,6 +34,7 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Is_Booked_Via_Recall]   [bit]           NULL,  -- Appointment_ID is set on the recall record
 	[Is_Booked]              [bit]           NULL,  -- patient has a future non-cancelled appointment
 	[Overdue_Band]           [varchar](20)   NULL,  -- 'Upcoming'/'01-30 Days'/'31-90 Days'/'91-180 Days'/'181+ Days'/'Booked'
+	[Recall_Status]          [varchar](20)   NULL,  -- 'Booked'/'2nd Reminder'/'1st Reminder'/'Overdue'/'Not Yet Due'
 	-- Next appointment enrichment (patient's soonest upcoming non-cancelled appointment)
 	[fk_Date_Appt_Booked]    [bigint]        NULL,  -- date key for when next appointment was booked (Pending_At)
 	[Appt_State]             [varchar](50)   NULL,  -- State of next appointment
