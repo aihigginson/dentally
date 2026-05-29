@@ -51,13 +51,18 @@ add("Book Before You Leave",
     "#,##0.0%");
 
 // ── Target and variance measures ─────────────────────────────────────────────
+// All use _Effective Targets (period-resolved, site hierarchy pre-computed).
 
 add("Chair Utilisation Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""chair_utilisation"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("Chair Utilisation vs Target",
@@ -74,9 +79,13 @@ RETURN IF(
 add("DNA Rate Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""dna_rate"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("DNA Rate vs Target",
@@ -93,9 +102,13 @@ RETURN IF(
 add("Days Until Next 30 Minute Free Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""days_until_30min_free"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "#,##0");
 
 add("Days Until Next 30 Minute Free vs Target",
@@ -112,9 +125,13 @@ RETURN IF(
 add("Days Until Next 1 Hour Free Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""days_until_1hr_free"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "#,##0");
 
 add("Days Until Next 1 Hour Free vs Target",
@@ -131,9 +148,13 @@ RETURN IF(
 add("Book Before You Leave Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""book_before_you_leave"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("Book Before You Leave vs Target",
@@ -155,98 +176,83 @@ RETURN IF(
 // book_before_you_leave → above + percent → absolute pp
 
 add("Chair Utilisation BG",
-    @"VAR actual   = [Chair Utilisation]
+    @"VAR actual    = [Chair Utilisation]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""chair_utilisation"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp  = (actual - target) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""chair_utilisation"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""chair_utilisation"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    diff_pp >= band,   ""#1a7f3c"",
-    diff_pp >= 0,          ""#6abf7b"",
-    diff_pp >= -band,  ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("DNA Rate BG",
-    @"VAR actual   = [DNA Rate]
+    @"VAR actual    = [DNA Rate]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""dna_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp  = (actual - target) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""dna_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""dna_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    diff_pp <= -band,  ""#1a7f3c"",
-    diff_pp <= 0,          ""#6abf7b"",
-    diff_pp <= band,   ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp <= -band, ""#1a7f3c"",
+    diff_pp <= 0,     ""#6abf7b"",
+    diff_pp <= band,  ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Days Until Next 30 Minute Free BG",
-    @"VAR actual   = [Days Until Next 30 Minute Free]
+    @"VAR actual    = [Days Until Next 30 Minute Free]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_30min_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""days_until_30min_free"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""days_until_30min_free"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),   ""#FFFFFF"",
-    pct <= -band,  ""#1a7f3c"",
-    pct <= 0,          ""#6abf7b"",
-    pct <= band,   ""#f4a261"",
-                       ""#c0392b"")",
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("Days Until Next 1 Hour Free BG",
-    @"VAR actual   = [Days Until Next 1 Hour Free]
+    @"VAR actual    = [Days Until Next 1 Hour Free]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value]))
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""days_until_1hr_free"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""days_until_1hr_free"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""days_until_1hr_free"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),   ""#FFFFFF"",
-    pct <= -band,  ""#1a7f3c"",
-    pct <= 0,          ""#6abf7b"",
-    pct <= band,   ""#f4a261"",
-                       ""#c0392b"")",
+    ISBLANK(target), ""#FFFFFF"",
+    pct <= -band,    ""#1a7f3c"",
+    pct <= 0,        ""#6abf7b"",
+    pct <= band,     ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 add("Book Before You Leave BG",
-    @"VAR actual   = [Book Before You Leave]
+    @"VAR actual    = [Book Before You Leave]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""book_before_you_leave"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp  = (actual - target) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""book_before_you_leave"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""book_before_you_leave"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    diff_pp >= band,   ""#1a7f3c"",
-    diff_pp >= 0,          ""#6abf7b"",
-    diff_pp >= -band,  ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 // ── Home Detail measures ──────────────────────────────────────────────────────
@@ -269,9 +275,13 @@ add("Short Notice Cancellation Rate",
 add("Cancellation Frequency Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""cancellation_frequency"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "0.0%");
 
 add("Cancellation Frequency vs Target",
@@ -288,9 +298,13 @@ RETURN IF(
 add("Short Notice Cancellation Rate Target",
     @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    '_Effective Targets'[Tenant ID]        = sel_tenant,
+    '_Effective Targets'[Metric]           = ""short_notice_cancellation_rate"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("Short Notice Cancellation Rate vs Target",
@@ -305,16 +319,13 @@ RETURN IF(
     "");
 
 add("Cancellation Frequency BG",
-    @"VAR actual   = [Cancellation Frequency]
+    @"VAR actual    = [Cancellation Frequency]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""cancellation_frequency"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp  = (actual - target) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""cancellation_frequency"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""cancellation_frequency"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
     diff_pp <= -band, ""#1a7f3c"",
@@ -324,16 +335,13 @@ RETURN SWITCH(TRUE(),
     "");
 
 add("Short Notice Cancellation Rate BG",
-    @"VAR actual   = [Short Notice Cancellation Rate]
+    @"VAR actual    = [Short Notice Cancellation Rate]
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp = (actual - target) * 100
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""short_notice_cancellation_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""short_notice_cancellation_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
     diff_pp <= -band, ""#1a7f3c"",

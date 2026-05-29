@@ -409,7 +409,7 @@ VAR fy_key     = [_Target FY Key]
 RETURN CALCULATE(
     MAX('_Effective Targets'[Effective Target]),
     '_Effective Targets'[Tenant ID]       = sel_tenant,
-    '_Effective Targets'[Metric]      = ""deposit_value"",
+    '_Effective Targets'[Metric]      = ""deposit_ratio"",
     '_Effective Targets'[Period Value] = fy_key,
     '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "0.0%");
@@ -430,8 +430,8 @@ add("Deposit Value BG",
 VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR fy_key     = [_Target FY Key]
-VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""deposit_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
-VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""deposit_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  '_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""deposit_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),'_Effective Targets'[Tenant ID] = sel_tenant, '_Effective Targets'[Metric] = ""deposit_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
