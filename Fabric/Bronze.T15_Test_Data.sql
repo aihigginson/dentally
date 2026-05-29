@@ -440,74 +440,14 @@ VALUES
 GO
 
 -- =============================================================================
--- 18. INPUT.TARGETS  — full set for all active metrics
+-- 18. INPUT.TARGETS  — loaded from spreadsheets via the Analytically UI
 -- =============================================================================
--- Period_Type = 'all_time', Period_Value = 'all' matches the app read/write pattern.
---
--- Format notes:
---   Cumulative metrics (total_revenue, new_patients etc): Target_Value = annual rate,
---   prorated by the run-rate helper in DAX.
---
---   Percent metrics — ALL stored as whole-number percentages (e.g. 85 = 85%).
---   DAX Target measures divide by 100 before comparing against fraction-form actuals.
---   This applies to: chair_utilisation, dna_rate, bbyl, exam_ratio, acceptance_rate,
---   short_notice_cancellation_rate, email/phone_details_rate, deposit_ratio,
---   nhs_uda_completion_rate, recall_compliance, patient_retention, etc.
---
---   Variance is always stored in percentage-point units for percent metrics
---   and as a relative % for currency/count metrics.
---
---   avg_plan_value is the correct key (NOT average_plan_value).
+-- Targets for T15 are loaded from:
+--   Targets/T15_2025-26.xlsx
+--   Targets/T15_2026-27.xlsx
+-- NHS UDA / UOA targets are derived automatically from Bronze.Contracts
+-- by Gold.usp_Load_Fact_Daily_Targets (no manual entry required).
 -- =============================================================================
-
-DELETE FROM Input.Targets WHERE Tenant_ID = 15;
-INSERT INTO Input.Targets
-    (Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, Target_Value, Variance, DW_Created_At, DW_Updated_At)
-VALUES
-    -- ── Revenue (cumulative, annual rate) ──────────────────────────────────────
-    (15, NULL, NULL, 'total_revenue',                  'all_time', 'all', 24000.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'private_revenue',                'all_time', 'all', 18000.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'nhs_revenue',                    'all_time', 'all',  6000.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'dna_revenue_lost',               'all_time', 'all',   600.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    -- ── Revenue (rate / point-in-time thresholds) ─────────────────────────────
-    (15, NULL, NULL, 'revenue_per_patient',            'all_time', 'all',   800.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'revenue_per_clinical_hour',      'all_time', 'all',   150.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'revenue_per_dentist_hour',       'all_time', 'all',   180.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'discounts',                      'all_time', 'all',     2.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; 2% of revenue; lower=better
-    (15, NULL, NULL, 'deposit_value',                  'all_time', 'all',    20.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; 20% deposit coverage target
-    (15, NULL, NULL, 'open_courses_value',             'all_time', 'all',   500.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    -- ── Patients (cumulative) ─────────────────────────────────────────────────
-    (15, NULL, NULL, 'new_patients',                   'all_time', 'all',    20.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'net_patient_growth',             'all_time', 'all',    10.00, 15.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    -- ── Patients (rate / snapshot) ────────────────────────────────────────────
-    (15, NULL, NULL, 'active_patients',                'all_time', 'all',    50.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'recall_compliance',              'all_time', 'all',    75.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100
-    (15, NULL, NULL, 'patient_retention',              'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100
-    (15, NULL, NULL, 'recalls_overdue_not_sent',       'all_time', 'all',    10.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100, lower=better
-    (15, NULL, NULL, 'retention_outlook',              'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- /100
-    (15, NULL, NULL, 'lapsed_patients',                'all_time', 'all',     3.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better; 2 actual = light green
-    -- ── Scheduling ────────────────────────────────────────────────────────────
-    (15, NULL, NULL, 'chair_utilisation',              'all_time', 'all',    85.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- % as whole number
-    (15, NULL, NULL, 'dna_rate',                       'all_time', 'all',     5.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- % as whole number, lower=better
-    (15, NULL, NULL, 'book_before_you_leave',          'all_time', 'all',    70.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- % as whole number
-    (15, NULL, NULL, 'days_until_30min_free',          'all_time', 'all',      3.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'days_until_1hr_free',            'all_time', 'all',      5.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'cancellation_frequency',         'all_time', 'all',      2.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'short_notice_cancellation_rate', 'all_time', 'all',    10.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %, lower=better
-    -- ── Clinical ──────────────────────────────────────────────────────────────
-    (15, NULL, NULL, 'acceptance_rate',                'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %
-    (15, NULL, NULL, 'open_courses',                   'all_time', 'all',      4.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better
-    (15, NULL, NULL, 'open_courses_without_appt',      'all_time', 'all',      2.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better
-    (15, NULL, NULL, 'exam_ratio',                     'all_time', 'all',    20.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %, within=good
-    -- ── Home detail ───────────────────────────────────────────────────────────
-    (15, NULL, NULL, 'avg_plan_value',                 'all_time', 'all',  1200.00, 10.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),
-    (15, NULL, NULL, 'overdue_recalls',                'all_time', 'all',      5.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- lower=better
-    (15, NULL, NULL, 'email_details_rate',             'all_time', 'all',    60.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; matches 3/5 patients
-    (15, NULL, NULL, 'phone_details_rate',             'all_time', 'all',    80.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; matches 4/5 patients
-    -- ── NHS ───────────────────────────────────────────────────────────────────
-    (15, NULL, NULL, 'nhs_uda_completion_rate',        'all_time', 'all',    90.00,  5.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3))),  -- whole %; band in pp
-    -- ── Spider-only (read directly by DAX, not shown in targets UI) ───────────
-    (15, NULL, NULL, 'outstanding_invoices',           'all_time', 'all',   600.00, 20.0, CAST(GETUTCDATE() AS datetime2(3)), CAST(GETUTCDATE() AS datetime2(3)));  -- lower=better
 GO
 
 -- =============================================================================
