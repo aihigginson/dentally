@@ -92,9 +92,7 @@
 --    Excluded from the full DELETE so trend history accumulates.
 --
 --  To Run:
---    DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
---    EXEC Gold.usp_Load_Fact_KPI_Snapshot
---         @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+--    DECLARE @i BIGINT, @u BIGINT, @d BIGINT;   EXEC Gold.usp_Load_Fact_KPI_Snapshot  @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_KPI_Snapshot]    Script Date: 18/05/2026 ******/
 SET ANSI_NULLS ON
