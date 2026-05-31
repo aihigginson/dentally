@@ -311,11 +311,11 @@ DECLARE @Msg        nvarchar(500);
 
     -- ── Silver derived attributes (run after all source Silver entities are loaded) ─
 
-    SET @Step = 'Appointment_Journey';
+    SET @Step = 'Appointment_Journey_Attributes';
     SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = 'SILVER_DERIVE_APPOINTMENT_JOURNEY'
+    SET @Process_Code = 'SILVER_APPOINTMENT_JOURNEY_ATTRIBUTES'
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
- -- EXEC Silver.usp_Derive_Appointment_Journey @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+ -- EXEC Silver.usp_Load_Appointment_Journey_Attributes @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
 

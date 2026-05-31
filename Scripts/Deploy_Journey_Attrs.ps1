@@ -3,8 +3,8 @@
 #   - Bronze.usp_Load_Appointments  (full field coverage, adds Booked_Via_API)
 #   - Bronze.usp_Load_Recalls       (adds First_Reminder_Sent_At)
 #   - Silver.Appointment_Reason_Map (new table + seed data)
-#   - Silver.usp_Derive_Appointment_Journey (new SP)
-#   - Gold.Fact_Appointments        (table recreated with 4 new journey columns)
+#   - Silver.usp_Load_Appointment_Journey_Attributes (new SP)
+#   - Gold.Fact_Appointments        (table recreated with 5 new journey columns)
 #   - Gold.usp_Load_Fact_Appointments
 #   - Stage.Appointments view refresh (picks up booked_via_api from Delta)
 # Then reloads data: Bronze -> Silver -> Derive -> Gold
@@ -73,7 +73,8 @@ Deploy-File "Silver.Appointments.Table.sql"                        "Silver.Appoi
 Deploy-File "Silver.usp_Load_Appointments.StoredProcedure.sql"     "Silver.usp_Load_Appointments"
 Deploy-File "Silver.Appointment_Reason_Map.Table.sql"              "Silver.Appointment_Reason_Map (table)"
 Deploy-File "Silver.Appointment_Reason_Map.Data.sql"               "Silver.Appointment_Reason_Map (data)"
-Deploy-File "Silver.usp_Derive_Appointment_Journey.StoredProcedure.sql" "Silver.usp_Derive_Appointment_Journey"
+Deploy-File "Silver.Appointment_Journey_Attributes.Table.sql"                        "Silver.Appointment_Journey_Attributes (table)"
+Deploy-File "Silver.usp_Load_Appointment_Journey_Attributes.StoredProcedure.sql"    "Silver.usp_Load_Appointment_Journey_Attributes"
 Deploy-File "Gold.Fact_Appointments.Table.sql"                     "Gold.Fact_Appointments (DROP/CREATE)"
 Deploy-File "Gold.usp_Load_Fact_Appointments.StoredProcedure.sql"  "Gold.usp_Load_Fact_Appointments"
 
@@ -207,10 +208,10 @@ PRINT CONCAT('Silver.usp_Load_Recalls  I=', @i, '  U=', @u, '  D=', @d);
 
 Run-SQL @"
 DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
-EXEC Silver.usp_Derive_Appointment_Journey @Mode = 'PROD',
+EXEC Silver.usp_Load_Appointment_Journey_Attributes @Mode = 'PROD',
      @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
-PRINT CONCAT('Silver.usp_Derive_Appointment_Journey  I=', @i, '  U=', @u, '  D=', @d);
-"@ "Silver.usp_Derive_Appointment_Journey"
+PRINT CONCAT('Silver.usp_Load_Appointment_Journey_Attributes  I=', @i, '  U=', @u, '  D=', @d);
+"@ "Silver.usp_Load_Appointment_Journey_Attributes"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n=== 5. Gold reload ===" -ForegroundColor Cyan

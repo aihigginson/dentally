@@ -41,9 +41,10 @@ CREATE TABLE [Gold].[Fact_Appointments](
 	[Waiting_Mins] [int] NULL,
 	[In_Surgery_Mins]    [int]          NULL,
 	[Booking]            [varchar](50)  NULL,
-	[This_Visit]         [varchar](50)  NULL,
-	[Next_Visit]         [varchar](50)  NULL,
-	[Future_Appointment] [varchar](50)  NULL,
+	[Appointment_Reason] [varchar](50)  NULL,
+	[Delay]              [varchar](50)  NULL,
+	[Next_Appointment]   [varchar](50)  NULL,
+	[Current_State]      [varchar](50)  NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )
