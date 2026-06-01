@@ -52,7 +52,8 @@ def write_stage(records: list, table_name: str, tenant_id: int, load_ts: str):
         r["DW_Stage_Loaded_At"] = load_ts
 
     def _to_str(v):
-        if v is None:                  return None
+        if v is None:                   return None
+        if isinstance(v, bool):         return '1' if v else '0'
         if isinstance(v, (dict, list)): return json.dumps(v)
         return str(v)
 

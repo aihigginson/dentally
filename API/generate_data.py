@@ -1271,7 +1271,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "treatment_id": ttx["id"] if ttx else None,
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": tx_online,
-                                "booked_via_api": tx_online,
+                                "booked_via_api": tx_bbyl or tx_online,
                                 "pending_at": _iso(tx_last_date) if tx_bbyl else None,
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
@@ -1308,7 +1308,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "treatment_id": htx["id"] if htx else None,
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": hyg_online,
-                                "booked_via_api": hyg_online,
+                                "booked_via_api": hyg_bbyl or hyg_online,
                                 "pending_at": _iso(d) if hyg_bbyl else None,
                                 "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
                                 "cancelled_at": None,
@@ -1324,8 +1324,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
             fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
             if fd is not None and fd >= TODAY:
                 fs_t, fe_t = _slot_times(fd, rng.randint(0, 14), 20)
-                booked_on  = tx_last_date
-                online     = rng.random() < 0.35
+                booked_on   = tx_last_date
+                rc_online   = rng.random() < 0.35
+                rc_bbyl     = (not rc_online) and rng.random() < bbyl_rate_tx
                 apt_id    += 1
                 appointments.append({
                     "id":                     apt_id,
@@ -1339,9 +1340,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                     "reason":                 "Recall Examination",
                     "treatment_id":           None,
                     "appointment_cancellation_reason_id": None,
-                    "online_booking":         online,
-                    "booked_via_api":         online,
-                    "pending_at":             _iso(booked_on),
+                    "online_booking":         rc_online,
+                    "booked_via_api":         rc_bbyl or rc_online,
+                    "pending_at":             _iso(booked_on) if rc_bbyl else None,
                     "completed_at":           None,
                     "cancelled_at":           None,
                     "did_not_attend_at":      None,
