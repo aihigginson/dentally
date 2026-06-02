@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Add Payment_Terms, Sent_At
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Invoices @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Invoices]
@@ -39,7 +40,7 @@ BEGIN
             , LEFT(nhs_amount,              255)           AS NHS_Amount
             , LEFT(dated_on,                255)           AS Dated_On
             , LEFT(due_on,                  255)           AS Due_On
-            , TRY_CAST(paid               AS DECIMAL(18,4)) AS Paid
+            , LEFT(paid,                    255)             AS Paid
             , LEFT(paid_on,                 255)           AS Paid_On
             , LEFT(reference,               255)           AS Reference
             , LEFT(footnote,                255)           AS Footnote

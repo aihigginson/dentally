@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     19/05/2026  AIH Read Name, Notes from Bronze (now available)
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS, PDS, UDA, UOA)
+--    *04     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -61,13 +62,13 @@ BEGIN
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Id],
                 LEFT(Site_ID, 50)  AS [Site_ID],
-                CASE WHEN Active = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
+                CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 LEFT(Contract_Number, 50)  AS [Contract_Number],
                 LEFT(Name, 255)  AS [Name],
                 LEFT(NHS_Location_ID, 50)  AS [NHS_Location_ID],
                 LEFT(NHS_Site_ID, 50)  AS [NHS_Site_ID],
                 Notes  AS [Notes],
-                CASE WHEN PDS_Plus = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [PDS_Plus],
+                CASE WHEN LOWER(TRIM(PDS_Plus)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [PDS_Plus],
                 TRY_CAST(Start_Date AS date)  AS [Start_Date],
                 TRY_CAST(End_Date   AS date)  AS [End_Date],
                 TRY_CAST(Target     AS decimal(18,4))  AS [Target],

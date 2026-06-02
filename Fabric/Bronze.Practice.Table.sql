@@ -15,7 +15,7 @@ CREATE TABLE [Bronze].[Practice](
 	[Logo_Url] [VARCHAR](255) NULL,
 	[Medical_History_Expiry_Days] [decimal](18, 4) NULL,
 	[Practice_Name] [VARCHAR](255) NULL,
-	[NHS] [decimal](18, 4) NULL,
+	[NHS] [VARCHAR](255) NULL,
 	[Oh_Mon#close] [VARCHAR](255) NULL,
 	[Oh_Mon#open] [VARCHAR](255) NULL,
 	[Oh_Tues#close] [VARCHAR](255) NULL,

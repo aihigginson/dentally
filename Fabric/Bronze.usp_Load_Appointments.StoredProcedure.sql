@@ -9,6 +9,7 @@
 --    *04     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *05     16/05/2026  AIH Add Site_ID (missing from Stage read despite being in Bronze table)
 --    *06     19/05/2026  AIH Remove Site_ID, Created_At, Updated_At Stage reads (not in Dentally API)
+--    *07     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -49,7 +50,7 @@ BEGIN
             , LEFT(state,                                  255)   AS State
             , LEFT(notes,                                  255)   AS Notes
             , LEFT(treatment_description,                  255)   AS Treatment_Description
-            , TRY_CAST(booked_via_api                    AS INT)  AS Booked_Via_API
+            , LEFT(booked_via_api,                            255)   AS Booked_Via_API
             , LEFT(pending_at,                             255)   AS Pending_At
             , LEFT(confirmed_at,                           255)   AS Confirmed_At
             , LEFT(arrived_at,                             255)   AS Arrived_At

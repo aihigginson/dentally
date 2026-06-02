@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Fix Reference and Transaction_Number to VARCHAR (API returns string, not number)
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Payments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Payments]
@@ -42,8 +43,8 @@ BEGIN
             , LEFT(method,                  255)            AS Method
             , LEFT(reference, 255) AS Reference
             , LEFT(status,                  255)            AS Status
-            , TRY_CAST(deleted            AS DECIMAL(18,4)) AS Deleted
-            , TRY_CAST(fully_explained    AS DECIMAL(18,4)) AS Fully_Explained
+            , LEFT(deleted,                255) AS Deleted
+            , LEFT(fully_explained,        255) AS Fully_Explained
             , LEFT(transaction_number, 255) AS Transaction_Number
         INTO #src
         FROM Stage.Payments

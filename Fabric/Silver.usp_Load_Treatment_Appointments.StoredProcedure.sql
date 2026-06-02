@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     19/05/2026  AIH Add Completed, Completed_At from Bronze (now populated)
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *04     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -70,9 +71,9 @@ BEGIN
         NULL  AS [Status],
                 -- Status not in Bronze
         Position  AS [Position],
-                Bookable  AS [Bookable],
+                CASE WHEN LOWER(TRIM(Bookable))  IN ('true','1') THEN 1 ELSE 0 END  AS [Bookable],
                 Notes  AS [Notes],
-                Completed  AS [Completed],
+                CASE WHEN LOWER(TRIM(Completed)) IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
                 LEFT(Completed_At, 50)  AS [Completed_At]
             FROM Bronze.Treatment_Appointments
         ) AS staged;

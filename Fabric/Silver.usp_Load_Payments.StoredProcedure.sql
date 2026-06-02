@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *03     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Payments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Payments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -72,8 +73,8 @@ BEGIN
                 Amount  AS [Amount],
                 Amount_Unexplained  AS [Amount_Unexplained],
                 LEFT(Method, 100)  AS [Method],
-                CASE WHEN Fully_Explained = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Fully_Explained],
-                CASE WHEN Deleted         = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Deleted],
+                CASE WHEN LOWER(TRIM(Fully_Explained)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Fully_Explained],
+                CASE WHEN LOWER(TRIM(Deleted))         IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Deleted],
                 LEFT(Status, 50)  AS [Status],
                 TRY_CAST(Dated_On AS date)  AS [Dated_On]
             FROM Bronze.Payments

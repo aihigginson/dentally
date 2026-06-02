@@ -6,6 +6,7 @@
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Add Completed, Completed_At
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Treatment_Appointments]
 GO
@@ -29,7 +30,7 @@ BEGIN
         SELECT
               TRY_CAST(tenant_id AS INT)                          AS Tenant_ID
             , LEFT(id, 255)                                       AS ID
-            , CASE WHEN bookable IN ('True', '1', 'true') THEN 1 ELSE 0 END AS Bookable
+            , LEFT(bookable, 255)                                            AS Bookable
             , LEFT(notes, 4000)                                   AS Notes
             , TRY_CAST(position AS INT)                           AS Position
             , LEFT(created_at, 255)                               AS Created_At
@@ -37,7 +38,7 @@ BEGIN
             , TRY_CAST(appointment_id AS INT)                     AS Appointment_ID
             , TRY_CAST(patient_id AS INT)                         AS Patient_ID
             , TRY_CAST(treatment_plan_id AS INT)                  AS Treatment_Plan_ID
-            , CASE WHEN LOWER(CAST(completed AS VARCHAR(10))) IN ('true','1') THEN 1 ELSE 0 END AS Completed
+            , LEFT(completed, 255)                                                         AS Completed
             , LEFT(completed_at, 255) AS Completed_At
         INTO #src
         FROM Stage.Treatment_Appointments

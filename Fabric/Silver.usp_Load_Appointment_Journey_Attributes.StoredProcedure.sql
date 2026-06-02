@@ -15,6 +15,8 @@
 --                            Next_Visit: changed nxt to show chronological next visit;
 --                            Future_Appt: separate active_bkg apply;
 --                            rename Other Booked -> Treatment Booked
+--    *06     31/05/2026  AIH BBYL fix: add Pending_DT to #appts; use Pending_DT (not Created_DT)
+--                            for BBYL date check — Created_At is never populated in source data
 --    *05     31/05/2026  AIH Rename SP to usp_Load_Appointment_Journey_Attributes;
 --                            rename table to Silver.Appointment_Journey_Attributes;
 --                            rename This_Visit->Appointment_Reason, Next_Visit->Next_Appointment,
@@ -70,7 +72,8 @@ BEGIN
             TRY_CAST(LEFT(NULLIF(TRIM(a.Completed_At),      ''), 23) AS datetime2(3)) AS Completed_DT,
             TRY_CAST(LEFT(NULLIF(TRIM(a.Cancelled_At),      ''), 23) AS datetime2(3)) AS Cancelled_DT,
             TRY_CAST(LEFT(NULLIF(TRIM(a.Did_Not_Attend_At), ''), 23) AS datetime2(3)) AS DNA_DT,
-            TRY_CAST(LEFT(NULLIF(TRIM(a.Created_At),        ''), 23) AS datetime2(3)) AS Created_DT
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Created_At),        ''), 23) AS datetime2(3)) AS Created_DT,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Pending_At),        ''), 23) AS datetime2(3)) AS Pending_DT
         INTO #appts
         FROM Silver.Appointments a
         WHERE a.Appointment_ID IS NOT NULL;
@@ -123,7 +126,7 @@ BEGIN
                 WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New'
                 WHEN a.Booked_Via_API = 1
                      AND prev_appt.Prev_Date IS NOT NULL
-                     AND CAST(a.Created_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
+                     AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
                 WHEN a.Booked_Via_API = 1                                  THEN 'Online'
                 ELSE 'Reception'
             END AS Booking,

@@ -7,6 +7,7 @@
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Add Name, Notes
 --    *04     20/05/2026  AIH Column naming convention fixes (PDS_Plus)
+--    *05     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Contracts]
 GO
@@ -30,12 +31,12 @@ BEGIN
         SELECT
               TRY_CAST(tenant_id AS INT)                                                                    AS Tenant_ID
             , LEFT(id, 255)                                                                                 AS ID
-            , CASE WHEN active IN ('True', '1', 'true') THEN 1 ELSE 0 END                                  AS Active
+            , LEFT(active, 255)                                                                             AS Active
             , LEFT(contract_number, 255)                                                                    AS Contract_Number
             , LEFT(end_date, 255)                                                                           AS End_Date
             , LEFT(nhs_location_id, 255)                                                                    AS NHS_Location_ID
             , LEFT(nhs_site_id, 255)                                                                        AS NHS_Site_ID
-            , CASE WHEN pds_plus IN ('True', '1', 'true') THEN 1 ELSE 0 END                                AS PDS_Plus
+            , LEFT(pds_plus, 255)                                                                           AS PDS_Plus
             , LEFT(site_id, 255)                                                                            AS Site_ID
             , LEFT(start_date, 255)                                                                         AS Start_Date
             , LEFT(target, 255)                                                                             AS Target

@@ -7,6 +7,7 @@
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Add 15 new patient fields (title, recall_method, acquisition_source_id, use_email/sms, preferred_name, work_phone, middle_name, emergency_contact_*, ethnicity, archived_reason, legacy_id, preferred_phone_number)
 --    *04     20/05/2026  AIH Fix Stage field name: ethnicity -> ethnicity_id; Preferred_Phone_Number VARCHAR not decimal
+--    *05     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patients]
@@ -32,11 +33,11 @@ BEGIN
               TRY_CAST(tenant_id               AS INT)            AS Tenant_ID
             , TRY_CAST(id                      AS INT)            AS Patient_ID
             , TRY_CAST(account_id              AS INT)            AS Account_ID
-            , CASE WHEN active = 'True' THEN 1 ELSE 0 END         AS Active
+            , LEFT(active,                             255)         AS Active
             , LEFT(first_name,                    255)            AS First_Name
             , LEFT(last_name,                     255)            AS Last_Name
             , LEFT(date_of_birth,                 255)            AS Date_Of_Birth
-            , CASE WHEN gender = 'False' THEN 0 ELSE 1 END        AS Gender
+            , LEFT(gender,                             255)        AS Gender
             , LEFT(email_address,                 255)            AS Email_Address
             , LEFT(mobile_phone,                  255)            AS Mobile_Phone
             , LEFT(home_phone,                    255)            AS Home_Phone
@@ -56,14 +57,14 @@ BEGIN
             , LEFT(nhs_number,                    255)            AS NHS_Number
             , LEFT(ni_number,                     255)            AS Ni_Number
             , LEFT(marketing,                     255)            AS Marketing
-            , CASE WHEN medical_alert = 'False' THEN 0 ELSE 1 END AS Medical_Alert
+            , LEFT(medical_alert,                      255)        AS Medical_Alert
             , LEFT(medical_alert_text,            255)            AS Medical_Alert_Text
             , LEFT(occupation,                    255)            AS Occupation
             , LEFT(title,                          255)            AS Title
             , LEFT(recall_method,                  255)            AS Recall_Method
             , LEFT(acquisition_source_id,          255)            AS Acquisition_Source_ID
-            , CASE WHEN use_email IN ('True','1','true') THEN CAST(1.0 AS DECIMAL(18,4)) ELSE CAST(0.0 AS DECIMAL(18,4)) END AS Use_Email
-            , CASE WHEN use_sms   IN ('True','1','true') THEN CAST(1.0 AS DECIMAL(18,4)) ELSE CAST(0.0 AS DECIMAL(18,4)) END AS Use_Sms
+            , LEFT(use_email,                           255)       AS Use_Email
+            , LEFT(use_sms,                             255)       AS Use_Sms
             , LEFT(preferred_name,                 255)            AS Preferred_Name
             , LEFT(work_phone,                     255)            AS Work_Phone
             , LEFT(middle_name,                    255)            AS Middle_Name

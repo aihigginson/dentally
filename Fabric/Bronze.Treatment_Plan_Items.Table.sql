@@ -7,10 +7,10 @@ DROP TABLE IF EXISTS [Bronze].[Treatment_Plan_Items]
 GO
 CREATE TABLE [Bronze].[Treatment_Plan_Items](
 	[ID] [varchar](50) NULL,
-	[Appear_On_Invoice] [decimal](18, 4) NULL,
+	[Appear_On_Invoice] [VARCHAR](255) NULL,
 	[Base_Chart] [decimal](18, 4) NULL,
-	[Charged] [decimal](18, 4) NULL,
-	[Completed] [decimal](18, 4) NULL,
+	[Charged] [VARCHAR](255) NULL,
+	[Completed] [VARCHAR](255) NULL,
 	[Completed_At] [VARCHAR](255) NULL,
 	[Duration] [decimal](18, 4) NULL,
 	[NHS_Treatment_Cat] [VARCHAR](255) NULL,

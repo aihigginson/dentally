@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Treatments]
 GO
 CREATE TABLE [Bronze].[Treatments](
 	[ID] [int] NULL,
-	[Active] [int] NULL,
+	[Active] [VARCHAR](255) NULL,
 	[Code] [VARCHAR](255) NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[Description] [VARCHAR](max) NULL,

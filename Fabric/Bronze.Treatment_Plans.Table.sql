@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Treatment_Plans]
 GO
 CREATE TABLE [Bronze].[Treatment_Plans](
 	[ID] [decimal](18, 4) NULL,
-	[Completed] [decimal](18, 4) NULL,
+	[Completed] [VARCHAR](255) NULL,
 	[Completed_At] [VARCHAR](255) NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[End_Date] [VARCHAR](255) NULL,

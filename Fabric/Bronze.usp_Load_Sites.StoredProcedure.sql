@@ -8,6 +8,7 @@
 --    *03     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *04     19/05/2026  AIH Fix phone->phone_number Stage field name; add Email_Address, Nickname
 --    *05     20/05/2026  AIH Default address_line_2/website/logo_url/default_payment_plan_id/email_address/nickname in gen_tenant() to ensure Stage columns always present
+--    *06     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Sites]
 GO
@@ -33,7 +34,7 @@ BEGIN
             , LEFT(id,                     255)                                                              AS Site_ID
             , LEFT(practice_id,            255)                                                              AS Practice_ID
             , LEFT(name,                   255)                                                              AS Name
-            , CASE WHEN active IN ('True', '1', 'true') THEN CAST(1 AS DECIMAL(18,4)) ELSE CAST(0 AS DECIMAL(18,4)) END AS Active
+            , LEFT(active, 255)                                                                             AS Active
             , LEFT(address_line_1,         255)                                                              AS Address_Line_1
             , LEFT(address_line_2,         255)                                                              AS Address_Line_2
             , LEFT(town,                   255)                                                              AS Town

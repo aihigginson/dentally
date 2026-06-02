@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Fix nomenclature field name (was name); add active, nhs_treatment_cat, uda_band, treatment_category_id, patient_nomenclature, description, created_at, updated_at; fix ID/Code types
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Treatments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Treatments]
@@ -32,7 +33,7 @@ BEGIN
             , TRY_CAST(id        AS INT)   AS ID
             , LEFT(nomenclature,   255)    AS Nomenclature
             , LEFT(code,           255)    AS Code
-            , CASE WHEN LOWER(CAST(active AS VARCHAR(10))) IN ('true','1') THEN 1 ELSE 0 END AS Active
+            , LEFT(active, 255)                                                              AS Active
             , LEFT(nhs_treatment_cat,     255) AS NHS_Treatment_Cat
             , TRY_CAST(uda_band         AS DECIMAL(18,4)) AS UDA_Band
             , TRY_CAST(treatment_category_id AS DECIMAL(18,4)) AS Treatment_Category_ID

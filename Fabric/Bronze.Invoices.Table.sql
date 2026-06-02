@@ -12,7 +12,7 @@ CREATE TABLE [Bronze].[Invoices](
 	[Dated_On] [VARCHAR](255) NULL,
 	[Due_On] [VARCHAR](255) NULL,
 	[Reference] [VARCHAR](255) NULL,
-	[Paid] [decimal](18, 4) NULL,
+	[Paid] [VARCHAR](255) NULL,
 	[Paid_On] [VARCHAR](255) NULL,
 	[Footnote] [VARCHAR](255) NULL,
 	[NHS_Amount] [VARCHAR](255) NULL,

@@ -8,6 +8,7 @@
 --    *02     14/05/2026  AIH Add Site_Id from Bronze
 --    *03     19/05/2026  AIH Set Site_Id, Created_At, Updated_At to NULL (removed from Bronze -- not in Dentally API)
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, UUID, API)
+--    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -102,8 +103,8 @@ BEGIN
                 Notes  AS [Notes],
                 -- VARCHAR(max) → VARCHAR(max)  OK
         Treatment_Description  AS [Treatment_Description],
-                -- Bronze Booked_Via_API is int; Silver is bit
-        CASE WHEN Booked_Via_API = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Booked_Via_API],
+                -- Bronze Booked_Via_API is VARCHAR; Silver is bit
+        CASE WHEN LOWER(TRIM(Booked_Via_API)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Booked_Via_API],
                 LEFT(Pending_At,        50)  AS [Pending_At],
                 LEFT(Confirmed_At,      50)  AS [Confirmed_At],
                 LEFT(Arrived_At,        50)  AS [Arrived_At],

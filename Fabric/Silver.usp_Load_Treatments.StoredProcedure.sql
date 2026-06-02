@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     19/05/2026  AIH Read Active from Bronze (now populated); simplify Code/ID reads (Bronze now typed)
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *04     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Treatments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -70,7 +71,7 @@ BEGIN
         LEFT(Description, 255)  AS [Description],
                 NULL  AS [Type],
                 -- Type not in Bronze
-        CASE WHEN Active = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
+        CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 LEFT(Nomenclature,         255)  AS [Nomenclature],
                 LEFT(Patient_Nomenclature, 255)  AS [Patient_Nomenclature],
                 LEFT(Patient_Description,  255)  AS [Patient_Description],

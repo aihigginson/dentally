@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Load missing columns: Start_Date, End_Date, Completed, Completed_At, Nickname, Last_Completed_At
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Treatment_Plans]
@@ -39,9 +40,7 @@ BEGIN
             , LEFT(updated_at,                    255)            AS Updated_At
             , LEFT(start_date,                    255)            AS Start_Date
             , LEFT(end_date,                      255)            AS End_Date
-            , CASE WHEN completed IS NULL THEN NULL
-                   WHEN LOWER(CAST(completed AS VARCHAR(10))) IN ('true','1') THEN 1.0000
-                   ELSE 0.0000 END                                AS Completed
+            , LEFT(completed, 255)                                AS Completed
             , LEFT(completed_at,                  255)            AS Completed_At
             , LEFT(nickname,                      255)            AS Nickname
             , LEFT(last_completed_at,             255)            AS Last_Completed_At

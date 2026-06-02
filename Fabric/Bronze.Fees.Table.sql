@@ -9,7 +9,7 @@ CREATE TABLE [Bronze].[Fees](
 	[Fee_ID] [VARCHAR](255) NULL,
 	[Payment_Plan_ID] [int] NULL,
 	[Treatment_ID] [decimal](18, 4) NULL,
-	[Multiple_Pricing] [int] NULL,
+	[Multiple_Pricing] [VARCHAR](255) NULL,
 	[Duration_One] [int] NULL,
 	[Duration_Two] [int] NULL,
 	[Duration_Three] [int] NULL,
