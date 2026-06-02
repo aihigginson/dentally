@@ -123,7 +123,7 @@ BEGIN
             -- Online = booked via API on any other date (patient self-booked remotely).
             CASE
                 WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
-                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New'
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New - ' + aqs.Name
                 WHEN a.Booked_Via_API = 1
                      AND prev_appt.Prev_Date IS NOT NULL
                      AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
@@ -159,7 +159,7 @@ BEGIN
             -- Recall categories = no active booking; recall record drives expectation.
             CASE
                 WHEN seen_again.Appointment_ID IS NOT NULL                                         THEN 'Seen Again'
-                WHEN active_bkg.Appointment_ID IS NOT NULL AND active_bkg.Booked_Via_API = 1      THEN 'BBYL'
+                WHEN active_bkg.Appointment_ID IS NOT NULL AND active_bkg.Booked_Via_API = 1      THEN 'Treatment BBYL'
                 WHEN active_bkg.Appointment_ID IS NOT NULL                                         THEN 'Treatment Booked'
                 WHEN pat.Active = 0                                                                THEN 'Will Not See Again'
                 WHEN lr.First_Reminder_Sent_At IS NOT NULL                                         THEN 'Recall Sent'
@@ -176,6 +176,7 @@ BEGIN
         LEFT JOIN #referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_ID = a.Patient_ID
         LEFT JOIN Silver.Patients  pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_ID = a.Patient_ID
         LEFT JOIN #latest_recall   lr   ON lr.Tenant_ID  = a.Tenant_ID  AND lr.Patient_ID  = a.Patient_ID
+        LEFT JOIN Silver.Acquisition_Sources aqs ON aqs.Tenant_ID = pat.Tenant_ID AND aqs.Acquisition_Source_ID = pat.Acquisition_Source_ID   
         LEFT JOIN Silver.Appointment_Reason_Map arm_this
                        ON arm_this.Reason_Text = NULLIF(TRIM(a.Reason), '')
 
