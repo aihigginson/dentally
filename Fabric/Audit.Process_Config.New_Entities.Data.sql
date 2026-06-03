@@ -17,3 +17,16 @@ WHERE NOT EXISTS (
 );
 PRINT CONCAT('Rooms Process_Config rows inserted: ', @@ROWCOUNT);
 GO
+
+-- Add Dim_NHS_Contracts and Fact_NHS_Claims Gold process config
+INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code)
+SELECT v.Process_Code, v.Process_Name, v.Process_Desc, v.Process_Parameters, v.Process_Category_Code, 'PROCEDURE'
+FROM (VALUES
+    ('GOLD_DIM_NHS_CONTRACTS', 'Gold.usp_Load_Dim_NHS_Contracts', 'Load Gold.Dim_NHS_Contracts from Silver.Contracts', '@Mode = ''LIVE'', @Logging = 1', 'GOLD_DIM'),
+    ('GOLD_FACT_NHS_CLAIMS',   'Gold.usp_Load_Fact_NHS_Claims',   'Load Gold.Fact_NHS_Claims from Silver.NHS_Claims',  '@Mode = ''LIVE'', @Logging = 1', 'GOLD_FACT')
+) AS v(Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code)
+WHERE NOT EXISTS (
+    SELECT 1 FROM Audit.Process_Config pc WHERE pc.Process_Code = v.Process_Code
+);
+PRINT CONCAT('NHS Contracts/Claims Process_Config rows inserted: ', @@ROWCOUNT);
+GO
