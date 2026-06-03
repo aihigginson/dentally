@@ -1088,9 +1088,12 @@ def gen_patients(tdef, rng):
 
 # ─── APPOINTMENTS ─────────────────────────────────────────────────────────────
 
-def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng):
+def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rooms, rng):
     """diary_set: set of (prac_id, date_str) for valid working days."""
     tid = tdef["tenant_id"]
+    rooms_by_site = {}
+    for r in rooms:
+        rooms_by_site.setdefault(r["site_id"], []).append(r["id"])
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     care_plan_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp["name"]=="Care Plan"), None)
     cr_ids = [c["id"] for c in tdef["cancellation_reasons"]]
@@ -1221,7 +1224,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                 "id": apt_id,
                 "patient_id": pat_id,
                 "practitioner_id": pid,
-                "room_id": None,
+                "user_id": pid,
+                "payment_plan_id": pp_id,
+                "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                 "start_time": _iso(d, start_t),
                 "end_time": _iso(d, end_t),
                 "duration": dur,
@@ -1262,7 +1267,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "id": apt_id,
                                 "patient_id": pat_id,
                                 "practitioner_id": pid,
-                                "room_id": None,
+                                "user_id": pid,
+                                "payment_plan_id": pp_id,
+                                "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                                 "start_time": _iso(td, ts_t),
                                 "end_time": _iso(td, te_t),
                                 "duration": tdur,
@@ -1299,7 +1306,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                                 "id": apt_id,
                                 "patient_id": pat_id,
                                 "practitioner_id": hpid,
-                                "room_id": None,
+                                "user_id": hpid,
+                                "payment_plan_id": pp_id,
+                                "room_id": rng.choice(rooms_by_site.get(prac_defs_by_id[hpid]["site_id"], [None])),
                                 "start_time": _iso(hd, hs_t),
                                 "end_time": _iso(hd, he_t),
                                 "duration": 30,
@@ -1332,7 +1341,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng
                     "id":                     apt_id,
                     "patient_id":             pat_id,
                     "practitioner_id":        pid,
-                    "room_id":                None,
+                    "user_id":                pid,
+                    "payment_plan_id":        pp_id,
+                    "room_id":                rng.choice(rooms_by_site.get(site_id, [None])),
                     "start_time":             _iso(fd, fs_t),
                     "end_time":               _iso(fd, fe_t),
                     "duration":               20,
@@ -2094,7 +2105,7 @@ def generate_tenant(tdef):
 
     rooms   = gen_rooms(tdef)
     patients = gen_patients(tdef, rng)
-    appointments = gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rng)
+    appointments = gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rooms, rng)
 
     plans, plan_items, treatment_appts = gen_treatment_plans_and_items(
         tdef, patients, appointments, tx_by_id, fee_map, rng)
