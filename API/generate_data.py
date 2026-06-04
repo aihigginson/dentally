@@ -961,6 +961,9 @@ def gen_patients(tdef, rng):
             dentists = [p for p in prac_defs if p["role"]=="dentist"]
         dentist = rng.choice(dentists)
 
+        # Assign hygienist (~75% of adults)
+        hyg_list = site_hygienists.get(site_id, [])
+
         # Payment plan: nhs_pct chance of NHS, else pick from dentist's private pp_ids
         use_nhs = nhs_pp_id and rng.random() < dentist["nhs_pct"]
         if use_nhs:
@@ -982,6 +985,10 @@ def gen_patients(tdef, rng):
         else:
             age = rng.randint(70, 90)
         dob = TODAY - timedelta(days=age*365 + rng.randint(0,364))
+
+        hygienist_id = (rng.choice([p["id"] for p in hyg_list])
+                        if hyg_list and age >= 18 and rng.random() < 0.75
+                        else None)
 
         # NHS exemption (~15% of NHS patients)
         exemption = None
@@ -1065,9 +1072,10 @@ def gen_patients(tdef, rng):
             "town": town,
             "postcode": postcode,
             "site_id": site_id,
-            "practitioner_id": dentist["id"],
+            "dentist_id": dentist["id"],
+            "hygienist_id": hygienist_id,
             "payment_plan_id": pp_id,
-            "account_id": _u5("acct", tid, i),
+            "account_id": i,
             "active": is_active,
             "nhs_exemption_code": exemption,
             "ethnicity_id": ethnicity,
@@ -1155,7 +1163,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 f"{end_min//60:02d}:{end_min%60:02d}:00")
 
     for pat in patients:
-        pid = pat["practitioner_id"]
+        pid = pat["dentist_id"]
         pp_id = pat["payment_plan_id"]
         site_id = pat["site_id"]
         is_nhs = (pp_id == nhs_pp_id)
@@ -1228,7 +1236,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "payment_plan_id": pp_id,
                 "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                 "start_time": _iso(d, start_t),
-                "end_time": _iso(d, end_t),
+                "finish_time": _iso(d, end_t),
                 "duration": dur,
                 "state": state,
                 "reason": "New Patient Examination" if is_first else "Routine Examination",
@@ -1236,6 +1244,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "appointment_cancellation_reason_id": cancel_id,
                 "online_booking": False,
                 "booked_via_api": False,
+                "arrived_at": _iso(d, start_t) if state == "completed" else None,
                 "completed_at": _iso(d, end_t) if state == "completed" else None,
                 "cancelled_at": _iso(d) if state == "cancelled" else None,
                 "did_not_attend_at": _iso(d) if state == "did_not_attend" else None,
@@ -1271,7 +1280,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "payment_plan_id": pp_id,
                                 "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                                 "start_time": _iso(td, ts_t),
-                                "end_time": _iso(td, te_t),
+                                "finish_time": _iso(td, te_t),
                                 "duration": tdur,
                                 "state": tx_state,
                                 "reason": ttx["description"] if ttx else "Treatment",
@@ -1280,6 +1289,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "online_booking": tx_online,
                                 "booked_via_api": tx_bbyl or tx_online,
                                 "pending_at": _iso(tx_last_date) if tx_bbyl else None,
+                                "arrived_at": _iso(td, ts_t) if tx_state == "completed" else None,
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
@@ -1310,7 +1320,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "payment_plan_id": pp_id,
                                 "room_id": rng.choice(rooms_by_site.get(prac_defs_by_id[hpid]["site_id"], [None])),
                                 "start_time": _iso(hd, hs_t),
-                                "end_time": _iso(hd, he_t),
+                                "finish_time": _iso(hd, he_t),
                                 "duration": 30,
                                 "state": hyg_state,
                                 "reason": "Scale & Polish",
@@ -1319,6 +1329,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "online_booking": hyg_online,
                                 "booked_via_api": hyg_bbyl or hyg_online,
                                 "pending_at": _iso(d) if hyg_bbyl else None,
+                                "arrived_at": _iso(hd, hs_t) if hyg_state == "completed" else None,
                                 "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
@@ -1345,7 +1356,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                     "payment_plan_id":        pp_id,
                     "room_id":                rng.choice(rooms_by_site.get(site_id, [None])),
                     "start_time":             _iso(fd, fs_t),
-                    "end_time":               _iso(fd, fe_t),
+                    "finish_time":            _iso(fd, fe_t),
                     "duration":               20,
                     "state":                  "booked",
                     "reason":                 "Recall Examination",
@@ -1354,6 +1365,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                     "online_booking":         rc_online,
                     "booked_via_api":         rc_bbyl or rc_online,
                     "pending_at":             _iso(booked_on) if rc_bbyl else None,
+                    "arrived_at":             None,
                     "completed_at":           None,
                     "cancelled_at":           None,
                     "did_not_attend_at":      None,
@@ -2042,6 +2054,32 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng):
         })
     return recalls
 
+# ─── PATIENT RECALL DATE ENRICHMENT ─────────────────────────────────────────
+# Called after appointments are generated; backfills dentist_recall_date and
+# hygienist_recall_date onto patient dicts based on actual last attended exams.
+
+def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id):
+    exam_tx_ids  = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
+    hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
+    for pat in patients:
+        pp           = pp_by_id.get(pat["payment_plan_id"], {})
+        dr_interval  = pp.get("dentist_recall_interval", 12)
+        hr_interval  = pp.get("hygienist_recall_interval", 6)
+        completed    = [a for a in apts_by_pat.get(pat["id"], [])
+                        if a["state"] == "completed"]
+        exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
+        hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
+        if exams:
+            last_exam_d = date.fromisoformat(max(a["start_time"][:10] for a in exams))
+            pat["dentist_recall_date"]   = str(_add_months(last_exam_d, dr_interval))
+        else:
+            pat["dentist_recall_date"]   = None
+        if hygiene_apts:
+            last_hyg_d = date.fromisoformat(max(a["start_time"][:10] for a in hygiene_apts))
+            pat["hygienist_recall_date"] = str(_add_months(last_hyg_d, hr_interval))
+        else:
+            pat["hygienist_recall_date"] = None
+
 # ─── PATIENT REFERRALS ───────────────────────────────────────────────────────
 
 def gen_patient_referrals(tdef, patients, apts_by_pat, rng):
@@ -2050,6 +2088,12 @@ def gen_patient_referrals(tdef, patients, apts_by_pat, rng):
     ref_types = ["Patient", "Specialist", "Internal"]
     referrals = []
     ref_id    = tid * 100000
+
+    # Dentists/specialists per site for internal referrals
+    site_clinicians = {}
+    for p in tdef["_prac_defs"]:
+        if p["role"] in ("dentist", "orthodontist", "specialist"):
+            site_clinicians.setdefault(p["site_id"], []).append(p["id"])
 
     for pat in patients:
         if rng.random() >= 0.15:
@@ -2063,18 +2107,25 @@ def gen_patient_referrals(tdef, patients, apts_by_pat, rng):
         ref_type  = rng.choice(ref_types)
         site_id   = pat.get("site_id") or rng.choice(site_ids)
         ref_dt    = first_apt["start_time"]
+        # Internal referrals have a referred practitioner (different from the patient's dentist)
+        referred_prac_id = None
+        if ref_type == "Internal":
+            candidates = [pid for pid in site_clinicians.get(site_id, [])
+                          if pid != pat.get("dentist_id")]
+            if candidates:
+                referred_prac_id = rng.choice(candidates)
         referrals.append({
             "id":                        ref_id,
             "patient_id":                pat_id,
             "site_id":                   site_id,
-            "user_id":                   None,
+            "user_id":                   first_apt["user_id"],
             "reference":                 f"REF{ref_id:07d}",
             "status":                    "active",
             "referrable_type":           ref_type,
             "services_appointment_id":   None,
             "additional_information":    None,
             "consented_by_patient":      True,
-            "referred_practitioner_id":  None,
+            "referred_practitioner_id":  referred_prac_id,
             "referred_site_id":          None,
             "created_at":                ref_dt,
             "updated_at":                ref_dt,
@@ -2108,6 +2159,14 @@ def generate_tenant(tdef):
     rooms   = gen_rooms(tdef)
     patients = gen_patients(tdef, rng)
     appointments = gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, rooms, rng)
+
+    # Backfill dentist_recall_date / hygienist_recall_date onto patient dicts now
+    # that we know which appointments each patient actually attended.
+    _apts_by_pat_tmp = {}
+    for a in appointments:
+        _apts_by_pat_tmp.setdefault(a["patient_id"], []).append(a)
+    pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
+    enrich_patient_recall_dates(patients, _apts_by_pat_tmp, tx_by_code, pp_by_id)
 
     plans, plan_items, treatment_appts = gen_treatment_plans_and_items(
         tdef, patients, appointments, tx_by_id, fee_map, rng)
