@@ -1382,6 +1382,10 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     pat_pp = {p["id"]: p["payment_plan_id"] for p in patients}
     plan_acceptance_rate = tdef.get("_params", {}).get("plan_acceptance_rate", 1.0)
 
+    # Practitioners available as referrers (dentists/orthodontists/specialists only)
+    all_prac_ids = [p["id"] for p in tdef["_prac_defs"]
+                    if p["role"] in ("dentist", "orthodontist", "specialist")]
+
     # Band UDA values
     uda_for_band = {1:1.0, 2:3.0, 3:5.0, 4:7.0, 5:12.0}
     band_uda = {1:1, 2:3, 3:5, 5:5, 7:7, 12:12}  # nhs_cat→uda mapping
@@ -1531,6 +1535,12 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             })
 
             for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos in plan_items_data:
+                # ~6% of private items have a referring practitioner (different from treating)
+                referrer_id = None
+                if not is_nhs and rng.random() < 0.06:
+                    candidates = [p for p in all_prac_ids if p != apt["practitioner_id"]]
+                    if candidates:
+                        referrer_id = rng.choice(candidates)
                 items.append({
                     "id": item_uuid,
                     "treatment_plan_id": plan_id,
@@ -1538,7 +1548,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "patient_id": pat_id,
                     "practitioner_id": apt["practitioner_id"],
                     "payment_plan_id": pp_id,
-                    "referrer_id": None,
+                    "referrer_id": referrer_id,
                     "treatment_appointment_id": _u5("ta", tid, apt["id"], plan_id),
                     "invoice_id": None,  # set later
                     "price": _fmt(price),
@@ -2198,6 +2208,17 @@ def generate_tenant(tdef):
     patient_stats      = gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat)
     recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng)
     patient_referrals  = gen_patient_referrals(tdef, patients, apts_by_pat, rng)
+
+    # Link booked recall appointments back to their recall records
+    _recall_apt_by_patient = {
+        a["patient_id"]: str(a["id"])
+        for a in appointments
+        if a.get("reason") == "Recall Examination" and a.get("state") == "booked"
+    }
+    for r in recalls:
+        booked_apt = _recall_apt_by_patient.get(r["patient_id"])
+        if booked_apt:
+            r["appointment_id"] = booked_apt
 
     return {
         "practice":            tdef["practice"],
