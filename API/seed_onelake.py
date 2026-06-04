@@ -30,7 +30,7 @@ ONELAKE_HOST   = "onelake.dfs.fabric.microsoft.com"
 def table_path(table_name: str) -> str:
     return (
         f"abfss://{WORKSPACE_GUID}@{ONELAKE_HOST}"
-        f"/{LAKEHOUSE_GUID}/Tables/stage_{table_name}"
+        f"/{LAKEHOUSE_GUID}/Tables/dbo/stage_{table_name}"
     )
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -42,14 +42,11 @@ def get_storage_options() -> dict:
     return {"bearer_token": token.token}
 
 # ── Write helper (mirrors notebook write_stage) ───────────────────────────────
-def write_stage(records: list, table_name: str, tenant_id: int, load_ts: str):
+def write_stage(records: list, table_name: str):
+    """Full overwrite of the entire table — all tenants in one write."""
     if not records:
         print(f"  {table_name}: 0 records (skipped)")
         return
-
-    for r in records:
-        r["tenant_id"]          = str(tenant_id)
-        r["DW_Stage_Loaded_At"] = load_ts
 
     def _to_str(v):
         if v is None:                   return None
@@ -61,15 +58,15 @@ def write_stage(records: list, table_name: str, tenant_id: int, load_ts: str):
     df   = pd.DataFrame(rows).astype("string")
     tbl  = pa.Table.from_pandas(df, preserve_index=False)
 
+    print(f"  {table_name}: writing {len(records):,} rows...", end="", flush=True)
     write_deltalake(
         table_path(table_name),
         tbl,
         mode            = "overwrite",
-        predicate       = f"tenant_id = '{tenant_id}'",
         schema_mode     = "merge",
         storage_options = get_storage_options(),
     )
-    print(f"  {table_name}: {len(records):,} rows")
+    print(" done.")
 
 
 # ── Tenant definitions (matches notebook) ─────────────────────────────────────
@@ -577,15 +574,49 @@ def main():
     print(f"Load timestamp : {load_ts}")
     print(f"Tenants to seed: {tenant_ids}\n")
 
+    # Map from generate_tenant output key -> Stage table name
+    TABLE_MAP = [
+        # reference data
+        ('practice',                   'practice',                   True),   # True = wrap in list
+        ('sites',                      'sites',                      False),
+        ('users',                      'users',                      False),
+        ('practitioners',              'practitioners',              False),
+        ('payment_plans',              'payment_plans',              False),
+        ('treatments',                 'treatments',                 False),
+        ('treatment_categories',       'treatment_categories',       False),
+        ('acquisition_sources',        'acquisition_sources',        False),
+        ('cancellation_reasons',       'cancellation_reasons',       False),
+        ('waiting_lists',              'waiting_lists',              False),
+        ('sundries',                   'sundries',                   False),
+        ('contracts',                  'contracts',                  False),
+        ('fees',                       'fees',                       False),
+        ('diary_breaks',               'practitioner_diary_breaks',  False),
+        ('rooms',                      'rooms',                      False),
+        # transactional data
+        ('patients',                   'patients',                   False),
+        ('diary_entries',              'practitioner_diary_entries', False),
+        ('appointments',               'appointments',               False),
+        ('invoices',                   'invoices',                   False),
+        ('invoice_items',              'invoice_items',              False),
+        ('payments',                   'payments',                   False),
+        ('treatment_plans',            'treatment_plans',            False),
+        ('treatment_plan_items',       'treatment_plan_items',       False),
+        ('recalls',                    'recalls',                    False),
+        ('nhs_claims',                 'nhs_claims',                 False),
+        ('patient_stats',              'patient_stats',              False),
+        ('payment_allocations',        'payment_allocations',        False),
+        ('payment_explanations',       'payment_explanations',       False),
+        ('treatment_appts',            'treatment_appointments',     False),
+        ('patient_referrals',          'patient_referrals',         False),
+    ]
+
+    # ── Phase 1: generate all tenant data and tag with tenant_id ─────────────
+    combined = {stage_name: [] for _, stage_name, _ in TABLE_MAP}
+
     for tid in tenant_ids:
         tdef = SEED_TENANTS[tid]
-        practice_name = tdef['practice']['name']
-        n_pat = tdef['n_patients']
-        print('=' * 60)
-        print(f'Tenant {tid}: {practice_name}  ({n_pat:,} patients)')
-        print('=' * 60)
-
-        print('  Generating...')
+        print(f'Generating Tenant {tid}: {tdef["practice"]["name"]}  '
+              f'({tdef["n_patients"]:,} patients)...', flush=True)
         data = generate_tenant(tdef)
         print(f"  patients={len(data['patients']):,}  "
               f"apts={len(data['appointments']):,}  "
@@ -593,43 +624,19 @@ def main():
               f"invoices={len(data['invoices']):,}  "
               f"claims={len(data['nhs_claims']):,}")
 
-        print('  Writing reference data...')
-        write_stage([data['practice']],           'practice',                  tid, load_ts)
-        write_stage(data['sites'],                'sites',                     tid, load_ts)
-        write_stage(data['users'],                'users',                     tid, load_ts)
-        write_stage(data['practitioners'],        'practitioners',             tid, load_ts)
-        write_stage(data['payment_plans'],        'payment_plans',             tid, load_ts)
-        write_stage(data['treatments'],           'treatments',                tid, load_ts)
-        write_stage(data['treatment_categories'], 'treatment_categories',      tid, load_ts)
-        write_stage(data['acquisition_sources'],  'acquisition_sources',       tid, load_ts)
-        write_stage(data['cancellation_reasons'], 'cancellation_reasons',      tid, load_ts)
-        write_stage(data['waiting_lists'],        'waiting_lists',             tid, load_ts)
-        write_stage(data['sundries'],             'sundries',                  tid, load_ts)
-        write_stage(data['contracts'],            'contracts',                 tid, load_ts)
-        write_stage(data['fees'],                 'fees',                      tid, load_ts)
-        write_stage(data['diary_breaks'],         'practitioner_diary_breaks', tid, load_ts)
-        write_stage(data['rooms'],                'rooms',                     tid, load_ts)
+        for data_key, stage_name, wrap in TABLE_MAP:
+            records = [data[data_key]] if wrap else data[data_key]
+            for r in records:
+                r['tenant_id']          = str(tid)
+                r['DW_Stage_Loaded_At'] = load_ts
+            combined[stage_name].extend(records)
 
-        print('  Writing transactional data...')
-        write_stage(data['patients'],             'patients',                  tid, load_ts)
-        write_stage(data['diary_entries'],        'practitioner_diary_entries',tid, load_ts)
-        write_stage(data['appointments'],         'appointments',              tid, load_ts)
-        write_stage(data['invoices'],             'invoices',                  tid, load_ts)
-        write_stage(data['invoice_items'],        'invoice_items',             tid, load_ts)
-        write_stage(data['payments'],             'payments',                  tid, load_ts)
-        write_stage(data['treatment_plans'],      'treatment_plans',           tid, load_ts)
-        write_stage(data['treatment_plan_items'], 'treatment_plan_items',      tid, load_ts)
-        write_stage(data['recalls'],              'recalls',                   tid, load_ts)
-        write_stage(data['nhs_claims'],           'nhs_claims',                tid, load_ts)
-        write_stage(data['patient_stats'],        'patient_stats',             tid, load_ts)
-        write_stage(data['payment_allocations'],  'payment_allocations',       tid, load_ts)
-        write_stage(data['payment_explanations'], 'payment_explanations',      tid, load_ts)
-        write_stage(data['treatment_appts'],      'treatment_appointments',    tid, load_ts)
-        write_stage(data['patient_referrals'],    'patient_referrals',         tid, load_ts)
+    # ── Phase 2: write each table as a single full overwrite ─────────────────
+    print('\nWriting to OneLake (full overwrite per table)...')
+    for _, stage_name, _ in TABLE_MAP:
+        write_stage(combined[stage_name], stage_name)
 
-        print(f'  Tenant {tid} complete.\n')
-
-    print('All tenants seeded. Run Bronze.usp_Load_All for tenants 11-14.')
+    print('\nAll tenants seeded. Run Bronze.usp_Load_All for tenants 11-14.')
 
 
 if __name__ == '__main__':
