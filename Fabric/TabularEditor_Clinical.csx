@@ -10,9 +10,12 @@ Action<string,string,string> add = (name, dax, fmt) => {
     if (fmt != "") m.FormatString = fmt;
 };
 
+
+
 // ── Value measures ───────────────────────────────────────────────────────────
 
-// Acceptance rate: plans that have progressed to having a start date / all plans
+// Acceptance rate: plans that have progressed to having a start date / all plans.
+// Filters by practitioner via the List Treatment Plans -> List Practitioners relationship.
 add("Treatment Acceptance Rate",
     @"DIVIDE(
     CALCULATE(SUM('List Treatment Plans'[Treatment Plan Count]),
@@ -20,29 +23,23 @@ add("Treatment Acceptance Rate",
     SUM('List Treatment Plans'[Treatment Plan Count]))",
     "#,##0.0%");
 
-// Open courses: point-in-time count from KPI Snapshot (A1) — most recent weekly snapshot in slicer
+// Open courses: live count of incomplete, started plans from List Treatment Plans.
+// Filters by practitioner via the List Treatment Plans -> List Practitioners relationship.
+// (Previously read from _KPI Snapshot which had no practitioner grain.)
 add("Open Courses",
-    @"VAR snap_fk =
-    MAXX(
-        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-        '_KPI Snapshot'[fk Date]
-    )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date]        = snap_fk,
-    '_KPI Snapshot'[Metric]         = ""open_courses"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
-)",
+    @"CALCULATE(
+    SUM('List Treatment Plans'[Treatment Plan Count]),
+    'List Treatment Plans'[Completed] = FALSE(),
+    NOT ISBLANK('List Treatment Plans'[Start Date]))",
     "#,##0");
 
-// Open courses with no future appointment booked
+// Open courses with no future appointment booked.
+// Filters by practitioner via the aggregate table's existing fk Practitioner relationship.
 add("Open Courses Without Appointment",
     @"CALCULATE(
     DISTINCTCOUNT('Aggregate Site Patient Practitioner Daily'[fk Patient]),
     'Aggregate Site Patient Practitioner Daily'[Open Treatment Plan] > 0,
-    'Aggregate Site Patient Practitioner Daily'[Future Appointment] = FALSE(),
-    REMOVEFILTERS('List Practitioners'))",
+    'Aggregate Site Patient Practitioner Daily'[Future Appointment] = FALSE())",
     "#,##0");
 
 // Exam ratio: exam appointments / all appointments

@@ -9,6 +9,7 @@
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *05     22/05/2026  AIH Add Practitioner_Count (1 real, 0 sentinel) for SUM-based measures
+--    *06     05/06/2026  AIH Default Active to 1 (not 0) when Practitioner_Active is NULL — T11+ test data omits the field
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
@@ -55,7 +56,7 @@ BEGIN
             NULLIF(TRIM(User_Mobile_Phone),'')                              AS Mobile_Phone,
             NULLIF(TRIM(User_Role),'')                                      AS Role,
             CAST(User_Permission_Level AS INT)                              AS Permission_Level,
-            CAST(ISNULL(Practitioner_Active,0) AS BIT)                      AS Active,
+            CAST(ISNULL(Practitioner_Active,1) AS BIT)                      AS Active,
             NULLIF(TRIM(Practitioner_Colour),'')                            AS Colour,
             NULLIF(TRIM(Practitioner_GDC_Number),'')                        AS GDC_Number,
             NULLIF(TRIM(Practitioner_NHS_Number),'')                        AS NHS_Number,

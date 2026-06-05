@@ -247,11 +247,8 @@ T1 = {
         _contract(1,"site-ng","FDX03",2026,2625,28.80,loc_id="QU9",contract_number="16C/FDX03/D"),
     ],
     "acquisition_sources": [
-        _acq("acq-1-01","Walk-in / Off the Street"),_acq("acq-1-02","Google Search"),
-        _acq("acq-1-03","Word of Mouth"),_acq("acq-1-04","NHS Referral"),
-        _acq("acq-1-05","Patient Referral"),_acq("acq-1-06","Website / Online"),
-        _acq("acq-1-07","Social Media"),_acq("acq-1-08","Local Advertisement"),
-        _acq("acq-1-09","School / Employer Scheme"),_acq("acq-1-10","Returning Patient"),
+        _acq("acq-1-01","Online Marketing"),_acq("acq-1-02","Walk-in"),
+        _acq("acq-1-03","Local Ad Campaign"),
     ],
     "cancellation_reasons": [
         _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
@@ -376,10 +373,8 @@ T2 = {
     ],
     "contracts": [],
     "acquisition_sources": [
-        _acq("acq-2-01","Walk-in / Off the Street"),_acq("acq-2-02","Google Search"),
-        _acq("acq-2-03","Patient Referral"),_acq("acq-2-04","Website / Online"),
-        _acq("acq-2-05","Social Media"),_acq("acq-2-06","Specialist Referral"),
-        _acq("acq-2-07","Instagram / Ads"),_acq("acq-2-08","Local Dentist Referral"),
+        _acq("acq-2-01","Online Marketing"),_acq("acq-2-02","Walk-in"),
+        _acq("acq-2-03","Local Ad Campaign"),
     ],
     "cancellation_reasons": [
         _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
@@ -483,10 +478,8 @@ T3 = {
         _contract(3,"site-mb","FMC02",2026,1350,28.50,loc_id="QOP",contract_number="16C/FMC02/D"),
     ],
     "acquisition_sources": [
-        _acq("acq-3-01","Walk-in / Off the Street"),_acq("acq-3-02","Google Search"),
-        _acq("acq-3-03","Word of Mouth"),_acq("acq-3-04","NHS Referral"),
-        _acq("acq-3-05","Website / Online"),_acq("acq-3-06","Patient Referral"),
-        _acq("acq-3-07","Social Media"),
+        _acq("acq-3-01","Online Marketing"),_acq("acq-3-02","Walk-in"),
+        _acq("acq-3-03","Local Ad Campaign"),
     ],
     "cancellation_reasons": [
         _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),
@@ -569,9 +562,8 @@ T4 = {
         _contract(4,"site-bm","FBM01",2026,2250,28.80,loc_id="QHL",contract_number="16C/FBM01/D"),
     ],
     "acquisition_sources": [
-        _acq("acq-4-01","Walk-in / Off the Street"),_acq("acq-4-02","Google Search"),
-        _acq("acq-4-03","Word of Mouth"),_acq("acq-4-04","NHS Referral"),
-        _acq("acq-4-05","Patient Referral"),_acq("acq-4-06","Website / Online"),
+        _acq("acq-4-01","Online Marketing"),_acq("acq-4-02","Walk-in"),
+        _acq("acq-4-03","Local Ad Campaign"),
     ],
     "cancellation_reasons": [
         _cr(1,"Patient cancelled - short notice"),_cr(2,"Patient cancelled - in advance"),

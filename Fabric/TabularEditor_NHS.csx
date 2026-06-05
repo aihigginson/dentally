@@ -42,6 +42,37 @@ add("NHS UDA Completion Rate",
 // If you need a standalone copy, uncomment and rename below.
 // add("NHS Revenue (NHS)", @"[NHS Revenue]", ""£#,##0"");
 
+// ── FY YTD measures ──────────────────────────────────────────────────────────
+// NHS contracts run April -> March. These measures lock to the current FY
+// regardless of any date slicer selection, so the NHS page always shows
+// in-year progress without requiring a specific date grouping to be selected.
+
+add("NHS UDA Contracted FY",
+    @"VAR today    = TODAY()
+VAR fy_start = IF(MONTH(today) >= 4, DATE(YEAR(today), 4, 1), DATE(YEAR(today)-1, 4, 1))
+VAR fy_end   = DATE(YEAR(fy_start)+1, 3, 31)
+RETURN
+CALCULATE(
+    SUM('List Treatment Plans'[NHS UDA Value]),
+    'List Treatment Plans'[Start Date] >= fy_start,
+    'List Treatment Plans'[Start Date] <= fy_end)",
+    "#,##0.00");
+
+add("NHS UDA Completed FY YTD",
+    @"VAR today    = TODAY()
+VAR fy_start = IF(MONTH(today) >= 4, DATE(YEAR(today), 4, 1), DATE(YEAR(today)-1, 4, 1))
+RETURN
+CALCULATE(
+    SUM('List Treatment Plans'[NHS Completed UDA Value]),
+    'List Treatment Plans'[Completed] = TRUE(),
+    'List Treatment Plans'[Completed Date] >= fy_start,
+    'List Treatment Plans'[Completed Date] <= today)",
+    "#,##0.00");
+
+add("NHS UDA Completion Rate FY YTD",
+    @"DIVIDE([NHS UDA Completed FY YTD], [NHS UDA Contracted FY])",
+    "#,##0.0%");
+
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("NHS UDAs Target",

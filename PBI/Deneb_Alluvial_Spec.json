@@ -854,10 +854,12 @@
                     "align": { "signal": "datum.si === 0 ? 'right' : 'left'" },
                     "fontSize": { "value": 10 },
                     "fontFamily": { "value": "Segoe UI" },
-                    "fill": { "signal": "cLabelText" }
+                    "fill": { "signal": "cLabelText" },
+                    "limit": { "value": 140 }
                 },
                 "update": {
-                    "text": { "signal": "datum.lab + ' (' + datum.display_tot + ')'" }
+                    "text": { "signal": "datum.lab + ' (' + datum.display_tot + ')'" },
+                    "opacity": { "signal": "(datum.y1 - datum.y0) >= 4 ? 1 : 0" }
                 }
             }
         },

@@ -356,7 +356,7 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
-    <div class="nav-tab" data-section="targets" id="nav-targets" style="display:none">Targets</div>
+
     <button class="filter-toggle" id="filter-toggle">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
@@ -435,21 +435,6 @@
         <div class="embed-slot embed-full" id="embed-nhs">Please Wait...</div>
     </section>
 
-    <!-- ── TARGETS ── -->
-    <section class="section" id="section-targets">
-        <div class="section-header">
-            <div class="section-title">Targets</div>
-            <div class="section-controls">
-                <span class="targets-status" id="targets-status"></span>
-                <button class="targets-save-btn" id="targets-save-btn">Save changes</button>
-            </div>
-        </div>
-        <div class="targets-wrap">
-            <div class="targets-loading" id="targets-loading">Loading&hellip;</div>
-            <table class="targets-table" id="targets-table" style="display:none"></table>
-        </div>
-    </section>
-
 </main>
 
 <script src="/msal-browser.min.js"></script>
@@ -457,9 +442,13 @@
 <script>
 
     // ── MSAL auth state ───────────────────────────────────────────────────────
-    const MSAL_SCOPES   = ['openid', 'profile', 'email'];
-    let msalInstance    = null;
-    let msalAccount     = null;
+    const MSAL_SCOPES = ['openid', 'profile', 'email'];
+    let msalInstance  = null;
+    let msalAccount   = null;
+
+    // Mobile browsers block popups — use redirect flow instead.
+    // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
+    function _onMobile() { return window.innerWidth < 768; }
 
     async function initAuth() {
         const config = await fetch('/api/auth-config').then(r => r.json());
@@ -470,10 +459,15 @@
                 authority:   'https://login.microsoftonline.com/common',
                 redirectUri: window.location.origin,
             },
-            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true },
         });
 
-        await msalInstance.handleRedirectPromise();
+        // Catch the result of a loginRedirect / acquireTokenRedirect return
+        const redirectResult = await msalInstance.handleRedirectPromise();
+        if (redirectResult?.account) {
+            msalAccount = redirectResult.account;
+            return;
+        }
 
         const accounts = msalInstance.getAllAccounts();
         if (accounts.length > 0) {
@@ -483,7 +477,7 @@
 
         // No cached session — show sign-in button and wait for user interaction
         return new Promise((resolve) => {
-            const btn = document.getElementById('auth-signin-btn');
+            const btn     = document.getElementById('auth-signin-btn');
             const spinner = document.getElementById('auth-spinner');
             spinner.style.display = 'none';
             document.getElementById('auth-status').textContent = 'Please sign in to continue.';
@@ -493,6 +487,11 @@
                 spinner.style.display = '';
                 document.getElementById('auth-status').textContent = 'Signing you in...';
                 try {
+                    if (_onMobile()) {
+                        // Navigates away — result caught by handleRedirectPromise on return
+                        await msalInstance.loginRedirect({ scopes: MSAL_SCOPES });
+                        return;
+                    }
                     const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES });
                     msalAccount  = result.account;
                     btn.style.display = 'none';
@@ -512,6 +511,10 @@
             return r.idToken;
         } catch (e) {
             if (e instanceof msal.InteractionRequiredAuthError) {
+                if (_onMobile()) {
+                    await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+                    return null; // never reached — page navigates away
+                }
                 const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
                 msalAccount = r.account;
                 return r.idToken;
@@ -532,6 +535,10 @@
         }
         if (res.status === 401) {
             try {
+                if (_onMobile()) {
+                    await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+                    return res; // never reached
+                }
                 const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
                 msalAccount = r.account;
                 const retry = await fetch(url, {
@@ -559,6 +566,10 @@
 
     document.getElementById('contact-switch-btn').addEventListener('click', async () => {
         try {
+            if (_onMobile()) {
+                await msalInstance.loginRedirect({ scopes: MSAL_SCOPES, prompt: 'select_account' });
+                return;
+            }
             const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES, prompt: 'select_account' });
             msalAccount  = result.account;
             document.getElementById('contact-overlay').style.display = 'none';
@@ -578,7 +589,6 @@
         const o = document.getElementById('header-org');
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
-        if (data.maintain_targets) document.getElementById('nav-targets').style.display = '';
 
         document.getElementById('auth-overlay').style.display = 'none';
 
@@ -710,6 +720,18 @@
     }
 
     document.addEventListener('click', () => closePageDropdown());
+
+    // ── Page-list cache (sessionStorage) ─────────────────────────────────────
+    // Avoids the getPages() async round-trip on every section activation.
+    // Pages are cached per report name; refreshed in the background after each load.
+    function _getCachedPages(reportName) {
+        try { const r = sessionStorage.getItem('pbi_pages_' + reportName); return r ? JSON.parse(r) : null; }
+        catch (_) { return null; }
+    }
+    function _setCachedPages(reportName, pages) {
+        try { sessionStorage.setItem('pbi_pages_' + reportName, JSON.stringify(pages)); }
+        catch (_) {}
+    }
 
     function buildSubnav(sectionKey, pages, report) {
         const prev = sectionSubnavData[sectionKey];
@@ -942,7 +964,12 @@
                 const r = window.powerbi.embed(slot, cfg);
                 embeddedReports[sectionKey] = r;
                 attachEmbedOverlay(slot, r);
-                r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} applyFilters(); });
+                r.on('loaded', async () => {
+                    const pageCached = _getCachedPages(reportName);
+                    if (pageCached) buildSubnav(sectionKey, pageCached, r);
+                    applyFilters();
+                    try { const live = await r.getPages(); _setCachedPages(reportName, live); buildSubnav(sectionKey, live, r); } catch (_) {}
+                });
             });
         }, 300);
     });
@@ -980,8 +1007,14 @@
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
             r.on('loaded', async () => {
-                try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {}
+                const cached = _getCachedPages(reportName);
+                if (cached) buildSubnav(sectionKey, cached, r);
                 applyFilters();
+                try {
+                    const live = await r.getPages();
+                    _setCachedPages(reportName, live);
+                    buildSubnav(sectionKey, live, r);
+                } catch (_) {}
             });
             return r;
         }
