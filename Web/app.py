@@ -218,11 +218,11 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
-        active_w = "AND Active = 1" if active_only else ""
         cur.execute(
             f"SELECT Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
-            f"WHERE  Tenant_ID IN ({placeholders}) {active_w} "
+            f"WHERE  Tenant_ID IN ({placeholders}) "
+            f"AND    pk_Practitioner > 0 "
             f"ORDER BY Full_Name",
             tids,
         )
