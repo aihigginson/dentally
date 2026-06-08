@@ -112,8 +112,8 @@ BEGIN
                     LEFT(Preferred_Name,100)                                 AS Preferred_Name,
                     LEFT(Preferred_Phone_Number, 50)                         AS Preferred_Phone_Number,
                     TRY_CAST(Date_Of_Birth AS date)                          AS Date_Of_Birth,
-                    -- Bronze Gender is decimal; convert numeric code to text
-                    CASE CAST(TRY_CAST(ROUND(CAST(Gender AS float),0) AS int) AS VARCHAR(5))
+                    -- Bronze Gender may be a numeric code (0/1/2) or text (Male/Female)
+                    CASE CAST(TRY_CAST(ROUND(TRY_CAST(Gender AS float),0) AS int) AS VARCHAR(5))
                         WHEN '0' THEN 'Unknown'
                         WHEN '1' THEN 'Male'
                         WHEN '2' THEN 'Female'

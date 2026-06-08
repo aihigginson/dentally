@@ -690,8 +690,14 @@ def gen_fees(tdef, treatments, payment_plans):
                 "multiple_pricing": code in {1421,1422,1423},
                 "price_one": _fmt(price),
                 "price_two": None,
+                "price_three": None,
+                "price_four": None,
+                "price_five": None,
                 "duration_one": dur,
                 "duration_two": None,
+                "duration_three": None,
+                "duration_four": None,
+                "duration_five": None,
             })
     return out
 
@@ -1048,6 +1054,12 @@ def gen_patients(tdef, rng):
         is_active = rng.random() < active_rate
         archived_reason = rng.choice(["Moved away","Deceased","No longer a patient",None]) if not is_active else None
 
+        # medical alert: ~5% chance
+        has_alert = rng.random() < 0.05
+        alert_texts = ["Penicillin allergy","Latex allergy","Warfarin","Diabetes","Hypertension","Asthma"]
+
+        pp_def = pp_by_id.get(pp_id, {})
+
         patients.append({
             "id": i,
             "title": pat_title,
@@ -1056,12 +1068,15 @@ def gen_patients(tdef, rng):
             "middle_name": None,
             "last_name": last,
             "date_of_birth": str(dob),
+            "gender": "Female" if is_female else "Male",
             "email_address": f"{first.lower()}.{last.lower()}{i}@example.com" if rng.random() < email_rate else None,
             "mobile_phone": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}" if rng.random() < phone_rate else None,
+            "home_phone": f"0{rng.randint(1000,9999)} {rng.randint(100000,999999)}" if rng.random() < 0.20 else None,
             "work_phone": work_phone,
             "address_line_1": f"{house_num} {street}",
             "address_line_2": None,
             "town": town,
+            "county": None,
             "postcode": postcode,
             "site_id": site_id,
             "dentist_id": dentist["id"],
@@ -1070,9 +1085,17 @@ def gen_patients(tdef, rng):
             "account_id": i,
             "active": is_active,
             "nhs_exemption_code": exemption,
+            "nhs_number": f"NHS{rng.randint(100000000,999999999)}" if use_nhs else None,
+            "ni_number": f"{rng.choice('ABCEGHJKLMNOPRSTWXYZ')}{rng.choice('ABCEGHJKLMNPRSTWXYZ')}{rng.randint(100000,999999)}{rng.choice('ABCD')}" if age >= 16 else None,
             "ethnicity_id": ethnicity,
             "acquisition_source_id": acq_id,
             "recall_method": recall_method,
+            "dentist_recall_interval": pp_def.get("dentist_recall_interval", 6),
+            "hygienist_recall_interval": pp_def.get("hygienist_recall_interval", 6),
+            "marketing": rng.random() < 0.70,
+            "medical_alert": has_alert,
+            "medical_alert_text": rng.choice(alert_texts) if has_alert else None,
+            "occupation": None,
             "use_email": use_email,
             "use_sms": use_sms,
             "preferred_phone_number": preferred_phone,
@@ -1240,6 +1263,13 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "completed_at": _iso(d, end_t) if state == "completed" else None,
                 "cancelled_at": _iso(d) if state == "cancelled" else None,
                 "did_not_attend_at": _iso(d) if state == "did_not_attend" else None,
+                "uuid": _u5("apt", tid, apt_id),
+                "patient_name": None,
+                "patient_image_url": None,
+                "notes": None,
+                "treatment_description": None,
+                "confirmed_at": None,
+                "in_surgery_at": _iso(d, start_t) if state == "completed" else None,
             })
 
             if state == "completed":
@@ -1285,6 +1315,13 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
+                                "uuid": _u5("apt", tid, apt_id),
+                                "patient_name": None,
+                                "patient_image_url": None,
+                                "notes": None,
+                                "treatment_description": None,
+                                "confirmed_at": None,
+                                "in_surgery_at": _iso(td, ts_t) if tx_state == "completed" else None,
                             })
                             tx_last_date = td
 
@@ -1325,6 +1362,13 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
                                 "cancelled_at": None,
                                 "did_not_attend_at": None,
+                                "uuid": _u5("apt", tid, apt_id),
+                                "patient_name": None,
+                                "patient_image_url": None,
+                                "notes": None,
+                                "treatment_description": None,
+                                "confirmed_at": None,
+                                "in_surgery_at": _iso(hd, hs_t) if hyg_state == "completed" else None,
                             })
 
         # recall_booking_rate of patients who have had exams get a future booked recall appointment.
@@ -1361,6 +1405,13 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                     "completed_at":           None,
                     "cancelled_at":           None,
                     "did_not_attend_at":      None,
+                    "uuid":                   _u5("apt", tid, apt_id),
+                    "patient_name":           None,
+                    "patient_image_url":      None,
+                    "notes":                  None,
+                    "treatment_description":  None,
+                    "confirmed_at":           None,
+                    "in_surgery_at":          None,
                 })
 
     return appointments
@@ -1898,6 +1949,7 @@ def gen_nhs_claims(tdef, plans, patients_by_id, contracts_by_site, rng):
             "awarded_dentist_charge": _fmt(awarded_dentist_charge),
             "ni_calculated_dentist_fee": _fmt(round(dentist_charge * 0.9, 2)),
             "ni_calculated_patient_fee": _fmt(patient_charge),
+            "status": status,
             "claim_status": status,
             "submitted_date": submitted,
             "approval_date": approved,
@@ -1963,6 +2015,7 @@ def gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat):
             "total_paid": _fmt(total_pay),
             "total_invoiced": _fmt(total_inv),
             "nhs_exemption_code": pat.get("nhs_exemption_code"),
+            "created_at": _iso(TODAY),
             "updated_at": _iso(TODAY),
         })
     return stats

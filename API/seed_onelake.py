@@ -23,8 +23,8 @@ from generate_data import generate_tenant, _u5, _pp, _sundry, _wl, _acq, _cr, _c
 # ── OneLake config ────────────────────────────────────────────────────────────
 # Workspace GUID: visible in Fabric URL (e.g. /groups/{GUID}/)
 # Lakehouse GUID: open LH_Dentally in Fabric → copy from URL (/lakehouses/{GUID}/)
-WORKSPACE_GUID = "cc17dd89-e547-461c-98e5-7f1ae00c496f"
-LAKEHOUSE_GUID = "e8fbfd57-f8ab-4344-a161-3837a33d1c35"
+WORKSPACE_GUID = "22e235e2-7a32-4451-b573-8d5eb8532a23"
+LAKEHOUSE_GUID = "e6cc2011-bd96-4164-8f21-ceb340e25449"
 ONELAKE_HOST   = "onelake.dfs.fabric.microsoft.com"
 
 def table_path(table_name: str) -> str:

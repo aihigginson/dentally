@@ -38,12 +38,6 @@ CREATE VIEW [Stage].[Patients] AS
 SELECT * FROM LH_Dentally.dbo.stage_patients
 GO
 
-DROP VIEW IF EXISTS [Stage].[Accounts]
-GO
-CREATE VIEW [Stage].[Accounts] AS
-SELECT * FROM LH_Dentally.dbo.stage_accounts
-GO
-
 DROP VIEW IF EXISTS [Stage].[Appointments]
 GO
 CREATE VIEW [Stage].[Appointments] AS
@@ -100,6 +94,16 @@ GO
 -- own sub-batch).  A warning is printed for any that are skipped.
 -- Re-running Deploy_To_Fabric.ps1 after Stage_Ingest will create them.
 -- -----------------------------------------------------------------------
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Accounts]', 'V') IS NOT NULL DROP VIEW [Stage].[Accounts];
+    EXEC('CREATE VIEW [Stage].[Accounts] AS SELECT * FROM LH_Dentally.dbo.stage_accounts');
+    PRINT 'Created Stage.Accounts';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Accounts skipped — stage_accounts not yet in LH_Dentally (run Stage_Ingest first)';
+END CATCH;
+GO
 
 BEGIN TRY
     IF OBJECT_ID('[Stage].[Practice]', 'V') IS NOT NULL DROP VIEW [Stage].[Practice];

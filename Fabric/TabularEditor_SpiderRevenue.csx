@@ -11,19 +11,21 @@
 //   AVERAGEX of the ratio = practice_actual / practice_target — meaningful for avg web.
 //   Fallback when no target: individual = actual / practice_average (vs average).
 //
-// Rate/point-in-time axes (Plan Value):
-//   Target from _Targets is already per-practitioner — use directly.
+// Rate/point-in-time axes (Plan Value, Discounts, Deposit Value):
+//   Target from _Effective Targets is site-level — same threshold for all practitioners.
+//   Fallback when no target: individual = actual / practice_average.
+//   Plan Value routes via _Treatment Plan Items[fk_Practitioner] → plan value on List Treatment Plans.
+//   (List Treatment Plans[Practitioner_ID] is a raw int with no PBI relationship.)
 //
-// Dummy axes (Discounts, Deposit Value):
-//   Return 1 (neutral, at target ring) until real data exists.
-//
-// Lower-is-better inversion (Outstanding Inv):
-//   Individual = per_prac_target / actual  → above target ring = below threshold (good).
+// Lower-is-better inversion (Outstanding Inv, Discounts):
+//   Individual = target / actual  → above target ring = below threshold (good).
+//   actual = 0 → perfect → return 2 (capped max).  BLANK → no data → return 1 (neutral).
 //
 // History:
 //   *01  21/05/2026  AIH  Initial
 //   *02  21/05/2026  AIH  AVERAGEX + avg-fallback for axes without _Targets entries
 //   *03  21/05/2026  AIH  Ratio architecture: all individual = ratio vs per-prac target
+//   *04  08/06/2026  AIH  Real DAX for Discounts and Deposit Value (was hardcoded 1)
 
 var folder = "Spider Revenue";
 var table  = "_Measures";
@@ -78,21 +80,54 @@ RETURN IF(ISBLANK(practice_tgt),
     IF(actual = 0, 2, IFERROR(DIVIDE(share, actual), 2)))",
     @"0.00");
 
-// Rate: target from _Targets is per-practitioner already
+// Rate: average private value of plans this practitioner has items on.
+// Route via _Treatment Plan Items (has fk_Practitioner) → List Treatment Plans (has Private Treatment Value).
+// Filter to Private Treatment Value > 0 to exclude NHS plans with £0 value.
 add("Spider Rev Plan Value",
-    @"VAR tgt      = [Average Plan Value Target]
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Average Plan Value])
-RETURN IFERROR(DIVIDE([Average Plan Value], IF(ISBLANK(tgt), fallback, tgt)), 0)",
+    @"VAR _plan_vals =
+    FILTER(
+        ADDCOLUMNS(
+            DISTINCT('_Treatment Plan Items'[fk Treatment Plan]),
+            ""_pv"", CALCULATE(MAX('List Treatment Plans'[Private Treatment Value]))
+        ),
+        [_pv] > 0
+    )
+VAR actual   = AVERAGEX(_plan_vals, [_pv])
+VAR fallback = AVERAGEX(
+    ALL('List Practitioners'),
+    AVERAGEX(
+        FILTER(
+            ADDCOLUMNS(
+                DISTINCT('_Treatment Plan Items'[fk Treatment Plan]),
+                ""_pv"", CALCULATE(MAX('List Treatment Plans'[Private Treatment Value]))
+            ),
+            [_pv] > 0
+        ), [_pv]))
+VAR tgt      = [Average Plan Value Target]
+RETURN IFERROR(DIVIDE(actual, IF(ISBLANK(tgt), fallback, tgt)), 0)",
     @"0.00");
 
-// Dummy — returns 1 (neutral, at target ring) until real data flows
+// Lower-is-better: target_rate / actual_rate → above target ring = fewer discounts (good)
+// actual = 0 → no discounts at all → perfect score (2); BLANK → no invoice data → neutral (1)
 add("Spider Rev Discounts",
-    @"1",
+    @"VAR actual   = [Discounts]
+VAR tgt      = [Discounts Target]
+VAR fallback = AVERAGEX(ALL('List Practitioners'), [Discounts])
+VAR denom    = IF(NOT ISBLANK(tgt), tgt, fallback)
+RETURN IF(
+    ISBLANK(actual), 1,
+    IF(actual = 0,   2,
+    IFERROR(DIVIDE(denom, actual), 1)))",
     @"0.00");
 
-// Dummy — returns 1 (neutral, at target ring) until deposit data available
+// Higher-is-better: actual_rate / target_rate → above target ring = higher deposit coverage (good)
+// BLANK actual → no payment data → neutral (0 rendered as centre)
 add("Spider Rev Deposit Value",
-    @"1",
+    @"VAR actual   = [Deposit Value]
+VAR tgt      = [Deposit Value Target]
+VAR fallback = AVERAGEX(ALL('List Practitioners'), [Deposit Value])
+VAR denom    = IF(NOT ISBLANK(tgt), tgt, IF(fallback > 0, fallback, 1))
+RETURN IFERROR(DIVIDE(actual, denom), 0)",
     @"0.00");
 
 // ── Targets — sentinel 1 on ratio scale ──────────────────────────────────────
@@ -128,9 +163,9 @@ add("Spider Rev Avg Plan Value",
     @"0.00");
 
 add("Spider Rev Avg Discounts",
-    @"1",
+    @"AVERAGEX(ALL('List Practitioners'), [Spider Rev Discounts])",
     @"0.00");
 
 add("Spider Rev Avg Deposit Value",
-    @"1",
+    @"AVERAGEX(ALL('List Practitioners'), [Spider Rev Deposit Value])",
     @"0.00");
