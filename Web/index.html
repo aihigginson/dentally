@@ -624,6 +624,18 @@
         'nhs':       'nhs',
     };
 
+    // ── Page list — update this when PBI reports change ──────────────────────
+    // Use the exact page names as they appear in Power BI Desktop.
+    // Sections with 0 or 1 entry show no dropdown.
+    const SECTION_PAGES = {
+        home:       ['Headlines', 'KPI Targets'],
+        revenue:    ['By Category', 'By Practitioner', 'Debt', 'Discounts', 'Deposits'],
+        patient:    ['Acquisition', 'Journeys', 'Retention'],
+        scheduling: ['Utilisation', 'Cancellations and DNA', 'BBYL', 'Availability'],
+        clinical:   ['Revenue', 'Other KPIs'],
+        nhs:        ['Key Metrics'],
+    };
+
     // ── State ────────────────────────────────────────────────────────────────
     let activeSection = 'home';
 
@@ -663,6 +675,7 @@
             loadTargets();
         } else {
             filterToggleBtn.style.visibility = '';
+            initSubnav(key);
             loadEmbedsInSection(key);
         }
     }
@@ -696,10 +709,11 @@
         dd.className = 'page-dropdown';
         data.pages.forEach(page => {
             const btn = document.createElement('button');
-            btn.className = 'page-dropdown-item' + (page.name === data.activePage ? ' active' : '');
+            btn.className = 'page-dropdown-item' + (page.name && page.name === data.activePage ? ' active' : '');
             btn.textContent = page.displayName;
             btn.addEventListener('click', e => {
                 e.stopPropagation();
+                if (!data.report || !page.name) return;
                 sectionSubnavData[sectionKey].activePage = page.name;
                 data.report.setPage(page.name);
                 closePageDropdown();
@@ -721,28 +735,41 @@
 
     document.addEventListener('click', () => closePageDropdown());
 
-    // ── Page-list cache (sessionStorage) ─────────────────────────────────────
-    // Avoids the getPages() async round-trip on every section activation.
-    // Pages are cached per report name; refreshed in the background after each load.
-    function _getCachedPages(reportName) {
-        try { const r = sessionStorage.getItem('pbi_pages_' + reportName); return r ? JSON.parse(r) : null; }
-        catch (_) { return null; }
-    }
-    function _setCachedPages(reportName, pages) {
-        try { sessionStorage.setItem('pbi_pages_' + reportName, JSON.stringify(pages)); }
-        catch (_) {}
+    // Populates the dropdown immediately from the static SECTION_PAGES list.
+    function initSubnav(sectionKey) {
+        const displayNames = SECTION_PAGES[sectionKey] || [];
+        const prev = sectionSubnavData[sectionKey];
+        const pages = displayNames.map(displayName => ({
+            displayName,
+            name: prev?.pages?.find(p => p.displayName === displayName)?.name || null,
+        }));
+        sectionSubnavData[sectionKey] = {
+            pages,
+            report:     prev?.report     || null,
+            activePage: prev?.activePage || null,
+        };
     }
 
-    function buildSubnav(sectionKey, pages, report) {
-        const prev = sectionSubnavData[sectionKey];
-        sectionSubnavData[sectionKey] = { pages, report, activePage: prev?.activePage || pages[0]?.name };
+    // Wires up the loaded report; resolves PBI internal page names and enables navigation.
+    async function attachReportToSubnav(sectionKey, report) {
+        const data = sectionSubnavData[sectionKey];
+        if (!data) return;
+        data.report = report;
+        try {
+            const live = await report.getPages();
+            data.pages.forEach(p => {
+                const match = live.find(lp => lp.displayName === p.displayName);
+                if (match) p.name = match.name;
+            });
+            if (!data.activePage) data.activePage = data.pages[0]?.name || null;
+        } catch (_) {}
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
             if (sectionSubnavData[sectionKey]) sectionSubnavData[sectionKey].activePage = active;
             if (activeDropdown?.sectionKey === sectionKey) {
                 activeDropdown.el.querySelectorAll('.page-dropdown-item').forEach(btn => {
-                    btn.classList.toggle('active', btn.textContent === pages.find(p => p.name === active)?.displayName);
+                    btn.classList.toggle('active', btn.textContent === data.pages.find(p => p.name === active)?.displayName);
                 });
             }
         });
@@ -962,11 +989,9 @@
                 const r = window.powerbi.embed(slot, cfg);
                 embeddedReports[sectionKey] = r;
                 attachEmbedOverlay(slot, r);
-                r.on('loaded', async () => {
-                    const pageCached = _getCachedPages(reportName);
-                    if (pageCached) buildSubnav(sectionKey, pageCached, r);
+                r.on('loaded', () => {
+                    attachReportToSubnav(sectionKey, r);
                     applyFilters();
-                    try { const live = await r.getPages(); _setCachedPages(reportName, live); buildSubnav(sectionKey, live, r); } catch (_) {}
                 });
             });
         }, 300);
@@ -1004,15 +1029,9 @@
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
-            r.on('loaded', async () => {
-                const cached = _getCachedPages(reportName);
-                if (cached) buildSubnav(sectionKey, cached, r);
+            r.on('loaded', () => {
+                attachReportToSubnav(sectionKey, r);
                 applyFilters();
-                try {
-                    const live = await r.getPages();
-                    _setCachedPages(reportName, live);
-                    buildSubnav(sectionKey, live, r);
-                } catch (_) {}
             });
             return r;
         }
@@ -1098,6 +1117,16 @@
         }
         Object.values(embeddedReports).forEach(r => r.setFilters(filters).catch(() => {}));
     }
+
+    // ── Page name helper ────────────────────────────────────────────────────
+    // Usage: navigate to a report, then in browser console run e.g. _debugPages('revenue')
+    // Shows the PBI display names — useful to verify they match SECTION_PAGES entries.
+    window._debugPages = async (sectionKey) => {
+        const r = embeddedReports[sectionKey];
+        if (!r) { console.log('Navigate to the', sectionKey, 'report first, then run this.'); return; }
+        const pages = await r.getPages();
+        console.log(JSON.stringify(pages.map(p => ({ name: p.name, displayName: p.displayName })), null, 2));
+    };
 
     // ── Init ─────────────────────────────────────────────────────────────────
     startApp();
