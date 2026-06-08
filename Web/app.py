@@ -177,6 +177,7 @@ def embed_token():
 def me():
     upn, err = _auth()
     if err:
+        print(f"AUTH FAIL: {err}", flush=True)
         return err
     try:
         conn = _fabric_conn()
@@ -203,6 +204,8 @@ def me():
             'maintain_targets': maintain_targets,
         })
     except Exception as e:
+        import traceback
+        print(f"ME ERROR: {e}\n{traceback.format_exc()}", flush=True)
         return jsonify({'error': str(e)}), 500
 
 
