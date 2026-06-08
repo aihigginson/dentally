@@ -114,6 +114,17 @@ def _fabric_conn(autocommit=False):
     )
     return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
+# ── Temporary network diagnostic ─────────────────────────────────────────────
+@app.route('/api/test-fabric-network')
+def test_fabric_network():
+    import socket
+    try:
+        sock = socket.create_connection((FABRIC_SERVER, 1433), timeout=5)
+        sock.close()
+        return jsonify({'status': 'reachable'})
+    except Exception as e:
+        return jsonify({'status': 'failed', 'error': str(e)})
+
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -177,7 +188,6 @@ def embed_token():
 def me():
     upn, err = _auth()
     if err:
-        print(f"AUTH FAIL: {err}", flush=True)
         return err
     try:
         conn = _fabric_conn()
