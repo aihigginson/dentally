@@ -158,6 +158,8 @@ def embed_token():
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}',
             headers=headers, timeout=10,
         )
+        if not r.ok:
+            return jsonify({'error': f'PBI API {r.status_code}', 'detail': r.text}), 502
         r.raise_for_status()
         report_meta = r.json()
         embed_url   = report_meta['embedUrl']
