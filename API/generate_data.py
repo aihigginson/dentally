@@ -2188,6 +2188,34 @@ def gen_patient_referrals(tdef, patients, apts_by_pat, rng):
     return referrals
 
 
+# ─── ACCOUNTS ────────────────────────────────────────────────────────────────
+
+def gen_accounts(patients, invoices, payments):
+    inv_by_pat  = {}
+    for inv in invoices:
+        inv_by_pat.setdefault(inv["patient_id"], []).append(float(inv["amount"]))
+    pay_by_pat  = {}
+    for pay in payments:
+        pay_by_pat.setdefault(pay["patient_id"], []).append(float(pay["amount"]))
+
+    accounts = []
+    for pat in patients:
+        pid      = pat["id"]
+        total_inv = sum(inv_by_pat.get(pid, []))
+        total_pay = sum(pay_by_pat.get(pid, []))
+        balance   = round(total_inv - total_pay, 2)
+        accounts.append({
+            "id":                            pat["account_id"],
+            "patient_id":                    pid,
+            "patient_name":                  f"{pat['first_name']} {pat['last_name']}",
+            "current_balance":               _fmt(balance),
+            "opening_balance":               "0.00",
+            "planned_nhs_treatment_value":   "0.00",
+            "planned_private_treatment_value": "0.00",
+        })
+    return accounts
+
+
 # ─── GENERATE TENANT ─────────────────────────────────────────────────────────
 
 def generate_tenant(tdef):
@@ -2296,6 +2324,7 @@ def generate_tenant(tdef):
         "patient_stats":       patient_stats,
         "recalls":             recalls,
         "patient_referrals":   patient_referrals,
+        "accounts":            gen_accounts(patients, invoices, payments),
     }
 
 
