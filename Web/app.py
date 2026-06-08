@@ -3,6 +3,7 @@ from flask_cors import CORS
 import msal
 import requests
 import pyodbc
+import struct
 import os
 from dotenv import load_dotenv
 import jwt
@@ -90,18 +91,28 @@ def _pbi_delegated_token():
     return result['access_token']
 
 
+def _fabric_access_token():
+    result = msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=f'https://login.microsoftonline.com/{TENANT_ID}',
+        client_credential=AZURE_CLIENT_SECRET,
+    ).acquire_token_for_client(scopes=['https://database.windows.net//.default'])
+    if 'access_token' not in result:
+        raise RuntimeError(result.get('error_description', 'Fabric token acquisition failed'))
+    return result['access_token']
+
 def _fabric_conn(autocommit=False):
+    token       = _fabric_access_token()
+    token_bytes = token.encode('utf-16-le')
+    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={FABRIC_SERVER},1433;"
         f"Database={FABRIC_DB};"
-        f"Authentication=ActiveDirectoryServicePrincipal;"
-        f"UID={AZURE_CLIENT_ID};"
-        f"PWD={AZURE_CLIENT_SECRET};"
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
     )
-    return pyodbc.connect(conn_str, autocommit=autocommit)
+    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
 # ── Public routes ─────────────────────────────────────────────────────────────
 
