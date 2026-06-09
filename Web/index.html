@@ -456,7 +456,7 @@
         msalInstance = new msal.PublicClientApplication({
             auth: {
                 clientId:    config.client_id,
-                authority:   `https://login.microsoftonline.com/${config.tenant_id}`,
+                authority:   'https://login.microsoftonline.com/common',
                 redirectUri: window.location.origin,
             },
             cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true },
