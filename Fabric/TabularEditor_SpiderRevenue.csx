@@ -28,6 +28,10 @@
 //   *04  08/06/2026  AIH  Real DAX for Discounts and Deposit Value (was hardcoded 1)
 //   *05  09/06/2026  AIH  Fix: compute actual via TREATAS so Deneb row context correctly
 //                         isolates per-practitioner figures from _Invoice Items / _Payments
+//   *06  09/06/2026  AIH  Fix: Plan Value denominator → practice average (not target) for
+//                         meaningful per-practitioner variance; Outstanding Invoices axis
+//                         replaced with per-practitioner _Invoice Items[Invoice Amount
+//                         Outstanding] as snapshot-based measure cannot split by practitioner
 
 var folder = "Spider Revenue";
 var table  = "_Measures";
@@ -76,13 +80,18 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
 // Lower-is-better: per-prac threshold / actual → >1 means below threshold (good)
-// actual=0 (zero debt) is a perfect score → return 2 (capped max)
+// Uses _Invoice Items[Invoice Amount Outstanding] per practitioner (the snapshot-based
+// [Outstanding Invoices] measure uses REMOVEFILTERS and cannot split by practitioner).
 add("Spider Rev Outstanding Invoices",
-    @"VAR practice_tgt = [Outstanding Invoices Target]
-VAR n        = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
-VAR share    = DIVIDE(practice_tgt, n)
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Outstanding Invoices])
-VAR actual   = COALESCE([Outstanding Invoices], 0)
+    @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
+VAR actual      = COALESCE(
+    CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner])),
+    0)
+VAR practice_tgt = [Outstanding Invoices Target]
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
+VAR share       = DIVIDE(practice_tgt, n)
+VAR fallback    = AVERAGEX(ALL('List Practitioners'),
+    CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(VALUES('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner])))
 RETURN IF(ISBLANK(practice_tgt),
     IF(actual = 0, 2, IFERROR(DIVIDE(fallback, actual), 1)),
     IF(actual = 0, 2, IFERROR(DIVIDE(share, actual), 2)))",
@@ -91,6 +100,9 @@ RETURN IF(ISBLANK(practice_tgt),
 // Rate: average private value of plans this practitioner has items on.
 // Route via _Treatment Plan Items (has fk_Practitioner) → List Treatment Plans (has Private Treatment Value).
 // Filter to Private Treatment Value > 0 to exclude NHS plans with £0 value.
+// Denominator is always the practice average (not the target) so the axis shows
+// above/below-average performance rather than above/below-target, which produces
+// meaningful per-practitioner variance regardless of target configuration.
 add("Spider Rev Plan Value",
     @"VAR _plan_vals =
     FILTER(
@@ -100,8 +112,8 @@ add("Spider Rev Plan Value",
         ),
         [_pv] > 0
     )
-VAR actual   = AVERAGEX(_plan_vals, [_pv])
-VAR fallback = AVERAGEX(
+VAR actual       = AVERAGEX(_plan_vals, [_pv])
+VAR practice_avg = AVERAGEX(
     ALL('List Practitioners'),
     AVERAGEX(
         FILTER(
@@ -111,8 +123,7 @@ VAR fallback = AVERAGEX(
             ),
             [_pv] > 0
         ), [_pv]))
-VAR tgt      = [Average Plan Value Target]
-RETURN IFERROR(DIVIDE(actual, IF(ISBLANK(tgt), fallback, tgt)), 0)",
+RETURN IFERROR(DIVIDE(actual, IF(practice_avg > 0, practice_avg, 1)), 0)",
     @"0.00");
 
 // Lower-is-better: target_rate / actual_rate → above target ring = fewer discounts (good)
