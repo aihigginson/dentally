@@ -41,7 +41,7 @@ BEGIN
             s.Acquisition_Source_ID                                 AS Acquisition_Source_ID,
             CAST(ISNULL(s.Active, 0) AS BIT)                        AS Active,
             NULLIF(TRIM(s.Name), '')                                AS Name,
-            NULLIF(TRIM(m.Standard_Acquisition_Source), '')         AS Standard_Acquisition_Source,
+            COALESCE(NULLIF(TRIM(m.Standard_Acquisition_Source),''), LEFT(NULLIF(TRIM(s.Name),''), 100)) AS Standard_Acquisition_Source,
             NULLIF(TRIM(s.Notes), '')                               AS Notes,
             CAST(1 AS INT)                                          AS Acquisition_Source_Count
         INTO #src

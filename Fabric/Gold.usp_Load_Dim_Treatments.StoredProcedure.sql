@@ -53,7 +53,7 @@ BEGIN
             CAST(t.NHS_Treatment_Cat AS INT)                AS NHS_Treatment_Cat,
             CAST(t.Treatment_Category_ID AS INT)            AS Treatment_Category_ID,
             NULLIF(TRIM(tc.Name),'')                        AS Treatment_Category_Name,
-            NULLIF(TRIM(m.Standard_Treatment_Category),'')  AS Standard_Treatment_Category,
+            COALESCE(NULLIF(TRIM(m.Standard_Treatment_Category),''), LEFT(NULLIF(TRIM(tc.Name),''), 100)) AS Standard_Treatment_Category,
             TRY_CAST(NULLIF(TRIM(t.Created_At),'') AS datetime2(3)) AS Created_Date,
             TRY_CAST(NULLIF(TRIM(t.Updated_At),'') AS datetime2(3)) AS Updated_Date,
             CAST(1 AS INT)                                            AS Treatment_Count

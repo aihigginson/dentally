@@ -45,7 +45,7 @@ BEGIN
             pp.Tenant_ID                                                    AS Tenant_ID,
             CAST(pp.Payment_Plan_ID AS INT)                                 AS Payment_Plan_ID,
             NULLIF(TRIM(pp.Payment_Plan_Name),'')                           AS Payment_Plan_Name,
-            NULLIF(TRIM(m.Standard_Payment_Plan),'')                        AS Standard_Payment_Plan,
+            COALESCE(NULLIF(TRIM(m.Standard_Payment_Plan),''), LEFT(NULLIF(TRIM(pp.Payment_Plan_Name),''), 100)) AS Standard_Payment_Plan,
             NULLIF(TRIM(pp.Payment_Plan_Patient_Friendly_Name),'')          AS Patient_Friendly_Name,
             CAST(ISNULL(pp.Payment_Plan_Active,0) AS BIT)                   AS Active,
             NULLIF(TRIM(pp.Payment_Plan_Colour),'')                         AS Colour,

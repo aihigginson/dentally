@@ -42,7 +42,7 @@ BEGIN
             LEFT(cr.Cancellation_Reason_ID, 50)                                                        AS Cancellation_Reason_ID,
             CAST(CASE WHEN cr.Archived = 1 THEN 0 ELSE 1 END AS BIT)                                  AS Is_Active,
             LEFT(cr.Reason, 255)                                                                       AS Reason,
-            NULLIF(TRIM(m.Standard_Cancellation_Reason), '')                                           AS Standard_Cancellation_Reason,
+            COALESCE(NULLIF(TRIM(m.Standard_Cancellation_Reason),''), LEFT(cr.Reason, 100))             AS Standard_Cancellation_Reason,
             LEFT(cr.Reason_Type, 50)                                                                   AS Reason_Type,
             CAST(CASE WHEN LOWER(ISNULL(cr.Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice,
             CAST(1 AS INT)                                                                             AS Cancellation_Reason_Count
