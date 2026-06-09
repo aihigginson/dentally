@@ -34,7 +34,7 @@
         },
         {
             "name": "sel_name",
-            "update": "show_sel ? data('dataset')[0]['Practitioner Name'] : ''"
+            "update": "show_sel ? data('dataset')[0]['Full Name'] : ''"
         },
         {
             "name": "avg_col",
