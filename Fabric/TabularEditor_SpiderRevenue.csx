@@ -26,6 +26,8 @@
 //   *02  21/05/2026  AIH  AVERAGEX + avg-fallback for axes without _Targets entries
 //   *03  21/05/2026  AIH  Ratio architecture: all individual = ratio vs per-prac target
 //   *04  08/06/2026  AIH  Real DAX for Discounts and Deposit Value (was hardcoded 1)
+//   *05  09/06/2026  AIH  Fix: compute actual via TREATAS so Deneb row context correctly
+//                         isolates per-practitioner figures from _Invoice Items / _Payments
 
 var folder = "Spider Revenue";
 var table  = "_Measures";
@@ -44,27 +46,33 @@ foreach (var existing in Model.Tables[table].Measures
 // ── Individual — all return a ratio ──────────────────────────────────────────
 
 add("Spider Rev Total Revenue",
-    @"VAR practice_tgt = [Total Revenue Target]
-VAR n        = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
-VAR share    = DIVIDE(practice_tgt, n)
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Total Revenue])
-RETURN IFERROR(DIVIDE([Total Revenue], IF(share > 0, share, fallback)), 0)",
+    @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
+VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR practice_tgt = [Total Revenue Target]
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
+VAR share       = DIVIDE(practice_tgt, n)
+VAR fallback    = AVERAGEX(ALL('List Practitioners'), [Total Revenue])
+RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
 add("Spider Rev Private Revenue",
-    @"VAR practice_tgt = [Private Revenue Target]
-VAR n        = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
-VAR share    = DIVIDE(practice_tgt, n)
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Private Revenue])
-RETURN IFERROR(DIVIDE([Private Revenue], IF(share > 0, share, fallback)), 0)",
+    @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
+VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] = 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR practice_tgt = [Private Revenue Target]
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
+VAR share       = DIVIDE(practice_tgt, n)
+VAR fallback    = AVERAGEX(ALL('List Practitioners'), [Private Revenue])
+RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
 add("Spider Rev NHS Revenue",
-    @"VAR practice_tgt = [NHS Revenue Target]
-VAR n        = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
-VAR share    = DIVIDE(practice_tgt, n)
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [NHS Revenue])
-RETURN IFERROR(DIVIDE([NHS Revenue], IF(share > 0, share, fallback)), 0)",
+    @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
+VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] > 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR practice_tgt = [NHS Revenue Target]
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALL('List Practitioners'))
+VAR share       = DIVIDE(practice_tgt, n)
+VAR fallback    = AVERAGEX(ALL('List Practitioners'), [NHS Revenue])
+RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
 // Lower-is-better: per-prac threshold / actual → >1 means below threshold (good)
@@ -110,10 +118,20 @@ RETURN IFERROR(DIVIDE(actual, IF(ISBLANK(tgt), fallback, tgt)), 0)",
 // Lower-is-better: target_rate / actual_rate → above target ring = fewer discounts (good)
 // actual = 0 → no discounts at all → perfect score (2); BLANK → no invoice data → neutral (1)
 add("Spider Rev Discounts",
-    @"VAR actual   = [Discounts]
-VAR tgt      = [Discounts Target]
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Discounts])
-VAR denom    = IF(NOT ISBLANK(tgt), tgt, fallback)
+    @"VAR prac_pks  = VALUES('List Practitioners'[pk Practitioner])
+VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_disc = CALCULATE(
+    SUMX(
+        SUMMARIZE('_Invoice Items',
+            '_Invoice Items'[Invoice ID],
+            ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
+            ""_items"", SUM('_Invoice Items'[Total Price])),
+        IF([_inv] > [_items], [_inv] - [_items], 0)),
+    TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual    = DIVIDE(prac_disc, prac_rev)
+VAR tgt       = [Discounts Target]
+VAR fallback  = AVERAGEX(ALL('List Practitioners'), [Discounts])
+VAR denom     = IF(NOT ISBLANK(tgt), tgt, fallback)
 RETURN IF(
     ISBLANK(actual), 1,
     IF(actual = 0,   2,
@@ -123,10 +141,13 @@ RETURN IF(
 // Higher-is-better: actual_rate / target_rate → above target ring = higher deposit coverage (good)
 // BLANK actual → no payment data → neutral (0 rendered as centre)
 add("Spider Rev Deposit Value",
-    @"VAR actual   = [Deposit Value]
-VAR tgt      = [Deposit Value Target]
-VAR fallback = AVERAGEX(ALL('List Practitioners'), [Deposit Value])
-VAR denom    = IF(NOT ISBLANK(tgt), tgt, IF(fallback > 0, fallback, 1))
+    @"VAR prac_pks = VALUES('List Practitioners'[pk Practitioner])
+VAR prac_dep  = CALCULATE(SUM('_Payments'[Deposit Amount]), TREATAS(prac_pks, '_Payments'[fk Practitioner]))
+VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual    = DIVIDE(prac_dep, prac_rev)
+VAR tgt       = [Deposit Value Target]
+VAR fallback  = AVERAGEX(ALL('List Practitioners'), [Deposit Value])
+VAR denom     = IF(NOT ISBLANK(tgt), tgt, IF(fallback > 0, fallback, 1))
 RETURN IFERROR(DIVIDE(actual, denom), 0)",
     @"0.00");
 
