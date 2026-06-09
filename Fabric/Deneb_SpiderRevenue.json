@@ -291,15 +291,15 @@
       "from": {"data": "ring_labels"},
       "encode": {
         "enter": {
-          "text":       {"signal": "datum.r === 0.5 ? 'Target' : format(datum.r * 200, '.0f') + '%'"},
-          "fill":       {"signal": "datum.r === 0.5 ? tgt_col : '#98a2b3'"},
-          "fontWeight": {"signal": "datum.r === 0.5 ? 'bold' : 'normal'"},
-          "fontSize":   {"value": 8},
-          "font":       {"value": "Segoe UI, sans-serif"}
+          "fontSize": {"value": 8},
+          "font":     {"value": "Segoe UI, sans-serif"}
         },
         "update": {
-          "x": {"field": "px", "offset": 4},
-          "y": {"field": "py", "offset": -3}
+          "x":          {"field": "px", "offset": 4},
+          "y":          {"field": "py", "offset": -3},
+          "text":       {"signal": "isValid(datum.r) ? (datum.r === 0.5 ? 'Target' : format(datum.r * 200, '.0f') + '%') : ''"},
+          "fill":       {"signal": "isValid(datum.r) && datum.r === 0.5 ? tgt_col : '#98a2b3'"},
+          "fontWeight": {"signal": "isValid(datum.r) && datum.r === 0.5 ? 'bold' : 'normal'"}
         }
       }
     },
@@ -308,7 +308,11 @@
       "description": "legend avg swatch",
       "type": "symbol",
       "encode": {
-        "enter": {"stroke": {"signal": "avg_col"}, "strokeWidth": {"value": 2.5}, "size": {"value": 80}, "shape": {"value": "stroke"}},
+        "enter": {
+          "fill": {"signal": "avg_col"}, "fillOpacity": {"value": 0.3},
+          "stroke": {"signal": "avg_col"}, "strokeWidth": {"value": 1.5},
+          "size": {"value": 60}
+        },
         "update": {"x": {"signal": "cx - 120"}, "y": {"value": 11}}
       }
     },
@@ -324,8 +328,15 @@
       "description": "legend sel swatch",
       "type": "symbol",
       "encode": {
-        "enter": {"stroke": {"signal": "sel_col"}, "strokeWidth": {"value": 2.5}, "size": {"value": 80}, "shape": {"value": "stroke"}},
-        "update": {"x": {"signal": "cx - 120"}, "y": {"value": 25}, "opacity": {"signal": "show_sel ? 1 : 0"}}
+        "enter": {
+          "fill": {"signal": "sel_col"}, "fillOpacity": {"value": 0.25},
+          "stroke": {"signal": "sel_col"}, "strokeWidth": {"value": 1.5},
+          "size": {"value": 60}
+        },
+        "update": {
+          "x": {"signal": "cx - 120"}, "y": {"value": 25},
+          "opacity": {"signal": "show_sel ? 1 : 0"}
+        }
       }
     },
     {
