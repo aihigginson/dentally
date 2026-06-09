@@ -13,23 +13,19 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // ── Value measures ───────────────────────────────────────────────────────────
 
 add("Total Revenue",
-    @"CALCULATE(
-    SUM('_Invoice Items'[Total Price]),
-    TREATAS(DISTINCT('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner]))",
+    @"SUM('_Invoice Items'[Total Price])",
     "£#,##0");
 
 add("NHS Revenue",
     @"CALCULATE(
     SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] > 0,
-    TREATAS(DISTINCT('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner]))",
+    '_Invoice Items'[NHS Charge] > 0)",
     "£#,##0");
 
 add("Private Revenue",
     @"CALCULATE(
     SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] = 0,
-    TREATAS(DISTINCT('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner]))",
+    '_Invoice Items'[NHS Charge] = 0)",
     "£#,##0");
 
 // Supports_Practitioner = 0 — always show site total; bypass practitioner slicer
@@ -381,24 +377,18 @@ RETURN dna_count * avg_appt_value",
     "£#,##0");
 
 add("Deposit Value",
-    @"DIVIDE(
-    CALCULATE(
-        SUM('_Payments'[Deposit Amount]),
-        TREATAS(DISTINCT('List Practitioners'[pk Practitioner]), '_Payments'[fk Practitioner])),
-    [Total Revenue])",
+    @"DIVIDE(SUM('_Payments'[Deposit Amount]), [Total Revenue])",
     "0.0%");
 
 add("Discounts",
-    @"CALCULATE(
-    DIVIDE(
-        SUMX(
-            SUMMARIZE('_Invoice Items',
-                '_Invoice Items'[Invoice ID],
-                ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
-                ""_items"", SUM('_Invoice Items'[Total Price])),
-            IF([_inv] > [_items], [_inv] - [_items], 0)),
-        [Total Revenue]),
-    TREATAS(DISTINCT('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner]))",
+    @"DIVIDE(
+    SUMX(
+        SUMMARIZE('_Invoice Items',
+            '_Invoice Items'[Invoice ID],
+            ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
+            ""_items"", SUM('_Invoice Items'[Total Price])),
+        IF([_inv] > [_items], [_inv] - [_items], 0)),
+    [Total Revenue])",
     "0.0%");
 
 add("Deposit Value Target",
