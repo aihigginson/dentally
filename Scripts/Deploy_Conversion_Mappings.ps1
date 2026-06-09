@@ -24,11 +24,6 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
 
 $FabricDir = Join-Path $PSScriptRoot '..\Fabric'
 
-$securePwd = Read-Host "Fabric password for $Username" -AsSecureString
-$bstr      = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePwd)
-$pwd       = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
 function Read-Fabric($file) {
     [System.IO.File]::ReadAllText((Join-Path $FabricDir $file), [System.Text.Encoding]::UTF8)
 }
@@ -129,7 +124,7 @@ $tmpFile = Join-Path $env:TEMP "Deploy_Conversion_Mappings_$(Get-Date -Format 'y
 Write-Host ""
 Write-Host "Deploying conversion mapping architecture to $Database @ $Server" -ForegroundColor Cyan
 
-& sqlcmd -S $Server -d $Database -G -U $Username -P $pwd -i "$tmpFile" -b
+& sqlcmd -S $Server -d $Database -G -U $Username -i "$tmpFile" -b
 $rc = $LASTEXITCODE
 
 Remove-Item $tmpFile -Force
