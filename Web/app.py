@@ -114,17 +114,6 @@ def _fabric_conn(autocommit=False):
     )
     return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
-# ── Temporary network diagnostic ─────────────────────────────────────────────
-@app.route('/api/test-fabric-network')
-def test_fabric_network():
-    import socket
-    try:
-        sock = socket.create_connection((FABRIC_SERVER, 1433), timeout=5)
-        sock.close()
-        return jsonify({'status': 'reachable'})
-    except Exception as e:
-        return jsonify({'status': 'failed', 'error': str(e)})
-
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -158,8 +147,6 @@ def embed_token():
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}',
             headers=headers, timeout=10,
         )
-        if not r.ok:
-            return jsonify({'error': f'PBI API {r.status_code}', 'detail': r.text}), 502
         r.raise_for_status()
         report_meta = r.json()
         embed_url   = report_meta['embedUrl']
