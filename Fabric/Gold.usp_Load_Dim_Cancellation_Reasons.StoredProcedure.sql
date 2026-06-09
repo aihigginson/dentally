@@ -6,6 +6,7 @@
 --  History          :
 --    *01     21/05/2026  AIH Initial Release
 --    *02     22/05/2026  AIH Add Cancellation_Reason_Count (1 real, 0 sentinel) for SUM-based measures
+--    *03     09/06/2026  AIH Add Standard_Cancellation_Reason via LEFT JOIN Input.Cancellation_Reason_Map
 --  To Run           :   DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Dim_Cancellation_Reasons @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Cancellation_Reasons]    Script Date: 21/05/2026 ******/
@@ -37,16 +38,18 @@ BEGIN
         --*********************************
 
         SELECT
-            Tenant_ID                                                                               AS Tenant_ID,
-            LEFT(Cancellation_Reason_ID, 50)                                                        AS Cancellation_Reason_ID,
-            CAST(CASE WHEN Archived = 1 THEN 0 ELSE 1 END AS BIT)                                  AS Is_Active,
-            LEFT(Reason, 255)                                                                       AS Reason,
-            LEFT(Reason_Type, 50)                                                                   AS Reason_Type,
-            CAST(CASE WHEN LOWER(ISNULL(Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice,
-            CAST(1 AS INT)                                                                                        AS Cancellation_Reason_Count
+            cr.Tenant_ID                                                                               AS Tenant_ID,
+            LEFT(cr.Cancellation_Reason_ID, 50)                                                        AS Cancellation_Reason_ID,
+            CAST(CASE WHEN cr.Archived = 1 THEN 0 ELSE 1 END AS BIT)                                  AS Is_Active,
+            LEFT(cr.Reason, 255)                                                                       AS Reason,
+            NULLIF(TRIM(m.Standard_Cancellation_Reason), '')                                           AS Standard_Cancellation_Reason,
+            LEFT(cr.Reason_Type, 50)                                                                   AS Reason_Type,
+            CAST(CASE WHEN LOWER(ISNULL(cr.Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice,
+            CAST(1 AS INT)                                                                             AS Cancellation_Reason_Count
         INTO #src
-        FROM Silver.Appointment_Cancellation_Reasons
-        WHERE Cancellation_Reason_ID IS NOT NULL;
+        FROM Silver.Appointment_Cancellation_Reasons cr
+        LEFT JOIN Input.Cancellation_Reason_Map m ON m.Tenant_ID = cr.Tenant_ID AND m.Source_Cancellation_Reason = LEFT(cr.Reason, 255)
+        WHERE cr.Cancellation_Reason_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -61,25 +64,28 @@ BEGIN
 
         -- Update changed rows
         UPDATE tgt SET
-            Is_Active        = src.Is_Active,
-            Reason           = src.Reason,
-            Reason_Type      = src.Reason_Type,
-            Is_Short_Notice  = src.Is_Short_Notice,
-            DW_Updated_At    = SYSUTCDATETIME()
+            Is_Active                    = src.Is_Active,
+            Reason                       = src.Reason,
+            Standard_Cancellation_Reason = src.Standard_Cancellation_Reason,
+            Reason_Type                  = src.Reason_Type,
+            Is_Short_Notice              = src.Is_Short_Notice,
+            DW_Updated_At                = SYSUTCDATETIME()
         FROM Gold.Dim_Cancellation_Reasons tgt
         INNER JOIN #src src
             ON tgt.bk_Cancellation_Reason_ID = src.Cancellation_Reason_ID
            AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-            ISNULL(CAST(tgt.[Is_Active]       AS VARCHAR(500)), ''),
-            ISNULL(CAST(tgt.[Reason]          AS VARCHAR(500)), ''),
-            ISNULL(CAST(tgt.[Reason_Type]     AS VARCHAR(500)), ''),
-            ISNULL(CAST(tgt.[Is_Short_Notice] AS VARCHAR(500)), '')
+            ISNULL(CAST(tgt.[Is_Active]                    AS VARCHAR(500)), ''),
+            ISNULL(CAST(tgt.[Reason]                       AS VARCHAR(500)), ''),
+            ISNULL(CAST(tgt.[Standard_Cancellation_Reason] AS VARCHAR(500)), ''),
+            ISNULL(CAST(tgt.[Reason_Type]                  AS VARCHAR(500)), ''),
+            ISNULL(CAST(tgt.[Is_Short_Notice]              AS VARCHAR(500)), '')
         )) <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-            ISNULL(CAST(src.[Is_Active]       AS VARCHAR(500)), ''),
-            ISNULL(CAST(src.[Reason]          AS VARCHAR(500)), ''),
-            ISNULL(CAST(src.[Reason_Type]     AS VARCHAR(500)), ''),
-            ISNULL(CAST(src.[Is_Short_Notice] AS VARCHAR(500)), '')
+            ISNULL(CAST(src.[Is_Active]                    AS VARCHAR(500)), ''),
+            ISNULL(CAST(src.[Reason]                       AS VARCHAR(500)), ''),
+            ISNULL(CAST(src.[Standard_Cancellation_Reason] AS VARCHAR(500)), ''),
+            ISNULL(CAST(src.[Reason_Type]                  AS VARCHAR(500)), ''),
+            ISNULL(CAST(src.[Is_Short_Notice]              AS VARCHAR(500)), '')
         ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -87,13 +93,13 @@ BEGIN
         DECLARE @pk_base BIGINT = ISNULL((SELECT MAX(pk_Cancellation_Reason) FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason > 0), 0);
         INSERT INTO Gold.Dim_Cancellation_Reasons (
             pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID,
-            Is_Active, Reason, Reason_Type, Is_Short_Notice,
+            Is_Active, Reason, Standard_Cancellation_Reason, Reason_Type, Is_Short_Notice,
             Cancellation_Reason_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Cancellation_Reason_ID),
             src.Tenant_ID, src.Cancellation_Reason_ID,
-            src.Is_Active, src.Reason, src.Reason_Type, src.Is_Short_Notice,
+            src.Is_Active, src.Reason, src.Standard_Cancellation_Reason, src.Reason_Type, src.Is_Short_Notice,
             src.Cancellation_Reason_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (

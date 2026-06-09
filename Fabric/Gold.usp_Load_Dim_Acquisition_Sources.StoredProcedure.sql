@@ -5,6 +5,7 @@
 --  Initial Date     :  29/05/2026
 --  History          :
 --    *01     29/05/2026  AIH Initial Release
+--    *02     09/06/2026  AIH Add Standard_Acquisition_Source via LEFT JOIN Input.Acquisition_Source_Map
 --  To Run           :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Acquisition_Sources @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Acquisition_Sources]    Script Date: 29/05/2026 10:15:06 ******/
@@ -40,10 +41,12 @@ BEGIN
             s.Acquisition_Source_ID                                 AS Acquisition_Source_ID,
             CAST(ISNULL(s.Active, 0) AS BIT)                        AS Active,
             NULLIF(TRIM(s.Name), '')                                AS Name,
+            NULLIF(TRIM(m.Standard_Acquisition_Source), '')         AS Standard_Acquisition_Source,
             NULLIF(TRIM(s.Notes), '')                               AS Notes,
             CAST(1 AS INT)                                          AS Acquisition_Source_Count
         INTO #src
         FROM Silver.Acquisition_Sources s
+        LEFT JOIN Input.Acquisition_Source_Map m ON m.Tenant_ID = s.Tenant_ID AND m.Source_Acquisition_Source = NULLIF(TRIM(s.Name), '')
         WHERE s.Acquisition_Source_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -59,23 +62,26 @@ BEGIN
 
         -- Update changed rows
         UPDATE tgt SET
-            Active                      = src.Active,
-            Name                        = src.Name,
-            Notes                       = src.Notes,
-            DW_Updated_At               = SYSUTCDATETIME()
+            Active                       = src.Active,
+            Name                         = src.Name,
+            Standard_Acquisition_Source  = src.Standard_Acquisition_Source,
+            Notes                        = src.Notes,
+            DW_Updated_At                = SYSUTCDATETIME()
         FROM Gold.Dim_Acquisition_Sources tgt
         INNER JOIN #src src
             ON tgt.Acquisition_Source_ID = src.Acquisition_Source_ID
            AND tgt.Tenant_ID             = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-           ISNULL(CAST(tgt.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Name]   AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Notes]  AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Active]                      AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Name]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Standard_Acquisition_Source] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Notes]                       AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-           ISNULL(CAST(src.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Name]   AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Notes]  AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Active]                      AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Name]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Standard_Acquisition_Source] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Notes]                       AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -84,13 +90,13 @@ BEGIN
         INSERT INTO Gold.Dim_Acquisition_Sources (
             pk_Acquisition_Source,
             Tenant_ID, Acquisition_Source_ID,
-            Active, Name, Notes,
+            Active, Name, Standard_Acquisition_Source, Notes,
             Acquisition_Source_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Acquisition_Source_ID),
             src.Tenant_ID, src.Acquisition_Source_ID,
-            src.Active, src.Name, src.Notes,
+            src.Active, src.Name, src.Standard_Acquisition_Source, src.Notes,
             src.Acquisition_Source_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (
