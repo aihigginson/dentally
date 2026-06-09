@@ -97,32 +97,20 @@ RETURN IF(ISBLANK(practice_tgt),
     IF(actual = 0, 2, IFERROR(DIVIDE(share, actual), 2)))",
     @"0.00");
 
-// Rate: average private value of plans this practitioner has items on.
-// Route via _Treatment Plan Items (has fk_Practitioner) → List Treatment Plans (has Private Treatment Value).
-// Filter to Private Treatment Value > 0 to exclude NHS plans with £0 value.
-// Denominator is always the practice average (not the target) so the axis shows
-// above/below-average performance rather than above/below-target, which produces
-// meaningful per-practitioner variance regardless of target configuration.
+// Rate: this practitioner's average plan value vs the practice-wide average.
+// Delegates to [Average Plan Value] for the individual value (known-good TREATAS pattern).
+// practice_avg uses ALL on all three related tables to break the residual filter chain
+// that [ALL('List Practitioners')] alone leaves in place on _Treatment Plan Items and
+// List Treatment Plans — without this, every AVERAGEX iteration sees only the selected
+// practitioner's plans and practice_avg collapses to actual, giving ratio = 1.0 always.
 add("Spider Rev Plan Value",
-    @"VAR _plan_vals =
-    FILTER(
-        ADDCOLUMNS(
-            DISTINCT('_Treatment Plan Items'[fk Treatment Plan]),
-            ""_pv"", CALCULATE(MAX('List Treatment Plans'[Private Treatment Value]))
-        ),
-        [_pv] > 0
-    )
-VAR actual       = AVERAGEX(_plan_vals, [_pv])
-VAR practice_avg = AVERAGEX(
+    @"VAR actual       = [Average Plan Value]
+VAR practice_avg = CALCULATE(
+    [Average Plan Value],
     ALL('List Practitioners'),
-    AVERAGEX(
-        FILTER(
-            ADDCOLUMNS(
-                DISTINCT('_Treatment Plan Items'[fk Treatment Plan]),
-                ""_pv"", CALCULATE(MAX('List Treatment Plans'[Private Treatment Value]))
-            ),
-            [_pv] > 0
-        ), [_pv]))
+    ALL('_Treatment Plan Items'),
+    ALL('List Treatment Plans')
+)
 RETURN IFERROR(DIVIDE(actual, IF(practice_avg > 0, practice_avg, 1)), 0)",
     @"0.00");
 
@@ -191,7 +179,8 @@ add("Spider Rev Avg Outstanding Invoices",
     @"0.00");
 
 add("Spider Rev Avg Plan Value",
-    @"AVERAGEX(ALL('List Practitioners'), [Spider Rev Plan Value])",
+    @"VAR pa = CALCULATE([Average Plan Value], ALL('List Practitioners'), ALL('_Treatment Plan Items'), ALL('List Treatment Plans'))
+RETURN IF(pa > 0, 1, BLANK())",
     @"0.00");
 
 add("Spider Rev Avg Discounts",
