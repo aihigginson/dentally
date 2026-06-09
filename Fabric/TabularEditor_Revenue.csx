@@ -28,23 +28,18 @@ add("Private Revenue",
     '_Invoice Items'[NHS Charge] = 0)",
     "£#,##0");
 
-// Supports_Practitioner = 0 — always show site total; bypass practitioner slicer
 add("Outstanding Invoices",
     @"VAR snap_fk =
-    CALCULATE(
-        MAXX(
-            FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-            '_KPI Snapshot'[fk Date]
-        ),
-        REMOVEFILTERS( 'List Practitioners' )
+    MAXX(
+        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
+        '_KPI Snapshot'[fk Date]
     )
 RETURN
 CALCULATE(
     SUM( '_KPI Snapshot'[Value] ),
     '_KPI Snapshot'[fk Date]        = snap_fk,
     '_KPI Snapshot'[Metric]         = ""outstanding_invoices"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-    REMOVEFILTERS( 'List Practitioners' )
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
 )",
     "£#,##0");
 

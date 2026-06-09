@@ -25,6 +25,9 @@
 --                             reconstructions from Dim_Treatment_Plans; convert active_patients (A5) and
 --                             lapsed_patients (A6) from accumulating to historical using Dim_Patients date
 --                             fields (lapsed = Last_Appointment_Date < D-730d, active = new minus lapsed)
+--    *10     09/06/2026  AIH  A1/A2/A3/A4: store at practitioner grain (fk_Practitioner) instead of -1.
+--                             A2 CTE joins Dim_Practitioners on Role to prioritise dentists over
+--                             hygienists/therapists when an invoice spans multiple practitioners.
 --
 --  Purpose:
 --    Populates Gold.Fact_KPI_Snapshot with point-in-time metric values
@@ -54,14 +57,17 @@
 --      Start_Date IS NOT NULL AND Start_Date <= D
 --      AND (End_Date IS NULL OR End_Date > D)
 --      AND (Completed_Date IS NULL OR Completed_Date > D)
---    Grouped by Tenant x Site (fk_Practitioner = -1, Supports_Practitioner = 0).
+--    Grouped by Tenant x Site x Practitioner.
 --
 --    outstanding_invoices (historical, A2)
 --    ================================
 --    An invoice is outstanding at D when:
 --      Invoice_Date <= D AND (Paid_Date IS NULL OR Paid_Date > D)
---    Aggregated to invoice level (Invoice_Amount) to avoid double-counting items.
---    Grouped by Tenant x Site (fk_Practitioner = -1, Supports_Practitioner = 0).
+--    Aggregated to invoice level to avoid double-counting items.
+--    When an invoice spans multiple practitioners (e.g. dentist + hygienist),
+--    the invoice is attributed to the dentist (Role IN dentist/orthodontist/specialist);
+--    falls back to MAX(fk_Practitioner) if no dentist found.
+--    Grouped by Tenant x Site x Practitioner.
 --
 --    average_plan_value (historical, A3)
 --    ================================
@@ -225,15 +231,14 @@ BEGIN
 
         -- ── A1: open_courses — count of open treatment plans ─────────────────
         -- A plan is open at D when started <= D, not yet ended, not yet completed.
-        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
-        -- Site derived via Practitioner_ID → Dim_Practitioners → Dim_Practice_Sites.
+        -- Grouped by Tenant x Site x Practitioner.
         INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
         SELECT
             DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
             ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
-            -1                                                  AS fk_Practitioner,
+            ISNULL(dp.[pk_Practitioner], -1)                   AS fk_Practitioner,
             CAST('open_courses' AS VARCHAR(100))               AS Metric,
             CAST(COUNT(*) AS DECIMAL(18,4))                    AS Value
         FROM #snap_dates sd
@@ -252,22 +257,33 @@ BEGIN
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
-            dps.[pk_Practice_Site];
+            dps.[pk_Practice_Site],
+            dp.[pk_Practitioner];
 
         -- ── A2: outstanding_invoices — unpaid invoice totals ─────────────────
         -- An invoice is outstanding at D when issued <= D and not paid by D.
-        -- Aggregated at invoice level (Invoice_Amount) to avoid double-counting items.
+        -- Aggregated at invoice level to avoid double-counting items.
+        -- Multi-practitioner invoices attributed to the dentist (dentist/orthodontist/
+        -- specialist takes priority); falls back to MAX(fk_Practitioner) if no dentist.
         -- CTE avoids a second temp table (Fabric rejects CROSS JOIN temp-to-temp).
-        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        -- Grouped by Tenant x Site x Practitioner.
         ;WITH inv_agg AS (
             SELECT
                 fii.[Invoice_ID],
                 fii.[Tenant_ID],
                 ISNULL(fii.[fk_Practice_Site], -1)             AS fk_Practice_Site,
+                COALESCE(
+                    MAX(CASE WHEN dp.[Role] IN ('dentist','orthodontist','specialist')
+                             THEN fii.[fk_Practitioner] END),
+                    MAX(fii.[fk_Practitioner])
+                )                                              AS fk_Practitioner,
                 MAX(fii.[Invoice_Amount_Outstanding])           AS Invoice_Outstanding,
                 MIN(dd_i.[Full_Date])                          AS Invoice_Date,
                 MAX(dd_p.[Full_Date])                          AS Paid_Date
             FROM [Gold].[Fact_Invoice_Items] fii
+            LEFT JOIN [Gold].[Dim_Practitioners] dp
+                ON dp.[pk_Practitioner] = fii.[fk_Practitioner]
+               AND dp.[Tenant_ID]       = fii.[Tenant_ID]
             INNER JOIN [Gold].[Dim_Date] dd_i ON dd_i.pk_Date = fii.[fk_Date_Invoice]
             LEFT  JOIN [Gold].[Dim_Date] dd_p ON dd_p.pk_Date = fii.[fk_Date_Paid]
             WHERE fii.[Invoice_Amount] > 0
@@ -279,7 +295,7 @@ BEGIN
             sd.Snapshot_Grain,
             inv.[Tenant_ID],
             inv.[fk_Practice_Site],
-            -1                                                  AS fk_Practitioner,
+            ISNULL(inv.[fk_Practitioner], -1)                  AS fk_Practitioner,
             CAST('outstanding_invoices' AS VARCHAR(100))       AS Metric,
             SUM(inv.[Invoice_Outstanding])                     AS Value
         FROM #snap_dates sd
@@ -290,18 +306,19 @@ BEGIN
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
             inv.[Tenant_ID],
-            inv.[fk_Practice_Site];
+            inv.[fk_Practice_Site],
+            inv.[fk_Practitioner];
 
         -- ── A3: average_plan_value — mean private value of open plans ────────
         -- Same open-plan gate as A1 (open_courses).
-        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        -- Grouped by Tenant x Site x Practitioner.
         INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
         SELECT
             DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
             ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
-            -1                                                  AS fk_Practitioner,
+            ISNULL(dp.[pk_Practitioner], -1)                   AS fk_Practitioner,
             CAST('average_plan_value' AS VARCHAR(100))         AS Metric,
             SUM(ISNULL(dtp.[Private_Treatment_Value], 0))
                 / NULLIF(CAST(COUNT(*) AS DECIMAL(18,4)), 0)   AS Value
@@ -321,19 +338,20 @@ BEGIN
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
-            dps.[pk_Practice_Site];
+            dps.[pk_Practice_Site],
+            dp.[pk_Practitioner];
 
         -- ── A4: treatment_acceptance_rate — cumulative acceptance ratio ───────
         -- Denominator: all plans Created_Date <= D.
         -- Numerator: of those, plans with Start_Date IS NOT NULL AND Start_Date <= D.
-        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        -- Grouped by Tenant x Site x Practitioner.
         INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
         SELECT
             DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
             ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
-            -1                                                  AS fk_Practitioner,
+            ISNULL(dp.[pk_Practitioner], -1)                   AS fk_Practitioner,
             CAST('treatment_acceptance_rate' AS VARCHAR(100))  AS Metric,
             CAST(SUM(CASE WHEN dtp.[Start_Date] IS NOT NULL
                            AND dtp.[Start_Date] <= sd.Snapshot_Date THEN 1 ELSE 0 END) AS DECIMAL(18,4))
@@ -352,7 +370,8 @@ BEGIN
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
             dtp.[Tenant_ID],
-            dps.[pk_Practice_Site];
+            dps.[pk_Practice_Site],
+            dp.[pk_Practitioner];
 
         -- ── A5: lapsed_patients — historical from Dim_Patients ────────────────
         -- Lapsed at D: First_Appointment_Date <= D AND Last_Appointment_Date < D-730d.
