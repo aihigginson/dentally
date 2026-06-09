@@ -1,7 +1,7 @@
 // TabularEditor_SpiderScheduling.csx
 // Creates 21 measures for the Scheduling Spider (Deneb radar) visual:
 //   7  Spider Sch *       — individual values, filter-context sensitive
-//   7  Spider Sch Avg *   — practice average, ALL('List Practitioners') bypasses slicer
+//   7  Spider Sch Avg *   — practice average, ALLSELECTED('List Practitioners') bypasses slicer
 //   7  Spider Sch Tgt *   — targets (inverted axes return ratio sentinel 1)
 //
 // Lower-is-better axes (Cancellation Freq, Short Notice Cancel, Days Next 30/1Hr):
@@ -103,29 +103,29 @@ RETURN IF(ISBLANK(tgt), BLANK(), 1)",
 // ── Practice averages (ALL bypasses practitioner slicer) ──────────────────────
 
 add("Spider Sch Avg Chair Utilisation",
-    @"CALCULATE([Spider Sch Chair Utilisation], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch Chair Utilisation], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Sch Avg DNA Score",
-    @"CALCULATE([Spider Sch DNA Score], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch DNA Score], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Sch Avg Cancellation Freq",
-    @"CALCULATE([Spider Sch Cancellation Freq], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch Cancellation Freq], ALLSELECTED('List Practitioners'))",
     @"0.00");
 
 add("Spider Sch Avg Short Notice Cancel",
-    @"CALCULATE([Spider Sch Short Notice Cancel], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch Short Notice Cancel], ALLSELECTED('List Practitioners'))",
     @"0.00");
 
 add("Spider Sch Avg BBYL",
-    @"CALCULATE([Spider Sch BBYL], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch BBYL], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Sch Avg Days Next 30 Min",
-    @"CALCULATE([Spider Sch Days Next 30 Min], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch Days Next 30 Min], ALLSELECTED('List Practitioners'))",
     @"0.00");
 
 add("Spider Sch Avg Days Next 1 Hr",
-    @"CALCULATE([Spider Sch Days Next 1 Hr], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Sch Days Next 1 Hr], ALLSELECTED('List Practitioners'))",
     @"0.00");
