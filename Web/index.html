@@ -388,6 +388,16 @@
     </div>
     <div class="filter-sep"></div>
     <div class="filter-field">
+        <label for="f-role">Role</label>
+        <select class="filter-select" id="f-role">
+            <option value="all">All roles</option>
+            <option value="Dentist">Dentist</option>
+            <option value="Hygienist">Hygienist</option>
+            <option value="Therapist">Therapist</option>
+        </select>
+    </div>
+    <div class="filter-sep"></div>
+    <div class="filter-field">
         <label for="f-pract">Practitioner</label>
         <select class="filter-select" id="f-pract"><option value="all">All practitioners</option></select>
     </div>
@@ -1054,18 +1064,25 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'Last 3 Months', site: 'all', pract: 'all' };
+    const filterState = { period: 'Last 3 Months', site: 'all', role: 'all', pract: 'all' };
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
+    const selRole     = document.getElementById('f-role');
     const selPract    = document.getElementById('f-pract');
     const badge       = document.getElementById('filter-badge');
+    const ROLE_ALL_LABEL = {
+        all: 'All practitioners', Dentist: 'All Dentists',
+        Hygienist: 'All Hygienists', Therapist: 'All Therapists',
+    };
 
     function refreshBadge() {
-        badge.textContent = [
+        const parts = [
             selPeriod.options[selPeriod.selectedIndex].text,
             selSite.options[selSite.selectedIndex].text,
-            selPract.options[selPract.selectedIndex].text,
-        ].join(' · ');
+        ];
+        if (filterState.role !== 'all') parts.push(selRole.options[selRole.selectedIndex].text);
+        parts.push(selPract.options[selPract.selectedIndex].text);
+        badge.textContent = parts.join(' · ');
     }
 
     function onFilterChange() {
@@ -1080,9 +1097,19 @@
     selSite.addEventListener('change', onFilterChange);
     selPract.addEventListener('change', onFilterChange);
 
+    selRole.addEventListener('change', () => {
+        filterState.role  = selRole.value;
+        filterState.pract = 'all';
+        selPract.value    = 'all';
+        loadFilters(true);
+        applyFilters();
+    });
+
     function loadFilters(sitesAlreadyLoaded) {
         const activeOnly = document.getElementById('f-active-only').checked ? '1' : '0';
-        authFetch('/api/filters?active_only=' + activeOnly)
+        const role = filterState.role;
+        const roleParam = role !== 'all' ? '&role=' + encodeURIComponent(role) : '';
+        authFetch('/api/filters?active_only=' + activeOnly + roleParam)
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
@@ -1092,12 +1119,18 @@
                         selSite.appendChild(o);
                     });
                 }
+                selPract.options[0].textContent = ROLE_ALL_LABEL[role] || 'All practitioners';
                 while (selPract.options.length > 1) selPract.remove(1);
                 data.practitioners.forEach(p => {
                     const o = document.createElement('option');
                     o.value = p.id; o.textContent = p.name;
                     selPract.appendChild(o);
                 });
+                if (filterState.pract !== 'all' && ![...selPract.options].some(o => o.value === filterState.pract)) {
+                    selPract.value = 'all';
+                    filterState.pract = 'all';
+                }
+                refreshBadge();
             })
             .catch(() => {});
     }
@@ -1108,6 +1141,9 @@
         const filters = [];
         if (filterState.site !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
+        }
+        if (filterState.role !== 'all') {
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
         }
         if (filterState.pract !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });

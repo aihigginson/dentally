@@ -215,6 +215,7 @@ def filters():
         return err
 
     active_only = request.args.get('active_only', '1') == '1'
+    role_filter = request.args.get('role', 'all')
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
@@ -233,13 +234,16 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
+        role_clause  = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        pract_params = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
             f"SELECT Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
             f"WHERE  Tenant_ID IN ({placeholders}) "
             f"AND    pk_Practitioner > 0 "
+            f"{role_clause}"
             f"ORDER BY Full_Name",
-            tids,
+            pract_params,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
         conn.close()
