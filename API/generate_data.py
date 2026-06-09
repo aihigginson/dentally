@@ -24,6 +24,16 @@ def _add_months(d, m):
                   31,30,31,30,31,31,30,31,30,31][mo-1])
     return date(yr,mo,dy)
 
+# Maps internal functional role names to values valid per the Dentally API constraint:
+# Administrator, Dentist, Hygienist, Nurse, Practice Manager, Receptionist, Technician, Therapist
+_API_ROLE = {
+    "dentist":      "Dentist",
+    "orthodontist": "Dentist",
+    "specialist":   "Dentist",
+    "hygienist":    "Hygienist",
+    "tco":          "Receptionist",
+}
+
 BH = {
     date(2023,1,2),date(2023,4,7),date(2023,4,10),date(2023,5,1),
     date(2023,5,8),date(2023,5,29),date(2023,8,28),date(2023,12,25),date(2023,12,26),
@@ -733,7 +743,7 @@ def gen_users_and_practitioners(tdef):
         users.append({
             "id": uid, "first_name": fn, "last_name": ln,
             "title": p["title"], "middle_name": None,
-            "email": email, "role": p["role"], "active": p["active"],
+            "email": email, "role": _API_ROLE.get(p["role"], p["role"]), "active": p["active"],
             "mobile_phone": mobile,
             "site_id": p["site_id"],
             "permission_level": 1,
@@ -778,7 +788,7 @@ def gen_users_and_practitioners(tdef):
             "id": uid,
             "first_name": fn,
             "last_name": ln,
-            "role": p["role"],
+            "role": _API_ROLE.get(p["role"], p["role"]),
             "title": p["title"],
             "email": email,
             "mobile_phone": mobile,
@@ -803,7 +813,7 @@ def gen_users_and_practitioners(tdef):
             "practitioner_category": pcat,
             "user_first_name":     fn,
             "user_last_name":      ln,
-            "user_role":           p["role"],
+            "user_role":           _API_ROLE.get(p["role"], p["role"]),
             "user_title":          p["title"],
             "user_email":          email,
             "user_mobile_phone":   mobile,

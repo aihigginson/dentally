@@ -32,6 +32,9 @@
 //                         meaningful per-practitioner variance; Outstanding Invoices axis
 //                         replaced with per-practitioner _Invoice Items[Invoice Amount
 //                         Outstanding] as snapshot-based measure cannot split by practitioner
+//   *07  09/06/2026  AIH  Fix: tenant scope was using VALUES('List Practice Sites'[Tenant ID])
+//                         which has no RLS filter; changed to VALUES('List Practitioners'[Tenant ID])
+//                         so tenant capture respects the RLS filter on List Practitioners
 
 var folder = "Spider Revenue";
 var table  = "_Measures";
@@ -53,9 +56,9 @@ add("Spider Rev Total Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
 VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
 VAR practice_tgt = [Total Revenue Target]
-VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALLSELECTED('List Practitioners'))
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
-VAR fallback    = AVERAGEX(ALLSELECTED('List Practitioners'), [Total Revenue])
+VAR fallback    = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Total Revenue])
 RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
@@ -63,9 +66,9 @@ add("Spider Rev Private Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
 VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] = 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
 VAR practice_tgt = [Private Revenue Target]
-VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALLSELECTED('List Practitioners'))
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
-VAR fallback    = AVERAGEX(ALLSELECTED('List Practitioners'), [Private Revenue])
+VAR fallback    = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Private Revenue])
 RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
@@ -73,9 +76,9 @@ add("Spider Rev NHS Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
 VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] > 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
 VAR practice_tgt = [NHS Revenue Target]
-VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALLSELECTED('List Practitioners'))
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
-VAR fallback    = AVERAGEX(ALLSELECTED('List Practitioners'), [NHS Revenue])
+VAR fallback    = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [NHS Revenue])
 RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
@@ -88,9 +91,9 @@ VAR actual      = COALESCE(
     CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner])),
     0)
 VAR practice_tgt = [Outstanding Invoices Target]
-VAR n           = CALCULATE(COUNTROWS('List Practitioners'), ALLSELECTED('List Practitioners'))
+VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
-VAR fallback    = AVERAGEX(ALLSELECTED('List Practitioners'),
+VAR fallback    = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])),
     CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(VALUES('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner])))
 RETURN IF(ISBLANK(practice_tgt),
     IF(actual = 0, 2, IFERROR(DIVIDE(fallback, actual), 1)),
@@ -100,14 +103,14 @@ RETURN IF(ISBLANK(practice_tgt),
 // Rate: this practitioner's average plan value vs the practice-wide average.
 // Delegates to [Average Plan Value] for the individual value (known-good TREATAS pattern).
 // practice_avg uses ALL on all three related tables to break the residual filter chain
-// that [ALLSELECTED('List Practitioners')] alone leaves in place on _Treatment Plan Items and
+// that [FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID]))] alone leaves in place on _Treatment Plan Items and
 // List Treatment Plans — without this, every AVERAGEX iteration sees only the selected
 // practitioner's plans and practice_avg collapses to actual, giving ratio = 1.0 always.
 add("Spider Rev Plan Value",
     @"VAR actual       = [Average Plan Value]
 VAR practice_avg = CALCULATE(
     [Average Plan Value],
-    ALLSELECTED('List Practitioners'),
+    FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])),
     ALLSELECTED('_Treatment Plan Items'),
     ALLSELECTED('List Treatment Plans')
 )
@@ -129,7 +132,7 @@ VAR prac_disc = CALCULATE(
     TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_disc, prac_rev)
 VAR tgt       = [Discounts Target]
-VAR fallback  = AVERAGEX(ALLSELECTED('List Practitioners'), [Discounts])
+VAR fallback  = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Discounts])
 VAR denom     = IF(NOT ISBLANK(tgt), tgt, fallback)
 RETURN IF(
     ISBLANK(actual), 1,
@@ -145,7 +148,7 @@ VAR prac_dep  = CALCULATE(SUM('_Payments'[Deposit Amount]), TREATAS(prac_pks, '_
 VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_dep, prac_rev)
 VAR tgt       = [Deposit Value Target]
-VAR fallback  = AVERAGEX(ALLSELECTED('List Practitioners'), [Deposit Value])
+VAR fallback  = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Deposit Value])
 VAR denom     = IF(NOT ISBLANK(tgt), tgt, IF(fallback > 0, fallback, 1))
 RETURN IFERROR(DIVIDE(actual, denom), 0)",
     @"0.00");
@@ -163,30 +166,30 @@ add("Spider Rev Tgt Deposit Value",       @"1", @"0.00");
 // ── Practice averages — AVERAGEX of ratio gives practice_actual/practice_target ─
 
 add("Spider Rev Avg Total Revenue",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev Total Revenue])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Total Revenue])",
     @"0.00");
 
 add("Spider Rev Avg Private Revenue",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev Private Revenue])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Private Revenue])",
     @"0.00");
 
 add("Spider Rev Avg NHS Revenue",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev NHS Revenue])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev NHS Revenue])",
     @"0.00");
 
 add("Spider Rev Avg Outstanding Invoices",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev Outstanding Invoices])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Outstanding Invoices])",
     @"0.00");
 
 add("Spider Rev Avg Plan Value",
-    @"VAR pa = CALCULATE([Average Plan Value], ALLSELECTED('List Practitioners'), ALLSELECTED('_Treatment Plan Items'), ALLSELECTED('List Treatment Plans'))
+    @"VAR pa = CALCULATE([Average Plan Value], FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), ALLSELECTED('_Treatment Plan Items'), ALLSELECTED('List Treatment Plans'))
 RETURN IF(pa > 0, 1, BLANK())",
     @"0.00");
 
 add("Spider Rev Avg Discounts",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev Discounts])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Discounts])",
     @"0.00");
 
 add("Spider Rev Avg Deposit Value",
-    @"AVERAGEX(ALLSELECTED('List Practitioners'), [Spider Rev Deposit Value])",
+    @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Deposit Value])",
     @"0.00");
