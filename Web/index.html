@@ -1003,6 +1003,10 @@
                     attachReportToSubnav(sectionKey, r);
                     applyFilters();
                 });
+                r.on('rendered', () => {
+                    const d = sectionSubnavData[sectionKey];
+                    if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+                });
             });
         }, 300);
     });
@@ -1042,6 +1046,10 @@
             r.on('loaded', () => {
                 attachReportToSubnav(sectionKey, r);
                 applyFilters();
+            });
+            r.on('rendered', () => {
+                const d = sectionSubnavData[sectionKey];
+                if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
             });
             return r;
         }
