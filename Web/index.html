@@ -609,9 +609,11 @@
         loadFilters(false);
         initSubnav('home');
         loadEmbedsInSection('home');
-        ['revenue', 'patient', 'scheduling', 'clinical', 'nhs'].forEach((key, i) => {
-            setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
-        });
+        if (!isMobile()) {
+            ['revenue', 'patient', 'scheduling', 'clinical', 'nhs'].forEach((key, i) => {
+                setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
+            });
+        }
     }
 
     async function startApp() {
