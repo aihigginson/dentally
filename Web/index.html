@@ -635,15 +635,39 @@
     };
 
     // ── Page list — update this when PBI reports change ──────────────────────
-    // Use the exact page names as they appear in Power BI Desktop.
+    // Internal page names captured via _debugPages() at build time.
     // Sections with 0 or 1 entry show no dropdown.
     const SECTION_PAGES = {
-        home:       ['Headlines', 'Key Metrics'],
-        revenue:    ['By Category', 'By Practitioner', 'Debt', 'Discounts', 'Deposits', 'Comparison'],
-        patient:    ['Acquisition', 'Journeys', 'Retention'],
-        scheduling: ['Utilisation', 'Cancellations and DNA', 'BBYL', 'Availability'],
-        clinical:   ['Revenue', 'Other KPIs'],
-        nhs:        ['Key Metrics'],
+        home: [
+            { displayName: 'Headlines',   name: '146989b88eb26d71b830' },
+            { displayName: 'Key Metrics', name: 'eb569f4aab9cd15aa776' },
+        ],
+        revenue: [
+            { displayName: 'By Category',     name: '1731a006301e70a5cd87' },
+            { displayName: 'By Practitioner', name: 'ad9e62f74c350683b2a8' },
+            { displayName: 'Debt',            name: '7f6e0ba3e2ead59a06c5' },
+            { displayName: 'Discounts',       name: '2b3f398145d40b179050' },
+            { displayName: 'Deposits',        name: '24208f3d007390977e6c' },
+            { displayName: 'Comparison',      name: 'c5967aa555b6d08669a5' },
+        ],
+        patient: [
+            { displayName: 'Acquisition', name: '146989b88eb26d71b830' },
+            { displayName: 'Journeys',    name: 'e4dd9e17b481ec28099d' },
+            { displayName: 'Retention',   name: '4ebf2bb99ffb110e19e2' },
+        ],
+        scheduling: [
+            { displayName: 'Utilisation',           name: '146989b88eb26d71b830' },
+            { displayName: 'Cancellations and DNA',  name: '3f0a60f9895e0db15be8' },
+            { displayName: 'BBYL',                   name: '5e1e3e4a400344602496' },
+            { displayName: 'Availability',           name: 'b8c471d14517cbc187be' },
+        ],
+        clinical: [
+            { displayName: 'Revenue',    name: '146989b88eb26d71b830' },
+            { displayName: 'Other KPIs', name: '866800f0b9230dc066c9' },
+        ],
+        nhs: [
+            { displayName: 'Key Metrics', name: '146989b88eb26d71b830' },
+        ],
     };
 
     // ── State ────────────────────────────────────────────────────────────────
@@ -745,34 +769,23 @@
 
     document.addEventListener('click', () => closePageDropdown());
 
-    // Populates the dropdown immediately from the static SECTION_PAGES list.
+    // Populates the dropdown from the static SECTION_PAGES list (names pre-captured at build time).
     function initSubnav(sectionKey) {
-        const displayNames = SECTION_PAGES[sectionKey] || [];
+        const pageList = SECTION_PAGES[sectionKey] || [];
         const prev = sectionSubnavData[sectionKey];
-        const pages = displayNames.map(displayName => ({
-            displayName,
-            name: prev?.pages?.find(p => p.displayName === displayName)?.name || null,
-        }));
         sectionSubnavData[sectionKey] = {
-            pages,
+            pages:      pageList.map(p => ({ displayName: p.displayName, name: p.name })),
             report:     prev?.report     || null,
             activePage: prev?.activePage || null,
         };
     }
 
-    // Wires up the loaded report; resolves PBI internal page names and enables navigation.
-    async function attachReportToSubnav(sectionKey, report) {
+    // Wires up the loaded report and enables page-change tracking.
+    function attachReportToSubnav(sectionKey, report) {
         const data = sectionSubnavData[sectionKey];
         if (!data) return;
         data.report = report;
-        try {
-            const live = await report.getPages();
-            data.pages.forEach(p => {
-                const match = live.find(lp => lp.displayName === p.displayName);
-                if (match) p.name = match.name;
-            });
-            if (!data.activePage) data.activePage = data.pages[0]?.name || null;
-        } catch (_) {}
+        if (!data.activePage) data.activePage = data.pages[0]?.name || null;
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
@@ -1046,10 +1059,6 @@
             r.on('loaded', () => {
                 attachReportToSubnav(sectionKey, r);
                 applyFilters();
-            });
-            r.on('rendered', () => {
-                const d = sectionSubnavData[sectionKey];
-                if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
             });
             return r;
         }
