@@ -321,13 +321,13 @@
                     "position": "aboveValue"
                 }],
                 "cardCalloutArea": [{
-                    "paddingUniform": 3
+                    "paddingUniform": 0
                 }],
                 "outline":    [{ "show": false }],
                 "divider":    [{ "show": false }],
                 "dropShadow": [{ "show": false }],
                 "referenceLabelTitle":  [{ "show": false }],
-                "referenceLabelValue":  [{ "show": false }],
+                "referenceLabelValue":  [{ "show": true }],
                 "referenceLabelLayout": [{ "show": false }]
             }
         },
