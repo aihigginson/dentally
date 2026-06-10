@@ -15,6 +15,8 @@
 --                            Next_Visit: changed nxt to show chronological next visit;
 --                            Future_Appt: separate active_bkg apply;
 --                            rename Other Booked -> Treatment Booked
+--    *07     10/06/2026  AIH Booking 'New - ...' now uses Standard_Acquisition_Source via
+--                            Input.Acquisition_Source_Map join; falls back to raw name if unmapped
 --    *06     31/05/2026  AIH BBYL fix: add Pending_DT to #appts; use Pending_DT (not Created_DT)
 --                            for BBYL date check — Created_At is never populated in source data
 --    *05     31/05/2026  AIH Rename SP to usp_Load_Appointment_Journey_Attributes;
@@ -123,7 +125,7 @@ BEGIN
             -- Online = booked via API on any other date (patient self-booked remotely).
             CASE
                 WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
-                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New - ' + aqs.Name
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New - ' + COALESCE(iam.Standard_Acquisition_Source, aqs.Name)
                 WHEN a.Booked_Via_API = 1
                      AND prev_appt.Prev_Date IS NOT NULL
                      AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
@@ -176,7 +178,8 @@ BEGIN
         LEFT JOIN #referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_ID = a.Patient_ID
         LEFT JOIN Silver.Patients  pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_ID = a.Patient_ID
         LEFT JOIN #latest_recall   lr   ON lr.Tenant_ID  = a.Tenant_ID  AND lr.Patient_ID  = a.Patient_ID
-        LEFT JOIN Silver.Acquisition_Sources aqs ON aqs.Tenant_ID = pat.Tenant_ID AND aqs.Acquisition_Source_ID = pat.Acquisition_Source_ID   
+        LEFT JOIN Silver.Acquisition_Sources     aqs ON aqs.Tenant_ID = pat.Tenant_ID AND aqs.Acquisition_Source_ID = pat.Acquisition_Source_ID
+        LEFT JOIN Input.Acquisition_Source_Map  iam ON iam.Tenant_ID = pat.Tenant_ID AND iam.Source_Acquisition_Source = aqs.Name
         LEFT JOIN Silver.Appointment_Reason_Map arm_this
                        ON arm_this.Reason_Text = NULLIF(TRIM(a.Reason), '')
 
