@@ -203,19 +203,21 @@ def main():
         ws.cell(i, 2, existing.get(source, ''))
         ws.cell(i, 2).alignment = _body_align()
 
-    # Dropdown validation on Standard column
-    quoted = ','.join(f'"{v}"' for v in standard_values)
-    dv = DataValidation(
-        type='list',
-        formula1=f'"{quoted}"' if len(quoted) <= 255 else None,
-        allow_blank=True,
-        showDropDown=False,
-        showErrorMessage=True,
-        errorTitle='Invalid value',
-        error=f'Choose a value from the standard list.',
-    )
-    # If the quoted list exceeds 255 chars, write standards to a hidden sheet
-    if len(quoted) > 255:
+    # Dropdown validation on Standard column.
+    # formula1 for a literal list must be a single quoted CSV — no inner quotes.
+    # Excel caps the formula1 string at 255 chars; use a hidden sheet for longer lists.
+    plain_list = ','.join(standard_values)
+    if len(plain_list) <= 255:
+        dv = DataValidation(
+            type='list',
+            formula1=f'"{plain_list}"',
+            allow_blank=True,
+            showDropDown=False,
+            showErrorMessage=True,
+            errorTitle='Invalid value',
+            error='Choose a value from the standard list.',
+        )
+    else:
         ref_ws = wb.create_sheet('_Standards')
         ref_ws.sheet_state = 'hidden'
         for j, v in enumerate(standard_values, start=1):
