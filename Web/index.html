@@ -456,6 +456,26 @@
     let msalInstance  = null;
     let msalAccount   = null;
 
+    // Mobile: acquireTokenSilent uses hidden iframes that Safari's ITP blocks,
+    // causing an infinite acquireTokenRedirect loop. Cache the ID token from
+    // login/redirect results in localStorage and serve it directly on mobile,
+    // only redirecting when it genuinely expires (~1 hour).
+    let _cachedIdToken       = localStorage.getItem('_anly_id_token') || null;
+    let _cachedIdTokenExpiry = parseInt(localStorage.getItem('_anly_id_token_exp') || '0');
+
+    function _cacheIdToken(result) {
+        _cachedIdToken       = result.idToken;
+        _cachedIdTokenExpiry = result.expiresOn ? result.expiresOn.getTime() : Date.now() + 3600000;
+        localStorage.setItem('_anly_id_token',     _cachedIdToken);
+        localStorage.setItem('_anly_id_token_exp', String(_cachedIdTokenExpiry));
+    }
+
+    function _clearIdTokenCache() {
+        _cachedIdToken = null; _cachedIdTokenExpiry = 0;
+        localStorage.removeItem('_anly_id_token');
+        localStorage.removeItem('_anly_id_token_exp');
+    }
+
     // Mobile browsers block popups — use redirect flow instead.
     // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
     function _onMobile() { return window.innerWidth < 768; }
@@ -476,6 +496,7 @@
         const redirectResult = await msalInstance.handleRedirectPromise();
         if (redirectResult?.account) {
             msalAccount = redirectResult.account;
+            _cacheIdToken(redirectResult);
             return;
         }
 
@@ -504,6 +525,7 @@
                     }
                     const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES });
                     msalAccount  = result.account;
+                    _cacheIdToken(result);
                     btn.style.display = 'none';
                     resolve();
                 } catch {
@@ -516,15 +538,21 @@
     }
 
     async function getIdToken() {
+        if (_onMobile()) {
+            // acquireTokenSilent uses hidden iframes; Safari's ITP blocks these.
+            // Return the cached ID token obtained at login/last redirect instead,
+            // only redirecting when it genuinely expires.
+            if (_cachedIdToken && Date.now() < _cachedIdTokenExpiry - 300000) {
+                return _cachedIdToken;
+            }
+            await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+            return null; // never reached — page navigates away
+        }
         try {
             const r = await msalInstance.acquireTokenSilent({ scopes: MSAL_SCOPES, account: msalAccount });
             return r.idToken;
         } catch (e) {
             if (e instanceof msal.InteractionRequiredAuthError) {
-                if (_onMobile()) {
-                    await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
-                    return null; // never reached — page navigates away
-                }
                 const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
                 msalAccount = r.account;
                 return r.idToken;
@@ -546,6 +574,8 @@
         if (res.status === 401) {
             try {
                 if (_onMobile()) {
+                    // Backend rejected the token — clear cache so redirect fetches a fresh one
+                    _clearIdTokenCache();
                     await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
                     return res; // never reached
                 }
