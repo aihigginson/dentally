@@ -609,6 +609,9 @@
         loadFilters(false);
         initSubnav('home');
         loadEmbedsInSection('home');
+        ['revenue', 'patient', 'scheduling', 'clinical', 'nhs'].forEach((key, i) => {
+            setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
+        });
     }
 
     async function startApp() {
@@ -748,9 +751,9 @@
             btn.textContent = page.displayName;
             btn.addEventListener('click', e => {
                 e.stopPropagation();
-                if (!data.report || !page.name) return;
+                if (!page.name) return;
                 sectionSubnavData[sectionKey].activePage = page.name;
-                data.report.setPage(page.name);
+                if (data.report) data.report.setPage(page.name);
                 closePageDropdown();
             });
             dd.appendChild(btn);
@@ -787,6 +790,9 @@
         if (!data) return;
         data.report = report;
         if (!data.activePage) data.activePage = data.pages[0]?.name || null;
+        if (data.activePage && data.activePage !== data.pages[0]?.name) {
+            report.setPage(data.activePage);
+        }
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
