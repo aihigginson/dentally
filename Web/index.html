@@ -469,7 +469,7 @@
                 authority:   'https://login.microsoftonline.com/common',
                 redirectUri: window.location.origin,
             },
-            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true },
+            cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
         });
 
         // Catch the result of a loginRedirect / acquireTokenRedirect return
