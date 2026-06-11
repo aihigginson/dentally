@@ -77,7 +77,7 @@ add("Treatment Completed Price",
     @"CALCULATE(
     SUM('_Treatment Plan Items'[Price]),
     '_Treatment Plan Items'[Completed] = TRUE(),
-    USERELATIONSHIP('_Treatment Plan Items'[fk Date Completed], 'Dim Date'[pk Date])
+    USERELATIONSHIP('_Treatment Plan Items'[fk Date Completed], 'List Date'[pk Date])
 )",
     "£#,##0.00");
 
