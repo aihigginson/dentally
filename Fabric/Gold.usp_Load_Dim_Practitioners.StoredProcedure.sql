@@ -10,6 +10,7 @@
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *05     22/05/2026  AIH Add Practitioner_Count (1 real, 0 sentinel) for SUM-based measures
 --    *06     05/06/2026  AIH Default Active to 1 (not 0) when Practitioner_Active is NULL — T11+ test data omits the field
+--    *07     11/06/2026  AIH Remove Title from Full_Name — display first + last name only
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
@@ -49,7 +50,6 @@ BEGIN
             NULLIF(TRIM(User_Middle_Name),'')                               AS Middle_Name,
             NULLIF(TRIM(User_Last_Name),'')                                 AS Last_Name,
             NULLIF(CONCAT_WS(' ',
-                NULLIF(TRIM(User_Title),''),
                 NULLIF(TRIM(User_First_Name),''),
                 NULLIF(TRIM(User_Last_Name),'')),'')                        AS Full_Name,
             NULLIF(TRIM(User_Email),'')                                     AS Email,
