@@ -15,5 +15,6 @@ INSERT INTO Security.Application_Users (User_UPN, Client_ID, Display_Name, Maint
 VALUES ('aihigginson@2rrjxy.onmicrosoft.com', 1,  'Andrew I Higginson',    1),
        ('aihigginson@outlook.com',            1,  'Andy Higginson Personal', 1),
        ('admin@analytically.info',            11, 'Andrew Higginson',       1),
-       ('craigjack@mapledental.co.uk',        11, 'Craig Jack',             0);
+       ('craigjack@mapledental.co.uk',        11, 'Craig Jack',             0),
+       ('StephenRoberts@mapledental.co.uk',  11, 'Stephen Roberts',        0);
 GO
