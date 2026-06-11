@@ -12,6 +12,8 @@ CREATE TABLE [Gold].[Aggregate_Site_Practitioner_Current](
 	[Tenant_ID]                       [int]           NOT NULL,
 	[Days_Until_Next_30_Mins]         [int]           NULL,
 	[Days_Until_Next_1_Hour_Free]     [int]           NULL,
+	[Next_7_Days_Available_Mins]      [int]           NULL,
+	[Next_7_Days_Booked_Mins]         [int]           NULL,
 	[DW_Created_At]                   [datetime2](6)  NOT NULL,
 	[DW_Updated_At]                   [datetime2](6)  NOT NULL
 )

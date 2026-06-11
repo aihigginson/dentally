@@ -5,6 +5,7 @@
 --  Initial Date     :  07/05/2026
 --  History          :
 --    *01     07/05/2026  AIH  Initial Release
+--    *02     11/06/2026  AIH  Add Next_7_Days_Available_Mins / Next_7_Days_Booked_Mins
 --  Notes:
 --    Grain  : Site × Practitioner × Tenant  (current forward-looking diary availability)
 --    Pattern: Full DELETE + INSERT each run.
@@ -46,7 +47,8 @@ BEGIN
         --**** Procedure logic starts  ****
         --*********************************
 
-        DECLARE @Today DATE = CAST(SYSUTCDATETIME() AS DATE);
+        DECLARE @Today    DATE = CAST(SYSUTCDATETIME() AS DATE);
+        DECLARE @Week_End DATE = DATEADD(DAY, 7, @Today);
 
         -- ── Booked minutes per practitioner per future day ───────────────────
         -- Sum non-cancelled appointment durations against each diary day.
@@ -91,19 +93,50 @@ BEGIN
         JOIN Gold.Dim_Date dd ON dd.pk_Date = f.fk_Date
         GROUP BY f.fk_Practitioner, f.Tenant_ID;
 
+        -- ── Next-7-day available and booked minutes per practitioner ────────
+        -- Includes today; sums diary availability and non-cancelled booked mins.
+        SELECT
+            fpd.fk_Practitioner,
+            fpd.Tenant_ID,
+            SUM(ISNULL(fpd.Available_Clinical_Mins, 0))     AS Available_Mins_7d,
+            ISNULL(SUM(b7.Booked_Mins), 0)                  AS Booked_Mins_7d
+        INTO #week
+        FROM Gold.Fact_Practitioner_Diaries fpd
+        JOIN Gold.Dim_Date dd ON dd.pk_Date = fpd.fk_Date_Day
+        LEFT JOIN (
+            SELECT apt.fk_Practitioner, apt.fk_Date_Start AS fk_Date, apt.Tenant_ID,
+                   SUM(ISNULL(apt.Duration_Mins, 0))         AS Booked_Mins
+            FROM Gold.Fact_Appointments apt
+            JOIN Gold.Dim_Date dd2 ON dd2.pk_Date = apt.fk_Date_Start
+            WHERE apt.Is_Cancelled = 0
+              AND dd2.Full_Date >= @Today
+              AND dd2.Full_Date <  @Week_End
+            GROUP BY apt.fk_Practitioner, apt.fk_Date_Start, apt.Tenant_ID
+        ) b7 ON b7.fk_Practitioner = fpd.fk_Practitioner
+             AND b7.fk_Date          = fpd.fk_Date_Day
+             AND b7.Tenant_ID        = fpd.Tenant_ID
+        WHERE fpd.Unavailable = 0
+          AND dd.Full_Date >= @Today
+          AND dd.Full_Date <  @Week_End
+        GROUP BY fpd.fk_Practitioner, fpd.Tenant_ID;
+
         -- ── Site spine from Dim_Practitioners ───────────────────────────────
         SELECT
             dps.pk_Practice_Site                        AS fk_Site,
             dpr.pk_Practitioner                         AS fk_Practitioner,
             dpr.Tenant_ID,
             s.Days_Until_Next_30_Mins,
-            s.Days_Until_Next_1_Hour_Free
+            s.Days_Until_Next_1_Hour_Free,
+            w.Available_Mins_7d             AS Next_7_Days_Available_Mins,
+            w.Booked_Mins_7d                AS Next_7_Days_Booked_Mins
         INTO #src
         FROM Gold.Dim_Practitioners dpr
         LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID   = dpr.Site_ID
                                               AND dps.Tenant_ID = dpr.Tenant_ID
         LEFT JOIN #slots s ON s.fk_Practitioner = dpr.pk_Practitioner
                            AND s.Tenant_ID       = dpr.Tenant_ID
+        LEFT JOIN #week  w ON w.fk_Practitioner = dpr.pk_Practitioner
+                           AND w.Tenant_ID       = dpr.Tenant_ID
         WHERE dpr.pk_Practitioner > 0;   -- exclude unknown (-1) seed row
 
         -- ── Full rebuild ─────────────────────────────────────────────────────
@@ -114,6 +147,7 @@ BEGIN
             pk_Site_Practitioner_Current,
             fk_Site, fk_Practitioner, Tenant_ID,
             Days_Until_Next_30_Mins, Days_Until_Next_1_Hour_Free,
+            Next_7_Days_Available_Mins, Next_7_Days_Booked_Mins,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -124,6 +158,8 @@ BEGIN
             s.Tenant_ID,
             s.Days_Until_Next_30_Mins,
             s.Days_Until_Next_1_Hour_Free,
+            s.Next_7_Days_Available_Mins,
+            s.Next_7_Days_Booked_Mins,
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #src s;
@@ -131,6 +167,7 @@ BEGIN
 
         DROP TABLE #src;
         DROP TABLE #slots;
+        DROP TABLE #week;
         DROP TABLE #free;
         DROP TABLE #booked;
 
