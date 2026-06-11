@@ -70,6 +70,17 @@ CALCULATE(
 )",
     "#,##0");
 
+// Treatment items completed in the selected period, summed by price.
+// Activates the inactive fk Date Completed → Dim Date relationship so the
+// date slicer filters by completion date rather than creation date.
+add("Treatment Completed Price",
+    @"CALCULATE(
+    SUM('_Treatment Plan Items'[Price]),
+    '_Treatment Plan Items'[Completed] = TRUE(),
+    USERELATIONSHIP('_Treatment Plan Items'[fk Date Completed], 'Dim Date'[pk Date])
+)",
+    "£#,##0.00");
+
 // Exam ratio: exam appointments / all appointments
 add("Exam Ratio",
     @"DIVIDE(
