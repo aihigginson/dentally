@@ -20,7 +20,7 @@ VALUES
   (3,  3,  'ClearSmile Manchester (Dev)','https://dentally-production.up.railway.app', 'dev-mock-key-tenant3', NULL, NULL, 1, 1, NULL, 'Mock API — ClearSmile Manchester, 2 sites, NHS + private'),
   (4,  4,  'ClearSmile Birmingham (Dev)','https://dentally-production.up.railway.app', 'dev-mock-key-tenant4', NULL, NULL, 1, 1, NULL, 'Mock API — ClearSmile Birmingham, 1 site, NHS + private'),
 -- Seeded tenants (tenants 11-14 — loaded via Seed_Stage_Test_Data notebook, no API)
-  (11, 11, 'Valley Dental Group',        NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Bristol, 3 sites, NHS + ortho, 15,000 patients'),
+  (11, 11, 'Demonstration Practice',     NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Bristol, 3 sites, NHS + ortho, 15,000 patients'),
   (12, 12, 'Elara Dental',               NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Edinburgh, 1 site, private, 7,500 patients'),
   (13, 13, 'NorthCity Dental',           NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Leeds, 2 sites, NHS + private, 7,500 patients'),
   (14, 14, 'Eastside Dental',            NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Nottingham, 1 site, NHS + private, 5,000 patients');
