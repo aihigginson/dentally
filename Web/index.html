@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytically</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <style>
         :root {
             --navy:        #1A527A;
@@ -33,8 +36,7 @@
             background: white; border-radius: 12px; border: 1px solid var(--border);
             box-shadow: 0 4px 24px rgba(0,0,0,0.06); max-width: 360px; width: 90%;
         }
-        .auth-brand { font-size: 28px; font-weight: 700; color: var(--navy); margin-bottom: 32px; letter-spacing: 0.01em; }
-        .auth-brand span { color: var(--teal-bright); }
+        .auth-logo { width: 160px; height: 160px; object-fit: contain; margin-bottom: 16px; }
         .auth-spinner {
             width: 32px; height: 32px; border: 3px solid var(--border);
             border-top-color: var(--navy); border-radius: 50%;
@@ -306,7 +308,7 @@
 <!-- ════════════════ AUTH OVERLAY ════════════════ -->
 <div class="auth-overlay" id="auth-overlay">
     <div class="auth-box">
-        <div class="auth-brand">Analytic<span>ally</span></div>
+        <img class="auth-logo" src="/logo.png" alt="Analytically">
         <div class="auth-spinner" id="auth-spinner"></div>
         <div class="auth-status" id="auth-status">Loading...</div>
         <button class="auth-signin-btn" id="auth-signin-btn">Sign in with Microsoft</button>
