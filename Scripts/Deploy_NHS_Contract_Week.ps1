@@ -47,11 +47,11 @@ function Deploy-File($file, $label) {
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 1. Deploy Dim_Date table (adds Is_Working_Day_England column) ===" -ForegroundColor Cyan
-# Fabric validates SP column references at CREATE time, so the table must have
+Write-Host "=== 1. Deploy Dim_Date table (adds Is_Working_Day_England) ===" -ForegroundColor Cyan
+# Fabric validates SP column references at CREATE time so the table must have
 # the new column before the SP can be deployed.
 # ---------------------------------------------------------------------------
-Deploy-File "Gold.Dim_Date.Table.sql" "Gold.Dim_Date table (empty — repopulated next step)"
+Deploy-File "Gold.Dim_Date.Table.sql" "Gold.Dim_Date table (empty - repopulated in step 3)"
 
 if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
@@ -67,11 +67,11 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 Write-Host ""
 Write-Host "=== 3. Rebuild Dim_Date data ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
-$sql = @"
+$sql = @'
 DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0;
 EXEC Gold.usp_Load_Dim_Date @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 PRINT 'Dim_Date rows: ' + CAST(@i AS VARCHAR);
-"@
+'@
 Run-SQL $sql "EXEC Gold.usp_Load_Dim_Date"
 
 if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
@@ -96,11 +96,11 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 Write-Host ""
 Write-Host "=== 6. Populate Fact_NHS_Contract_Week ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
-$sql = @"
+$sql = @'
 DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0;
 EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 PRINT 'Fact_NHS_Contract_Week rows inserted: ' + CAST(@i AS VARCHAR);
-"@
+'@
 Run-SQL $sql "EXEC Gold.usp_Load_Fact_NHS_Contract_Week"
 
 if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
@@ -121,7 +121,7 @@ if ($Errors -gt 0) {
     Write-Host "All steps completed successfully." -ForegroundColor Green
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Yellow
-    Write-Host "  1. Re-run Meta.usp_Create_Gold_Views in Fabric to publish the PBI._NHS_Contract_Week view"
+    Write-Host "  1. Re-run Meta.usp_Create_Gold_Views in Fabric to publish PBI._NHS_Contract_Week view"
     Write-Host "  2. Refresh the NHS semantic model in Power BI"
     Write-Host "  3. Run TabularEditor_NHS.csx in Tabular Editor to add the two new DAX measures"
     Write-Host "  4. Build the line chart visual in the NHS report"
