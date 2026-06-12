@@ -95,6 +95,12 @@
             display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
+        body.dev-mode .header { background: #6B21A8; }
+        body.dev-mode .nav-tab.active, body.dev-mode .nav-tab:hover { color: #6B21A8; border-bottom-color: #6B21A8; }
+        .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+                     background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
+                     border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+        body.dev-mode .dev-badge { display: inline; }
         .header-brand  { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
         .brand-1       { color: #FFFFFF; }
         .brand-2       { color: var(--teal-bright); }
@@ -343,7 +349,7 @@
 
 <!-- ════════════════ HEADER ════════════════ -->
 <header class="header">
-    <div class="header-brand"><span class="brand-1">Analytic</span><span class="brand-2">ally</span></div>
+    <div class="header-brand"><span class="brand-1">Analytic</span><span class="brand-2">ally</span><span class="dev-badge">DEV</span></div>
     <div class="header-right">
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
@@ -631,6 +637,7 @@
         const o = document.getElementById('header-org');
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
+        if (data.env === 'dev') document.body.classList.add('dev-mode');
 
         document.getElementById('auth-overlay').style.display = 'none';
 

@@ -14,6 +14,7 @@ load_dotenv()
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
+APP_ENV        = os.environ.get('APP_ENV', 'prod')
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
 CLIENT_SECRET  = os.environ['CLIENT_SECRET']
@@ -201,6 +202,7 @@ def me():
             'tenant_ids':       tids,
             'practice_name':    practice_name,
             'maintain_targets': maintain_targets,
+            'env':              APP_ENV,
         })
     except Exception as e:
         import traceback
