@@ -1177,12 +1177,18 @@
 
         const report = doEmbed(config);
 
-        // Mobile layout fallback: if report hangs or errors, re-embed with desktop layout
+        // Mobile layout fallback: only for reports with NO mobile layout, which
+        // hang silently. A successful 'loaded' or 'rendered' means the report is
+        // fine — cancel the timer so a slow-but-working report is never forced to
+        // desktop. The 'error' event remains the real failure signal.
         if (config.settings.layoutType === 2) {
-            let rendered = false;
-            report.on('rendered', () => { rendered = true; });
+            let settled = false;
+            const settle = (ev) => { if (!settled) { settled = true; clearTimeout(timer); _devLog('[mobile ok]', sectionKey, ev); } };
+            report.on('loaded',   () => settle('loaded'));
+            report.on('rendered', () => settle('rendered'));
             const fallback = (why) => {
-                if (rendered) return;
+                if (settled) return;
+                settled = true;
                 clearTimeout(timer);
                 _devLog('[mobile fallback -> desktop]', sectionKey, why);
                 const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
