@@ -1149,7 +1149,10 @@
         const c = slot.querySelector('.embed-canvas');
         if (!c) return;
         if (isMobile()) { c.style.transform = 'none'; return; }
-        const s = Math.min(slot.clientWidth / CANVAS_W, slot.clientHeight / CANVAS_H);
+        // Cap at 1.0 — scaling the iframe ABOVE 1:1 makes the browser re-rasterise
+        // the report at higher effective resolution and PBI reflows its text,
+        // reintroducing the axis/legend crowding. Only ever scale DOWN to fit.
+        const s = Math.min(slot.clientWidth / CANVAS_W, slot.clientHeight / CANVAS_H, 1);
         if (s > 0) c.style.transform = `scale(${s})`;
     }
     // One observer rescales whichever slot changes size (window resize, filter bar
