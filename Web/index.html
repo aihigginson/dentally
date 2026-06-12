@@ -1180,28 +1180,7 @@
             return r;
         }
 
-        const report = doEmbed(config);
-
-        // Mobile layout fallback: only for reports with NO mobile layout, which
-        // hang silently. A successful 'loaded' or 'rendered' means the report is
-        // fine — cancel the timer so a slow-but-working report is never forced to
-        // desktop. The 'error' event remains the real failure signal.
-        if (config.settings.layoutType === 2) {
-            let settled = false;
-            const settle = (ev) => { if (!settled) { settled = true; clearTimeout(timer); _devLog('[mobile ok]', sectionKey, ev); } };
-            report.on('loaded',   () => settle('loaded'));
-            report.on('rendered', () => settle('rendered'));
-            const fallback = (why) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                _devLog('[mobile fallback -> desktop]', sectionKey, why);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
-                doEmbed(desktop);
-            };
-            report.on('error', () => fallback('error event'));
-            const timer = setTimeout(() => fallback('12s timeout'), 12000);
-        }
+        doEmbed(config);
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
