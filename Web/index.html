@@ -1048,10 +1048,12 @@
     const _mqMobile = window.matchMedia('(max-width: 767px)');
     function isMobile() { return _mqMobile.matches; }
 
+    // displayOption: 0 = FitToPage (whole page scaled to fit, aspect preserved —
+    // matches the Power BI service view). 1 = FitToWidth, 2 = ActualSize.
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            : { layoutType: 1, customLayout: { displayOption: 1 } };
+            : { layoutType: 1, customLayout: { displayOption: 0 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -1060,7 +1062,7 @@
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 } },
         };
     }
 
@@ -1196,7 +1198,7 @@
                 settled = true;
                 clearTimeout(timer);
                 _devLog('[mobile fallback -> desktop]', sectionKey, why);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
+                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 0 } } };
                 doEmbed(desktop);
             };
             report.on('error', () => fallback('error event'));
