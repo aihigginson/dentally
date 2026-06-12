@@ -8,6 +8,7 @@
 --    *02     27/05/2026  AIH Financial_Year_Name format changed from 'FY2024/25' to 'FY 2024-25'
 --    *03     29/05/2026  AIH Add Calendar_Year_Week, Week_Commencing_Date, Week_Ending_Date,
 --                            Month_Commencing_Date, Month_Ending_Date
+--    *04     12/06/2026  AIH Add Is_Working_Day_England (Mon-Fri excl. England/Wales bank holidays)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Date @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Date]    Script Date: 20/04/2026 10:15:06 ******/
@@ -110,7 +111,8 @@ BEGIN
         Is_Weekend                      BIT             NOT NULL,
         Is_Leap_Year                    BIT             NOT NULL,
         Is_England_Wales_Bank_Holiday   BIT             NOT NULL,
-        Is_Scotland_Bank_Holiday        BIT             NOT NULL
+        Is_Scotland_Bank_Holiday        BIT             NOT NULL,
+        Is_Working_Day_England          BIT             NOT NULL
     );
 
     -- -------------------------------------------------------
@@ -183,7 +185,8 @@ BEGIN
         Financial_Week, Financial_Day_Of_Year,
         Relative_Financial_Day, Relative_Financial_Week, Relative_Financial_Month,
         Relative_Financial_Quarter, Relative_Financial_Year,
-        Is_Weekend, Is_Leap_Year, Is_England_Wales_Bank_Holiday, Is_Scotland_Bank_Holiday
+        Is_Weekend, Is_Leap_Year, Is_England_Wales_Bank_Holiday, Is_Scotland_Bank_Holiday,
+        Is_Working_Day_England
     )
     SELECT
         DATEDIFF(DAY, '19991231', d),
@@ -253,16 +256,20 @@ BEGIN
         CASE WHEN DATEPART(WEEKDAY, d) IN (1, 7) THEN 1 ELSE 0 END,
         CASE WHEN (yr % 4 = 0 AND yr % 100 <> 0) OR yr % 400 = 0 THEN 1 ELSE 0 END,
         CAST(0 AS BIT),
-        CAST(0 AS BIT)
+        CAST(0 AS BIT),
+        CASE WHEN DATEPART(WEEKDAY, d) IN (1, 7) THEN 0 ELSE 1 END
     FROM D3;
 
     UPDATE d SET Is_England_Wales_Bank_Holiday = 1 
     FROM Gold.Dim_Date d 
     JOIN Bronze.Bank_Holidays ON Holiday_Date=Full_Date AND Division = 'england-and-wales'
 
-    UPDATE d SET Is_Scotland_Bank_Holiday = 1 
-    FROM Gold.Dim_Date d 
+    UPDATE d SET Is_Scotland_Bank_Holiday = 1
+    FROM Gold.Dim_Date d
     JOIN Bronze.Bank_Holidays ON Holiday_Date=Full_Date AND Division = 'scotland'
+
+    UPDATE Gold.Dim_Date SET Is_Working_Day_England = 0
+    WHERE Is_England_Wales_Bank_Holiday = 1
 
 
     SELECT @My_Inserts = COUNT(*) FROM Gold.Dim_Date

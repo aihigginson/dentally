@@ -49,6 +49,7 @@ CREATE TABLE [Gold].[Dim_Date](
 	[Is_Weekend] [bit] NOT NULL,
 	[Is_Leap_Year] [bit] NOT NULL,
 	[Is_England_Wales_Bank_Holiday] [bit] NOT NULL,
-	[Is_Scotland_Bank_Holiday] [bit] NOT NULL
+	[Is_Scotland_Bank_Holiday] [bit] NOT NULL,
+	[Is_Working_Day_England] [bit] NOT NULL
 )
 GO
