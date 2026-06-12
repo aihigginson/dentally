@@ -1133,6 +1133,9 @@
             applyFilters();
         });
         r.on('rendered', () => {
+            const slot = document.getElementById('embed-' + sectionKey);
+            const vis  = slot && slot.offsetParent !== null;
+            if (slot) _devLog('[rendered]', sectionKey, slot.clientWidth + 'x' + slot.clientHeight, vis ? 'visible' : 'HIDDEN');
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
         });
