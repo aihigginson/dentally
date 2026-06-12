@@ -241,8 +241,12 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
+            /* Aspect ratio MUST match the PBI report canvas (Format > Canvas
+               settings). Canvas is 1280x600; a mismatch makes FitToPage letterbox
+               and render the report smaller than the container, which triggers
+               PBI's responsive layout to crowd axis titles/legends. */
             flex: 1; min-height: 0;
-            width: 100%; max-width: calc((100vh - 100px) * 16 / 9); margin: 0;
+            width: 100%; max-width: calc((100vh - 100px) * 1280 / 600); margin: 0;
             background: white; border: none; display: block;
             overflow: hidden;
         }
