@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID for Practitioner_Id, User_Id, Site_Id, etc.)
+--    *03     12/06/2026  AIH Fix Contract_Targets_String truncation (LEFT 100 -> full value)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
@@ -84,7 +85,7 @@ BEGIN
                 LEFT(Practitioner_NHS_Number,          100)  AS [Practitioner_NHS_Number],
                 LEFT(Practitioner_Site_ID,             100)  AS [Practitioner_Site_ID],
                 LEFT(Practitioner_Default_Contract_ID, 100)  AS [Practitioner_Default_Contract_ID],
-                LEFT(Contract_Targets_String,          100)  AS [Contract_Targets_String],
+                Contract_Targets_String                       AS [Contract_Targets_String],
                 LEFT(User_Image_Url,                   100)  AS [User_Image_URL],
                 LEFT(User_Last_Login,                  100)  AS [User_Last_Login],
                 LEFT(User_Created_At,                  100)  AS [User_Created_At],

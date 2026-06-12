@@ -24,7 +24,7 @@ CREATE TABLE [Silver].[Practitioners](
 	[Practitioner_NHS_Number] [VARCHAR](100) NULL,
 	[Practitioner_Site_ID] [VARCHAR](100) NULL,
 	[Practitioner_Default_Contract_ID] [VARCHAR](100) NULL,
-	[Contract_Targets_String] [VARCHAR](100) NULL,
+	[Contract_Targets_String] [VARCHAR](MAX) NULL,
 	[User_Image_URL] [VARCHAR](100) NULL,
 	[User_Last_Login] [VARCHAR](100) NULL,
 	[User_Created_At] [VARCHAR](100) NULL,
