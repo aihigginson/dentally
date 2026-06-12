@@ -241,8 +241,12 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
+            /* Fill the content area and align left. The old
+               max-width: calc((100vh - 100px) * 16/9) used a magic chrome-height
+               constant that underestimated real chrome, sizing the box wrong and
+               pushing the report off the left edge — removed. */
             flex: 1; min-height: 0;
-            width: 100%; max-width: calc((100vh - 100px) * 16 / 9); margin: 0;
+            width: 100%; margin: 0; align-self: flex-start;
             background: white; border: none; display: block;
             overflow: hidden;
         }
