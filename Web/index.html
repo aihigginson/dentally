@@ -101,6 +101,13 @@
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
         body.dev-mode .dev-badge { display: inline; }
+        #dev-log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99999;
+                   max-height: 30vh; overflow-y: auto; margin: 0; padding: 6px 10px;
+                   background: rgba(20,0,40,0.88); color: #d6b3ff; font-family: monospace;
+                   font-size: 11px; line-height: 1.35; white-space: pre-wrap;
+                   border-top: 2px solid #6B21A8; }
+        #dev-log .dev-log-clear { position: sticky; top: 0; float: right; color: #fff;
+                   background: #6B21A8; border-radius: 4px; padding: 0 6px; cursor: pointer; }
         .header-brand  { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
         .brand-1       { color: #FFFFFF; }
         .brand-2       { color: var(--teal-bright); }
@@ -458,6 +465,32 @@
 <script src="/msal-browser.min.js"></script>
 <script src="/powerbi.min.js"></script>
 <script>
+
+    // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
+    // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
+    // fixed panel at the bottom of the screen so issues can be seen on a phone.
+    function _devLog(...args) {
+        try { console.log(...args); } catch (e) {}
+        if (!document.body.classList.contains('dev-mode')) return;
+        let panel = document.getElementById('dev-log');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'dev-log';
+            const clear = document.createElement('span');
+            clear.className = 'dev-log-clear';
+            clear.textContent = 'clear';
+            clear.onclick = () => { panel.querySelectorAll('.dev-log-line').forEach(n => n.remove()); };
+            panel.appendChild(clear);
+            document.body.appendChild(panel);
+        }
+        const line = document.createElement('div');
+        line.className = 'dev-log-line';
+        const t = new Date().toTimeString().slice(0, 8);
+        line.textContent = t + '  ' + args.map(a =>
+            typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        panel.appendChild(line);
+        panel.scrollTop = panel.scrollHeight;
+    }
 
     // ── MSAL auth state ───────────────────────────────────────────────────────
     const MSAL_SCOPES = ['openid', 'profile', 'email'];
@@ -1051,8 +1084,7 @@
     // is immune to the content-overflow width blips that previously caused a
     // spurious desktop re-embed seconds after a mobile report loaded.
     _mqMobile.addEventListener('change', () => {
-        if (document.body.classList.contains('dev-mode'))
-            console.log('[breakpoint change] isMobile=', _mqMobile.matches);
+        _devLog('[breakpoint change] isMobile=', _mqMobile.matches, 'innerWidth=', window.innerWidth);
         // Full re-embed on layout switch — updateSettings alone can't swap mobile/desktop layout
         Object.keys(embeddedReports).forEach(sectionKey => {
             const reportName = SECTION_REPORT[sectionKey];
@@ -1115,7 +1147,7 @@
             });
             r.on('buttonClicked', event => {
                 const title = event.detail && event.detail.title ? event.detail.title : '';
-                if (document.body.classList.contains('dev-mode')) console.log('[buttonClicked]', event.detail);
+                _devLog('[buttonClicked]', event.detail);
                 if (!title.startsWith('goto_')) return;
                 // Format: goto_<ReportName>_<PageName-with-dashes>
                 // Spaces in page names are replaced with - by convention (no report names contain -)
@@ -1149,14 +1181,15 @@
         if (config.settings.layoutType === 2) {
             let rendered = false;
             report.on('rendered', () => { rendered = true; });
-            const fallback = () => {
+            const fallback = (why) => {
                 if (rendered) return;
                 clearTimeout(timer);
+                _devLog('[mobile fallback -> desktop]', sectionKey, why);
                 const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
                 doEmbed(desktop);
             };
-            report.on('error', fallback);
-            const timer = setTimeout(fallback, 12000);
+            report.on('error', () => fallback('error event'));
+            const timer = setTimeout(() => fallback('12s timeout'), 12000);
         }
     }
 
