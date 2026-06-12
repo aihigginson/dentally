@@ -47,7 +47,17 @@ function Deploy-File($file, $label) {
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 1. Update Dim_Date SP (adds Is_Working_Day_England) ===" -ForegroundColor Cyan
+Write-Host "=== 1. Deploy Dim_Date table (adds Is_Working_Day_England column) ===" -ForegroundColor Cyan
+# Fabric validates SP column references at CREATE time, so the table must have
+# the new column before the SP can be deployed.
+# ---------------------------------------------------------------------------
+Deploy-File "Gold.Dim_Date.Table.sql" "Gold.Dim_Date table (empty — repopulated next step)"
+
+if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
+
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "=== 2. Deploy updated usp_Load_Dim_Date SP ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 Deploy-File "Gold.usp_Load_Dim_Date.StoredProcedure.sql" "Gold.usp_Load_Dim_Date SP"
 
@@ -55,7 +65,7 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 2. Rebuild Dim_Date with new column ===" -ForegroundColor Cyan
+Write-Host "=== 3. Rebuild Dim_Date data ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 $sql = @"
 DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0;
@@ -68,7 +78,7 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 3. Create Fact_NHS_Contract_Week table ===" -ForegroundColor Cyan
+Write-Host "=== 4. Create Fact_NHS_Contract_Week table ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 Deploy-File "Gold.Fact_NHS_Contract_Week.Table.sql" "Gold.Fact_NHS_Contract_Week table"
 
@@ -76,7 +86,7 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 4. Deploy usp_Load_Fact_NHS_Contract_Week ===" -ForegroundColor Cyan
+Write-Host "=== 5. Deploy usp_Load_Fact_NHS_Contract_Week ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 Deploy-File "Gold.usp_Load_Fact_NHS_Contract_Week.StoredProcedure.sql" "Gold.usp_Load_Fact_NHS_Contract_Week SP"
 
@@ -84,7 +94,7 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 5. Populate Fact_NHS_Contract_Week ===" -ForegroundColor Cyan
+Write-Host "=== 6. Populate Fact_NHS_Contract_Week ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 $sql = @"
 DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0;
@@ -97,7 +107,7 @@ if ($Errors -gt 0) { Write-Host "Aborting." -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== 6. Update Process_Config and Load_All ===" -ForegroundColor Cyan
+Write-Host "=== 7. Update Process_Config and Load_All ===" -ForegroundColor Cyan
 # ---------------------------------------------------------------------------
 Deploy-File "Audit.Process_Config.Data.sql" "Audit.Process_Config data"
 Deploy-File "Audit.usp_Load_All.sql"        "Audit.usp_Load_All SP"
