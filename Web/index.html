@@ -1167,8 +1167,14 @@
         });
         r.on('rendered', () => {
             const slot = document.getElementById('embed-' + sectionKey);
+            const cv   = slot && slot.querySelector('.embed-canvas');
+            const ifr  = cv && cv.querySelector('iframe');
             const vis  = slot && slot.offsetParent !== null;
-            if (slot) _devLog('[rendered]', sectionKey, slot.clientWidth + 'x' + slot.clientHeight, vis ? 'visible' : 'HIDDEN');
+            _devLog('[rendered]', sectionKey,
+                'slot=' + (slot ? slot.clientWidth + 'x' + slot.clientHeight : '?'),
+                'canvas=' + (cv ? cv.clientWidth + 'x' + cv.clientHeight : '?'),
+                'iframe=' + (ifr ? ifr.clientWidth + 'x' + ifr.clientHeight : '?'),
+                vis ? 'visible' : 'HIDDEN');
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
         });
