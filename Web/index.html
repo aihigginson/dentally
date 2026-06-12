@@ -1178,21 +1178,19 @@
                 'canvas=' + (cv ? cv.clientWidth + 'x' + cv.clientHeight : '?'),
                 'iframe=' + (ifr ? ifr.clientWidth + 'x' + ifr.clientHeight : '?'),
                 vis ? 'visible' : 'HIDDEN', r.__refit ? '(refit)' : '');
-            // First render happens before the iframe/layout/fonts have settled, so
-            // PBI lays out wrong and stays wrong until a resize forces a re-fit.
-            // Nudge it once, only when the slot is visible (so the re-fit measures
-            // the real size, not a hidden 0). Perturbing the canvas height by 1px
-            // guarantees PBI re-measures (a bare window 'resize' can be a no-op if
-            // PBI thinks its iframe is unchanged). Mirrors the manual resize fix.
+            // Segoe UI Light/Semibold are lazy-loaded web fonts in the PBI iframe;
+            // the first render lays out axis/legend with fallback metrics and never
+            // re-measures, causing crowding until a resize. We can't observe the
+            // cross-origin iframe's fonts, so force PBI to re-measure a few times
+            // over the first ~1.5s to catch the font load whenever it lands.
+            // Perturbing the canvas height by 1px guarantees a re-measure.
             if (!r.__refit && vis && cv && slot && slot.clientWidth > 0) {
                 r.__refit = true;
-                requestAnimationFrame(() => {
+                const refit = () => {
                     cv.style.height = (CANVAS_H - 1) + 'px';
-                    requestAnimationFrame(() => {
-                        cv.style.height = CANVAS_H + 'px';
-                        window.dispatchEvent(new Event('resize'));
-                    });
-                });
+                    requestAnimationFrame(() => { cv.style.height = CANVAS_H + 'px'; });
+                };
+                [0, 400, 900, 1500].forEach(ms => setTimeout(refit, ms));
             }
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
