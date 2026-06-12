@@ -1098,14 +1098,7 @@
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
-            r.on('loaded', () => {
-                attachReportToSubnav(sectionKey, r);
-                applyFilters();
-            });
-            r.on('rendered', () => {
-                const d = sectionSubnavData[sectionKey];
-                if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
-            });
+            attachReportHandlers(r, sectionKey);
         });
     });
 
@@ -1117,6 +1110,48 @@
         function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
         report.on('rendered', remove);
         report.on('error', remove);
+    }
+
+    // Standard event handlers attached to every embedded report. Must be called
+    // from BOTH embed paths (initial load and breakpoint re-embed) — otherwise a
+    // re-embed silently drops the buttonClicked handler and cross-report
+    // navigation buttons stop working.
+    function attachReportHandlers(r, sectionKey) {
+        r.on('loaded', () => {
+            attachReportToSubnav(sectionKey, r);
+            applyFilters();
+        });
+        r.on('rendered', () => {
+            const d = sectionSubnavData[sectionKey];
+            if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+        });
+        r.on('buttonClicked', event => {
+            const title = event.detail && event.detail.title ? event.detail.title : '';
+            _devLog('[buttonClicked]', event.detail);
+            if (!title.startsWith('goto_')) return;
+            // Format: goto_<ReportName>_<PageName-with-dashes>
+            // Spaces in page names are replaced with - by convention (no report names contain -)
+            const parts  = title.split('_');
+            if (parts.length < 3) return;
+            const sectionRaw = parts[1].toLowerCase();
+            const pageDisplay = parts.slice(2).join('_').replace(/-/g, ' ');
+            const target = { home:'home', revenue:'revenue', patient:'patient',
+                             schedule:'scheduling', scheduling:'scheduling',
+                             clinical:'clinical', nhs:'nhs' }[sectionRaw];
+            if (!target) return;
+            const page = (SECTION_PAGES[target] || [])
+                .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
+            if (!sectionSubnavData[target]) initSubnav(target);
+            if (page) sectionSubnavData[target].activePage = page.name;
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            const tab = document.querySelector(`.nav-tab[data-section="${target}"]`);
+            if (tab) tab.classList.add('active');
+            closePageDropdown();
+            activateSection(target);
+            loadEmbedsInSection(target);
+            if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
+                sectionSubnavData[target].report.setPage(page.name);
+        });
     }
 
     async function loadEmbedsInSection(sectionKey) {
@@ -1141,37 +1176,7 @@
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
-            r.on('loaded', () => {
-                attachReportToSubnav(sectionKey, r);
-                applyFilters();
-            });
-            r.on('buttonClicked', event => {
-                const title = event.detail && event.detail.title ? event.detail.title : '';
-                _devLog('[buttonClicked]', event.detail);
-                if (!title.startsWith('goto_')) return;
-                // Format: goto_<ReportName>_<PageName-with-dashes>
-                // Spaces in page names are replaced with - by convention (no report names contain -)
-                const parts  = title.split('_');
-                if (parts.length < 3) return;
-                const sectionRaw = parts[1].toLowerCase();
-                const pageDisplay = parts.slice(2).join('_').replace(/-/g, ' ');
-                const target = { home:'home', revenue:'revenue', patient:'patient',
-                                 schedule:'scheduling', scheduling:'scheduling',
-                                 clinical:'clinical', nhs:'nhs' }[sectionRaw];
-                if (!target) return;
-                const page = (SECTION_PAGES[target] || [])
-                    .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
-                if (!sectionSubnavData[target]) initSubnav(target);
-                if (page) sectionSubnavData[target].activePage = page.name;
-                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-                const tab = document.querySelector(`.nav-tab[data-section="${target}"]`);
-                if (tab) tab.classList.add('active');
-                closePageDropdown();
-                activateSection(target);
-                loadEmbedsInSection(target);
-                if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
-                    sectionSubnavData[target].report.setPage(page.name);
-            });
+            attachReportHandlers(r, sectionKey);
             return r;
         }
 
