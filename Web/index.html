@@ -216,7 +216,7 @@
         body.is-fullscreen .nav,
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
-        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; aspect-ratio: auto; }
+        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
         body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
@@ -241,28 +241,10 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
-            /* Outer box: exactly canvas-shaped (1280:600) and left-aligned.
-               The report is embedded into a fixed 1280x600 inner .embed-canvas
-               and scaled to fit via CSS transform, so PBI ALWAYS lays out at the
-               design size (no responsive re-layout / axis-legend crowding).
-               If the canvas size changes, update this ratio AND the JS 1280/600. */
             flex: 1; min-height: 0;
-            aspect-ratio: 1280 / 600;
-            width: auto; max-width: 100%;
-            align-self: flex-start; margin: 0;
+            width: 100%; max-width: calc((100vh - 100px) * 16 / 9); margin: 0;
             background: white; border: none; display: block;
             overflow: hidden;
-            position: relative;
-        }
-        .embed-canvas {
-            position: absolute; top: 0; left: 0;
-            width: 1280px; height: 600px;
-            transform-origin: top left;
-        }
-        /* Mobile uses PBI MobilePortrait — no fixed canvas, fill the area. */
-        @media (max-width: 767px) {
-            .embed-full   { aspect-ratio: auto; width: 100%; }
-            .embed-canvas { width: 100%; height: 100%; transform: none !important; }
         }
         .embed-full iframe,
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
@@ -1066,12 +1048,10 @@
     const _mqMobile = window.matchMedia('(max-width: 767px)');
     function isMobile() { return _mqMobile.matches; }
 
-    // displayOption: 0 = FitToPage (whole page scaled to fit, aspect preserved —
-    // matches the Power BI service view). 1 = FitToWidth, 2 = ActualSize.
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            : { layoutType: 1, customLayout: { displayOption: 0 } };
+            : { layoutType: 1, customLayout: { displayOption: 1 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -1080,7 +1060,7 @@
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 } },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
         };
     }
 
@@ -1114,14 +1094,11 @@
             const slot = document.getElementById('embed-' + sectionKey);
             if (!slot) return;
             const cfg = _buildConfig(cached);
-            const canvas = _canvas(slot);
-            window.powerbi.reset(canvas);
-            const r = window.powerbi.embed(canvas, cfg);
+            window.powerbi.reset(slot);
+            const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
-            _slotRO.observe(slot);
-            _scaleCanvas(slot);
         });
     });
 
@@ -1135,30 +1112,6 @@
         report.on('error', remove);
     }
 
-    // Fixed 1280x600 inner element that PBI is embedded into (desktop). PBI always
-    // lays out at the design size; we scale this element with a CSS transform to
-    // fit the slot, so the layout is pixel-identical everywhere (no responsive
-    // re-flow). Mobile uses MobilePortrait, so the canvas just fills the slot.
-    const CANVAS_W = 1280, CANVAS_H = 600;
-    function _canvas(slot) {
-        let c = slot.querySelector('.embed-canvas');
-        if (!c) { c = document.createElement('div'); c.className = 'embed-canvas'; slot.appendChild(c); }
-        return c;
-    }
-    function _scaleCanvas(slot) {
-        const c = slot.querySelector('.embed-canvas');
-        if (!c) return;
-        if (isMobile()) { c.style.transform = 'none'; return; }
-        // Cap at 1.0 — scaling the iframe ABOVE 1:1 makes the browser re-rasterise
-        // the report at higher effective resolution and PBI reflows its text,
-        // reintroducing the axis/legend crowding. Only ever scale DOWN to fit.
-        const s = Math.min(slot.clientWidth / CANVAS_W, slot.clientHeight / CANVAS_H, 1);
-        if (s > 0) c.style.transform = `scale(${s})`;
-    }
-    // One observer rescales whichever slot changes size (window resize, filter bar
-    // toggle, section show/hide, fullscreen) — no manual resize wiring needed.
-    const _slotRO = new ResizeObserver(entries => { for (const e of entries) _scaleCanvas(e.target); });
-
     // Standard event handlers attached to every embedded report. Must be called
     // from BOTH embed paths (initial load and breakpoint re-embed) — otherwise a
     // re-embed silently drops the buttonClicked handler and cross-report
@@ -1169,29 +1122,6 @@
             applyFilters();
         });
         r.on('rendered', () => {
-            const slot = document.getElementById('embed-' + sectionKey);
-            const cv   = slot && slot.querySelector('.embed-canvas');
-            const ifr  = cv && cv.querySelector('iframe');
-            const vis  = slot && slot.offsetParent !== null;
-            _devLog('[rendered]', sectionKey,
-                'slot=' + (slot ? slot.clientWidth + 'x' + slot.clientHeight : '?'),
-                'canvas=' + (cv ? cv.clientWidth + 'x' + cv.clientHeight : '?'),
-                'iframe=' + (ifr ? ifr.clientWidth + 'x' + ifr.clientHeight : '?'),
-                vis ? 'visible' : 'HIDDEN', r.__refit ? '(refit)' : '');
-            // Segoe UI Light/Semibold are lazy-loaded web fonts in the PBI iframe;
-            // the first render lays out axis/legend with fallback metrics and never
-            // re-measures, causing crowding until a resize. We can't observe the
-            // cross-origin iframe's fonts, so force PBI to re-measure a few times
-            // over the first ~1.5s to catch the font load whenever it lands.
-            // Perturbing the canvas height by 1px guarantees a re-measure.
-            if (!r.__refit && vis && cv && slot && slot.clientWidth > 0) {
-                r.__refit = true;
-                const refit = () => {
-                    cv.style.height = (CANVAS_H - 1) + 'px';
-                    requestAnimationFrame(() => { cv.style.height = CANVAS_H + 'px'; });
-                };
-                [0, 400, 900, 1500].forEach(ms => setTimeout(refit, ms));
-            }
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
         });
@@ -1242,14 +1172,11 @@
         }
 
         function doEmbed(cfg) {
-            const canvas = _canvas(slot);
-            window.powerbi.reset(canvas);
-            const r = window.powerbi.embed(canvas, cfg);
+            window.powerbi.reset(slot);
+            const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
-            _slotRO.observe(slot);
-            _scaleCanvas(slot);
             return r;
         }
 
@@ -1269,7 +1196,7 @@
                 settled = true;
                 clearTimeout(timer);
                 _devLog('[mobile fallback -> desktop]', sectionKey, why);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 0 } } };
+                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
                 doEmbed(desktop);
             };
             report.on('error', () => fallback('error event'));
