@@ -1177,7 +1177,23 @@
                 'slot=' + (slot ? slot.clientWidth + 'x' + slot.clientHeight : '?'),
                 'canvas=' + (cv ? cv.clientWidth + 'x' + cv.clientHeight : '?'),
                 'iframe=' + (ifr ? ifr.clientWidth + 'x' + ifr.clientHeight : '?'),
-                vis ? 'visible' : 'HIDDEN');
+                vis ? 'visible' : 'HIDDEN', r.__refit ? '(refit)' : '');
+            // First render happens before the iframe/layout/fonts have settled, so
+            // PBI lays out wrong and stays wrong until a resize forces a re-fit.
+            // Nudge it once, only when the slot is visible (so the re-fit measures
+            // the real size, not a hidden 0). Perturbing the canvas height by 1px
+            // guarantees PBI re-measures (a bare window 'resize' can be a no-op if
+            // PBI thinks its iframe is unchanged). Mirrors the manual resize fix.
+            if (!r.__refit && vis && cv && slot && slot.clientWidth > 0) {
+                r.__refit = true;
+                requestAnimationFrame(() => {
+                    cv.style.height = (CANVAS_H - 1) + 'px';
+                    requestAnimationFrame(() => {
+                        cv.style.height = CANVAS_H + 'px';
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                });
+            }
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
         });
