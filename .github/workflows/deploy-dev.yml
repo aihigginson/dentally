@@ -38,4 +38,5 @@ jobs:
           az containerapp update \
             --name ca-analytically-dev \
             --resource-group rg-analytically \
-            --image analyticallyacr.azurecr.io/analytically:dev
+            --image analyticallyacr.azurecr.io/analytically:dev \
+            --revision-suffix r${{ github.run_number }}
