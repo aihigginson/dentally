@@ -1109,6 +1109,33 @@
                 attachReportToSubnav(sectionKey, r);
                 applyFilters();
             });
+            r.on('buttonClicked', event => {
+                const title = event.detail && event.detail.title ? event.detail.title : '';
+                if (document.body.classList.contains('dev-mode')) console.log('[buttonClicked]', event.detail);
+                if (!title.startsWith('goto_')) return;
+                // Format: goto_<ReportName>_<PageName-with-dashes>
+                // Spaces in page names are replaced with - by convention (no report names contain -)
+                const parts  = title.split('_');
+                if (parts.length < 3) return;
+                const sectionRaw = parts[1].toLowerCase();
+                const pageDisplay = parts.slice(2).join('_').replace(/-/g, ' ');
+                const target = { home:'home', revenue:'revenue', patient:'patient',
+                                 schedule:'scheduling', scheduling:'scheduling',
+                                 clinical:'clinical', nhs:'nhs' }[sectionRaw];
+                if (!target) return;
+                const page = (SECTION_PAGES[target] || [])
+                    .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
+                if (!sectionSubnavData[target]) initSubnav(target);
+                if (page) sectionSubnavData[target].activePage = page.name;
+                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                const tab = document.querySelector(`.nav-tab[data-section="${target}"]`);
+                if (tab) tab.classList.add('active');
+                closePageDropdown();
+                activateSection(target);
+                loadEmbedsInSection(target);
+                if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
+                    sectionSubnavData[target].report.setPage(page.name);
+            });
             return r;
         }
 
