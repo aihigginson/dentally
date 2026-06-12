@@ -241,12 +241,17 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
-            /* Aspect ratio MUST match the PBI report canvas (Format > Canvas
-               settings). Canvas is 1280x600; a mismatch makes FitToPage letterbox
-               and render the report smaller than the container, which triggers
-               PBI's responsive layout to crowd axis titles/legends. */
+            /* aspect-ratio MUST match the PBI report canvas (Format > Canvas
+               settings). Canvas is 1280x600. Deriving width from the real flex
+               height via aspect-ratio (instead of a magic chrome-height constant)
+               makes the box exactly canvas-shaped, so FitToPage fills it edge to
+               edge with no letterbox offset and no responsive crowding.
+               align-self keeps it left-aligned. If the canvas size changes,
+               update this ratio. */
             flex: 1; min-height: 0;
-            width: 100%; max-width: calc((100vh - 100px) * 1280 / 600); margin: 0;
+            aspect-ratio: 1280 / 600;
+            width: auto; max-width: 100%;
+            align-self: flex-start; margin: 0;
             background: white; border: none; display: block;
             overflow: hidden;
         }
