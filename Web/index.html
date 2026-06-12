@@ -95,6 +95,19 @@
             display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
+        body.dev-mode .header { background: #6B21A8; }
+        body.dev-mode .nav-tab.active, body.dev-mode .nav-tab:hover { color: #6B21A8; border-bottom-color: #6B21A8; }
+        .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+                     background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
+                     border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+        body.dev-mode .dev-badge { display: inline; }
+        #dev-log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99999;
+                   max-height: 30vh; overflow-y: auto; margin: 0; padding: 6px 10px;
+                   background: rgba(20,0,40,0.88); color: #d6b3ff; font-family: monospace;
+                   font-size: 11px; line-height: 1.35; white-space: pre-wrap;
+                   border-top: 2px solid #6B21A8; }
+        #dev-log .dev-log-clear { position: sticky; top: 0; float: right; color: #fff;
+                   background: #6B21A8; border-radius: 4px; padding: 0 6px; cursor: pointer; }
         .header-brand  { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
         .brand-1       { color: #FFFFFF; }
         .brand-2       { color: var(--teal-bright); }
@@ -343,7 +356,7 @@
 
 <!-- ════════════════ HEADER ════════════════ -->
 <header class="header">
-    <div class="header-brand"><span class="brand-1">Analytic</span><span class="brand-2">ally</span></div>
+    <div class="header-brand"><span class="brand-1">Analytic</span><span class="brand-2">ally</span><span class="dev-badge">DEV</span></div>
     <div class="header-right">
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
@@ -453,6 +466,32 @@
 <script src="/powerbi.min.js"></script>
 <script>
 
+    // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
+    // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
+    // fixed panel at the bottom of the screen so issues can be seen on a phone.
+    function _devLog(...args) {
+        try { console.log(...args); } catch (e) {}
+        if (!document.body.classList.contains('dev-mode')) return;
+        let panel = document.getElementById('dev-log');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'dev-log';
+            const clear = document.createElement('span');
+            clear.className = 'dev-log-clear';
+            clear.textContent = 'clear';
+            clear.onclick = () => { panel.querySelectorAll('.dev-log-line').forEach(n => n.remove()); };
+            panel.appendChild(clear);
+            document.body.appendChild(panel);
+        }
+        const line = document.createElement('div');
+        line.className = 'dev-log-line';
+        const t = new Date().toTimeString().slice(0, 8);
+        line.textContent = t + '  ' + args.map(a =>
+            typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        panel.appendChild(line);
+        panel.scrollTop = panel.scrollHeight;
+    }
+
     // ── MSAL auth state ───────────────────────────────────────────────────────
     const MSAL_SCOPES = ['openid', 'profile', 'email'];
     let msalInstance  = null;
@@ -480,7 +519,7 @@
 
     // Mobile browsers block popups — use redirect flow instead.
     // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
-    function _onMobile() { return window.innerWidth < 768; }
+    function _onMobile() { return window.matchMedia('(max-width: 767px)').matches; }
 
     async function initAuth() {
         const config = await fetch('/api/auth-config').then(r => r.json());
@@ -631,6 +670,7 @@
         const o = document.getElementById('header-org');
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
+        if (data.env === 'dev') document.body.classList.add('dev-mode');
 
         document.getElementById('auth-overlay').style.display = 'none';
 
@@ -1001,7 +1041,12 @@
     const embeddedReports = {};
     const tokenCache      = {};
 
-    function isMobile() { return window.innerWidth < 768; }
+    // matchMedia reflects the CSS viewport breakpoint, which (unlike
+    // window.innerWidth) is not affected by transient content overflow when a
+    // PBI report renders wide content. Using innerWidth caused the layout to
+    // spuriously flip to desktop a few seconds after a report loaded on mobile.
+    const _mqMobile = window.matchMedia('(max-width: 767px)');
+    function isMobile() { return _mqMobile.matches; }
 
     function _layoutSettings() {
         return isMobile()
@@ -1034,36 +1079,27 @@
         return _buildConfig(entry);
     }
 
-    let _wasMobile = isMobile(), _resizeTimer;
-    window.addEventListener('resize', () => {
-        clearTimeout(_resizeTimer);
-        _resizeTimer = setTimeout(() => {
-            const nowMobile = isMobile();
-            if (nowMobile === _wasMobile) return;
-            _wasMobile = nowMobile;
-            // Full re-embed on layout switch — updateSettings alone can't swap mobile/desktop layout
-            Object.keys(embeddedReports).forEach(sectionKey => {
-                const reportName = SECTION_REPORT[sectionKey];
-                if (!reportName) return;
-                const cached = tokenCache[reportName];
-                if (!cached) return;
-                const slot = document.getElementById('embed-' + sectionKey);
-                if (!slot) return;
-                const cfg = _buildConfig(cached);
-                window.powerbi.reset(slot);
-                const r = window.powerbi.embed(slot, cfg);
-                embeddedReports[sectionKey] = r;
-                attachEmbedOverlay(slot, r);
-                r.on('loaded', () => {
-                    attachReportToSubnav(sectionKey, r);
-                    applyFilters();
-                });
-                r.on('rendered', () => {
-                    const d = sectionSubnavData[sectionKey];
-                    if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
-                });
-            });
-        }, 300);
+    // Re-embed only on a genuine mobile/desktop breakpoint crossing (rotation,
+    // window resize across 768px). matchMedia fires once on the real change and
+    // is immune to the content-overflow width blips that previously caused a
+    // spurious desktop re-embed seconds after a mobile report loaded.
+    _mqMobile.addEventListener('change', () => {
+        _devLog('[breakpoint change] isMobile=', _mqMobile.matches, 'innerWidth=', window.innerWidth);
+        // Full re-embed on layout switch — updateSettings alone can't swap mobile/desktop layout
+        Object.keys(embeddedReports).forEach(sectionKey => {
+            const reportName = SECTION_REPORT[sectionKey];
+            if (!reportName) return;
+            const cached = tokenCache[reportName];
+            if (!cached) return;
+            const slot = document.getElementById('embed-' + sectionKey);
+            if (!slot) return;
+            const cfg = _buildConfig(cached);
+            window.powerbi.reset(slot);
+            const r = window.powerbi.embed(slot, cfg);
+            embeddedReports[sectionKey] = r;
+            attachEmbedOverlay(slot, r);
+            attachReportHandlers(r, sectionKey);
+        });
     });
 
     function attachEmbedOverlay(slot, report) {
@@ -1074,6 +1110,48 @@
         function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
         report.on('rendered', remove);
         report.on('error', remove);
+    }
+
+    // Standard event handlers attached to every embedded report. Must be called
+    // from BOTH embed paths (initial load and breakpoint re-embed) — otherwise a
+    // re-embed silently drops the buttonClicked handler and cross-report
+    // navigation buttons stop working.
+    function attachReportHandlers(r, sectionKey) {
+        r.on('loaded', () => {
+            attachReportToSubnav(sectionKey, r);
+            applyFilters();
+        });
+        r.on('rendered', () => {
+            const d = sectionSubnavData[sectionKey];
+            if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+        });
+        r.on('buttonClicked', event => {
+            const title = event.detail && event.detail.title ? event.detail.title : '';
+            _devLog('[buttonClicked]', event.detail);
+            if (!title.startsWith('goto_')) return;
+            // Format: goto_<ReportName>_<PageName-with-dashes>
+            // Spaces in page names are replaced with - by convention (no report names contain -)
+            const parts  = title.split('_');
+            if (parts.length < 3) return;
+            const sectionRaw = parts[1].toLowerCase();
+            const pageDisplay = parts.slice(2).join('_').replace(/-/g, ' ');
+            const target = { home:'home', revenue:'revenue', patient:'patient',
+                             schedule:'scheduling', scheduling:'scheduling',
+                             clinical:'clinical', nhs:'nhs' }[sectionRaw];
+            if (!target) return;
+            const page = (SECTION_PAGES[target] || [])
+                .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
+            if (!sectionSubnavData[target]) initSubnav(target);
+            if (page) sectionSubnavData[target].activePage = page.name;
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            const tab = document.querySelector(`.nav-tab[data-section="${target}"]`);
+            if (tab) tab.classList.add('active');
+            closePageDropdown();
+            activateSection(target);
+            loadEmbedsInSection(target);
+            if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
+                sectionSubnavData[target].report.setPage(page.name);
+        });
     }
 
     async function loadEmbedsInSection(sectionKey) {
@@ -1098,28 +1176,11 @@
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
-            r.on('loaded', () => {
-                attachReportToSubnav(sectionKey, r);
-                applyFilters();
-            });
+            attachReportHandlers(r, sectionKey);
             return r;
         }
 
-        const report = doEmbed(config);
-
-        // Mobile layout fallback: if report hangs or errors, re-embed with desktop layout
-        if (config.settings.layoutType === 2) {
-            let rendered = false;
-            report.on('rendered', () => { rendered = true; });
-            const fallback = () => {
-                if (rendered) return;
-                clearTimeout(timer);
-                const desktop = { ...config, settings: { ...config.settings, layoutType: 1, customLayout: { displayOption: 1 } } };
-                doEmbed(desktop);
-            };
-            report.on('error', fallback);
-            const timer = setTimeout(fallback, 12000);
-        }
+        doEmbed(config);
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────

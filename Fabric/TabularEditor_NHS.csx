@@ -150,6 +150,42 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))",
     "");
 
+// ── YTD contract tracking (line chart: cumulative actuals vs cumulative target) ──
+// X-axis: List Date[Week Commencing Date] filtered to a single financial year.
+// Both measures use running-total logic: sum all weeks up to and including the
+// current week in context. Tenant/contract filters are inherited from RLS and
+// any slicers; only the date dimension is overridden for the accumulation.
+
+add("NHS UDA Claims YTD",
+    @"VAR _fy = MAX('List Date'[Financial Year])
+VAR _fw = MAX('List Date'[Financial Week])
+RETURN
+CALCULATE(
+    SUMX(
+        '_NHS Claims',
+        COALESCE('_NHS Claims'[Awarded UDA], '_NHS Claims'[Expected UDA])
+    ),
+    REMOVEFILTERS('List Date'),
+    FILTER(
+        ALL('List Date'),
+        'List Date'[Financial Year]  = _fy
+        && 'List Date'[Financial Week] <= _fw
+    )
+)",
+    "#,##0.00");
+
+add("NHS UDA Contract Target YTD",
+    @"VAR _fy = MAX('List Date'[Financial Year])
+VAR _fw = MAX('List Date'[Financial Week])
+RETURN
+CALCULATE(
+    SUM('_NHS Contract Week'[Pro Rata UDA Target]),
+    REMOVEFILTERS('List Date'),
+    '_NHS Contract Week'[Financial Year]  = _fy,
+    '_NHS Contract Week'[Financial Week] <= _fw
+)",
+    "#,##0.00");
+
 // ── BG colour measures ───────────────────────────────────────────────────────
 // nhs_udas / nhs_uoas: target and band from _Daily Targets (contract-derived).
 // nhs_uda_completion_rate: target and band from _Targets (manual Input.Targets entry).
