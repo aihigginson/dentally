@@ -216,7 +216,7 @@
         body.is-fullscreen .nav,
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
-        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
+        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; aspect-ratio: auto; }
         body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
@@ -241,19 +241,28 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
-            /* aspect-ratio MUST match the PBI report canvas (Format > Canvas
-               settings). Canvas is 1280x600. Deriving width from the real flex
-               height via aspect-ratio (instead of a magic chrome-height constant)
-               makes the box exactly canvas-shaped, so FitToPage fills it edge to
-               edge with no letterbox offset and no responsive crowding.
-               align-self keeps it left-aligned. If the canvas size changes,
-               update this ratio. */
+            /* Outer box: exactly canvas-shaped (1280:600) and left-aligned.
+               The report is embedded into a fixed 1280x600 inner .embed-canvas
+               and scaled to fit via CSS transform, so PBI ALWAYS lays out at the
+               design size (no responsive re-layout / axis-legend crowding).
+               If the canvas size changes, update this ratio AND the JS 1280/600. */
             flex: 1; min-height: 0;
             aspect-ratio: 1280 / 600;
             width: auto; max-width: 100%;
             align-self: flex-start; margin: 0;
             background: white; border: none; display: block;
             overflow: hidden;
+            position: relative;
+        }
+        .embed-canvas {
+            position: absolute; top: 0; left: 0;
+            width: 1280px; height: 600px;
+            transform-origin: top left;
+        }
+        /* Mobile uses PBI MobilePortrait — no fixed canvas, fill the area. */
+        @media (max-width: 767px) {
+            .embed-full   { aspect-ratio: auto; width: 100%; }
+            .embed-canvas { width: 100%; height: 100%; transform: none !important; }
         }
         .embed-full iframe,
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
@@ -1105,11 +1114,14 @@
             const slot = document.getElementById('embed-' + sectionKey);
             if (!slot) return;
             const cfg = _buildConfig(cached);
-            window.powerbi.reset(slot);
-            const r = window.powerbi.embed(slot, cfg);
+            const canvas = _canvas(slot);
+            window.powerbi.reset(canvas);
+            const r = window.powerbi.embed(canvas, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
+            _slotRO.observe(slot);
+            _scaleCanvas(slot);
         });
     });
 
@@ -1122,6 +1134,27 @@
         report.on('rendered', remove);
         report.on('error', remove);
     }
+
+    // Fixed 1280x600 inner element that PBI is embedded into (desktop). PBI always
+    // lays out at the design size; we scale this element with a CSS transform to
+    // fit the slot, so the layout is pixel-identical everywhere (no responsive
+    // re-flow). Mobile uses MobilePortrait, so the canvas just fills the slot.
+    const CANVAS_W = 1280, CANVAS_H = 600;
+    function _canvas(slot) {
+        let c = slot.querySelector('.embed-canvas');
+        if (!c) { c = document.createElement('div'); c.className = 'embed-canvas'; slot.appendChild(c); }
+        return c;
+    }
+    function _scaleCanvas(slot) {
+        const c = slot.querySelector('.embed-canvas');
+        if (!c) return;
+        if (isMobile()) { c.style.transform = 'none'; return; }
+        const s = Math.min(slot.clientWidth / CANVAS_W, slot.clientHeight / CANVAS_H);
+        if (s > 0) c.style.transform = `scale(${s})`;
+    }
+    // One observer rescales whichever slot changes size (window resize, filter bar
+    // toggle, section show/hide, fullscreen) — no manual resize wiring needed.
+    const _slotRO = new ResizeObserver(entries => { for (const e of entries) _scaleCanvas(e.target); });
 
     // Standard event handlers attached to every embedded report. Must be called
     // from BOTH embed paths (initial load and breakpoint re-embed) — otherwise a
@@ -1186,11 +1219,14 @@
         }
 
         function doEmbed(cfg) {
-            window.powerbi.reset(slot);
-            const r = window.powerbi.embed(slot, cfg);
+            const canvas = _canvas(slot);
+            window.powerbi.reset(canvas);
+            const r = window.powerbi.embed(canvas, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
+            _slotRO.observe(slot);
+            _scaleCanvas(slot);
             return r;
         }
 
