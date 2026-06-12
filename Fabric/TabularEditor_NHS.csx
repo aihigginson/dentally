@@ -42,18 +42,54 @@ add("NHS UDA Completion Rate",
 // If you need a standalone copy, uncomment and rename below.
 // add("NHS Revenue (NHS)", @"[NHS Revenue]", ""£#,##0"");
 
+// ── FY YTD measures ──────────────────────────────────────────────────────────
+// NHS contracts run April -> March. These measures lock to the current FY
+// regardless of any date slicer selection, so the NHS page always shows
+// in-year progress without requiring a specific date grouping to be selected.
+
+add("NHS UDA Contracted FY",
+    @"VAR today    = TODAY()
+VAR fy_start = IF(MONTH(today) >= 4, DATE(YEAR(today), 4, 1), DATE(YEAR(today)-1, 4, 1))
+VAR fy_end   = DATE(YEAR(fy_start)+1, 3, 31)
+RETURN
+CALCULATE(
+    SUM('List Treatment Plans'[NHS UDA Value]),
+    'List Treatment Plans'[Start Date] >= fy_start,
+    'List Treatment Plans'[Start Date] <= fy_end)",
+    "#,##0.00");
+
+add("NHS UDA Completed FY YTD",
+    @"VAR today    = TODAY()
+VAR fy_start = IF(MONTH(today) >= 4, DATE(YEAR(today), 4, 1), DATE(YEAR(today)-1, 4, 1))
+RETURN
+CALCULATE(
+    SUM('List Treatment Plans'[NHS Completed UDA Value]),
+    'List Treatment Plans'[Completed] = TRUE(),
+    'List Treatment Plans'[Completed Date] >= fy_start,
+    'List Treatment Plans'[Completed Date] <= today)",
+    "#,##0.00");
+
+add("NHS UDA Completion Rate FY YTD",
+    @"DIVIDE([NHS UDA Completed FY YTD], [NHS UDA Contracted FY])",
+    "#,##0.0%");
+
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("NHS UDAs Target",
-    @"VAR period_key    = [_FY Period Key]
-VAR annual        = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_udas""
-    && '_Targets'[Period Type] = ""annual""
-    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR all_time_target = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_udas""
-    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant  = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+VAR run_rate    = [_Period Run Rate]
+VAR target_rows = FILTER(
+    ALL('_Daily Targets'),
+    '_Daily Targets'[Metric]             = ""nhs_udas""
+    && '_Daily Targets'[fk Practitioner] = -1
+    && '_Daily Targets'[Tenant ID]       = sel_tenant
+    && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site))
+VAR full_target = CALCULATE(
+    SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    target_rows)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
     "#,##0.00");
 
 add("NHS UDAs vs Target",
@@ -68,15 +104,20 @@ RETURN IF(
     "");
 
 add("NHS UOAs Target",
-    @"VAR period_key    = [_FY Period Key]
-VAR annual        = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_uoas""
-    && '_Targets'[Period Type] = ""annual""
-    && '_Targets'[Period Value] = period_key), '_Targets'[Target Value])
-VAR all_time_target = MAXX(FILTER('_Targets',
-    '_Targets'[Metric] = ""nhs_uoas""
-    && '_Targets'[Period Type] = ""all_time""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(annual), all_time_target, annual) * [_Period Run Rate]",
+    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant  = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+VAR run_rate    = [_Period Run Rate]
+VAR target_rows = FILTER(
+    ALL('_Daily Targets'),
+    '_Daily Targets'[Metric]             = ""nhs_uoas""
+    && '_Daily Targets'[fk Practitioner] = -1
+    && '_Daily Targets'[Tenant ID]       = sel_tenant
+    && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site))
+VAR full_target = CALCULATE(
+    SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    target_rows)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
     "#,##0.00");
 
 add("NHS UOAs vs Target",
@@ -91,9 +132,11 @@ RETURN IF(
     "");
 
 add("NHS UDA Completion Rate Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+RETURN COALESCE(
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
     "#,##0.0%");
 
 add("NHS UDA Completion Rate vs Target",
@@ -108,40 +151,63 @@ RETURN IF(
     "");
 
 // ── BG colour measures ───────────────────────────────────────────────────────
-// No _Targets rows exist for NHS metrics yet — all return white.
-// Add rows to _Targets with the metric keys below and these will light up:
-//   nhs_udas | nhs_uoas | nhs_uda_completion_rate
+// nhs_udas / nhs_uoas: target and band from _Daily Targets (contract-derived).
+// nhs_uda_completion_rate: target and band from _Targets (manual Input.Targets entry).
 
 add("NHS UDAs BG",
-    @"VAR actual   = [NHS UDAs]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_udas""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual     = [NHS UDAs]
+VAR target     = [NHS UDAs Target]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+VAR band       = CALCULATE(
+    MAX('_Daily Targets'[Variance]),
+    FILTER(
+        ALL('_Daily Targets'),
+        '_Daily Targets'[Metric]             = ""nhs_udas""
+        && '_Daily Targets'[fk Practitioner] = -1
+        && '_Daily Targets'[Tenant ID]       = sel_tenant
+        && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site)))
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
-    pct >= band,   ""#1a7f3c"",
+    pct >= band,       ""#1a7f3c"",
     pct >= 0,          ""#6abf7b"",
-    pct >= -band,  ""#f4a261"",
+    pct >= -band,      ""#f4a261"",
                        ""#c0392b"")",
     "");
 
 add("NHS UOAs BG",
-    @"VAR actual   = [NHS UOAs]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uoas""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual     = [NHS UOAs]
+VAR target     = [NHS UOAs Target]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+VAR band       = CALCULATE(
+    MAX('_Daily Targets'[Variance]),
+    FILTER(
+        ALL('_Daily Targets'),
+        '_Daily Targets'[Metric]             = ""nhs_uoas""
+        && '_Daily Targets'[fk Practitioner] = -1
+        && '_Daily Targets'[Tenant ID]       = sel_tenant
+        && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site)))
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
-    pct >= band,   ""#1a7f3c"",
+    pct >= band,       ""#1a7f3c"",
     pct >= 0,          ""#6abf7b"",
-    pct >= -band,  ""#f4a261"",
+    pct >= -band,      ""#f4a261"",
                        ""#c0392b"")",
     "");
 
 add("NHS UDA Completion Rate BG",
     @"VAR actual   = [NHS UDA Completion Rate]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_uda_completion_rate""), '_Targets'[Variance])
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
+VAR target   = COALESCE(
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
+VAR band     = COALESCE(
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
+    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),       ""#FFFFFF"",

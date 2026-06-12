@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Sites]
 GO
 CREATE TABLE [Bronze].[Sites](
 	[Site_ID] [VARCHAR](255) NULL,
-	[Active] [decimal](18, 4) NULL,
+	[Active] [VARCHAR](255) NULL,
 	[Address_Line_1] [VARCHAR](255) NULL,
 	[Address_Line_2] [VARCHAR](255) NULL,
 	[Default_Payment_Plan_ID] [decimal](18, 4) NULL,

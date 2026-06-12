@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS, Private_treatment_value -> Private_Treatment_Value)
+--    *03     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -66,7 +67,7 @@ BEGIN
                 Practitioner_ID  AS [Practitioner_ID],
                 NULL  AS [Site_ID],
                 -- Site_ID not in Bronze
-        TRY_CAST(ROUND(CAST(Completed AS float),0) AS int)  AS [Completed],
+        CASE WHEN LOWER(TRIM(Completed)) IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
                 NULL  AS [NHS_Course_Part],
                 -- NHS_Course_Part not in Bronze
         NULL  AS [Accepted_At],

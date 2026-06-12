@@ -5,6 +5,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
+--    *03     05/06/2026  AIH Add Treatment_Plan_Count column (was in .Table.sql but missing here; Load SP requires it)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Create_Dim_Treatment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Treatment_Plans]
@@ -49,13 +50,14 @@ BEGIN
         Private_Treatment_Value    DECIMAL(18,4)     NULL,
         Created_Date               datetime2(3) NULL,
         Updated_Date               datetime2(3) NULL,
+        Treatment_Plan_Count       INT               NOT NULL,
         DW_Created_At              datetime2(6)      NOT NULL,
         DW_Updated_At              datetime2(6)      NOT NULL
     );
 
         -- Insert -1 unknown/shared seed row
-        INSERT INTO Gold.Dim_Treatment_Plans (pk_Treatment_Plan, Tenant_ID, Treatment_Plan_ID, DW_Created_At, DW_Updated_At)
-        VALUES (-1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME());
+        INSERT INTO Gold.Dim_Treatment_Plans (pk_Treatment_Plan, Tenant_ID, Treatment_Plan_ID, Treatment_Plan_Count, DW_Created_At, DW_Updated_At)
+        VALUES (-1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME());
 
         --*********************************
         --**** Procedure logic ends    ****

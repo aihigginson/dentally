@@ -1,278 +1,942 @@
 {
-  "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "width": 900,
-  "height": 500,
-  "padding": {"top": 10, "bottom": 10, "left": 10, "right": 10},
+    "$schema": "https://vega.github.io/schema/vega/v5.json",
+    "width": 900,
+    "height": 500,
+    "padding": {
+        "top": 10,
+        "bottom": 10,
+        "left": 10,
+        "right": 10
+    },
 
-  "signals": [
-    {"name": "nW",    "value": 14},
-    {"name": "nS",    "value": 4},
-    {"name": "dx",    "update": "width / (nS - 1)"},
-    {"name": "grand", "update": "data('grand_ds').length > 0 ? data('grand_ds')[0].grand_val : 1"},
-    {"name": "hovSrcStage", "update": "hov != null ? toNumber(slice(hov.srcID, 0, 1)) : -1"},
-    {"name": "hovSrcVal",   "update": "hov != null ? slice(hov.srcID, 2) : ''"},
-    {"name": "hovTgtVal",   "update": "hov != null ? slice(hov.tgtID, 2) : ''"},
-    {"name": "hov",   "value": null,
-     "on": [
-       {"events": "path:mouseover", "update": "datum"},
-       {"events": "path:mouseout",  "update": "null"},
-       {"events": "rect:mouseover", "update": "null"}
-     ]},
-    {"name": "hovNode", "value": null,
-     "on": [
-       {"events": "rect:mouseover", "update": "datum"},
-       {"events": "rect:mouseout",  "update": "null"},
-       {"events": "path:mouseover", "update": "null"}
-     ]}
-  ],
-
-  "data": [
-    {"name": "dataset"},
-
-    {"name": "grand_ds", "source": "dataset", "transform": [
-      {"type": "aggregate", "fields": ["Patient Count"], "ops": ["sum"], "as": ["grand_val"]}
-    ]},
-
-    {"name":"s0","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["Booking"],"fields":["Patient Count"],"ops":["sum"],"as":["tot"]},
-      {"type":"formula","expr":"0","as":"si"},
-      {"type":"formula","expr":"datum['Booking']","as":"lab"},
-      {"type":"formula","expr":"'0|'+datum['Booking']","as":"nid"},
-      {"type":"formula","expr":"datum.lab==='New'?0:datum.lab==='BBYL'?1:datum.lab==='Reception'?2:datum.lab==='Referral'?3:4","as":"sort_key"}
-    ]},
-    {"name":"s1","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["This Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["tot"]},
-      {"type":"formula","expr":"1","as":"si"},
-      {"type":"formula","expr":"datum['This Visit']","as":"lab"},
-      {"type":"formula","expr":"'1|'+datum['This Visit']","as":"nid"},
-      {"type":"formula","expr":"datum.lab==='Exam'?0:datum.lab==='Hygiene'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Emergency'?3:datum.lab==='Review'?4:datum.lab==='Other'?5:6","as":"sort_key"}
-    ]},
-    {"name":"s2","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["Next Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["tot"]},
-      {"type":"formula","expr":"2","as":"si"},
-      {"type":"formula","expr":"datum['Next Visit']","as":"lab"},
-      {"type":"formula","expr":"'2|'+datum['Next Visit']","as":"nid"},
-      {"type":"formula","expr":"datum.lab==='Exam'?0:datum.lab==='Hygiene'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Emergency'?3:datum.lab==='Review'?4:datum.lab==='Other'?5:6","as":"sort_key"}
-    ]},
-    {"name":"s3","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["Future Appointment"],"fields":["Patient Count"],"ops":["sum"],"as":["tot"]},
-      {"type":"formula","expr":"3","as":"si"},
-      {"type":"formula","expr":"datum['Future Appointment']","as":"lab"},
-      {"type":"formula","expr":"'3|'+datum['Future Appointment']","as":"nid"},
-      {"type":"formula","expr":"datum.lab==='Seen Again'?0:datum.lab==='BBYL'?1:datum.lab==='Other Booking'?2:datum.lab==='Will Not See Again'?3:datum.lab==='Recall Sent'?4:datum.lab==='Recall Overdue'?5:datum.lab==='Recall Not Yet Due'?6:datum.lab==='No Recall Set'?7:8","as":"sort_key"}
-    ]},
-
-    {"name":"nodes","source":["s0","s1","s2","s3"],"transform":[
-      {"type":"stack","groupby":["si"],"field":"tot",
-       "sort":{"field":"sort_key","order":"ascending"},
-       "as":["y0s","y1s"]},
-      {"type":"formula","expr":"datum.si * dx","as":"x"},
-      {"type":"formula","expr":"datum.y0s / grand * height","as":"y0"},
-      {"type":"formula","expr":"datum.y1s / grand * height","as":"y1"}
-    ]},
-
-    {"name":"e01","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["Booking","This Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["flow"]},
-      {"type":"formula","expr":"'0|'+datum['Booking']","as":"srcID"},
-      {"type":"formula","expr":"'1|'+datum['This Visit']","as":"tgtID"}
-    ]},
-    {"name":"e12","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["This Visit","Next Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["flow"]},
-      {"type":"formula","expr":"'1|'+datum['This Visit']","as":"srcID"},
-      {"type":"formula","expr":"'2|'+datum['Next Visit']","as":"tgtID"}
-    ]},
-    {"name":"e23","source":"dataset","transform":[
-      {"type":"aggregate","groupby":["Next Visit","Future Appointment"],"fields":["Patient Count"],"ops":["sum"],"as":["flow"]},
-      {"type":"formula","expr":"'2|'+datum['Next Visit']","as":"srcID"},
-      {"type":"formula","expr":"'3|'+datum['Future Appointment']","as":"tgtID"}
-    ]},
-
-    {"name":"edges","source":["e01","e12","e23"],"transform":[
-      {"type":"lookup","from":"nodes","key":"nid","fields":["srcID"],
-       "values":["x","y0","y1","tot"],"as":["sx","sy0","sy1","stot"]},
-      {"type":"lookup","from":"nodes","key":"nid","fields":["tgtID"],
-       "values":["x","y0","y1","tot"],"as":["tx","ty0","ty1","ttot"]},
-      {"type":"filter","expr":"isValid(datum.sx) && isValid(datum.tx) && isValid(datum.stot) && datum.stot > 0 && isValid(datum.ttot) && datum.ttot > 0"},
-      {"type":"stack","groupby":["srcID"],"field":"flow",
-       "sort":{"field":"tgtID"},"as":["sr0","sr1"]},
-      {"type":"stack","groupby":["tgtID"],"field":"flow",
-       "sort":{"field":"srcID"},"as":["tr0","tr1"]},
-      {"type":"formula","expr":"datum.sy0 + (datum.sr0/datum.stot)*(datum.sy1-datum.sy0)","as":"bsy0"},
-      {"type":"formula","expr":"datum.sy0 + (datum.sr1/datum.stot)*(datum.sy1-datum.sy0)","as":"bsy1"},
-      {"type":"formula","expr":"datum.ty0 + (datum.tr0/datum.ttot)*(datum.ty1-datum.ty0)","as":"bty0"},
-      {"type":"formula","expr":"datum.ty0 + (datum.tr1/datum.ttot)*(datum.ty1-datum.ty0)","as":"bty1"},
-      {"type":"formula","expr":"(datum.sx + nW + datum.tx) / 2","as":"mx"},
-      {"type":"formula","expr":"datum.srcID + '~' + datum.tgtID","as":"key"}
-    ]},
-
-    {"name":"cohort","source":"dataset","transform":[
-      {"type":"filter","expr":"(hov == null && hovNode == null) || (hovNode != null && ((hovNode.si === 0 && datum['Booking'] === hovNode.lab) || (hovNode.si === 1 && datum['This Visit'] === hovNode.lab) || (hovNode.si === 2 && datum['Next Visit'] === hovNode.lab) || (hovNode.si === 3 && datum['Future Appointment'] === hovNode.lab))) || (hov != null && ((hovSrcStage === 0 && datum['Booking'] === hovSrcVal && datum['This Visit'] === hovTgtVal) || (hovSrcStage === 1 && datum['This Visit'] === hovSrcVal && datum['Next Visit'] === hovTgtVal) || (hovSrcStage === 2 && datum['Next Visit'] === hovSrcVal && datum['Future Appointment'] === hovTgtVal)))"}
-    ]},
-    {"name":"ce01","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["Booking","This Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["cflow"]},
-      {"type":"formula","expr":"'0|'+datum['Booking']+'~1|'+datum['This Visit']","as":"key"}
-    ]},
-    {"name":"ce12","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["This Visit","Next Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["cflow"]},
-      {"type":"formula","expr":"'1|'+datum['This Visit']+'~2|'+datum['Next Visit']","as":"key"}
-    ]},
-    {"name":"ce23","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["Next Visit","Future Appointment"],"fields":["Patient Count"],"ops":["sum"],"as":["cflow"]},
-      {"type":"formula","expr":"'2|'+datum['Next Visit']+'~3|'+datum['Future Appointment']","as":"key"}
-    ]},
-    {"name":"cohort_edges","source":["ce01","ce12","ce23"]},
-
-    {"name":"overlay_edges","source":"cohort_edges","transform":[
-      {"type":"formula","expr":"slice(datum.key, 0, indexof(datum.key, '~'))","as":"srcID"},
-      {"type":"formula","expr":"slice(datum.key, indexof(datum.key, '~') + 1)","as":"tgtID"},
-      {"type":"lookup","from":"edges","key":"key","fields":["key"],
-       "values":["sx","bsy0","bsy1","tx","bty0","bty1","mx","flow"],
-       "as":["sx","bsy0","bsy1","tx","bty0","bty1","mx","full_flow"]},
-      {"type":"filter","expr":"(hov != null || hovNode != null) && isValid(datum.bsy0) && isValid(datum.bty0) && datum.full_flow > 0"},
-      {"type":"formula","expr":"datum.cflow / datum.full_flow","as":"frac"},
-      {"type":"formula","expr":"datum.bsy0 + datum.frac * (datum.bsy1 - datum.bsy0)","as":"osy1"},
-      {"type":"formula","expr":"datum.bty0 + datum.frac * (datum.bty1 - datum.bty0)","as":"oty1"}
-    ]},
-
-    {"name":"cns0","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["Booking"],"fields":["Patient Count"],"ops":["sum"],"as":["cohort_tot"]},
-      {"type":"formula","expr":"'0|'+datum['Booking']","as":"nid"}
-    ]},
-    {"name":"cns1","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["This Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["cohort_tot"]},
-      {"type":"formula","expr":"'1|'+datum['This Visit']","as":"nid"}
-    ]},
-    {"name":"cns2","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["Next Visit"],"fields":["Patient Count"],"ops":["sum"],"as":["cohort_tot"]},
-      {"type":"formula","expr":"'2|'+datum['Next Visit']","as":"nid"}
-    ]},
-    {"name":"cns3","source":"cohort","transform":[
-      {"type":"aggregate","groupby":["Future Appointment"],"fields":["Patient Count"],"ops":["sum"],"as":["cohort_tot"]},
-      {"type":"formula","expr":"'3|'+datum['Future Appointment']","as":"nid"}
-    ]},
-    {"name":"cohort_node_totals","source":["cns0","cns1","cns2","cns3"]},
-
-    {"name":"node_display","source":"nodes","transform":[
-      {"type":"lookup","from":"cohort_node_totals","key":"nid","fields":["nid"],
-       "values":["cohort_tot"],"as":["cohort_tot"]},
-      {"type":"formula","expr":"isValid(datum.cohort_tot) ? datum.cohort_tot : datum.tot","as":"display_tot"}
-    ]}
-  ],
-
-  "marks": [
-    {
-      "type": "path",
-      "from": {"data": "edges"},
-      "encode": {
-        "enter": {
-          "path": {"signal": "isValid(datum.bsy0) && isValid(datum.bsy1) && isValid(datum.bty0) && isValid(datum.bty1) ? ('M'+(datum.sx+nW)+','+(datum.bsy0)+' C'+datum.mx+','+(datum.bsy0)+' '+datum.mx+','+(datum.bty0)+' '+datum.tx+','+(datum.bty0)+' L'+datum.tx+','+(datum.bty1)+' C'+datum.mx+','+(datum.bty1)+' '+datum.mx+','+(datum.bsy1)+' '+(datum.sx+nW)+','+(datum.bsy1)+' Z') : 'M0,0Z'"},
-          "fill": {"value": "#1A527A"},
-          "stroke": {"value": "none"},
-          "cursor": {"value": "pointer"}
+    "signals": [
+        {
+            "name": "cHygiene",
+            "value": "#40622A"
         },
-        "update": {
-          "fillOpacity": {"signal": "hov == null && hovNode == null ? 0.35 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.18 : 0.05) : (indata('cohort_edges', 'key', datum.key) ? 0.18 : 0.05)"},
-          "tooltip": {"signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}"}
-        }
-      }
-    },
-    {
-      "type": "path",
-      "from": {"data": "overlay_edges"},
-      "interactive": false,
-      "encode": {
-        "enter": {
-          "fillOpacity": {"value": 0.80},
-          "stroke": {"value": "none"}
+        {
+            "name": "cExam",
+            "value": "#8AB5B2"
         },
-        "update": {
-          "fill": {"signal": "hovNode != null ? '#8AB5B2' : '#C8A070'"},
-          "path": {"signal": "'M'+(datum.sx+nW)+','+datum.bsy0+' C'+datum.mx+','+datum.bsy0+' '+datum.mx+','+datum.bty0+' '+datum.tx+','+datum.bty0+' L'+datum.tx+','+datum.oty1+' C'+datum.mx+','+datum.oty1+' '+datum.mx+','+datum.osy1+' '+(datum.sx+nW)+','+datum.osy1+' Z'"}
-        }
-      }
-    },
-    {
-      "type": "rect",
-      "from": {"data": "nodes"},
-      "encode": {
-        "enter": {
-          "x": {"field": "x"},
-          "width": {"signal": "nW"},
-          "y": {"field": "y0"},
-          "y2": {"field": "y1"},
-          "cornerRadius": {"value": 2}
+        {
+            "name": "cContinuingTreatment",
+            "value": "#6666AA"
         },
-        "update": {
-          "fill": {"signal": "hovNode != null && datum.nid === hovNode.nid ? '#8AB5B2' : (datum.sort_key % 2 === 0 ? '#1A527A' : '#5F86A2')"},
-          "cursor": {"value": "pointer"}
-        }
-      }
-    },
-    {
-      "type": "text",
-      "from": {"data": "node_display"},
-      "encode": {
-        "enter": {
-          "x": {"signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4"},
-          "y": {"signal": "(datum.y0 + datum.y1) / 2"},
-          "baseline": {"value": "middle"},
-          "align": {"signal": "datum.si === 0 ? 'right' : 'left'"},
-          "fontSize": {"value": 10},
-          "fontFamily": {"value": "Segoe UI"},
-          "fill": {"value": "#6B7280"}
+        {
+            "name": "cReview",
+            "value": "#338AAA"
         },
-        "update": {
-          "text": {"signal": "datum.lab + ' (' + datum.display_tot + ')'"}
+        {
+            "name": "cRecallExamination",
+            "value": "#776B70"
+        },
+        {
+            "name": "cEmergency",
+            "value": "#B05252"
+        },
+        {
+            "name": "cOther",
+            "value": "#8A8E92"
+        },
+        {
+            "name": "cNodeBar",
+            "value": "#1A527A"
+        },
+        {
+            "name": "cNodeBarAlt",
+            "value": "#1A527A"
+        },
+        {
+            "name": "cNodeHover",
+            "value": "#2F5597"
+        },
+        {
+            "name": "cFlowHover",
+            "value": "#A894D8"
+        },
+        {
+            "name": "cFlowNeutral",
+            "value": "#B0C4CE"
+        },
+        {
+            "name": "cHeaderText",
+            "value": "#1A527A"
+        },
+        {
+            "name": "cLabelText",
+            "value": "#6B7280"
+        },
+
+
+        {
+            "name": "nW",
+            "value": 14
+        },
+        {
+            "name": "nS",
+            "value": 5
+        },
+        {
+            "name": "dx",
+            "update": "width / (nS - 1)"
+        },
+        {
+            "name": "grand",
+            "update": "data('grand_ds').length > 0 ? data('grand_ds')[0].grand_val : 1"
+        },
+        {
+            "name": "hovSrcStage",
+            "update": "hov != null ? toNumber(slice(hov.srcID, 0, 1)) : -1"
+        },
+        {
+            "name": "hovSrcVal",
+            "update": "hov != null ? slice(hov.srcID, 2) : ''"
+        },
+        {
+            "name": "hovTgtVal",
+            "update": "hov != null ? slice(hov.tgtID, 2) : ''"
+        },
+        {
+            "name": "hov",
+            "value": null,
+            "on": [
+                {
+                    "events": "path:mouseover",
+                    "update": "datum"
+                },
+                {
+                    "events": "path:mouseout",
+                    "update": "null"
+                },
+                {
+                    "events": "rect:mouseover",
+                    "update": "null"
+                }
+            ]
+        },
+        {
+            "name": "hovNode",
+            "value": null,
+            "on": [
+                {
+                    "events": "rect:mouseover",
+                    "update": "datum"
+                },
+                {
+                    "events": "rect:mouseout",
+                    "update": "null"
+                },
+                {
+                    "events": "path:mouseover",
+                    "update": "null"
+                }
+            ]
         }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {"signal": "0"},      "y": {"value": -22},
-          "text": {"value": "Booking"},
-          "fontWeight": {"value": "bold"}, "fontSize": {"value": 11},
-          "fontFamily": {"value": "Segoe UI"},
-          "fill": {"value": "#1A527A"}, "align": {"value": "center"}
+    ],
+
+    "data": [
+        { "name": "dataset" },
+
+        {
+            "name": "grand_ds",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "grand_val" ]
+                }
+            ]
+        },
+
+        {
+            "name": "s0",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Booking" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "0",
+                    "as": "si"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Booking']",
+                    "as": "lab"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'0|'+datum['Booking']",
+                    "as": "nid"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.lab==='New'?0:datum.lab==='BBYL'?1:datum.lab==='Reception'?2:datum.lab==='Referral'?3:4",
+                    "as": "sort_key"
+                }
+            ]
+        },
+        {
+            "name": "s1",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Appointment Reason" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "1",
+                    "as": "si"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Appointment Reason']",
+                    "as": "lab"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'1|'+datum['Appointment Reason']",
+                    "as": "nid"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:7",
+                    "as": "sort_key"
+                }
+            ]
+        },
+        {
+            "name": "s2",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Delay" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "2",
+                    "as": "si"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Delay']",
+                    "as": "lab"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'2|'+datum['Delay']",
+                    "as": "nid"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.lab==='Same Day'?0:datum.lab==='Within 1 Month'?1:datum.lab==='Within 6 Months'?2:datum.lab==='Within 12 Months'?3:datum.lab==='More than 12 Months'?4:datum.lab==='No Future Appointment'?5:6",
+                    "as": "sort_key"
+                }
+            ]
+        },
+        {
+            "name": "s3",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Next Appointment" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "3",
+                    "as": "si"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Next Appointment']",
+                    "as": "lab"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'3|'+datum['Next Appointment']",
+                    "as": "nid"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:datum.lab==='No Future Appointment'?7:8",
+                    "as": "sort_key"
+                }
+            ]
+        },
+        {
+            "name": "s4",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Current State" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "4",
+                    "as": "si"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Current State']",
+                    "as": "lab"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'4|'+datum['Current State']",
+                    "as": "nid"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.lab==='Seen Again'?0:datum.lab==='Treatment BBYL'?1:datum.lab==='Treatment Booked'?2:datum.lab==='Recall Not Yet Due'?3:datum.lab==='Recall Sent'?4:datum.lab==='Recall Overdue'?5:datum.lab==='No Recall Set'?6:datum.lab==='Will Not See Again'?7:8",
+                    "as": "sort_key"
+                }
+            ]
+        },
+
+        {
+            "name": "nodes",
+            "source": [ "s0", "s1", "s2", "s3", "s4" ],
+            "transform": [
+                {
+                    "type": "stack",
+                    "groupby": [ "si" ],
+                    "field": "tot",
+                    "sort": {
+                        "field": "sort_key",
+                        "order": "ascending"
+                    },
+                    "as": [ "y0s", "y1s" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.si * dx",
+                    "as": "x"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.y0s / grand * height",
+                    "as": "y0"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.y1s / grand * height",
+                    "as": "y1"
+                }
+            ]
+        },
+
+        {
+            "name": "e01",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Booking", "Appointment Reason" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "flow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'0|'+datum['Booking']",
+                    "as": "srcID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'1|'+datum['Appointment Reason']",
+                    "as": "tgtID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Appointment Reason']",
+                    "as": "colorKey"
+                }
+            ]
+        },
+        {
+            "name": "e12",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Appointment Reason", "Delay" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "flow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'1|'+datum['Appointment Reason']",
+                    "as": "srcID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'2|'+datum['Delay']",
+                    "as": "tgtID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Appointment Reason']",
+                    "as": "colorKey"
+                }
+            ]
+        },
+        {
+            "name": "e23",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Delay", "Next Appointment" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "flow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'2|'+datum['Delay']",
+                    "as": "srcID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'3|'+datum['Next Appointment']",
+                    "as": "tgtID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Next Appointment'] !== 'No Future Appointment' ? datum['Next Appointment'] : null",
+                    "as": "colorKey"
+                }
+            ]
+        },
+        {
+            "name": "e34",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Next Appointment", "Current State" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "flow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'3|'+datum['Next Appointment']",
+                    "as": "srcID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "'4|'+datum['Current State']",
+                    "as": "tgtID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum['Next Appointment'] !== 'No Future Appointment' ? datum['Next Appointment'] : null",
+                    "as": "colorKey"
+                }
+            ]
+        },
+
+        {
+            "name": "edges",
+            "source": [ "e01", "e12", "e23", "e34" ],
+            "transform": [
+                {
+                    "type": "lookup",
+                    "from": "nodes",
+                    "key": "nid",
+                    "fields": [ "srcID" ],
+                    "values": [ "x", "y0", "y1", "tot" ],
+                    "as": [ "sx", "sy0", "sy1", "stot" ]
+                },
+                {
+                    "type": "lookup",
+                    "from": "nodes",
+                    "key": "nid",
+                    "fields": [ "tgtID" ],
+                    "values": [ "x", "y0", "y1", "tot" ],
+                    "as": [ "tx", "ty0", "ty1", "ttot" ]
+                },
+                {
+                    "type": "filter",
+                    "expr": "isValid(datum.sx) && isValid(datum.tx) && isValid(datum.stot) && datum.stot > 0 && isValid(datum.ttot) && datum.ttot > 0"
+                },
+                {
+                    "type": "stack",
+                    "groupby": [ "srcID" ],
+                    "field": "flow",
+                    "sort": {
+                        "field": "ty0",
+                        "order": "ascending"
+                    },
+                    "as": [ "sr0", "sr1" ]
+                },
+                {
+                    "type": "stack",
+                    "groupby": [ "tgtID" ],
+                    "field": "flow",
+                    "sort": {
+                        "field": "sy0",
+                        "order": "ascending"
+                    },
+                    "as": [ "tr0", "tr1" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.sy0 + (datum.sr0/datum.stot)*(datum.sy1-datum.sy0)",
+                    "as": "bsy0"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.sy0 + (datum.sr1/datum.stot)*(datum.sy1-datum.sy0)",
+                    "as": "bsy1"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.ty0 + (datum.tr0/datum.ttot)*(datum.ty1-datum.ty0)",
+                    "as": "bty0"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.ty0 + (datum.tr1/datum.ttot)*(datum.ty1-datum.ty0)",
+                    "as": "bty1"
+                },
+                {
+                    "type": "formula",
+                    "expr": "(datum.sx + nW + datum.tx) / 2",
+                    "as": "mx"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.srcID + '~' + datum.tgtID",
+                    "as": "key"
+                }
+            ]
+        },
+
+        {
+            "name": "cohort",
+            "source": "dataset",
+            "transform": [
+                {
+                    "type": "filter",
+                    "expr": "(hov == null && hovNode == null) || (hovNode != null && ((hovNode.si === 0 && datum['Booking'] === hovNode.lab) || (hovNode.si === 1 && datum['Appointment Reason'] === hovNode.lab) || (hovNode.si === 2 && datum['Delay'] === hovNode.lab) || (hovNode.si === 3 && datum['Next Appointment'] === hovNode.lab) || (hovNode.si === 4 && datum['Current State'] === hovNode.lab))) || (hov != null && ((hovSrcStage === 0 && datum['Booking'] === hovSrcVal && datum['Appointment Reason'] === hovTgtVal) || (hovSrcStage === 1 && datum['Appointment Reason'] === hovSrcVal && datum['Delay'] === hovTgtVal) || (hovSrcStage === 2 && datum['Delay'] === hovSrcVal && datum['Next Appointment'] === hovTgtVal) || (hovSrcStage === 3 && datum['Next Appointment'] === hovSrcVal && datum['Current State'] === hovTgtVal)))"
+                }
+            ]
+        },
+        {
+            "name": "ce01",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Booking", "Appointment Reason" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cflow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'0|'+datum['Booking']+'~1|'+datum['Appointment Reason']",
+                    "as": "key"
+                }
+            ]
+        },
+        {
+            "name": "ce12",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Appointment Reason", "Delay" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cflow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'1|'+datum['Appointment Reason']+'~2|'+datum['Delay']",
+                    "as": "key"
+                }
+            ]
+        },
+        {
+            "name": "ce23",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Delay", "Next Appointment" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cflow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'2|'+datum['Delay']+'~3|'+datum['Next Appointment']",
+                    "as": "key"
+                }
+            ]
+        },
+        {
+            "name": "ce34",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Next Appointment", "Current State" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cflow" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'3|'+datum['Next Appointment']+'~4|'+datum['Current State']",
+                    "as": "key"
+                }
+            ]
+        },
+        {
+            "name": "cohort_edges",
+            "source": [ "ce01", "ce12", "ce23", "ce34" ]
+        },
+
+        {
+            "name": "overlay_edges",
+            "source": "cohort_edges",
+            "transform": [
+                {
+                    "type": "formula",
+                    "expr": "slice(datum.key, 0, indexof(datum.key, '~'))",
+                    "as": "srcID"
+                },
+                {
+                    "type": "formula",
+                    "expr": "slice(datum.key, indexof(datum.key, '~') + 1)",
+                    "as": "tgtID"
+                },
+                {
+                    "type": "lookup",
+                    "from": "edges",
+                    "key": "key",
+                    "fields": [ "key" ],
+                    "values": [ "sx", "bsy0", "bsy1", "tx", "bty0", "bty1", "mx", "flow" ],
+                    "as": [ "sx", "bsy0", "bsy1", "tx", "bty0", "bty1", "mx", "full_flow" ]
+                },
+                {
+                    "type": "filter",
+                    "expr": "(hov != null || hovNode != null) && isValid(datum.bsy0) && isValid(datum.bty0) && datum.full_flow > 0"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.cflow / datum.full_flow",
+                    "as": "frac"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.bsy0 + datum.frac * (datum.bsy1 - datum.bsy0)",
+                    "as": "osy1"
+                },
+                {
+                    "type": "formula",
+                    "expr": "datum.bty0 + datum.frac * (datum.bty1 - datum.bty0)",
+                    "as": "oty1"
+                }
+            ]
+        },
+
+        {
+            "name": "cns0",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Booking" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'0|'+datum['Booking']",
+                    "as": "nid"
+                }
+            ]
+        },
+        {
+            "name": "cns1",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Appointment Reason" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'1|'+datum['Appointment Reason']",
+                    "as": "nid"
+                }
+            ]
+        },
+        {
+            "name": "cns2",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Delay" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'2|'+datum['Delay']",
+                    "as": "nid"
+                }
+            ]
+        },
+        {
+            "name": "cns3",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Next Appointment" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'3|'+datum['Next Appointment']",
+                    "as": "nid"
+                }
+            ]
+        },
+        {
+            "name": "cns4",
+            "source": "cohort",
+            "transform": [
+                {
+                    "type": "aggregate",
+                    "groupby": [ "Current State" ],
+                    "fields": [ "Patient Count" ],
+                    "ops": [ "sum" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "'4|'+datum['Current State']",
+                    "as": "nid"
+                }
+            ]
+        },
+        {
+            "name": "cohort_node_totals",
+            "source": [ "cns0", "cns1", "cns2", "cns3", "cns4" ]
+        },
+
+        {
+            "name": "node_display",
+            "source": "nodes",
+            "transform": [
+                {
+                    "type": "lookup",
+                    "from": "cohort_node_totals",
+                    "key": "nid",
+                    "fields": [ "nid" ],
+                    "values": [ "cohort_tot" ],
+                    "as": [ "cohort_tot" ]
+                },
+                {
+                    "type": "formula",
+                    "expr": "isValid(datum.cohort_tot) ? datum.cohort_tot : datum.tot",
+                    "as": "display_tot"
+                }
+            ]
         }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {"signal": "dx"},     "y": {"value": -22},
-          "text": {"value": "This Visit"},
-          "fontWeight": {"value": "bold"}, "fontSize": {"value": 11},
-          "fontFamily": {"value": "Segoe UI"},
-          "fill": {"value": "#1A527A"}, "align": {"value": "center"}
+    ],
+
+    "scales": [
+        {
+            "name": "reasonColor",
+            "type": "ordinal",
+            "domain": [ "Hygiene", "Exam", "Continuing Treatment", "Review", "Recall Examination", "Emergency", "Other" ],
+            "range": { "signal": "[cHygiene, cExam, cContinuingTreatment, cReview, cRecallExamination, cEmergency, cOther]" }
         }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {"signal": "dx * 2"}, "y": {"value": -22},
-          "text": {"value": "Next Visit"},
-          "fontWeight": {"value": "bold"}, "fontSize": {"value": 11},
-          "fontFamily": {"value": "Segoe UI"},
-          "fill": {"value": "#1A527A"}, "align": {"value": "center"}
+    ],
+
+    "marks": [
+        {
+            "type": "path",
+            "from": { "data": "edges" },
+            "encode": {
+                "enter": {
+                    "path": { "signal": "isValid(datum.bsy0) && isValid(datum.bsy1) && isValid(datum.bty0) && isValid(datum.bty1) ? ('M'+(datum.sx+nW)+','+(datum.bsy0)+' C'+datum.mx+','+(datum.bsy0)+' '+datum.mx+','+(datum.bty0)+' '+datum.tx+','+(datum.bty0)+' L'+datum.tx+','+(datum.bty1)+' C'+datum.mx+','+(datum.bty1)+' '+datum.mx+','+(datum.bsy1)+' '+(datum.sx+nW)+','+(datum.bsy1)+' Z') : 'M0,0Z'" },
+                    "fill": { "signal": "datum.colorKey ? scale('reasonColor', datum.colorKey) : cFlowNeutral" },
+                    "stroke": { "value": "none" },
+                    "cursor": { "value": "pointer" }
+                },
+                "update": {
+                    "fillOpacity": { "signal": "hov == null && hovNode == null ? 0.35 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.18 : 0.05) : (indata('cohort_edges', 'key', datum.key) ? 0.18 : 0.05)" },
+                    "tooltip": { "signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}" }
+                }
+            }
+        },
+        {
+            "type": "path",
+            "from": { "data": "overlay_edges" },
+            "interactive": false,
+            "encode": {
+                "enter": {
+                    "fillOpacity": { "value": 0.80 },
+                    "stroke": { "value": "none" }
+                },
+                "update": {
+                    "fill": { "signal": "hovNode != null ? cNodeHover : cFlowHover" },
+                    "path": { "signal": "'M'+(datum.sx+nW)+','+datum.bsy0+' C'+datum.mx+','+datum.bsy0+' '+datum.mx+','+datum.bty0+' '+datum.tx+','+datum.bty0+' L'+datum.tx+','+datum.oty1+' C'+datum.mx+','+datum.oty1+' '+datum.mx+','+datum.osy1+' '+(datum.sx+nW)+','+datum.osy1+' Z'" }
+                }
+            }
+        },
+        {
+            "type": "rect",
+            "from": { "data": "nodes" },
+            "encode": {
+                "enter": {
+                    "x": { "field": "x" },
+                    "width": { "signal": "nW" },
+                    "y": { "field": "y0" },
+                    "y2": { "field": "y1" },
+                    "cornerRadius": { "value": 2 }
+                },
+                "update": {
+                    "fill": { "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : ((datum.si === 1 || datum.si === 3) && datum.lab !== 'No Future Appointment' ? scale('reasonColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))" },
+                    "cursor": { "value": "pointer" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "from": { "data": "node_display" },
+            "encode": {
+                "enter": {
+                    "x": { "signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4" },
+                    "y": { "signal": "(datum.y0 + datum.y1) / 2" },
+                    "baseline": { "value": "middle" },
+                    "align": { "signal": "datum.si === 0 ? 'right' : 'left'" },
+                    "fontSize": { "value": 10 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cLabelText" },
+                    "limit": { "value": 140 }
+                },
+                "update": {
+                    "text": { "signal": "datum.lab + ' (' + datum.display_tot + ')'" },
+                    "opacity": { "signal": "(datum.y1 - datum.y0) >= 4 ? 1 : 0" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "encode": {
+                "enter": {
+                    "x": { "signal": "0" },
+                    "y": { "value": -22 },
+                    "text": { "value": "Booking" },
+                    "fontWeight": { "value": "bold" },
+                    "fontSize": { "value": 11 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cHeaderText" },
+                    "align": { "value": "center" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "encode": {
+                "enter": {
+                    "x": { "signal": "dx" },
+                    "y": { "value": -22 },
+                    "text": { "value": "Appointment Reason" },
+                    "fontWeight": { "value": "bold" },
+                    "fontSize": { "value": 11 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cHeaderText" },
+                    "align": { "value": "center" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "encode": {
+                "enter": {
+                    "x": { "signal": "dx * 2" },
+                    "y": { "value": -22 },
+                    "text": { "value": "Delay" },
+                    "fontWeight": { "value": "bold" },
+                    "fontSize": { "value": 11 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cHeaderText" },
+                    "align": { "value": "center" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "encode": {
+                "enter": {
+                    "x": { "signal": "dx * 3" },
+                    "y": { "value": -22 },
+                    "text": { "value": "Next Appointment" },
+                    "fontWeight": { "value": "bold" },
+                    "fontSize": { "value": 11 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cHeaderText" },
+                    "align": { "value": "center" }
+                }
+            }
+        },
+        {
+            "type": "text",
+            "encode": {
+                "enter": {
+                    "x": { "signal": "dx * 4" },
+                    "y": { "value": -22 },
+                    "text": { "value": "Current State" },
+                    "fontWeight": { "value": "bold" },
+                    "fontSize": { "value": 11 },
+                    "fontFamily": { "value": "Segoe UI" },
+                    "fill": { "signal": "cHeaderText" },
+                    "align": { "value": "center" }
+                }
+            }
         }
-      }
-    },
-    {
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {"signal": "dx * 3"}, "y": {"value": -22},
-          "text": {"value": "Future Appt"},
-          "fontWeight": {"value": "bold"}, "fontSize": {"value": 11},
-          "fontFamily": {"value": "Segoe UI"},
-          "fill": {"value": "#1A527A"}, "align": {"value": "center"}
-        }
-      }
-    }
-  ]
+    ]
 }

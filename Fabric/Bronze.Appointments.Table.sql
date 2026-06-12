@@ -9,7 +9,7 @@ CREATE TABLE [Bronze].[Appointments](
 	[ID] [int] NULL,
 	[Appointment_Cancellation_Reason_ID] [int] NULL,
 	[Arrived_At] [VARCHAR](255) NULL,
-	[Booked_Via_API] [int] NULL,
+	[Booked_Via_API] [VARCHAR](255) NULL,
 	[Cancelled_At] [VARCHAR](255) NULL,
 	[Completed_At] [VARCHAR](255) NULL,
 	[Confirmed_At] [VARCHAR](255) NULL,

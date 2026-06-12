@@ -7,12 +7,12 @@ DROP TABLE IF EXISTS [Bronze].[Contracts]
 GO
 CREATE TABLE [Bronze].[Contracts](
 	[ID] [VARCHAR](255) NULL,
-	[Active] [int] NULL,
+	[Active] [VARCHAR](255) NULL,
 	[Contract_Number] [VARCHAR](255) NULL,
 	[End_Date] [VARCHAR](255) NULL,
 	[NHS_Location_ID] [VARCHAR](255) NULL,
 	[NHS_Site_ID] [VARCHAR](255) NULL,
-	[PDS_Plus] [int] NULL,
+	[PDS_Plus] [VARCHAR](255) NULL,
 	[Site_ID] [VARCHAR](255) NULL,
 	[Start_Date] [VARCHAR](255) NULL,
 	[Target] [VARCHAR](255) NULL,

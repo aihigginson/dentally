@@ -8,6 +8,7 @@
 --    *02     19/05/2026  AIH Read Town from Bronze (now available)
 --    *03     20/05/2026  AIH Phone_Number is VARCHAR — remove float cast, use LEFT directly
 --    *04     20/05/2026  AIH Column naming convention fixes (Practice_Id -> Practice_ID)
+--    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Practice @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Practice]    Script Date: 20/04/2026 10:15:06 ******/
@@ -68,7 +69,7 @@ BEGIN
                 NULL  AS [County],
                 LEFT(Postcode, 20)  AS [Postcode],
                 NULL  AS [Country],
-                TRY_CAST(ROUND(CAST(NHS AS float),0) AS int)  AS [NHS],
+                CASE WHEN LOWER(TRIM(NHS)) IN ('true','1') THEN 1 ELSE 0 END  AS [NHS],
                 LEFT(Time_Zone, 50)  AS [Time_Zone],
                 LEFT(Website, 200)  AS [Website]
             FROM Bronze.Practice

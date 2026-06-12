@@ -5,6 +5,7 @@
 --  History          :
 --    *01     30/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
+--    *03     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Acquisition_Sources]
 GO
@@ -28,7 +29,7 @@ BEGIN
         SELECT
               TRY_CAST(tenant_id AS INT)                                                                    AS Tenant_ID
             , LEFT(id, 255)                                                                                 AS ID
-            , CASE WHEN active IN ('True', '1', 'true') THEN 1 ELSE 0 END                                  AS Active
+            , LEFT(active, 255)                                                                             AS Active
             , LEFT(name, 255)                                                                               AS Name
             , CAST(notes AS VARCHAR(MAX))                                                                   AS Notes
         INTO #src

@@ -8,6 +8,7 @@
 --    *02     19/05/2026  AIH Add Emergency_Contact_Name/Relationship/Phone; read Archived_Reason from Bronze
 --    *03     20/05/2026  AIH Preferred_Phone_Number is VARCHAR (enum: mobile/home/work) — remove float cast
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -102,7 +103,7 @@ BEGIN
                     TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)    AS Patient_ID,
                     TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)    AS Account_ID,
                     LEFT(Site_ID, 50)                                        AS Site_ID,
-                    CASE WHEN TRY_CAST(Active AS decimal(18,4)) = 1
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Active,
                     LEFT(Title,          20)                                 AS Title,
                     LEFT(First_Name,    100)                                 AS First_Name,
@@ -111,8 +112,8 @@ BEGIN
                     LEFT(Preferred_Name,100)                                 AS Preferred_Name,
                     LEFT(Preferred_Phone_Number, 50)                         AS Preferred_Phone_Number,
                     TRY_CAST(Date_Of_Birth AS date)                          AS Date_Of_Birth,
-                    -- Bronze Gender is decimal; convert numeric code to text
-                    CASE CAST(TRY_CAST(ROUND(CAST(Gender AS float),0) AS int) AS VARCHAR(5))
+                    -- Bronze Gender may be a numeric code (0/1/2) or text (Male/Female)
+                    CASE CAST(TRY_CAST(ROUND(TRY_CAST(Gender AS float),0) AS int) AS VARCHAR(5))
                         WHEN '0' THEN 'Unknown'
                         WHEN '1' THEN 'Male'
                         WHEN '2' THEN 'Female'
@@ -139,18 +140,18 @@ BEGIN
                     LEFT(Custom_Field_2, 100)                                AS Custom_Field_2,
                     NULL                                                     AS Status,
                     CAST(NULL AS bit)                                         AS Recalls,
-                    -- Bronze Medical_Alert is decimal; Silver is bit
-                    CASE WHEN TRY_CAST(Medical_Alert AS decimal(18,4)) = 1
+                    -- Bronze Medical_Alert is VARCHAR; Silver is bit
+                    CASE WHEN LOWER(TRIM(Medical_Alert)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Medical_Alert,
                     Medical_Alert_Text,
-                    -- Bronze Use_Sms is decimal; map to Silver Sms_Communication bit
-                    CASE WHEN TRY_CAST(Use_Sms AS decimal(18,4)) = 1
+                    -- Bronze Use_Sms is VARCHAR; map to Silver Sms_Communication bit
+                    CASE WHEN LOWER(TRIM(Use_Sms)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Sms_Communication,
-                    -- Bronze Use_Email is decimal; map to Silver Email_Communication bit
-                    CASE WHEN TRY_CAST(Use_Email AS decimal(18,4)) = 1
+                    -- Bronze Use_Email is VARCHAR; map to Silver Email_Communication bit
+                    CASE WHEN LOWER(TRIM(Use_Email)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Email_Communication,
                     -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
-                    CASE WHEN Marketing = '1' OR Marketing = 'true'
+                    CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
                     TRY_CAST(ROUND(CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
                     TRY_CAST(ROUND(CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,

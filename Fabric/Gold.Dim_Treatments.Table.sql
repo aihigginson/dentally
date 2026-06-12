@@ -20,6 +20,7 @@ CREATE TABLE [Gold].[Dim_Treatments](
 	[NHS_Treatment_Cat] [int] NULL,
 	[Treatment_Category_ID] [int] NULL,
 	[Treatment_Category_Name] [VARCHAR](255) NULL,
+	[Standard_Treatment_Category] [VARCHAR](100) NULL,
 	[Created_Date] [datetime2](3) NULL,
 	[Updated_Date] [datetime2](3) NULL,
 	[Treatment_Count] [int] NOT NULL,

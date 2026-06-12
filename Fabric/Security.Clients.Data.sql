@@ -18,7 +18,7 @@ VALUES
   (3,  'ClearSmile Manchester (Dev)'),
   (4,  'ClearSmile Birmingham (Dev)'),
 -- Seeded tenants
-  (11, 'Valley Dental Group'),
+  (11, 'Demonstration Practice'),
   (12, 'Elara Dental'),
   (13, 'NorthCity Dental'),
   (14, 'Eastside Dental');

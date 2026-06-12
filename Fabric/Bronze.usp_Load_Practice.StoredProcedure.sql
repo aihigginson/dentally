@@ -6,6 +6,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     19/05/2026  AIH Fix phone_number to VARCHAR; add Town
+--    *04     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practice]
 GO
@@ -44,7 +45,7 @@ BEGIN
             , LEFT(custom_patient_field_label_1,         255)         AS Custom_Patient_Field_Label_1
             , LEFT(custom_patient_field_label_2,         255)         AS Custom_Patient_Field_Label_2
             , TRY_CAST(medical_history_expiry_days AS DECIMAL(18,4))  AS Medical_History_Expiry_Days
-            , CASE WHEN nhs IN ('True', '1', 'true') THEN CAST(1 AS DECIMAL(18,4)) ELSE CAST(0 AS DECIMAL(18,4)) END AS NHS
+            , LEFT(nhs,                255)  AS NHS
             , LEFT(oh_mon_open,                          255)         AS [Oh_Mon#open]
             , LEFT(oh_mon_close,                         255)         AS [Oh_Mon#close]
             , LEFT(oh_tues_open,                         255)         AS [Oh_Tues#open]

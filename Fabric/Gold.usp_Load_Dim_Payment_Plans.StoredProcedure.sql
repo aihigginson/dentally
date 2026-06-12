@@ -10,6 +10,7 @@
 --    *04     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
 --    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *06     22/05/2026  AIH Add Payment_Plan_Count (1 real, 0 sentinel) for SUM-based measures
+--    *07     09/06/2026  AIH Add Standard_Payment_Plan via LEFT JOIN Input.Payment_Plan_Map
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Payment_Plans @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Payment_Plans]    Script Date: 20/04/2026 10:15:06 ******/
@@ -41,24 +42,26 @@ BEGIN
         --*********************************
 
         SELECT
-            Tenant_ID AS Tenant_ID,
-            CAST(Payment_Plan_ID AS INT)                                    AS Payment_Plan_ID,
-            NULLIF(TRIM(Payment_Plan_Name),'')                              AS Payment_Plan_Name,
-            NULLIF(TRIM(Payment_Plan_Patient_Friendly_Name),'')             AS Patient_Friendly_Name,
-            CAST(ISNULL(Payment_Plan_Active,0) AS BIT)                      AS Active,
-            NULLIF(TRIM(Payment_Plan_Colour),'')                            AS Colour,
-            NULLIF(TRIM(Payment_Plan_Site_ID),'')                           AS Site_ID,
-            CAST(Dentist_Recall_Interval AS INT)                            AS Dentist_Recall_Interval_Months,
-            CAST(Hygienist_Recall_Interval AS INT)                          AS Hygienist_Recall_Interval_Months,
-            CAST(Emergency_Duration AS INT)                                 AS Emergency_Duration_Mins,
-            CAST(Exam_Duration AS INT)                                      AS Exam_Duration_Mins,
-            CAST(Exam_Scale_And_Polish_Duration AS INT)                     AS Exam_Scale_Polish_Duration_Mins,
-            CAST(Scale_And_Polish_Duration AS INT)                          AS Scale_Polish_Duration_Mins,
-            TRY_CAST(Payment_Plan_Created_At AS datetime2(3))               AS Created_Date,
-            CAST(1 AS INT)                                                           AS Payment_Plan_Count
+            pp.Tenant_ID                                                    AS Tenant_ID,
+            CAST(pp.Payment_Plan_ID AS INT)                                 AS Payment_Plan_ID,
+            NULLIF(TRIM(pp.Payment_Plan_Name),'')                           AS Payment_Plan_Name,
+            COALESCE(NULLIF(TRIM(m.Standard_Payment_Plan),''), LEFT(NULLIF(TRIM(pp.Payment_Plan_Name),''), 100)) AS Standard_Payment_Plan,
+            NULLIF(TRIM(pp.Payment_Plan_Patient_Friendly_Name),'')          AS Patient_Friendly_Name,
+            CAST(ISNULL(pp.Payment_Plan_Active,0) AS BIT)                   AS Active,
+            NULLIF(TRIM(pp.Payment_Plan_Colour),'')                         AS Colour,
+            NULLIF(TRIM(pp.Payment_Plan_Site_ID),'')                        AS Site_ID,
+            CAST(pp.Dentist_Recall_Interval AS INT)                         AS Dentist_Recall_Interval_Months,
+            CAST(pp.Hygienist_Recall_Interval AS INT)                       AS Hygienist_Recall_Interval_Months,
+            CAST(pp.Emergency_Duration AS INT)                              AS Emergency_Duration_Mins,
+            CAST(pp.Exam_Duration AS INT)                                   AS Exam_Duration_Mins,
+            CAST(pp.Exam_Scale_And_Polish_Duration AS INT)                  AS Exam_Scale_Polish_Duration_Mins,
+            CAST(pp.Scale_And_Polish_Duration AS INT)                       AS Scale_Polish_Duration_Mins,
+            TRY_CAST(pp.Payment_Plan_Created_At AS datetime2(3))            AS Created_Date,
+            CAST(1 AS INT)                                                  AS Payment_Plan_Count
         INTO #src
-        FROM Silver.Payment_Plans
-        WHERE Payment_Plan_ID IS NOT NULL;
+        FROM Silver.Payment_Plans pp
+        LEFT JOIN Input.Payment_Plan_Map m ON m.Tenant_ID = pp.Tenant_ID AND m.Source_Payment_Plan = NULLIF(TRIM(pp.Payment_Plan_Name),'')
+        WHERE pp.Payment_Plan_ID IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -70,6 +73,7 @@ BEGIN
         -- Update changed rows
         UPDATE tgt SET
             Payment_Plan_Name               = src.Payment_Plan_Name,
+            Standard_Payment_Plan           = src.Standard_Payment_Plan,
             Patient_Friendly_Name           = src.Patient_Friendly_Name,
             Active                          = src.Active,
             Colour                          = src.Colour,
@@ -84,28 +88,30 @@ BEGIN
         FROM Gold.Dim_Payment_Plans tgt
         INNER JOIN #src src ON tgt.Payment_Plan_ID = src.Payment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-           ISNULL(CAST(tgt.[Payment_Plan_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Patient_Friendly_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Colour] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Site_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Payment_Plan_Name]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Standard_Payment_Plan]         AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Patient_Friendly_Name]         AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Active]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Colour]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Site_ID]                       AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Dentist_Recall_Interval_Months] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Emergency_Duration_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Exam_Duration_Mins] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Emergency_Duration_Mins]       AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Exam_Duration_Mins]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Exam_Scale_Polish_Duration_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Scale_Polish_Duration_Mins] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Scale_Polish_Duration_Mins]    AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
-           ISNULL(CAST(src.[Payment_Plan_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Patient_Friendly_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Colour] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Site_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Payment_Plan_Name]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Standard_Payment_Plan]         AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Patient_Friendly_Name]         AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Active]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Colour]                        AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Site_ID]                       AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Dentist_Recall_Interval_Months] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Emergency_Duration_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Exam_Duration_Mins] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Emergency_Duration_Mins]       AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Exam_Duration_Mins]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Exam_Scale_Polish_Duration_Mins] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Scale_Polish_Duration_Mins] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Scale_Polish_Duration_Mins]    AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -113,14 +119,16 @@ BEGIN
         DECLARE @pk_Payment_Plan_base BIGINT = ISNULL((SELECT MAX(pk_Payment_Plan) FROM Gold.Dim_Payment_Plans WHERE pk_Payment_Plan > 0), 0);
         INSERT INTO Gold.Dim_Payment_Plans (
             pk_Payment_Plan,
-            Tenant_ID, Payment_Plan_ID, Payment_Plan_Name, Patient_Friendly_Name, Active, Colour, Site_ID,
+            Tenant_ID, Payment_Plan_ID, Payment_Plan_Name, Standard_Payment_Plan,
+            Patient_Friendly_Name, Active, Colour, Site_ID,
             Dentist_Recall_Interval_Months, Hygienist_Recall_Interval_Months,
             Emergency_Duration_Mins, Exam_Duration_Mins, Exam_Scale_Polish_Duration_Mins,
             Scale_Polish_Duration_Mins, Created_Date, Payment_Plan_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Payment_Plan_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Payment_Plan_ID),
-            src.Tenant_ID, src.Payment_Plan_ID, src.Payment_Plan_Name, src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
+            src.Tenant_ID, src.Payment_Plan_ID, src.Payment_Plan_Name, src.Standard_Payment_Plan,
+            src.Patient_Friendly_Name, src.Active, src.Colour, src.Site_ID,
             src.Dentist_Recall_Interval_Months, src.Hygienist_Recall_Interval_Months,
             src.Emergency_Duration_Mins, src.Exam_Duration_Mins, src.Exam_Scale_Polish_Duration_Mins,
             src.Scale_Polish_Duration_Mins, src.Created_Date, src.Payment_Plan_Count, SYSUTCDATETIME(), SYSUTCDATETIME()

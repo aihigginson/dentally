@@ -1,7 +1,7 @@
 // TabularEditor_SpiderTreatment.csx
 // Creates 15 measures for the Treatment Spider (Deneb radar) visual:
 //   5  Spider Tx *       — individual values, filter-context sensitive
-//   5  Spider Tx Avg *   — practice average, ALL('List Practitioners') bypasses slicer
+//   5  Spider Tx Avg *   — practice average, ALLSELECTED('List Practitioners') bypasses slicer
 //   5  Spider Tx Tgt *   — targets (inverted axes return ratio sentinel 1)
 //
 // Lower-is-better axis (Open Courses):
@@ -76,21 +76,21 @@ add("Spider Tx Tgt Acceptance Rate",
 // ── Practice averages (ALL bypasses practitioner slicer) ──────────────────────
 
 add("Spider Tx Avg Rev Per Hour",
-    @"CALCULATE([Spider Tx Rev Per Hour], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Rev Per Hour], ALLSELECTED('List Practitioners'))",
     @"£#,##0");
 
 add("Spider Tx Avg Open Courses Value",
-    @"CALCULATE([Spider Tx Open Courses Value], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Open Courses Value], ALLSELECTED('List Practitioners'))",
     @"£#,##0");
 
 add("Spider Tx Avg Open Courses",
-    @"CALCULATE([Spider Tx Open Courses], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Open Courses], ALLSELECTED('List Practitioners'))",
     @"0.00");
 
 add("Spider Tx Avg Exam Ratio",
-    @"CALCULATE([Spider Tx Exam Ratio], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Exam Ratio], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Tx Avg Acceptance Rate",
-    @"CALCULATE([Spider Tx Acceptance Rate], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Acceptance Rate], ALLSELECTED('List Practitioners'))",
     @"0.0%");

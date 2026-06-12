@@ -311,11 +311,11 @@ DECLARE @Msg        nvarchar(500);
 
     -- ── Silver derived attributes (run after all source Silver entities are loaded) ─
 
-    SET @Step = 'Appointment_Journey';
+    SET @Step = 'Appointment_Journey_Attributes';
     SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = 'SILVER_DERIVE_APPOINTMENT_JOURNEY'
+    SET @Process_Code = 'SILVER_APPOINTMENT_JOURNEY_ATTRIBUTES'
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
- -- EXEC Silver.usp_Derive_Appointment_Journey @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+ -- EXEC Silver.usp_Load_Appointment_Journey_Attributes @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
 
@@ -357,9 +357,15 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Gold.usp_Load_Dim_Practitioners @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT   
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
+    SET @Step = 'Dim_Acquisition_Sources'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Dim_Acquisition_Sources @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
     SET @Step = 'Dim_Patients';        SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Dim_Patients @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
@@ -387,6 +393,12 @@ DECLARE @Msg        nvarchar(500);
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Dim_Treatment_Plans @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Dim_NHS_Contracts';   SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Dim_NHS_Contracts @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     -- ---- FACTS ----
@@ -423,8 +435,14 @@ DECLARE @Msg        nvarchar(500);
 
     SET @Step = 'Fact_Contracts';      SET @Start = GETDATE();
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID    
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Contracts @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_NHS_Claims';     SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_NHS_Claims @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     SET @Step = 'Fact_Appointments';   SET @Start = GETDATE();
@@ -445,6 +463,18 @@ DECLARE @Msg        nvarchar(500);
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_Targets';        SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_Effective_Targets'; SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+ -- EXEC Gold.usp_Load_Fact_Effective_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     SET @Step = 'Fact_KPI_Snapshot';   SET @Start = GETDATE();

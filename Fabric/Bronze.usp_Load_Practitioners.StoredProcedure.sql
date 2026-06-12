@@ -9,6 +9,7 @@
 --    *04     19/05/2026  AIH Add gdc_number, nhs_number, default_contract_id, colour, user_title, user_email, user_mobile_phone, user_middle_name, contract_targets_string, user dates/login; fix nested user field names (user_first_name etc.)
 --    *05     20/05/2026  AIH Flatten user_* fields in generate_data.py so Stage has flat columns (not nested user struct)
 --    *06     20/05/2026  AIH Column naming convention fixes (Practitioner_Gdc_Number -> Practitioner_GDC_Number)
+--    *07     05/06/2026  AIH Accept '1' as truthy for active — Stage stores BIT as integer not string 'true'
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Practitioners @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practitioners]
@@ -47,7 +48,7 @@ BEGIN
             , LEFT(user_last_login,    255)                                  AS User_Last_Login
             , TRY_CAST(user_permission_level AS DECIMAL(18,4))               AS User_Permission_Level
             , LEFT(site_id,            255)                                  AS Practitioner_Site_ID
-            , CASE WHEN LOWER(CAST(active AS VARCHAR(10))) = 'true'
+            , CASE WHEN LOWER(CAST(active AS VARCHAR(10))) IN ('true', '1')
                    THEN CAST(1.0 AS DECIMAL(18,4))
                    ELSE CAST(0.0 AS DECIMAL(18,4)) END                       AS Practitioner_Active
             , LEFT(gdc_number,         255)                                  AS Practitioner_GDC_Number

@@ -1,7 +1,7 @@
 param(
-    [Parameter(Mandatory)] [string] $Server,
-    [Parameter(Mandatory)] [string] $Database,
-    [Parameter(Mandatory)] [string] $Username
+    [string] $Server   = "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com",
+    [string] $Database = "WH_Dentally",
+    [string] $Username = "aihigginson@2rrjxy.onmicrosoft.com"
 )
 
 if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
@@ -18,12 +18,24 @@ $Groups = [ordered]@{
     )
 
     '06. Bronze tables' = @(
+        'Bronze.Appointments.Table.sql'
+        'Bronze.Acquisition_Sources.Table.sql'
+        'Bronze.Contracts.Table.sql'
+        'Bronze.Fees.Table.sql'
         'Bronze.Invoice_Items.Table.sql'
+        'Bronze.Invoices.Table.sql'
+        'Bronze.Patients.Table.sql'
+        'Bronze.Payments.Table.sql'
+        'Bronze.Practice.Table.sql'
         'Bronze.Practitioners.Table.sql'
         'Bronze.Recalls.Table.sql'
+        'Bronze.Sites.Table.sql'
+        'Bronze.Treatment_Appointments.Table.sql'
+        'Bronze.Treatment_Plan_Items.Table.sql'
+        'Bronze.Treatment_Plans.Table.sql'
+        'Bronze.Treatments.Table.sql'
         'Bronze.Waiting_Lists.Table.sql'
         'Bronze.Cancellation_Reasons.Table.sql'
-        'Bronze.Treatment_Plan_Items.Table.sql'
     )
 
     '07. Bronze stored procedures' = @(

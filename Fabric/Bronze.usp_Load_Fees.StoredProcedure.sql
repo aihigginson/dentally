@@ -7,6 +7,7 @@
 --    *02     30/04/2026  AIH Fix source column id → fee_id to match mock API field name
 --    *03     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *04     16/05/2026  AIH Revert fee_id → id: 4-tenant rebuild restored standard id field name
+--    *05     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Fees]
 GO
@@ -32,7 +33,7 @@ BEGIN
             , LEFT(id, 255)                                                                                AS Fee_ID
             , TRY_CAST(payment_plan_id AS INT)                                                              AS Payment_Plan_ID
             , TRY_CAST(treatment_id AS DECIMAL(18,4))                                                       AS Treatment_ID
-            , CASE WHEN multiple_pricing IN ('True', '1', 'true') THEN 1 ELSE 0 END                         AS Multiple_Pricing
+            , LEFT(multiple_pricing, 255)                                                                   AS Multiple_Pricing
             , TRY_CAST(duration_one   AS INT)                                                               AS Duration_One
             , TRY_CAST(duration_two   AS INT)                                                               AS Duration_Two
             , TRY_CAST(duration_three AS INT)                                                               AS Duration_Three

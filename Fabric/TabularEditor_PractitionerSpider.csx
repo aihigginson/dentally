@@ -1,7 +1,7 @@
 // TabularEditor_PractitionerSpider.csx
 // Creates 14 measures for the Practitioner Spider (Deneb radar) visual:
 //   7  Spider *       — individual values, filter-context sensitive (practitioner slicer applies)
-//   7  Spider Avg *   — practice average, ALL('List Practitioners') bypasses practitioner slicer
+//   7  Spider Avg *   — practice average, ALLSELECTED('List Practitioners') bypasses practitioner slicer
 //
 // Vega spec logic:
 //   - Average web always shown (#8AB5B2 teal)
@@ -100,29 +100,29 @@ add("Spider Target UDA Completion",
 // ── Practice average measures (ALL bypasses practitioner slicer) ────────────
 
 add("Spider Avg Revenue vs Target",
-    @"CALCULATE([Spider Revenue vs Target], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Revenue vs Target], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Avg Chair Utilisation",
-    @"CALCULATE([Spider Chair Utilisation], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Chair Utilisation], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Avg Rev Per Hour",
-    @"CALCULATE([Spider Rev Per Hour], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Rev Per Hour], ALLSELECTED('List Practitioners'))",
     @"£#,##0");
 
 add("Spider Avg New Patients",
-    @"CALCULATE([Spider New Patients], ALL('List Practitioners'))",
+    @"CALCULATE([Spider New Patients], ALLSELECTED('List Practitioners'))",
     @"#,##0");
 
 add("Spider Avg Tx Conversion",
-    @"CALCULATE([Spider Tx Conversion], ALL('List Practitioners'))",
+    @"CALCULATE([Spider Tx Conversion], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Avg DNA Score",
-    @"CALCULATE([Spider DNA Score], ALL('List Practitioners'))",
+    @"CALCULATE([Spider DNA Score], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider Avg UDA Completion",
-    @"CALCULATE([Spider UDA Completion], ALL('List Practitioners'))",
+    @"CALCULATE([Spider UDA Completion], ALLSELECTED('List Practitioners'))",
     @"0.0%");

@@ -13,7 +13,7 @@
 .PARAMETER Username
     Your Azure AD email address.
 .EXAMPLE
-   .\Deploy_To_Fabric.ps1 -Server  "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com" -Database "WH_Dentally"   -Username "aihigginson@2rrjxy.onmicrosoft.com"
+   .\Deploy_To_Fabric.ps1 -Server  "emeh72n2ntdufpj4q665b2lzx4-4i26eirspjiujnltrvplquzkem.datawarehouse.fabric.microsoft.com" -Database "WH_Dentally" -Username "admin@analytically.info"
 #>
 param(
     [Parameter(Mandatory)] [string] $Server,
@@ -64,7 +64,6 @@ $Groups = [ordered]@{
     '2b. Security tables' = @(
         'Security.Clients.Table.sql'
         'Security.Application_Users.Table.sql'
-        'Security.User_Tenants.Table.sql'
     )
 
     '2c. Input tables' = @(
@@ -86,7 +85,6 @@ $Groups = [ordered]@{
         'Audit.Tenants.Data.sql'
         'Security.Clients.Data.sql'
         'Security.Application_Users.Data.sql'
-        'Security.User_Tenants.Data.sql'
     )
 
     '3b. Input data cleanup' = @(
@@ -103,6 +101,7 @@ $Groups = [ordered]@{
         'Audit.Meta_Log_Record_Count.StoredProcedure.sql'
         'Audit.Meta_Refresh_Record_Count.StoredProcedure.sql'
         'Audit.usp_Rerun_Failed_Jobs.StoredProcedure.sql'
+        'Audit.usp_Load_All.sql'
     )
 
     '5. Audit views' = @(
@@ -144,7 +143,11 @@ $Groups = [ordered]@{
         'Bronze.Practitioner_Diary.Table.sql'
         'Bronze.Practitioner_Diary_Breaks.Table.sql'
         'Bronze.Practitioners.Table.sql'
+        'Bronze.Cancellation_Reasons.Table.sql'
+        'Bronze.Patient_Referral_Reasons.Table.sql'
+        'Bronze.Patient_Referrals.Table.sql'
         'Bronze.Recalls.Table.sql'
+        'Bronze.Rooms.Table.sql'
         'Bronze.Sites.Table.sql'
         'Bronze.Sundries.Table.sql'
         'Bronze.Treatment_Appointments.Table.sql'
@@ -188,6 +191,11 @@ $Groups = [ordered]@{
         'Bronze.usp_Load_Payment_Allocations.StoredProcedure.sql'
         'Bronze.usp_Load_Payment_Explanations.StoredProcedure.sql'
         'Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql'
+        'Bronze.usp_Load_Cancellation_Reasons.StoredProcedure.sql'
+        'Bronze.usp_Load_Patient_Referral_Reasons.StoredProcedure.sql'
+        'Bronze.usp_Load_Patient_Referrals.StoredProcedure.sql'
+        'Bronze.usp_Load_Rooms.StoredProcedure.sql'
+        'Bronze.usp_Load_Waiting_Lists.StoredProcedure.sql'
         'Bronze.usp_Load_All.StoredProcedure.sql'
     )
 
@@ -224,6 +232,9 @@ $Groups = [ordered]@{
         'Silver.Treatments.Table.sql'
         'Silver.Users.Table.sql'
         'Silver.Waiting_List_Entries.Table.sql'
+        'Silver.Appointment_Journey_Attributes.Table.sql'
+        'Silver.Appointment_Reason_Map.Table.sql'
+        'Silver.Appointment_Reason_Map.Data.sql'
     )
 
     '11. Gold tables & functions' = @(
@@ -247,6 +258,16 @@ $Groups = [ordered]@{
         'Gold.Fact_Daily_Targets.Table.sql'
         'Gold.fn_Get_Date_Key.UserDefinedFunction.sql'
         'Gold.Dim_Tenants.Table.sql'
+        'Gold.Dim_Acquisition_Sources.Table.sql'
+        'Gold.Dim_Cancellation_Reasons.Table.sql'
+        'Gold.Dim_NHS_Contracts.Table.sql'
+        'Gold.Fact_Effective_Targets.Table.sql'
+        'Gold.Fact_KPI_Snapshot.Table.sql'
+        'Gold.Fact_NHS_Claims.Table.sql'
+        'Gold.Fact_Payments.Table.sql'
+        'Gold.Aggregate_Site_Patient_Current.Table.sql'
+        'Gold.Aggregate_Site_Patient_Practitioner_Daily.Table.sql'
+        'Gold.Aggregate_Site_Practitioner_Current.Table.sql'
     )
 
     '12. Silver procedures' = @(
@@ -277,6 +298,11 @@ $Groups = [ordered]@{
         'Silver.usp_Load_Treatment_Plans.StoredProcedure.sql'
         'Silver.usp_Load_Treatments.StoredProcedure.sql'
         'Silver.usp_Load_Users.StoredProcedure.sql'
+        'Silver.usp_Load_Appointment_Cancellation_Reasons.StoredProcedure.sql'
+        'Silver.usp_Load_Appointment_Journey_Attributes.StoredProcedure.sql'
+        'Silver.usp_Load_Patient_Referral_Reasons.StoredProcedure.sql'
+        'Silver.usp_Load_Patient_Referrals.StoredProcedure.sql'
+        'Silver.usp_Load_Rooms.StoredProcedure.sql'
     )
 
     '13. Gold usp_Create procedures' = @(
@@ -296,6 +322,9 @@ $Groups = [ordered]@{
         'Gold.usp_Create_Fact_Treatment_Appointments.StoredProcedure.sql'
         'Gold.usp_Create_Fact_Treatment_Plan_Items.StoredProcedure.sql'
         'Gold.usp_Create_Dim_Tenants.StoredProcedure.sql'
+        'Gold.usp_Create_Dim_NHS_Contracts.StoredProcedure.sql'
+        'Gold.usp_Create_Fact_NHS_Claims.StoredProcedure.sql'
+        'Gold.usp_Create_Fact_Payments.StoredProcedure.sql'
     )
 
     '14. Gold usp_Load procedures' = @(
@@ -319,10 +348,24 @@ $Groups = [ordered]@{
         'Gold.usp_Load_Dim_Tenants.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Targets.StoredProcedure.sql'
         'Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_Acquisition_Sources.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql'
+        'Gold.usp_Load_Dim_NHS_Contracts.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Effective_Targets.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_KPI_Snapshot.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_NHS_Claims.StoredProcedure.sql'
+        'Gold.usp_Load_Fact_Payments.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql'
+        'Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql'
     )
 
     '15. Meta procedures' = @(
         'Meta.usp_Create_Gold_Views.StoredProcedure.sql'
+    )
+
+    '16. PBI views' = @(
+        'PBI._Appointments_Sankey.View.sql'
     )
 
 }

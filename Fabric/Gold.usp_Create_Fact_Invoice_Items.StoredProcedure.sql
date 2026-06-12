@@ -66,6 +66,7 @@ BEGIN
         Invoice_Amount              DECIMAL(18,4)       NULL,
         Invoice_Amount_Outstanding  DECIMAL(18,4)       NULL,
         Invoice_NHS_Amount          DECIMAL(18,4)       NULL,
+        Aged_Debt_Band              VARCHAR(20)         NULL,
 
         DW_Created_At               datetime2(6)        NOT NULL,
         DW_Updated_At               datetime2(6)        NOT NULL

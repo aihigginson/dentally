@@ -7,6 +7,7 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     19/05/2026  AIH Add Nickname from Bronze; simplify Nickname read (now VARCHAR in Bronze)
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, lowercase cols -> Pascal_Case, day abbreviations)
+--    *04     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Sites @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Sites]    Script Date: 20/04/2026 10:15:06 ******/
@@ -71,7 +72,7 @@ BEGIN
                 LEFT(Practice_ID,   50)  AS [Practice_ID],
                 Name  AS [Name],
                 LEFT(Nickname, 255)  AS [Nickname],
-                TRY_CAST(ROUND(CAST(Active AS float),0) AS int)  AS [Active],
+                CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN 1 ELSE 0 END  AS [Active],
                 Address_Line_1  AS [Address_Line_1],
                 Address_Line_2  AS [Address_Line_2],
                 Town  AS [Town],

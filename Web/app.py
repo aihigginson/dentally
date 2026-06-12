@@ -3,6 +3,7 @@ from flask_cors import CORS
 import msal
 import requests
 import pyodbc
+import struct
 import os
 from dotenv import load_dotenv
 import jwt
@@ -20,6 +21,8 @@ WORKSPACE_ID   = os.environ['WORKSPACE_ID']
 DATASET_ID     = os.environ['DATASET_ID']
 USERNAME       = os.environ['PBI_USERNAME']
 PASSWORD       = os.environ['PBI_PASSWORD']
+AZURE_CLIENT_ID     = os.environ.get('AZURE_CLIENT_ID', CLIENT_ID)
+AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET', CLIENT_SECRET)
 REPORT_ROLES   = [r.strip() for r in os.environ.get('REPORT_ROLES', '').split(',') if r.strip()]
 FABRIC_SERVER  = os.environ['FABRIC_SERVER']
 FABRIC_DB      = os.environ.get('FABRIC_DB', 'WH_Dentally')
@@ -88,18 +91,28 @@ def _pbi_delegated_token():
     return result['access_token']
 
 
-def _fabric_conn():
+def _fabric_access_token():
+    result = msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=f'https://login.microsoftonline.com/{TENANT_ID}',
+        client_credential=AZURE_CLIENT_SECRET,
+    ).acquire_token_for_client(scopes=['https://database.windows.net//.default'])
+    if 'access_token' not in result:
+        raise RuntimeError(result.get('error_description', 'Fabric token acquisition failed'))
+    return result['access_token']
+
+def _fabric_conn(autocommit=False):
+    token       = _fabric_access_token()
+    token_bytes = token.encode('utf-16-le')
+    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={FABRIC_SERVER},1433;"
         f"Database={FABRIC_DB};"
-        f"Authentication=ActiveDirectoryPassword;"
-        f"UID={USERNAME};"
-        f"PWD={PASSWORD};"
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
     )
-    return pyodbc.connect(conn_str)
+    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
 # ── Public routes ─────────────────────────────────────────────────────────────
 
@@ -190,6 +203,8 @@ def me():
             'maintain_targets': maintain_targets,
         })
     except Exception as e:
+        import traceback
+        print(f"ME ERROR: {e}\n{traceback.format_exc()}", flush=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -200,6 +215,7 @@ def filters():
         return err
 
     active_only = request.args.get('active_only', '1') == '1'
+    role_filter = request.args.get('role', 'all')
     try:
         conn = _fabric_conn()
         cur  = conn.cursor()
@@ -218,13 +234,16 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
-        active_w = "AND Active = 1" if active_only else ""
+        role_clause  = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        pract_params = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
             f"SELECT Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
-            f"WHERE  Tenant_ID IN ({placeholders}) {active_w} "
+            f"WHERE  Tenant_ID IN ({placeholders}) "
+            f"AND    pk_Practitioner > 0 "
+            f"{role_clause}"
             f"ORDER BY Full_Name",
-            tids,
+            pract_params,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
         conn.close()
@@ -742,9 +761,8 @@ def save_targets():
     if err:
         return err
     try:
-        conn            = _fabric_conn()
-        conn.autocommit = True   # Fabric Warehouse requires autocommit for DML
-        cur             = conn.cursor()
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
         _, client_id, tids, _ = _get_user_info(cur, upn)
         if client_id is None:
             conn.close()
@@ -753,33 +771,39 @@ def save_targets():
         rows         = request.get_json(force=True) or []
         allowed_tids = set(tids)
 
-        for row in rows:
-            tid      = int(row['tenant_id'])
-            metric   = str(row['metric'])
-            value    = row.get('value')
-            variance = row.get('variance')
-            if tid not in allowed_tids:
-                continue
-            cur.execute(
+        valid = [
+            (int(r['tenant_id']), str(r['metric']), r.get('value'), r.get('variance'))
+            for r in rows if int(r['tenant_id']) in allowed_tids
+        ]
+
+        if valid:
+            cur.fast_executemany = True
+            cur.executemany(
                 "DELETE FROM Input.Targets "
                 "WHERE Tenant_ID = ? AND Metric = ? "
                 "AND Period_Type = 'all_time' AND Period_Value = 'all' "
                 "AND Site_ID IS NULL AND Practitioner_ID IS NULL",
-                [tid, metric],
+                [(tid, metric) for tid, metric, _, _ in valid],
             )
-            if value is not None:
-                cur.execute(
+            inserts = [
+                (tid, metric, float(value),
+                 float(variance) if variance is not None else None)
+                for tid, metric, value, variance in valid if value is not None
+            ]
+            if inserts:
+                cur.executemany(
                     "INSERT INTO Input.Targets "
                     "(Tenant_ID, Site_ID, Practitioner_ID, Metric, Period_Type, Period_Value, "
                     " Target_Value, Variance, DW_Created_At, DW_Updated_At) "
                     "VALUES (?, NULL, NULL, ?, 'all_time', 'all', ?, ?, GETUTCDATE(), GETUTCDATE())",
-                    [tid, metric, float(value),
-                     float(variance) if variance is not None else None],
+                    inserts,
                 )
 
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
+        import traceback
+        print(f"[save_targets] ERROR: {repr(e)}\n{traceback.format_exc()}", flush=True)
         return jsonify({'error': str(e)}), 500
 
 

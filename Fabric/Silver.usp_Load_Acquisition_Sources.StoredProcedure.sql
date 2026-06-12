@@ -6,6 +6,7 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *03     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Acquisition_Sources @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Acquisition_Sources]    Script Date: 20/04/2026 10:15:06 ******/
@@ -49,8 +50,8 @@ BEGIN
                 Tenant_ID  AS [Tenant_ID],
                 -- Bronze ID is VARCHAR(255); Silver is VARCHAR(50) – truncate safely
         LEFT(CAST(ID AS VARCHAR(255)), 50)  AS [Acquisition_Source_ID],
-                -- Bronze Active is int; Silver is bit
-        CASE WHEN Active = 1 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
+                -- Bronze Active is VARCHAR; Silver is bit
+        CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 Name  AS [Name],
                 -- Bronze Notes is VARCHAR(max); Silver is VARCHAR(1000)
         LEFT(Notes, 1000)  AS [Notes]

@@ -198,7 +198,7 @@ Deploy-Group "5. Silver tables -full rebuild (column naming fixes + schema chang
     'Silver.Acquisition_Sources.Table.sql'
     'Silver.Appointment_Cancellation_Reasons.Table.sql'
     'Silver.Appointment_Reason_Map.Table.sql'
-    'Silver.Appointment_Journey_Attrs.Table.sql'
+    'Silver.Appointment_Journey_Attributes.Table.sql'
     'Silver.Sundries.Table.sql'
     'Silver.Waiting_List_Entries.Table.sql'
     'Silver.Fees.Table.sql'
@@ -249,7 +249,7 @@ if ($Errors -gt 0) { Write-Host "`nAborting after Silver SP errors." -Foreground
 Deploy-Group "7. Silver stored procedures -new entities + derive" @(
     'Silver.usp_Load_Rooms.StoredProcedure.sql'
     'Silver.usp_Load_Appointment_Cancellation_Reasons.StoredProcedure.sql'
-    'Silver.usp_Derive_Appointment_Journey.StoredProcedure.sql'
+    'Silver.usp_Load_Appointment_Journey_Attributes.StoredProcedure.sql'
 )
 
 if ($Errors -gt 0) { Write-Host "`nAborting after Silver SP errors." -ForegroundColor Red; exit 1 }

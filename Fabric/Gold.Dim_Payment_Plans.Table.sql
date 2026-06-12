@@ -10,6 +10,7 @@ CREATE TABLE [Gold].[Dim_Payment_Plans](
 	[Tenant_ID] [int] NOT NULL,
 	[Payment_Plan_ID] [int] NOT NULL,
 	[Payment_Plan_Name] [VARCHAR](255) NULL,
+	[Standard_Payment_Plan] [VARCHAR](100) NULL,
 	[Patient_Friendly_Name] [VARCHAR](255) NULL,
 	[Active] [bit] NULL,
 	[Colour] [VARCHAR](20) NULL,

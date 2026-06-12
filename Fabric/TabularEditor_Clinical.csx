@@ -10,30 +10,64 @@ Action<string,string,string> add = (name, dax, fmt) => {
     if (fmt != "") m.FormatString = fmt;
 };
 
+
+
 // ── Value measures ───────────────────────────────────────────────────────────
 
-// Acceptance rate: plans that have progressed to having a start date / all plans
+// Acceptance rate: plans that have progressed to having a start date / all plans.
+// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer,
+// because List Treatment Plans has no fk_Practitioner surrogate key relationship.
 add("Treatment Acceptance Rate",
-    @"DIVIDE(
-    CALCULATE(SUM('List Treatment Plans'[Treatment Plan Count]),
-        'List Treatment Plans'[Start Date] <> BLANK()),
-    SUM('List Treatment Plans'[Treatment Plan Count]))",
+    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
+RETURN DIVIDE(
+    CALCULATE(
+        SUM('List Treatment Plans'[Treatment Plan Count]),
+        'List Treatment Plans'[Start Date] <> BLANK(),
+        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+    ),
+    CALCULATE(
+        SUM('List Treatment Plans'[Treatment Plan Count]),
+        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+    )
+)",
     "#,##0.0%");
 
-// Open courses: plans not yet completed
+// Open courses: live count of incomplete, started plans from List Treatment Plans.
+// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer.
 add("Open Courses",
-    @"SUMX(
-    FILTER('List Treatment Plans',
-        'List Treatment Plans'[Completed] = FALSE()),
-    'List Treatment Plans'[Treatment Plan Count])",
+    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
+RETURN CALCULATE(
+    SUM('List Treatment Plans'[Treatment Plan Count]),
+    'List Treatment Plans'[Completed]         = FALSE(),
+    NOT ISBLANK('List Treatment Plans'[Start Date]),
+    TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+)",
     "#,##0");
 
-// Open courses with no future appointment booked
+// Open courses with no future appointment booked.
+// Routes through _Treatment Plan Items to pick up the practitioner slicer,
+// then checks List Patients[Next Appointment Date] (current-state) for no future booking.
 add("Open Courses Without Appointment",
-    @"CALCULATE(
-    DISTINCTCOUNT('Aggregate Site Patient Practitioner Daily'[fk Patient]),
-    'Aggregate Site Patient Practitioner Daily'[Open Treatment Plan] > 0,
-    'Aggregate Site Patient Practitioner Daily'[Future Appointment] = FALSE())",
+    @"VAR today = TODAY()
+VAR open_plan_patients =
+    CALCULATETABLE(
+        DISTINCT('_Treatment Plan Items'[fk Patient]),
+        '_Treatment Plan Items'[Completed]        = FALSE(),
+        '_Treatment Plan Items'[Charged]          = FALSE(),
+        'List Treatment Plans'[Completed]         = FALSE(),
+        NOT ISBLANK('List Treatment Plans'[Start Date])
+    )
+RETURN
+CALCULATE(
+    COUNTROWS('List Patients'),
+    TREATAS(open_plan_patients, 'List Patients'[pk Patient]),
+    'List Patients'[pk Patient] > 0,
+    FILTER(
+        'List Patients',
+        ISBLANK('List Patients'[Next Appointment Date])
+            || 'List Patients'[Next Appointment Date] <= today
+    )
+)",
     "#,##0");
 
 // Exam ratio: exam appointments / all appointments
@@ -44,11 +78,17 @@ add("Exam Ratio",
     "#,##0.0%");
 
 // ── Target and variance measures ─────────────────────────────────────────────
+// All use _Effective Targets (period-resolved, site hierarchy pre-computed).
 
 add("Treatment Acceptance Rate Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""acceptance_rate"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("Treatment Acceptance Rate vs Target",
@@ -63,43 +103,60 @@ RETURN IF(
     "");
 
 add("Open Courses Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""open_courses""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""open_courses"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "#,##0");
 
 add("Open Courses vs Target",
     @"VAR actual = [Open Courses]
 VAR target = [Open Courses Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Open Courses Without Appointment Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""open_courses_without_appt""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""open_courses_without_appt"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "#,##0");
 
 add("Open Courses Without Appointment vs Target",
     @"VAR actual = [Open Courses Without Appointment]
 VAR target = [Open Courses Without Appointment Target]
-VAR pct    = DIVIDE(target - actual, ABS(target)) * 100
+VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
     ISBLANK(target), BLANK(),
-    IF(pct >= 0,
+    prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
 add("Exam Ratio Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""exam_ratio"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site) / 100",
     "#,##0.0%");
 
 add("Exam Ratio vs Target",
@@ -120,56 +177,65 @@ RETURN IF(
 // exam_ratio       → within + percent → absolute pp deviation from target
 
 add("Treatment Acceptance Rate BG",
-    @"VAR actual   = [Treatment Acceptance Rate]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""acceptance_rate""), '_Targets'[Variance])
-VAR diff_pp  = (actual - target) * 100
+    @"VAR actual    = [Treatment Acceptance Rate]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""acceptance_rate"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR diff_pp    = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    diff_pp >= band,   ""#1a7f3c"",
-    diff_pp >= 0,          ""#6abf7b"",
-    diff_pp >= -band,  ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    diff_pp >= band,  ""#1a7f3c"",
+    diff_pp >= 0,     ""#6abf7b"",
+    diff_pp >= -band, ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Open Courses BG",
-    @"VAR actual   = [Open Courses]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual    = [Open Courses]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),   ""#FFFFFF"",
-    pct <= -band,  ""#1a7f3c"",
-    pct <= 0,          ""#6abf7b"",
-    pct <= band,   ""#f4a261"",
-                       ""#c0392b"")",
+    ISBLANK(actual),  ""#E0E0E0"",
+    ISBLANK(target),  ""#FFFFFF"",
+    pct <= -band,     ""#1a7f3c"",
+    pct <= 0,         ""#6abf7b"",
+    pct <= band,      ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Open Courses Without Appointment BG",
-    @"VAR actual   = [Open Courses Without Appointment]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_without_appt""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_without_appt""), '_Targets'[Variance])
-VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual    = [Open Courses Without Appointment]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_without_appt"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),   ""#FFFFFF"",
-    pct <= -band,  ""#1a7f3c"",
-    pct <= 0,          ""#6abf7b"",
-    pct <= band,   ""#f4a261"",
-                       ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    pct <= -band,     ""#1a7f3c"",
+    pct <= 0,         ""#6abf7b"",
+    pct <= band,      ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 // within: deviation from target — being close is good
 add("Exam Ratio BG",
-    @"VAR actual   = [Exam Ratio]
-VAR target   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""), '_Targets'[Target Value])
-VAR band = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""exam_ratio""), '_Targets'[Variance])
-VAR dev      = ABS((actual - target) * 100)
+    @"VAR actual    = [Exam Ratio]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""exam_ratio"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR dev        = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    dev <= band,       ""#1a7f3c"",
-    dev <= band * 2,   ""#6abf7b"",
-    dev <= band * 3,   ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),    ""#FFFFFF"",
+    dev <= band,        ""#1a7f3c"",
+    dev <= band * 2,    ""#6abf7b"",
+    dev <= band * 3,    ""#f4a261"",
+                        ""#c0392b"")",
     "");
 
 // ── Home page measures ────────────────────────────────────────────────────────
@@ -191,19 +257,32 @@ CALCULATE(
 )",
     "£#,##0");
 
-// Average private treatment value per plan that has been started
+// Average private treatment value per plan that has been started.
+// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer.
 add("Average Plan Value",
-    @"DIVIDE(
-    SUM('List Treatment Plans'[Private Treatment Value]),
+    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
+RETURN DIVIDE(
+    CALCULATE(
+        SUM('List Treatment Plans'[Private Treatment Value]),
+        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+    ),
     CALCULATE(
         COUNTROWS('List Treatment Plans'),
-        NOT ISBLANK('List Treatment Plans'[Start Date])))",
+        NOT ISBLANK('List Treatment Plans'[Start Date]),
+        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+    )
+)",
     "£#,##0");
 
 add("Open Courses Value Target",
-    @"MAXX(
-    FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""open_courses_value"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
 add("Open Courses Value vs Target",
@@ -211,15 +290,22 @@ add("Open Courses Value vs Target",
 VAR target = [Open Courses Value Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual), ""No data"",
+    IF(ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))",
     "");
 
 add("Average Plan Value Target",
-    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""avg_plan_value""),
-    '_Targets'[Target Value])",
+    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""avg_plan_value"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site)",
     "£#,##0");
 
 add("Average Plan Value vs Target",
@@ -234,29 +320,34 @@ RETURN IF(
     "");
 
 add("Open Courses Value BG",
-    @"VAR actual = [Open Courses Value]
-VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Target Value])
-VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Variance])
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual    = [Open Courses Value]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""open_courses_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target), ""#FFFFFF"",
-    pct >= band,     ""#1a7f3c"",
-    pct >= 0,        ""#6abf7b"",
-    pct >= -band,    ""#f4a261"",
-                     ""#c0392b"")",
+    ISBLANK(actual),  ""#E0E0E0"",
+    ISBLANK(target),  ""#FFFFFF"",
+    pct >= band,      ""#1a7f3c"",
+    pct >= 0,         ""#6abf7b"",
+    pct >= -band,     ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 add("Average Plan Value BG",
-    @"VAR actual = [Average Plan Value]
-VAR target = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""avg_plan_value""), '_Targets'[Target Value])
-VAR band   = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""avg_plan_value""), '_Targets'[Variance])
-VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
+    @"VAR actual    = [Average Plan Value]
+VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR fy_key     = [_Target FY Key]
+VAR target     = CALCULATE(MAX('_Effective Targets'[Effective Target]),  TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band       = CALCULATE(MAX('_Effective Targets'[Effective Variance]),TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),'_Effective Targets'[Metric] = ""avg_plan_value"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(target), ""#FFFFFF"",
-    pct >= band,     ""#1a7f3c"",
-    pct >= 0,        ""#6abf7b"",
-    pct >= -band,    ""#f4a261"",
-                     ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    pct >= band,      ""#1a7f3c"",
+    pct >= 0,         ""#6abf7b"",
+    pct >= -band,     ""#f4a261"",
+                      ""#c0392b"")",
     "");
 
 Info("Clinical KPI measures created.");

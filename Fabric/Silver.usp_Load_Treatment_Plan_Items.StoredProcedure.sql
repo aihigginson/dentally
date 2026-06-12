@@ -8,6 +8,7 @@
 --    *02     18/05/2026  AIH Fix Id conversion: Bronze ID is now VARCHAR(50) not DECIMAL
 --    *03     19/05/2026  AIH Read Surfaces→Surface and Teeth→Tooth from Bronze (now populated)
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS)
+--    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -117,9 +118,9 @@ BEGIN
                 LEFT(Notes,                255)  AS [Notes],
                 TRY_CAST(ROUND(CAST(Position AS float),0) AS int)  AS [Position],
                 TRY_CAST(ROUND(CAST(Base_Chart AS float),0) AS int)  AS [Base_Chart],
-                TRY_CAST(ROUND(CAST(Completed AS float),0) AS int)  AS [Completed],
-                TRY_CAST(ROUND(CAST(Charged AS float),0) AS int)  AS [Charged],
-                TRY_CAST(ROUND(CAST(Appear_On_Invoice AS float),0) AS int)  AS [Appear_On_Invoice],
+                CASE WHEN LOWER(TRIM(Completed))       IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
+                CASE WHEN LOWER(TRIM(Charged))         IN ('true','1') THEN 1 ELSE 0 END  AS [Charged],
+                CASE WHEN LOWER(TRIM(Appear_On_Invoice)) IN ('true','1') THEN 1 ELSE 0 END  AS [Appear_On_Invoice],
                 TRY_CAST(ROUND(CAST(Duration AS float),0) AS int)  AS [Duration],
                 LEFT(Completed_At, 50)  AS [Completed_At],
                 LEFT(Created_At,   50)  AS [Created_At],

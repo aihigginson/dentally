@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Acquisition_Sources]
 GO
 CREATE TABLE [Bronze].[Acquisition_Sources](
 	[ID] [VARCHAR](255) NULL,
-	[Active] [int] NULL,
+	[Active] [VARCHAR](255) NULL,
 	[Name] [VARCHAR](255) NULL,
 	[Notes] [VARCHAR](max) NULL,
 	[Tenant_ID] [int] NULL,

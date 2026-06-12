@@ -9,6 +9,7 @@
 --    *03     18/05/2026  AIH Fix ID to VARCHAR(50) for UUID keys; load all Stage columns;
 --                            handle True/False boolean strings for Charged/Completed
 --    *04     19/05/2026  AIH Remove treatment_name from COALESCE (not in API); add Surfaces, Teeth
+--    *05     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --  To Run           :   DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
 --                        EXEC Bronze.usp_Load_Treatment_Plan_Items @Tenant_ID=11, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT
 ---------------------------------------------------------------------
@@ -31,9 +32,6 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        -- charged/completed/appear_on_invoice arrive as 'True'/'False' strings from the
-        -- notebook (Python booleans) or as BIT 1/0 from the Mock API pipeline.
-        -- LOWER + IN ('true','1') handles both without a TRY_CAST to BIT.
         SELECT
               TRY_CAST(tenant_id   AS INT)                                             AS Tenant_ID
             , LEFT(CAST(id AS VARCHAR(50)), 50)                                         AS ID
@@ -48,16 +46,10 @@ BEGIN
             , TRY_CAST(duration         AS DECIMAL(18,4))                              AS Duration
             , LEFT(created_at,           255)                                          AS Created_At
             , LEFT(updated_at,           255)                                          AS Updated_At
-            , CASE WHEN appear_on_invoice IS NULL THEN NULL
-                   WHEN LOWER(CAST(appear_on_invoice AS VARCHAR(10))) IN ('true','1') THEN 1.0000
-                   ELSE 0.0000 END                                                      AS Appear_On_Invoice
+            , LEFT(appear_on_invoice, 255)                                              AS Appear_On_Invoice
             , TRY_CAST(base_chart        AS DECIMAL(18,4))                             AS Base_Chart
-            , CASE WHEN charged IS NULL THEN NULL
-                   WHEN LOWER(CAST(charged AS VARCHAR(10))) IN ('true','1') THEN 1.0000
-                   ELSE 0.0000 END                                                      AS Charged
-            , CASE WHEN completed IS NULL THEN NULL
-                   WHEN LOWER(CAST(completed AS VARCHAR(10))) IN ('true','1') THEN 1.0000
-                   ELSE 0.0000 END                                                      AS Completed
+            , LEFT(charged,          255)                                              AS Charged
+            , LEFT(completed,        255)                                              AS Completed
             , LEFT(completed_at,         255)                                          AS Completed_At
             , LEFT(invoice_id,           255)                                          AS Invoice_ID
             , LEFT(nhs_treatment_cat,    255)                                          AS NHS_Treatment_Cat

@@ -11,6 +11,7 @@ CREATE TABLE [Gold].[Dim_Cancellation_Reasons](
 	[bk_Cancellation_Reason_ID] [VARCHAR](50)   NOT NULL,
 	[Is_Active]                 [bit]           NULL,
 	[Reason]                    [VARCHAR](255)  NULL,
+	[Standard_Cancellation_Reason] [VARCHAR](100) NULL,
 	[Reason_Type]               [VARCHAR](50)   NULL,
 	[Is_Short_Notice]           [bit]           NULL,
 	[Cancellation_Reason_Count] [int]           NOT NULL,

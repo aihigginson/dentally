@@ -4,11 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytically</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <style>
         :root {
             --navy:        #1A527A;
             --teal-bright: #5EC4C0;
-            --bg-page:     #F0F4F8;
+            --bg-page:     #FFFFFF;
             --bg-subtle:   #F8FAFC;
             --border:      #E4E8EE;
             --text:        #1F2937;
@@ -33,8 +36,7 @@
             background: white; border-radius: 12px; border: 1px solid var(--border);
             box-shadow: 0 4px 24px rgba(0,0,0,0.06); max-width: 360px; width: 90%;
         }
-        .auth-brand { font-size: 28px; font-weight: 700; color: var(--navy); margin-bottom: 32px; letter-spacing: 0.01em; }
-        .auth-brand span { color: var(--teal-bright); }
+        .auth-logo { width: 160px; height: 160px; object-fit: contain; margin-bottom: 16px; }
         .auth-spinner {
             width: 32px; height: 32px; border: 3px solid var(--border);
             border-top-color: var(--navy); border-radius: 50%;
@@ -161,15 +163,28 @@
         .section-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 
-        /* ── PBI page sub-nav (in section header) ── */
-        .report-subnav { display: none; gap: 6px; }
+        /* ── Page dropdown ── */
+        .page-dropdown {
+            position: fixed; z-index: 500;
+            background: white; border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.10); min-width: 160px;
+            padding: 4px 0; overflow: hidden;
+        }
+        .page-dropdown-item {
+            display: block; width: 100%; text-align: left; background: none; border: none;
+            padding: 9px 18px; font-size: 13px; font-family: var(--font); color: var(--text);
+            cursor: pointer; white-space: nowrap; transition: background 0.1s, color 0.1s;
+        }
+        .page-dropdown-item:hover  { background: var(--bg-page); color: var(--navy); }
+        .page-dropdown-item.active { color: var(--navy); font-weight: 600; }
+
+        /* ── Fullscreen button ── */
         .page-tile {
-            width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
             background: white; border: 1px solid var(--border); border-radius: var(--radius);
             cursor: pointer; color: var(--text-2); transition: border-color 0.12s, background 0.12s, color 0.12s; flex-shrink: 0;
         }
-        .page-tile:hover  { border-color: var(--navy); color: var(--navy); }
-        .page-tile.active { background: var(--navy); border-color: var(--navy); color: white; }
+        .page-tile:hover { border-color: var(--navy); color: var(--navy); }
 
         /* ── Fullscreen close button ── */
         .fullscreen-close {
@@ -293,7 +308,7 @@
 <!-- ════════════════ AUTH OVERLAY ════════════════ -->
 <div class="auth-overlay" id="auth-overlay">
     <div class="auth-box">
-        <div class="auth-brand">Analytic<span>ally</span></div>
+        <img class="auth-logo" src="/logo.png" alt="Analytically">
         <div class="auth-spinner" id="auth-spinner"></div>
         <div class="auth-status" id="auth-status">Loading...</div>
         <button class="auth-signin-btn" id="auth-signin-btn">Sign in with Microsoft</button>
@@ -343,18 +358,12 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
-    <div class="nav-tab" data-section="targets" id="nav-targets" style="display:none">Targets</div>
+
     <button class="filter-toggle" id="filter-toggle">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
     </button>
     <div class="nav-report-controls" id="nav-report-controls">
-        <div class="report-subnav" id="subnav-home"></div>
-        <div class="report-subnav" id="subnav-revenue"></div>
-        <div class="report-subnav" id="subnav-patient"></div>
-        <div class="report-subnav" id="subnav-scheduling"></div>
-        <div class="report-subnav" id="subnav-clinical"></div>
-        <div class="report-subnav" id="subnav-nhs"></div>
         <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
@@ -367,18 +376,27 @@
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
-            <option value="all">All periods</option>
-            <option value="FY 2026/27 (YTD)">FY 2026/27 (YTD)</option>
-            <option value="FY 2025/26">FY 2025/26</option>
-            <option value="FY 2024/25">FY 2024/25</option>
+            <option value="FY 2026-27 (YTD)">FY 2026-27 (YTD)</option>
+            <option value="FY 2025-26">FY 2025-26</option>
+            <option value="FY 2024-25">FY 2024-25</option>
             <option value="Last 12 Months">Last 12 Months</option>
-            <option value="Last 3 Months">Last 3 Months</option>
+            <option value="Last 3 Months" selected>Last 3 Months</option>
         </select>
     </div>
     <div class="filter-sep"></div>
     <div class="filter-field">
         <label for="f-site">Site</label>
         <select class="filter-select" id="f-site"><option value="all">All sites</option></select>
+    </div>
+    <div class="filter-sep"></div>
+    <div class="filter-field">
+        <label for="f-role">Role</label>
+        <select class="filter-select" id="f-role">
+            <option value="all">All roles</option>
+            <option value="Dentist">Dentist</option>
+            <option value="Hygienist">Hygienist</option>
+            <option value="Therapist">Therapist</option>
+        </select>
     </div>
     <div class="filter-sep"></div>
     <div class="filter-field">
@@ -389,7 +407,7 @@
     <label class="filter-check" for="f-active-only">
         <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-    <div class="filter-badge" id="filter-badge">All periods &middot; All sites &middot; All practitioners</div>
+    <div class="filter-badge" id="filter-badge">Last 3 Months &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
@@ -429,21 +447,6 @@
         <div class="embed-slot embed-full" id="embed-nhs">Please Wait...</div>
     </section>
 
-    <!-- ── TARGETS ── -->
-    <section class="section" id="section-targets">
-        <div class="section-header">
-            <div class="section-title">Targets</div>
-            <div class="section-controls">
-                <span class="targets-status" id="targets-status"></span>
-                <button class="targets-save-btn" id="targets-save-btn">Save changes</button>
-            </div>
-        </div>
-        <div class="targets-wrap">
-            <div class="targets-loading" id="targets-loading">Loading&hellip;</div>
-            <table class="targets-table" id="targets-table" style="display:none"></table>
-        </div>
-    </section>
-
 </main>
 
 <script src="/msal-browser.min.js"></script>
@@ -451,9 +454,33 @@
 <script>
 
     // ── MSAL auth state ───────────────────────────────────────────────────────
-    const MSAL_SCOPES   = ['openid', 'profile', 'email'];
-    let msalInstance    = null;
-    let msalAccount     = null;
+    const MSAL_SCOPES = ['openid', 'profile', 'email'];
+    let msalInstance  = null;
+    let msalAccount   = null;
+
+    // Mobile: acquireTokenSilent uses hidden iframes that Safari's ITP blocks,
+    // causing an infinite acquireTokenRedirect loop. Cache the ID token from
+    // login/redirect results in localStorage and serve it directly on mobile,
+    // only redirecting when it genuinely expires (~1 hour).
+    let _cachedIdToken       = localStorage.getItem('_anly_id_token') || null;
+    let _cachedIdTokenExpiry = parseInt(localStorage.getItem('_anly_id_token_exp') || '0');
+
+    function _cacheIdToken(result) {
+        _cachedIdToken       = result.idToken;
+        _cachedIdTokenExpiry = result.expiresOn ? result.expiresOn.getTime() : Date.now() + 3600000;
+        localStorage.setItem('_anly_id_token',     _cachedIdToken);
+        localStorage.setItem('_anly_id_token_exp', String(_cachedIdTokenExpiry));
+    }
+
+    function _clearIdTokenCache() {
+        _cachedIdToken = null; _cachedIdTokenExpiry = 0;
+        localStorage.removeItem('_anly_id_token');
+        localStorage.removeItem('_anly_id_token_exp');
+    }
+
+    // Mobile browsers block popups — use redirect flow instead.
+    // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
+    function _onMobile() { return window.innerWidth < 768; }
 
     async function initAuth() {
         const config = await fetch('/api/auth-config').then(r => r.json());
@@ -464,10 +491,16 @@
                 authority:   'https://login.microsoftonline.com/common',
                 redirectUri: window.location.origin,
             },
-            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+            cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
         });
 
-        await msalInstance.handleRedirectPromise();
+        // Catch the result of a loginRedirect / acquireTokenRedirect return
+        const redirectResult = await msalInstance.handleRedirectPromise();
+        if (redirectResult?.account) {
+            msalAccount = redirectResult.account;
+            _cacheIdToken(redirectResult);
+            return;
+        }
 
         const accounts = msalInstance.getAllAccounts();
         if (accounts.length > 0) {
@@ -477,7 +510,7 @@
 
         // No cached session — show sign-in button and wait for user interaction
         return new Promise((resolve) => {
-            const btn = document.getElementById('auth-signin-btn');
+            const btn     = document.getElementById('auth-signin-btn');
             const spinner = document.getElementById('auth-spinner');
             spinner.style.display = 'none';
             document.getElementById('auth-status').textContent = 'Please sign in to continue.';
@@ -487,8 +520,14 @@
                 spinner.style.display = '';
                 document.getElementById('auth-status').textContent = 'Signing you in...';
                 try {
+                    if (_onMobile()) {
+                        // Navigates away — result caught by handleRedirectPromise on return
+                        await msalInstance.loginRedirect({ scopes: MSAL_SCOPES });
+                        return;
+                    }
                     const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES });
                     msalAccount  = result.account;
+                    _cacheIdToken(result);
                     btn.style.display = 'none';
                     resolve();
                 } catch {
@@ -501,6 +540,16 @@
     }
 
     async function getIdToken() {
+        if (_onMobile()) {
+            // acquireTokenSilent uses hidden iframes; Safari's ITP blocks these.
+            // Return the cached ID token obtained at login/last redirect instead,
+            // only redirecting when it genuinely expires.
+            if (_cachedIdToken && Date.now() < _cachedIdTokenExpiry - 300000) {
+                return _cachedIdToken;
+            }
+            await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+            return null; // never reached — page navigates away
+        }
         try {
             const r = await msalInstance.acquireTokenSilent({ scopes: MSAL_SCOPES, account: msalAccount });
             return r.idToken;
@@ -526,6 +575,12 @@
         }
         if (res.status === 401) {
             try {
+                if (_onMobile()) {
+                    // Backend rejected the token — clear cache so redirect fetches a fresh one
+                    _clearIdTokenCache();
+                    await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+                    return res; // never reached
+                }
                 const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
                 msalAccount = r.account;
                 const retry = await fetch(url, {
@@ -553,6 +608,10 @@
 
     document.getElementById('contact-switch-btn').addEventListener('click', async () => {
         try {
+            if (_onMobile()) {
+                await msalInstance.loginRedirect({ scopes: MSAL_SCOPES, prompt: 'select_account' });
+                return;
+            }
             const result = await msalInstance.loginPopup({ scopes: MSAL_SCOPES, prompt: 'select_account' });
             msalAccount  = result.account;
             document.getElementById('contact-overlay').style.display = 'none';
@@ -572,7 +631,6 @@
         const o = document.getElementById('header-org');
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
-        if (data.maintain_targets) document.getElementById('nav-targets').style.display = '';
 
         document.getElementById('auth-overlay').style.display = 'none';
 
@@ -581,7 +639,13 @@
             filterToggleBtn.classList.add('active');
         }
         loadFilters(false);
+        initSubnav('home');
         loadEmbedsInSection('home');
+        if (!isMobile()) {
+            ['revenue', 'patient', 'scheduling', 'clinical', 'nhs'].forEach((key, i) => {
+                setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
+            });
+        }
     }
 
     async function startApp() {
@@ -608,46 +672,66 @@
         'nhs':       'nhs',
     };
 
-    const PAGE_ICON_MAP = {
-        'Performed':   'chart-bar',  'Open':        'clipboard',
-        'Acceptance':  'trend-up',   'Acquisition': 'person-add',
-        'Retention':   'refresh',    'Value':       'currency',
-        'Utilisation': 'calendar',   'Planning':    'forward',
-        'Performance': 'chart-line', 'Cashflow':    'chart-line',
-        'Discount':    'percent',    '_default':    'chart-bar',
+    // ── Page list — update this when PBI reports change ──────────────────────
+    // Internal page names captured via _debugPages() at build time.
+    // Sections with 0 or 1 entry show no dropdown.
+    const SECTION_PAGES = {
+        home: [
+            { displayName: 'Headlines',   name: '146989b88eb26d71b830' },
+            { displayName: 'Key Metrics', name: 'eb569f4aab9cd15aa776' },
+        ],
+        revenue: [
+            { displayName: 'By Category',     name: '1731a006301e70a5cd87' },
+            { displayName: 'By Practitioner', name: 'ad9e62f74c350683b2a8' },
+            { displayName: 'Debt',            name: '7f6e0ba3e2ead59a06c5' },
+            { displayName: 'Discounts',       name: '2b3f398145d40b179050' },
+            { displayName: 'Deposits',        name: '24208f3d007390977e6c' },
+            { displayName: 'Comparison',      name: 'c5967aa555b6d08669a5' },
+        ],
+        patient: [
+            { displayName: 'Acquisition', name: '146989b88eb26d71b830' },
+            { displayName: 'Journeys',    name: 'e4dd9e17b481ec28099d' },
+            { displayName: 'Retention',   name: '4ebf2bb99ffb110e19e2' },
+        ],
+        scheduling: [
+            { displayName: 'Utilisation',           name: '146989b88eb26d71b830' },
+            { displayName: 'Cancellations and DNA',  name: '3f0a60f9895e0db15be8' },
+            { displayName: 'BBYL',                   name: '5e1e3e4a400344602496' },
+            { displayName: 'Availability',           name: 'b8c471d14517cbc187be' },
+        ],
+        clinical: [
+            { displayName: 'Revenue',    name: '146989b88eb26d71b830' },
+            { displayName: 'Blend',      name: 'a210cd4d0750719b05c7' },
+            { displayName: 'Other KPIs', name: '866800f0b9230dc066c9' },
+        ],
+        nhs: [
+            { displayName: 'Key Metrics', name: '146989b88eb26d71b830' },
+        ],
     };
-
-    const ICONS = {
-        'chart-bar':  '<rect x="4" y="10" width="4" height="11" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="16" y="3" width="4" height="18" rx="1"/>',
-        'chart-line': '<polyline points="3 18 9 12 13 16 21 6" stroke-linecap="round" stroke-linejoin="round"/>',
-        'clipboard':  '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/>',
-        'trend-up':   '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 6 23 6 23 12" stroke-linecap="round" stroke-linejoin="round"/>',
-        'person-add': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14" stroke-linecap="round"/><line x1="16" y1="11" x2="22" y2="11" stroke-linecap="round"/>',
-        'refresh':    '<polyline points="23 4 23 10 17 10" stroke-linecap="round" stroke-linejoin="round"/><polyline points="1 20 1 14 7 14" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round"/>',
-        'currency':   '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 10a3 3 0 0 1 6 0c0 3-6 3-6 6a3 3 0 0 0 6 0" stroke-linecap="round"/>',
-        'calendar':   '<rect x="3" y="5" width="18" height="17" rx="1"/><path d="M3 11h18M8 3v4M16 3v4" stroke-linecap="round"/>',
-        'forward':    '<polyline points="5 12 19 12" stroke-linecap="round" stroke-linejoin="round"/><polyline points="13 6 19 12 13 18" stroke-linecap="round" stroke-linejoin="round"/>',
-        'percent':    '<line x1="19" y1="5" x2="5" y2="19" stroke-linecap="round"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
-    };
-
-    function svgIcon(key, size) {
-        size = size || 18;
-        return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8">${ICONS[key] || ICONS['chart-bar']}</svg>`;
-    }
 
     // ── State ────────────────────────────────────────────────────────────────
     let activeSection = 'home';
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', e => {
+            e.stopPropagation();
+            const key = tab.dataset.section;
+            const alreadyActive = key === activeSection;
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            activateSection(tab.dataset.section);
+            activateSection(key);
+            // Toggle dropdown: show on first click, close if already open for this tab
+            if (activeDropdown && activeDropdown.sectionKey === key) {
+                closePageDropdown();
+            } else {
+                showPageDropdown(key, tab);
+            }
         });
     });
 
     function activateSection(key) {
+        if (key !== activeSection) closePageDropdown();
         activeSection = key;
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         const el = document.getElementById('section-' + key);
@@ -656,9 +740,6 @@
 
         const navControls = document.getElementById('nav-report-controls');
         if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
-        document.querySelectorAll('.report-subnav').forEach(s => s.style.display = 'none');
-        const activeSubnav = document.getElementById('subnav-' + key);
-        if (activeSubnav && activeSubnav.children.length > 0) activeSubnav.style.display = 'flex';
 
         if (key === 'targets') {
             filterBar.classList.remove('open');
@@ -667,6 +748,7 @@
             loadTargets();
         } else {
             filterToggleBtn.style.visibility = '';
+            initSubnav(key);
             loadEmbedsInSection(key);
         }
     }
@@ -687,30 +769,74 @@
         if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
     });
 
-    // ── PBI page sub-nav ─────────────────────────────────────────────────────
-    function buildSubnav(sectionKey, pages, report) {
-        const el = document.getElementById('subnav-' + sectionKey);
-        if (!el || pages.length <= 1) { if (el) el.style.display = 'none'; return; }
-        el.innerHTML = '';
-        if (sectionKey === activeSection) el.style.display = 'flex';
-        pages.forEach((page, i) => {
+    // ── PBI page dropdown ────────────────────────────────────────────────────
+    const sectionSubnavData = {};
+    let activeDropdown = null;
+
+    function showPageDropdown(sectionKey, anchorEl) {
+        closePageDropdown();
+        const data = sectionSubnavData[sectionKey];
+        if (!data || data.pages.length <= 1) return;
+
+        const dd = document.createElement('div');
+        dd.className = 'page-dropdown';
+        data.pages.forEach(page => {
             const btn = document.createElement('button');
-            btn.className = 'page-tile' + (i === 0 ? ' active' : '');
-            btn.title     = page.displayName;
-            btn.innerHTML = svgIcon(PAGE_ICON_MAP[page.displayName] || PAGE_ICON_MAP['_default']);
-            btn.addEventListener('click', () => {
-                el.querySelectorAll('.page-tile').forEach(t => t.classList.remove('active'));
-                btn.classList.add('active');
-                report.setPage(page.name);
+            btn.className = 'page-dropdown-item' + (page.name && page.name === data.activePage ? ' active' : '');
+            btn.textContent = page.displayName;
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                if (!page.name) return;
+                sectionSubnavData[sectionKey].activePage = page.name;
+                if (data.report) data.report.setPage(page.name);
+                closePageDropdown();
             });
-            el.appendChild(btn);
+            dd.appendChild(btn);
         });
+        document.body.appendChild(dd);
+
+        const rect = anchorEl.getBoundingClientRect();
+        dd.style.left = rect.left + 'px';
+        dd.style.top  = rect.bottom + 'px';
+
+        activeDropdown = { sectionKey, el: dd };
+    }
+
+    function closePageDropdown() {
+        if (activeDropdown) { activeDropdown.el.remove(); activeDropdown = null; }
+    }
+
+    document.addEventListener('click', () => closePageDropdown());
+
+    // Populates the dropdown from the static SECTION_PAGES list (names pre-captured at build time).
+    function initSubnav(sectionKey) {
+        const pageList = SECTION_PAGES[sectionKey] || [];
+        const prev = sectionSubnavData[sectionKey];
+        sectionSubnavData[sectionKey] = {
+            pages:      pageList.map(p => ({ displayName: p.displayName, name: p.name })),
+            report:     prev?.report     || null,
+            activePage: prev?.activePage || null,
+        };
+    }
+
+    // Wires up the loaded report and enables page-change tracking.
+    function attachReportToSubnav(sectionKey, report) {
+        const data = sectionSubnavData[sectionKey];
+        if (!data) return;
+        data.report = report;
+        if (!data.activePage) data.activePage = data.pages[0]?.name || null;
+        if (data.activePage && data.activePage !== data.pages[0]?.name) {
+            report.setPage(data.activePage);
+        }
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
-            el.querySelectorAll('.page-tile').forEach((t, i) => {
-                t.classList.toggle('active', pages[i] && pages[i].name === active);
-            });
+            if (sectionSubnavData[sectionKey]) sectionSubnavData[sectionKey].activePage = active;
+            if (activeDropdown?.sectionKey === sectionKey) {
+                activeDropdown.el.querySelectorAll('.page-dropdown-item').forEach(btn => {
+                    btn.classList.toggle('active', btn.textContent === data.pages.find(p => p.name === active)?.displayName);
+                });
+            }
         });
     }
 
@@ -871,8 +997,6 @@
         }
     }
 
-    document.getElementById('targets-save-btn').addEventListener('click', saveTargets);
-
     // ── Power BI embedding ───────────────────────────────────────────────────
     const embeddedReports = {};
     const tokenCache      = {};
@@ -930,7 +1054,14 @@
                 const r = window.powerbi.embed(slot, cfg);
                 embeddedReports[sectionKey] = r;
                 attachEmbedOverlay(slot, r);
-                r.on('loaded', async () => { try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {} });
+                r.on('loaded', () => {
+                    attachReportToSubnav(sectionKey, r);
+                    applyFilters();
+                });
+                r.on('rendered', () => {
+                    const d = sectionSubnavData[sectionKey];
+                    if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+                });
             });
         }, 300);
     });
@@ -967,8 +1098,9 @@
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
             attachEmbedOverlay(slot, r);
-            r.on('loaded', async () => {
-                try { buildSubnav(sectionKey, await r.getPages(), r); } catch (_) {}
+            r.on('loaded', () => {
+                attachReportToSubnav(sectionKey, r);
+                applyFilters();
             });
             return r;
         }
@@ -991,18 +1123,25 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'all', site: 'all', pract: 'all' };
+    const filterState = { period: 'Last 3 Months', site: 'all', role: 'all', pract: 'all' };
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
+    const selRole     = document.getElementById('f-role');
     const selPract    = document.getElementById('f-pract');
     const badge       = document.getElementById('filter-badge');
+    const ROLE_ALL_LABEL = {
+        all: 'All practitioners', Dentist: 'All Dentists',
+        Hygienist: 'All Hygienists', Therapist: 'All Therapists',
+    };
 
     function refreshBadge() {
-        badge.textContent = [
+        const parts = [
             selPeriod.options[selPeriod.selectedIndex].text,
             selSite.options[selSite.selectedIndex].text,
-            selPract.options[selPract.selectedIndex].text,
-        ].join(' · ');
+        ];
+        if (filterState.role !== 'all') parts.push(selRole.options[selRole.selectedIndex].text);
+        parts.push(selPract.options[selPract.selectedIndex].text);
+        badge.textContent = parts.join(' · ');
     }
 
     function onFilterChange() {
@@ -1017,9 +1156,19 @@
     selSite.addEventListener('change', onFilterChange);
     selPract.addEventListener('change', onFilterChange);
 
+    selRole.addEventListener('change', () => {
+        filterState.role  = selRole.value;
+        filterState.pract = 'all';
+        selPract.value    = 'all';
+        loadFilters(true);
+        applyFilters();
+    });
+
     function loadFilters(sitesAlreadyLoaded) {
         const activeOnly = document.getElementById('f-active-only').checked ? '1' : '0';
-        authFetch('/api/filters?active_only=' + activeOnly)
+        const role = filterState.role;
+        const roleParam = role !== 'all' ? '&role=' + encodeURIComponent(role) : '';
+        authFetch('/api/filters?active_only=' + activeOnly + roleParam)
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
@@ -1029,12 +1178,18 @@
                         selSite.appendChild(o);
                     });
                 }
+                selPract.options[0].textContent = ROLE_ALL_LABEL[role] || 'All practitioners';
                 while (selPract.options.length > 1) selPract.remove(1);
                 data.practitioners.forEach(p => {
                     const o = document.createElement('option');
                     o.value = p.id; o.textContent = p.name;
                     selPract.appendChild(o);
                 });
+                if (filterState.pract !== 'all' && ![...selPract.options].some(o => o.value === filterState.pract)) {
+                    selPract.value = 'all';
+                    filterState.pract = 'all';
+                }
+                refreshBadge();
             })
             .catch(() => {});
     }
@@ -1046,6 +1201,9 @@
         if (filterState.site !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
         }
+        if (filterState.role !== 'all') {
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
+        }
         if (filterState.pract !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });
         }
@@ -1054,6 +1212,16 @@
         }
         Object.values(embeddedReports).forEach(r => r.setFilters(filters).catch(() => {}));
     }
+
+    // ── Page name helper ────────────────────────────────────────────────────
+    // Usage: navigate to a report, then in browser console run e.g. _debugPages('revenue')
+    // Shows the PBI display names — useful to verify they match SECTION_PAGES entries.
+    window._debugPages = async (sectionKey) => {
+        const r = embeddedReports[sectionKey];
+        if (!r) { console.log('Navigate to the', sectionKey, 'report first, then run this.'); return; }
+        const pages = await r.getPages();
+        console.log(JSON.stringify(pages.map(p => ({ name: p.name, displayName: p.displayName })), null, 2));
+    };
 
     // ── Init ─────────────────────────────────────────────────────────────────
     startApp();

@@ -1,7 +1,7 @@
 // TabularEditor_SpiderNHS.csx
 // Creates 15 measures for the NHS Spider (Deneb radar) visual:
 //   5  Spider NHS *       — individual values, filter-context sensitive
-//   5  Spider NHS Avg *   — practice average, ALL('List Practitioners') bypasses slicer
+//   5  Spider NHS Avg *   — practice average, ALLSELECTED('List Practitioners') bypasses slicer
 //   5  Spider NHS Tgt *   — targets
 //
 // Axes: UDA Completion Rate, NHS Revenue, Rev Per Clinical Hour, UDAs Completed, UOAs
@@ -64,7 +64,7 @@ add("Spider NHS Tgt Rev Per Hour",
 
 // No single contracted target applies across multiple contracts — use average as the benchmark
 add("Spider NHS Tgt UDAs Completed",
-    @"CALCULATE([Spider NHS UDAs Completed], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS UDAs Completed], ALLSELECTED('List Practitioners'))",
     @"#,##0");
 
 add("Spider NHS Tgt UOAs",
@@ -74,21 +74,21 @@ add("Spider NHS Tgt UOAs",
 // ── Practice averages (ALL bypasses practitioner slicer) ──────────────────────
 
 add("Spider NHS Avg UDA Completion",
-    @"CALCULATE([Spider NHS UDA Completion], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS UDA Completion], ALLSELECTED('List Practitioners'))",
     @"0.0%");
 
 add("Spider NHS Avg Revenue",
-    @"CALCULATE([Spider NHS Revenue], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS Revenue], ALLSELECTED('List Practitioners'))",
     @"£#,##0");
 
 add("Spider NHS Avg Rev Per Hour",
-    @"CALCULATE([Spider NHS Rev Per Hour], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS Rev Per Hour], ALLSELECTED('List Practitioners'))",
     @"£#,##0");
 
 add("Spider NHS Avg UDAs Completed",
-    @"CALCULATE([Spider NHS UDAs Completed], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS UDAs Completed], ALLSELECTED('List Practitioners'))",
     @"#,##0");
 
 add("Spider NHS Avg UOAs",
-    @"CALCULATE([Spider NHS UOAs], ALL('List Practitioners'))",
+    @"CALCULATE([Spider NHS UOAs], ALLSELECTED('List Practitioners'))",
     @"#,##0");
