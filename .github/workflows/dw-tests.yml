@@ -1,0 +1,38 @@
+name: DW Tests
+
+# Runs the data-warehouse regression + integrity test harness
+# (Scripts/Run_Tests.ps1) against WH_Dentally using the Test Runner service
+# principal. Used as a deploy gate (called by deploy-prod.yml) and for PR-time
+# signal. Exits non-zero -> the job fails -> the deploy is blocked.
+#
+# Requires repo secrets:
+#   FABRIC_SP_TENANT, FABRIC_SP_CLIENT_ID, FABRIC_SP_CLIENT_SECRET
+#
+# Notes:
+# - windows-latest + shell: powershell (Windows PowerShell 5.1) so the harness'
+#   System.Data.SqlClient usage resolves (matches local dev).
+# - The harness re-seeds the Test schema each run, so the enforced gate is the
+#   RECONCILE checks (FK NULLs, revenue split, cross-layer counts, sentinel) +
+#   zero capture errors. Regression-vs-baseline drift needs a persisted
+#   baseline (a separate roadmap item) and is not enforced here yet.
+# - Same-repo PRs only get the secrets; fork PRs will skip auth (by design).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+jobs:
+  dw-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run DW regression + integrity tests
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Run_Tests.ps1 -RunTag "ci-${{ github.run_number }}"
