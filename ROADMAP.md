@@ -29,7 +29,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 ## 3. Testing & CI gates  _(High)_
 
 - [ ] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (fails the build on regressions/FK failures)
-- [ ] Establish the first known-good baseline (`Test.usp_Promote`) once T11 data + tests are green
+- [x] Establish the first known-good baseline (`Test.usp_Promote`) — `baseline-v2`, 45 reconciles PASS / 115 OK / 2 OK(null), exit 0
 - [ ] Add a post-deploy smoke test against the web app
 - [ ] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers
 - [ ] Add a minimal E2E check for the embed flow
