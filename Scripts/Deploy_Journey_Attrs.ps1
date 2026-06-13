@@ -12,7 +12,7 @@
 param(
     [string] $Server   = "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com",
     [string] $Database = "WH_Dentally",
-    [string] $Username = "aihigginson@2rrjxy.onmicrosoft.com"
+    [string] $Username = "admin@Analytically.info"
 )
 
 if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
