@@ -155,18 +155,27 @@ $latest = "(SELECT TOP 1 Run_Id FROM Test.Compare_Result ORDER BY Compare_Run_At
 
 $captureErrors = Read-Rows "SELECT Metric_Name, Error_Message FROM Test.Capture_Current WHERE Error_Message IS NOT NULL ORDER BY Metric_Name"
 $summary = Read-Rows "SELECT Check_Type, Status, COUNT(*) AS Cnt FROM Test.Compare_Result WHERE Run_Id = $latest GROUP BY Check_Type, Status ORDER BY Check_Type, Status"
+# Real failures only. 'NEW (no baseline)' is benign (first run / newly added
+# metric) and must NOT block, otherwise the first baseline can never be set.
 $failures = Read-Rows @"
 SELECT Check_Type, Item_Name, Value_A, Value_B, Expected_Difference, Actual_Difference, Status, Detail
 FROM Test.Compare_Result
-WHERE Run_Id = $latest AND Status NOT IN ('OK','PASS')
+WHERE Run_Id = $latest
+  AND ( (Check_Type = 'RECONCILE'  AND Status <> 'PASS')
+     OR (Check_Type = 'REGRESSION' AND Status NOT IN ('OK','OK (null)','NEW (no baseline)')) )
 ORDER BY Check_Type, Item_Name
 "@
+$newRows  = Read-Rows "SELECT COUNT(*) AS Cnt FROM Test.Compare_Result WHERE Run_Id = $latest AND Status = 'NEW (no baseline)'"
+$newCount = [int]$newRows[0].Cnt
 
 # --- Report ----------------------------------------------------------------
 Write-Host ""
 Write-Host ("=" * 60)
 Write-Host "SUMMARY (run '$RunTag')" -ForegroundColor Cyan
 $summary | Format-Table -AutoSize | Out-String | Write-Host
+if ($newCount -gt 0) {
+    Write-Host "$newCount metric(s) have no baseline yet (benign -- will be captured on promote)." -ForegroundColor Yellow
+}
 
 if ($captureErrors.Count -gt 0) {
     Write-Host "CAPTURE ERRORS ($($captureErrors.Count)) -- metric SQL that failed to run:" -ForegroundColor Red

@@ -64,12 +64,13 @@ BEGIN
             , c.Value - b.Value                    -- actual variance
             , c.Value - b.Value                    -- deviation (expected 0)
             , CASE
-                WHEN b.Metric_Name IS NULL              THEN 'NEW (no baseline)'
-                WHEN c.Metric_Name IS NULL              THEN 'REMOVED (baseline only)'
-                WHEN c.Error_Message IS NOT NULL        THEN 'ERROR (capture failed)'
-                WHEN b.Value IS NULL OR c.Value IS NULL THEN 'NULL value'
-                WHEN ABS(c.Value - b.Value) > @Eps      THEN 'CHANGED'
-                ELSE                                         'OK'
+                WHEN b.Metric_Name IS NULL               THEN 'NEW (no baseline)'
+                WHEN c.Metric_Name IS NULL               THEN 'REMOVED (baseline only)'
+                WHEN c.Error_Message IS NOT NULL         THEN 'ERROR (capture failed)'
+                WHEN b.Value IS NULL AND c.Value IS NULL THEN 'OK (null)'   -- stable null, benign
+                WHEN b.Value IS NULL OR  c.Value IS NULL THEN 'CHANGED'     -- value appeared/disappeared
+                WHEN ABS(c.Value - b.Value) > @Eps       THEN 'CHANGED'
+                ELSE                                          'OK'
               END
             , c.Error_Message
         FROM Test.Capture_Current  c
@@ -118,7 +119,7 @@ BEGIN
            Actual_Difference AS Variance, Status, Detail AS Current_Error
     FROM Test.Compare_Result
     WHERE Run_Id = @Run_Id AND Check_Type = 'REGRESSION'
-    ORDER BY CASE WHEN Status = 'OK' THEN 1 ELSE 0 END, Item_Name;
+    ORDER BY CASE WHEN Status IN ('OK','OK (null)') THEN 1 ELSE 0 END, Item_Name;
 
     SELECT Check_Type, Item_Name AS Comparison_Name, Metric_A, Value_A, Metric_B, Value_B,
            Actual_Difference, Expected_Difference, Deviation, Status
