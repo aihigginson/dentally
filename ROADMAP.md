@@ -28,7 +28,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
 ## 3. Testing & CI gates  _(High)_
 
-- [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Activate by adding repo secrets `FABRIC_SP_TENANT` / `FABRIC_SP_CLIENT_ID` / `FABRIC_SP_CLIENT_SECRET`.** Enforces reconcile/FK integrity + capture success; regression-drift gate awaits a persisted baseline.
+- [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Active and verified green in CI** (secrets `FABRIC_SP_*` added). Enforces reconcile/FK integrity + capture success; regression-drift gate awaits a persisted baseline.
 - [x] Establish the first known-good baseline (`Test.usp_Promote`) — `baseline-v2`, 45 reconciles PASS / 115 OK / 2 OK(null), exit 0
 - [ ] Add a post-deploy smoke test against the web app
 - [ ] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers
