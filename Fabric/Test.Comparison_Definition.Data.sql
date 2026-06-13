@@ -39,3 +39,22 @@ VALUES
 ,('CMP_BS_INVOICES','BRONZE_INVOICES_T11','SILVER_INVOICES_T11',0,'Bronze = Silver invoice header rows',1)
 ,('CMP_BS_INVOICED_AMOUNT','BRONZE_INVOICED_AMOUNT_T11','SILVER_INVOICED_AMOUNT_T11',0,'Bronze = Silver total invoiced amount',1)
 GO
+
+-- =====================================================================
+-- Reconcile rules for the KPI metrics. Most KPI value measures gain
+-- coverage from the IMPLICIT regression check (Current vs Baseline) and
+-- need no row here. Reconcile rules suit decomposition / cross-layer
+-- control totals -- the genuinely clean ones for these metrics:
+-- =====================================================================
+INSERT INTO [Test].[Comparison_Definition]
+    ([Comparison_Name], [Metric_A], [Metric_B], [Expected_Difference], [Description], [Is_Active])
+VALUES
+-- Revenue split: Total Revenue must equal NHS + Private (i.e. every invoice
+-- item has a non-null NHS Charge). A non-zero result flags NULL NHS_Charge rows.
+ ('CMP_REVENUE_SPLIT','GOLD_TOTAL_REVENUE_T11','GOLD_REVENUE_NHS_OR_PRIVATE_INV_T11',0,'Total Revenue = NHS + Private (no invoice items with NULL NHS Charge)',1)
+-- Cross-layer control total candidate: Bronze invoice header Amount vs Gold
+-- invoice-item Total Price. DISABLED -- header Amount and summed item Total
+-- Price may legitimately differ (NHS handling, rounding). Verify the real
+-- offset on a known-good run, set Expected_Difference, then enable.
+,('CMP_INVOICE_AMOUNT_BRONZE_VS_GOLD_ITEMS','BRONZE_INVOICED_AMOUNT_T11','GOLD_TOTAL_REVENUE_T11',0,'Bronze invoice Amount vs Gold invoice-item Total Price (verify offset then enable)',0)
+GO
