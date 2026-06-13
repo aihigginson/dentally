@@ -14,9 +14,9 @@
 # ---------------------------------------------------------------------------
 
 param(
-    [string] $Server   = "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com",
+    [string] $Server   = "emeh72n2ntdufpj4q665b2lzx4-4i26eirspjiujnltrvplquzkem.datawarehouse.fabric.microsoft.com",
     [string] $Database = "WH_Dentally",
-    [string] $Username = "admin@Analytically.info"
+    [string] $Username = "admin@analytically.info"
 )
 
 if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
@@ -41,11 +41,12 @@ $Files = @(
     'Test.usp_Promote.StoredProcedure.sql'
 )
 
-# Auth: the account uses MFA, so we do NOT pass a password. With -G -U and no
-# -P, sqlcmd uses ActiveDirectoryInteractive and opens a browser for sign-in.
-# (Passing -P would force ActiveDirectoryPassword, which always fails for MFA.)
+$securePwd = Read-Host "Fabric password for $Username" -AsSecureString
+$bstr      = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePwd)
+$pwd       = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
 Write-Host "Deploying Test framework to $Database @ $Server" -ForegroundColor Cyan
-Write-Host "A browser window will open for MFA sign-in as $Username" -ForegroundColor DarkGray
 
 $combined = [System.Text.StringBuilder]::new()
 $count = 0
@@ -67,7 +68,7 @@ $tmpFile = Join-Path $env:TEMP "Deploy_Test_$(Get-Date -Format 'yyyyMMdd_HHmmss'
 
 Write-Host "Combined $count scripts into: $tmpFile"
 
-& sqlcmd -S $Server -d $Database -G -U $Username -i "$tmpFile" -b
+& sqlcmd -S $Server -d $Database -G -U $Username -P $pwd -i "$tmpFile" -b
 $rc = $LASTEXITCODE
 
 Remove-Item $tmpFile -Force
