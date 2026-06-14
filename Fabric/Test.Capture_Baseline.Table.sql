@@ -3,12 +3,15 @@
 -- Populated only by Test.usp_Promote (which copies Current -> Baseline once the
 -- variances have been reviewed and accepted). This is the table that gets
 -- dumped to a flat file for inclusion in a release.
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-DROP TABLE IF EXISTS [Test].[Capture_Baseline]
-GO
+--
+-- DATA-BEARING: created only if absent (guarded), NOT DROP/CREATE. A redeploy
+-- must NOT wipe the baseline -- otherwise every run would re-capture against an
+-- empty baseline, report all metrics as "NEW", and never catch a regression
+-- (the same data-preservation lesson the Migrations regime exists for). To
+-- rebuild the structure deliberately, drop it by hand first, then redeploy.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+    WHERE s.name = 'Test' AND t.name = 'Capture_Baseline')
 CREATE TABLE [Test].[Capture_Baseline](
     [Metric_Name]   [varchar](200)  NOT NULL,
     [Value]         [decimal](38,4) NULL,
