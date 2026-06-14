@@ -26,6 +26,14 @@ on:
   pull_request:
     branches: [main]
 
+# Serialize all runs: the harness mutates one shared Test schema in the single
+# warehouse, so two concurrent runs (e.g. a PR check + the merge's deploy gate)
+# would clobber each other. Queue rather than cancel so the deploy gate never
+# gets cancelled mid-flight.
+concurrency:
+  group: dw-tests-shared-warehouse
+  cancel-in-progress: false
+
 jobs:
   dw-tests:
     runs-on: windows-latest
