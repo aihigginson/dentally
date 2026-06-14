@@ -1,0 +1,42 @@
+name: Deploy Warehouse
+
+# Manifest-driven warehouse deployment. Applies an ordered release manifest via
+# the standard Scripts/Deploy.ps1 runner (authenticated as the Test Runner SP),
+# then runs the dw-tests gate to verify the new state.
+#
+# Deliberate, controlled release: triggered by hand (workflow_dispatch) with the
+# manifest filename, not on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Release manifest filename under Releases/ (e.g. V001__patient_cohorts.manifest)'
+        required: true
+
+# Serialise warehouse deploys against each other (single shared warehouse). A
+# different group from dw-tests so the verify job (which calls dw-tests) does not
+# deadlock against this workflow's own concurrency slot.
+concurrency:
+  group: dw-deploy-shared-warehouse
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply release manifest
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT: ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID: ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Deploy.ps1 -Manifest "Releases\${{ inputs.manifest }}"
+
+  # Verify the deployed warehouse passes regression + reconciliation + RLS.
+  verify:
+    needs: deploy
+    uses: ./.github/workflows/dw-tests.yml
+    secrets: inherit

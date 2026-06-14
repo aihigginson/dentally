@@ -37,15 +37,30 @@ versioning — they just redeploy.
 
 ## Release workflow
 
-1. **`Scripts/Migrate.ps1`** — apply pending schema/data migrations.
-2. **Deploy changed object scripts** (procs, views, seeds) from `Fabric/` — idempotent.
-3. **Reload Gold** (`Audit.usp_Load_All`, dims-before-facts) so new columns backfill
-   and FKs re-resolve.
-4. **`Meta.usp_Create_Gold_Views`** — regenerate the PBI views (metadata-driven, so
-   new columns appear automatically).
-5. **Refresh the PBI dataset**; run any new Tabular Editor measure scripts.
-6. **`Scripts/Run_Tests.ps1`** — regression + integrity + RLS gates; `-Promote` once
-   the variances are reviewed and accepted.
+The standard runner is **`Scripts/Deploy.ps1`** driven by a versioned
+**`Releases/Vnnn__*.manifest`** (see `Releases/README.md`). The manifest lists the
+warehouse actions in order, tagged `MIGRATE` / `DEPLOY` / `EXEC` / `TEST`, and ships
+with the release. A manifest typically encodes:
+
+1. **`MIGRATE`** — apply pending schema/data migrations (this folder).
+2. **`DEPLOY`** — (re)deploy changed object scripts (procs, views, seeds) from
+   `Fabric/` — idempotent.
+3. **`EXEC`** — reload Gold (`Audit.usp_Load_All`, dims-before-facts) so new columns
+   backfill and FKs re-resolve, then **`Meta.usp_Create_Gold_Views`** to regenerate
+   the PBI views (metadata-driven, so new columns appear automatically).
+4. **`TEST`** — regression + integrity + RLS gates.
+
+```
+.\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest
+```
+
+Then, on the PBI side (not warehouse, so not in the manifest): **refresh the dataset**
+and run any new Tabular Editor measure scripts. Re-baseline the tests with
+`Scripts\Run_Tests.ps1 -Promote` once the variances are reviewed and accepted.
+
+> `Scripts/Migrate.ps1` remains as a dev shortcut to auto-apply *all* pending
+> migrations without a manifest; it shares the `Migrate.Schema_Version` table with
+> `Deploy.ps1`'s `MIGRATE` tag, so they never double-apply.
 
 ## Writing a new migration
 
