@@ -9,11 +9,11 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
 ## 1. Lock down multi-tenant security  _(Critical — gating for real tenants)_
 
-- [ ] Make embed RLS **mandatory and fail-closed** — never issue an embed token without a tenant-scoped effective identity (`Web/app.py:157`)
-- [ ] Drive RLS roles/identity from the user's actual tenant, not the static `REPORT_ROLES` env list
-- [ ] Verify token **issuer** (pin to tenant) instead of `verify_iss: False` (`Web/app.py:56`)
+- [x] Make embed RLS **mandatory and fail-closed** — `/api/embed-token` always attaches the RLS effective identity, 403s unprovisioned users, refuses if no role configured (commit 943985e, **live in prod**).
+- [x] Drive RLS roles/identity from the user's actual tenant — embed-token verifies the caller maps to >=1 tenant via `Security.Application_Users` before issuing (same fix).
+- [~] Verify token **issuer** — N/A as a simple pin: the app is **multi-tenant** (`authority=.../common`, users span analytically.info / mapledental.co.uk / outlook.com), so pinning one issuer would break legit sign-ins. Already mitigated by signature (Microsoft JWKS) + audience check + the `Application_Users` allowlist. Optional later: verify `iss` is consistent with the token's `tid`.
 - [ ] Remove the ROPC master-user password flow (`_pbi_delegated_token`, `PBI_PASSWORD`); SP-only
-- [ ] Restrict CORS to known origins (`Web/app.py:15`)
+- [x] Restrict CORS to known origins — `CORS(app, origins=[...])`, defaults to the app domains, `ALLOWED_ORIGINS` override (commit 6a19cd2, on dev).
 - [ ] Return generic error responses to clients; log detail server-side (remove `str(e)` / `_error` leakage)
 - [ ] Run container as non-root (`Web/Dockerfile`); disable `debug=True` path (`Web/app.py:814`)
 - [x] Model-layer **RLS coverage guard** (`Scripts/Check_RLS_Coverage.ps1`, XMLA/ADOMD) — verifies the `RLS` role filters every tenant-bearing table; first run caught + closed 2 real leaks (`_NHS Claims`, `List NHS Contracts`); now green 29/29. **Wired into the `dw-tests` CI deploy gate** (ADOMD installed via NuGet, proven on the runner).
@@ -38,7 +38,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
 ## 4. Single source of truth for KPI logic  _(High)_
 
-- [ ] Delete the dead Flask KPI code: `/api/kpis`, all `_kpis_*`, `_wrap` in `Web/app.py` (preserved by tag `flask-kpi-cards-complete`)
+- [x] Delete the dead Flask KPI code: `/api/kpis`, all `_kpis_*`, `_wrap` + helpers in `Web/app.py` — ~400 lines removed (commit 28e5c40, on dev; preserved by tag `flask-kpi-cards-complete`)
 - [ ] Confirm DAX (Tabular Editor scripts) is the sole KPI definition
 - [ ] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven
 
