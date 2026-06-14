@@ -35,7 +35,10 @@ SELECT
     f.Invoice_Reference, f.Invoice_Payment_Terms, f.Invoice_Footnote, f.Invoice_Paid,
     f.Item_Price, f.Quantity, f.Total_Price, f.NHS_Charge,
     f.Invoice_Amount, f.Invoice_Amount_Outstanding, f.Invoice_NHS_Amount,
-    f.Is_Invoice_Outstanding, f.Is_Discount,
+    f.Is_Invoice_Outstanding,
+    -- Is_Discount is the sparse exception: LEFT JOIN the tiny positive set rather
+    -- than materialise a mostly-0 flag (+ per-invoice window) on every fact row.
+    CAST(CASE WHEN disc.Invoice_ID IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Is_Discount,
     -- Time-derived: recomputed at query time against the invoice date, so it is
     -- always current and behaves correctly under deltas (mirrors the original load
     -- logic but live). Unpaid only; paid invoices have no aged debt.
@@ -50,5 +53,6 @@ SELECT
     f.DW_Created_At,
     f.DW_Updated_At
 FROM Gold.Fact_Invoice_Items f
-LEFT JOIN Gold.Dim_Date d ON d.pk_Date = f.fk_Date_Invoice
+LEFT JOIN Gold.Dim_Date d         ON d.pk_Date     = f.fk_Date_Invoice
+LEFT JOIN Gold.Invoice_Discount disc ON disc.Tenant_ID = f.Tenant_ID AND disc.Invoice_ID = f.Invoice_ID
 GO

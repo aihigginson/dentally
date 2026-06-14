@@ -10,6 +10,11 @@
 --    *04     22/05/2026  AIH Add Tenant_ID filter to Silver.Invoices join; fix Silver.Patients subquery to include Tenant_ID
 --    *05     03/06/2026  AIH Add Aged_Debt_Band: banded days-overdue for unpaid invoices
 --    *06     14/06/2026  AIH Add Is_Invoice_Outstanding + Is_Discount (per-invoice, consistent with the Revenue Discounts measure)
+--    *07     14/06/2026  AIH Delta-pure: drop the two DERIVED columns. Aged_Debt_Band moves to the
+--                            live Gold.vw_Fact_Invoice_Items computation; Is_Discount (the sparse
+--                            exception) moves to a tiny positive table Gold.Invoice_Discount,
+--                            rebuilt here and LEFT JOINed in the view. Removes the per-invoice
+--                            window so the table is delta-ready (delta == full refresh).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -69,20 +74,7 @@ BEGIN
             CAST(ISNULL(inv.Amount,0) AS DECIMAL(12,2))                 AS Invoice_Amount,
             CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2))     AS Invoice_Amount_Outstanding,
             CAST(TRY_CAST(inv.NHS_Amount AS DECIMAL(12,2)) AS DECIMAL(12,2)) AS Invoice_NHS_Amount,
-            CASE
-                WHEN CAST(ISNULL(inv.Paid, 0) AS BIT) = 1 THEN NULL
-                WHEN DATEDIFF(DAY, CAST(inv.Dated_On AS DATE), CAST(SYSUTCDATETIME() AS DATE)) <=  30 THEN '0-30 Days'
-                WHEN DATEDIFF(DAY, CAST(inv.Dated_On AS DATE), CAST(SYSUTCDATETIME() AS DATE)) <=  60 THEN '31-60 Days'
-                WHEN DATEDIFF(DAY, CAST(inv.Dated_On AS DATE), CAST(SYSUTCDATETIME() AS DATE)) <=  90 THEN '61-90 Days'
-                WHEN DATEDIFF(DAY, CAST(inv.Dated_On AS DATE), CAST(SYSUTCDATETIME() AS DATE)) <= 120 THEN '91-120 Days'
-                ELSE '120+ Days'
-            END                                                             AS Aged_Debt_Band,
-            CASE WHEN CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2)) > 0 THEN 1 ELSE 0 END AS Is_Invoice_Outstanding,
-            -- Per-invoice discount, mirroring the Revenue 'Discounts' measure:
-            -- invoice header Amount exceeds the sum of its line Total Price.
-            CASE WHEN MAX(CAST(ISNULL(inv.Amount,0)      AS DECIMAL(12,2))) OVER (PARTITION BY ii.Tenant_ID, ii.Invoice_ID)
-                    > SUM(CAST(ISNULL(ii.Total_Price,0)  AS DECIMAL(12,2))) OVER (PARTITION BY ii.Tenant_ID, ii.Invoice_ID)
-                 THEN 1 ELSE 0 END                                          AS Is_Discount
+            CASE WHEN CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2)) > 0 THEN 1 ELSE 0 END AS Is_Invoice_Outstanding
         INTO #src
         FROM Silver.Invoice_Items ii
         LEFT JOIN Silver.Invoices inv         ON inv.Id              = ii.Invoice_ID        AND inv.Tenant_ID = ii.Tenant_ID
@@ -134,9 +126,7 @@ BEGIN
             Invoice_Amount           = src.Invoice_Amount,
             Invoice_Amount_Outstanding = src.Invoice_Amount_Outstanding,
             Invoice_NHS_Amount       = src.Invoice_NHS_Amount,
-            Aged_Debt_Band           = src.Aged_Debt_Band,
             Is_Invoice_Outstanding   = src.Is_Invoice_Outstanding,
-            Is_Discount              = src.Is_Discount,
             DW_Updated_At            = SYSUTCDATETIME()
         FROM Gold.Fact_Invoice_Items tgt
         INNER JOIN #src src ON tgt.bk_Invoice_Item_ID = src.bk_Invoice_Item_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -164,9 +154,7 @@ BEGIN
            ISNULL(CAST(tgt.[Invoice_Amount] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Invoice_Amount_Outstanding] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Invoice_NHS_Amount] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Aged_Debt_Band] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Is_Invoice_Outstanding] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Is_Discount] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Is_Invoice_Outstanding] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
@@ -192,9 +180,7 @@ BEGIN
            ISNULL(CAST(src.[Invoice_Amount] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Invoice_Amount_Outstanding] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Invoice_NHS_Amount] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Aged_Debt_Band] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Is_Invoice_Outstanding] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Is_Discount] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Is_Invoice_Outstanding] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -209,8 +195,7 @@ BEGIN
             Invoice_Reference, Invoice_Payment_Terms, Invoice_Footnote, Invoice_Paid,
             Item_Price, Quantity, Total_Price, NHS_Charge,
             Invoice_Amount, Invoice_Amount_Outstanding, Invoice_NHS_Amount,
-            Aged_Debt_Band,
-            Is_Invoice_Outstanding, Is_Discount,
+            Is_Invoice_Outstanding,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -223,12 +208,22 @@ BEGIN
             src.Invoice_Reference, src.Invoice_Payment_Terms, src.Invoice_Footnote, src.Invoice_Paid,
             src.Item_Price, src.Quantity, src.Total_Price, src.NHS_Charge,
             src.Invoice_Amount, src.Invoice_Amount_Outstanding, src.Invoice_NHS_Amount,
-            src.Aged_Debt_Band,
-            src.Is_Invoice_Outstanding, src.Is_Discount,
+            src.Is_Invoice_Outstanding,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoice_Items tgt WHERE tgt.bk_Invoice_Item_ID = src.bk_Invoice_Item_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- Rebuild the discount "positive" set (the exception, not the rule): invoices
+        -- whose header Amount exceeds the sum of their line Total Price. Tiny aggregate;
+        -- the PBI view LEFT JOINs it for Is_Discount instead of a per-row flag.
+        DELETE FROM Gold.Invoice_Discount;
+        INSERT INTO Gold.Invoice_Discount (Tenant_ID, Invoice_ID)
+        SELECT Tenant_ID, Invoice_ID
+        FROM   Gold.Fact_Invoice_Items
+        WHERE  Invoice_ID IS NOT NULL
+        GROUP BY Tenant_ID, Invoice_ID
+        HAVING MAX(Invoice_Amount) > SUM(Total_Price);
 
         DROP TABLE #src;
         --*********************************

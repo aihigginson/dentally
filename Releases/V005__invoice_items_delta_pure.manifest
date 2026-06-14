@@ -1,0 +1,36 @@
+# =====================================================================
+# Release V005 -- Make Fact_Invoice_Items delta-pure
+# =====================================================================
+# Removes the two DERIVED columns from the table so it holds only source-derived
+# data (delta == full refresh), applying the "processing in the view" architecture:
+#   * Aged_Debt_Band  -> computed LIVE in Gold.vw_Fact_Invoice_Items (time-derived).
+#   * Is_Discount      -> the SPARSE exception: a tiny positive table
+#                         (Gold.Invoice_Discount) LEFT JOINed in the view, instead of
+#                         a mostly-0 per-row flag + per-invoice window on every line.
+#
+# Order matters: the view + load + positive table must exist (and stop referencing
+# the columns) BEFORE the migration drops them.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V005__invoice_items_delta_pure.manifest
+# =====================================================================
+
+# 1. Tiny positive table for discounted invoices (guarded create)
+DEPLOY  Fabric\Gold.Invoice_Discount.Table.sql
+
+# 2. View: Aged_Debt_Band live + Is_Discount via LEFT JOIN (no longer reads the columns)
+DEPLOY  Fabric\Gold.vw_Fact_Invoice_Items.View.sql
+
+# 3. Load proc: no longer materialises the two columns; rebuilds the discount set
+DEPLOY  Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+
+# 4. Drop the two derived columns from the table (now unreferenced)
+MIGRATE Migrations\V005__invoice_items_delta_pure.sql
+
+# 5. Reload -- repopulate the fact (minus the columns) and build Gold.Invoice_Discount
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Invoice_Items @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 6. Regenerate PBI views (PBI.[_Invoice Items] keeps the same columns, now from the view)
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# 7. Verify -- the discount metric (rewritten to the positive set) must still match baseline
+TEST
