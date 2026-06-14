@@ -240,7 +240,9 @@ BEGIN
            ISNULL(CAST(tgt.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Phone_Missing] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Account_ID] AS VARCHAR(500)), ''),
@@ -289,7 +291,9 @@ BEGIN
            ISNULL(CAST(src.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Phone_Missing] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
