@@ -12,7 +12,14 @@ from jwt import PyJWKClient
 load_dotenv()
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-CORS(app)
+# Restrict CORS to the app's own origins (UI + API are same-origin, so this
+# can't affect normal use; it just stops arbitrary sites making cross-origin
+# calls). Override with ALLOWED_ORIGINS (comma-separated) if needed.
+_allowed_origins = [o.strip() for o in os.environ.get(
+    'ALLOWED_ORIGINS',
+    'https://analytically.info,https://dev.analytically.info,http://localhost:5000,http://localhost:8000'
+).split(',') if o.strip()]
+CORS(app, origins=_allowed_origins)
 
 APP_ENV        = os.environ.get('APP_ENV', 'prod')
 TENANT_ID      = os.environ['TENANT_ID']
