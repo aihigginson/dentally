@@ -17,7 +17,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [ ] Return generic error responses to clients; log detail server-side (remove `str(e)` / `_error` leakage)
 - [ ] Run container as non-root (`Web/Dockerfile`); disable `debug=True` path (`Web/app.py:814`)
 - [x] Model-layer **RLS coverage guard** (`Scripts/Check_RLS_Coverage.ps1`, XMLA/ADOMD) — verifies the `RLS` role filters every tenant-bearing table; first run caught + closed 2 real leaks (`_NHS Claims`, `List NHS Contracts`); now green 29/29. **Wired into the `dw-tests` CI deploy gate** (ADOMD installed via NuGet, proven on the runner).
-- [x] Behavioral **RLS isolation test** (`Scripts/Check_RLS_Isolation.ps1`, XMLA `EffectiveUserName`) — impersonates a user and proves every tenant-bearing table exposes only their tenant (+ sentinel). Verified: `admin@analytically.info` (T11) sees only T11 across all 29 tables with T12 data present. Closes off the blocked `executeQueries` path. _(Needs the test SP to stay a workspace Admin; not yet a CI gate.)_
+- [x] Behavioral **RLS isolation test** (`Scripts/Check_RLS_Isolation.ps1`, XMLA `EffectiveUserName`) — impersonates a user and proves every tenant-bearing table exposes only their tenant (+ sentinel). Verified: `admin@analytically.info` (T11) sees only T11 across all 29 tables with T12 data present. Closes off the blocked `executeQueries` path. **Now a third `dw-tests` CI gate** (proven on the runner; SP kept as workspace Admin).
 - [ ] Document the health-data compliance posture: encryption-at-rest, data-access auditing, retention/DSAR, backup/DR
 
 ## 2. Database release engineering  _(Critical — unblocks everything else)_
