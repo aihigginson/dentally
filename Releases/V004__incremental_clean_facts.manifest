@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V004 -- Incremental Gold: delta-convert the clean single-source facts
+# =====================================================================
+# Extends the watermark delta pattern (V002) to the remaining clean facts --
+# Fact_Contracts and Fact_Treatment_Plan_Items. Each sources one base Silver table
+# + stable dim pks (no cross-entity / time / window derivation), so a delta load is
+# 1-1 with a full refresh. Gold.Load_Watermark already exists (V002).
+#
+# Each establishing run uses @Full_Reload=1 to load all rows and seed the watermark.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V004__incremental_clean_facts.manifest
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Contracts.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql
+
+# Establishing full reloads -- load all rows, seed the watermarks
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Contracts @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plan_Items @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# Verify -- regression + reconciliation + RLS gate
+TEST

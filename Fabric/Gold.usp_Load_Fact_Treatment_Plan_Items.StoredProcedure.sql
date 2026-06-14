@@ -8,6 +8,8 @@
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     19/05/2026  AIH bk_Treatment_Plan_Item_ID: use tpi.Id directly (UUID, not INT)
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *05     14/06/2026  AIH Incremental (watermark) delta load. Clean single-source fact
+--                            (Silver.Treatment_Plan_Items + stable dim pks), delta == full refresh.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Treatment_Plan_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -26,6 +28,7 @@ CREATE PROCEDURE [Gold].[usp_Load_Fact_Treatment_Plan_Items]
     , @Run_Inserts   BIGINT OUT
     , @Run_Updates   BIGINT OUT
     , @Run_Deletes   BIGINT OUT
+    , @Full_Reload   BIT = 0
 )
 AS
 BEGIN
@@ -37,6 +40,17 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- Incremental watermark: process only Silver plan-items changed since the
+        -- last successful load (DW_Updated_At is hash-gated -> exact delta). Missing
+        -- watermark (first run) or @Full_Reload = 1 -> full load.
+        DECLARE @Run_Start datetime2(3) = SYSUTCDATETIME();
+        DECLARE @Watermark datetime2(3) =
+            CASE WHEN @Full_Reload = 1 THEN CONVERT(datetime2(3), '1900-01-01')
+                 ELSE ISNULL((SELECT Last_Loaded_At FROM Gold.Load_Watermark
+                              WHERE Entity_Name = 'Fact_Treatment_Plan_Items'),
+                             CONVERT(datetime2(3), '1900-01-01'))
+            END;
 
         SELECT
             tpi.Tenant_ID                                                   AS Tenant_ID,
@@ -76,12 +90,15 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Created_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_comp         ON dd_comp.Full_Date     = TRY_CAST(NULLIF(TRIM(tpi.Completed_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_u            ON dd_u.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Updated_At),'') AS DATE)
-        WHERE tpi.Id IS NOT NULL;
+        WHERE tpi.Id IS NOT NULL
+          AND tpi.DW_Updated_At > @Watermark;   -- delta: only changed/new plan-items
 
-        -- Remove rows no longer in source
+        -- Remove rows no longer in source. #src is now a DELTA, so orphan detection
+        -- runs against the FULL Silver key set (keys only -- cheap).
         DELETE tgt
         FROM Gold.Fact_Treatment_Plan_Items tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Treatment_Plan_Item_ID = tgt.bk_Treatment_Plan_Item_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Silver.Treatment_Plan_Items s
+                          WHERE s.Id = tgt.bk_Treatment_Plan_Item_ID AND s.Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -181,6 +198,14 @@ BEGIN
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Plan_Items tgt WHERE tgt.bk_Treatment_Plan_Item_ID = src.bk_Treatment_Plan_Item_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- Advance the watermark only after a successful load (inside TRY).
+        UPDATE Gold.Load_Watermark
+           SET Last_Loaded_At = @Run_Start, DW_Updated_At = SYSUTCDATETIME()
+         WHERE Entity_Name = 'Fact_Treatment_Plan_Items';
+        IF @@ROWCOUNT = 0
+            INSERT INTO Gold.Load_Watermark (Entity_Name, Last_Loaded_At, DW_Updated_At)
+            VALUES ('Fact_Treatment_Plan_Items', @Run_Start, SYSUTCDATETIME());
 
         DROP TABLE #src;
         --*********************************
