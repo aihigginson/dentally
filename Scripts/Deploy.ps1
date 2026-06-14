@@ -27,15 +27,22 @@
 #                     promotion stays a deliberate human step). Fails the
 #                     deploy if the tests fail.
 #
+# Every real run is stamped into Migrate.Deploy_Log (release manifest, git
+# commit SHA, branch, who, when, status) so a deploy is auditable and the
+# exact pre-deploy code revision is recoverable for a rollback. See
+# Releases/README.md "Rolling back a release".
+#
 # Usage:
 #   .\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest
 #   .\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest -WhatIf
+#   .\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest -Log
 # Exit:  0 = applied ok ; 1 = an action failed ; 2 = config / connection / parse.
 # ---------------------------------------------------------------------------
 
 param(
     [Parameter(Mandatory = $true)][string] $Manifest,
-    [switch] $WhatIf
+    [switch] $WhatIf,
+    [switch] $Log
 )
 $ErrorActionPreference = 'Stop'
 
@@ -59,10 +66,12 @@ function Resolve-RepoPath([string] $p) {
     if (Test-Path $rp) { return (Resolve-Path $rp).Path }
     throw "file not found: $p"
 }
+function SqlLit([string] $s) { if ($null -eq $s) { return '' } return $s.Replace("'", "''") }
 
 # --- resolve + parse the manifest into an ordered action list --------------
 if (-not (Test-Path $Manifest)) { $Manifest = Join-Path $RepoRoot $Manifest }
 if (-not (Test-Path $Manifest)) { Write-Host "Manifest not found: $Manifest" -ForegroundColor Red; exit 2 }
+$manifestLeaf = Split-Path $Manifest -Leaf
 
 $valid   = @('MIGRATE', 'DEPLOY', 'EXEC', 'TEST')
 $actions = @()
@@ -110,70 +119,111 @@ function ExecBatches([string] $sql) {
     }
 }
 
-# Migration tracking table (idempotent) -- shared with Migrate.ps1.
+# Tracking tables (idempotent). Schema_Version is shared with Migrate.ps1;
+# Deploy_Log is the per-deploy audit ledger (the rollback "helping hand").
 Exec1 "IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name='Migrate') EXEC('CREATE SCHEMA [Migrate]')"
 Exec1 @"
 IF NOT EXISTS (SELECT 1 FROM sys.tables t JOIN sys.schemas s ON t.schema_id=s.schema_id WHERE s.name='Migrate' AND t.name='Schema_Version')
   CREATE TABLE Migrate.Schema_Version (Version varchar(20) NOT NULL, Name varchar(200) NOT NULL, Checksum varchar(64) NULL, Applied_At datetime2(3) NOT NULL, Success bit NOT NULL)
 "@
+Exec1 @"
+IF NOT EXISTS (SELECT 1 FROM sys.tables t JOIN sys.schemas s ON t.schema_id=s.schema_id WHERE s.name='Migrate' AND t.name='Deploy_Log')
+  CREATE TABLE Migrate.Deploy_Log (Deploy_Id varchar(36) NOT NULL, Manifest varchar(260) NOT NULL, Git_Commit varchar(40) NULL, Git_Branch varchar(200) NULL, Deployed_By varchar(200) NULL, Deployed_At datetime2(3) NOT NULL, Action_Count int NULL, Status varchar(20) NOT NULL)
+"@
 function Test-Applied([string] $ver) {
-    $c = $conn.CreateCommand(); $c.CommandText = "SELECT COUNT(*) FROM Migrate.Schema_Version WHERE Version = '$($ver.Replace("'","''"))' AND Success = 1"
+    $c = $conn.CreateCommand(); $c.CommandText = "SELECT COUNT(*) FROM Migrate.Schema_Version WHERE Version = '$(SqlLit $ver)' AND Success = 1"
     return ([int] $c.ExecuteScalar()) -gt 0
 }
 
+# --- -Log : show this manifest's deploy history + file list, then exit -----
+if ($Log) {
+    Write-Host "Deploy history for '$manifestLeaf':" -ForegroundColor Cyan
+    $c = $conn.CreateCommand()
+    $c.CommandText = "SELECT Deployed_At, Status, Git_Branch, Git_Commit, Deployed_By, Action_Count FROM Migrate.Deploy_Log WHERE Manifest = '$(SqlLit $manifestLeaf)' ORDER BY Deployed_At DESC"
+    $r = $c.ExecuteReader(); $any = $false
+    while ($r.Read()) {
+        $any = $true
+        $shaFull = [string] $r['Git_Commit']
+        $shaShort = if ($shaFull.Length -ge 8) { $shaFull.Substring(0, 8) } else { $shaFull }
+        Write-Host ("  {0:yyyy-MM-dd HH:mm:ss}  {1,-8} {2}@{3}  by {4}  ({5} actions)" -f `
+            [datetime] $r['Deployed_At'], [string] $r['Status'], [string] $r['Git_Branch'], $shaShort, [string] $r['Deployed_By'], $r['Action_Count'])
+    }
+    $r.Close()
+    if (-not $any) { Write-Host "  (no deploys recorded)" -ForegroundColor DarkGray }
+    Write-Host "Files in this manifest (revert candidates for rollback):" -ForegroundColor Cyan
+    $actions | Where-Object { $_.Tag -eq 'MIGRATE' -or $_.Tag -eq 'DEPLOY' } | ForEach-Object { Write-Host ("  [{0,-7}] {1}" -f $_.Tag, $_.Arg) }
+    $conn.Close(); exit 0
+}
+
+# --- capture deploy provenance + open the ledger row -----------------------
+$gitSha = ''; $gitBranch = ''
+try { $gitSha    = (& git -C $RepoRoot rev-parse HEAD).Trim() }            catch { $gitSha = '' }
+try { $gitBranch = (& git -C $RepoRoot rev-parse --abbrev-ref HEAD).Trim() } catch { $gitBranch = '' }
+$who = if ($env:GITHUB_ACTOR) { $env:GITHUB_ACTOR } elseif ($env:USERNAME) { $env:USERNAME } else { 'unknown' }
+$deployId = [guid]::NewGuid().ToString()
+Exec1 "INSERT INTO Migrate.Deploy_Log (Deploy_Id,Manifest,Git_Commit,Git_Branch,Deployed_By,Deployed_At,Action_Count,Status) VALUES ('$deployId','$(SqlLit $manifestLeaf)','$(SqlLit $gitSha)','$(SqlLit $gitBranch)','$(SqlLit $who)',SYSUTCDATETIME(),$($actions.Count),'RUNNING')"
+$shaLabel = if ($gitSha.Length -ge 8) { $gitSha.Substring(0, 8) } else { '(no git)' }
+Write-Host "Deploy $deployId  commit $shaLabel  branch $gitBranch" -ForegroundColor DarkGray
+
 $sha  = New-Object System.Security.Cryptography.SHA256Managed
 $step = 0
-foreach ($a in $actions) {
-    $step++
-    $tag = "[$step/$($actions.Count)] $($a.Tag)"
-    switch ($a.Tag) {
+try {
+    foreach ($a in $actions) {
+        $step++
+        $tag = "[$step/$($actions.Count)] $($a.Tag)"
+        switch ($a.Tag) {
 
-        'MIGRATE' {
-            $path  = Resolve-RepoPath $a.Arg
-            $fname = Split-Path $path -Leaf
-            if ($fname -notmatch '^(V\d+)__(.+)\.sql$') { Write-Host "$tag  bad migration filename: $fname (expected Vnnn__name.sql)" -ForegroundColor Red; $conn.Close(); exit 1 }
-            $ver = $Matches[1]; $nm = $Matches[2]
-            if (Test-Applied $ver) { Write-Host "$tag  $fname -- already applied, skipped" -ForegroundColor DarkGray; break }
-            Write-Host "$tag  applying $fname ..." -ForegroundColor Cyan
-            $sql  = [System.IO.File]::ReadAllText($path)
-            $hash = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($sql))) -replace '-').ToLower()
-            $vn = $ver.Replace("'", "''"); $nme = $nm.Replace("'", "''")
-            try { ExecBatches $sql }
-            catch {
-                Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red
-                try { Exec1 "INSERT INTO Migrate.Schema_Version (Version,Name,Checksum,Applied_At,Success) VALUES ('$vn','$nme','$hash',SYSUTCDATETIME(),0)" } catch {}
-                $conn.Close(); exit 1
+            'MIGRATE' {
+                $path  = Resolve-RepoPath $a.Arg
+                $fname = Split-Path $path -Leaf
+                if ($fname -notmatch '^(V\d+)__(.+)\.sql$') { throw "$tag bad migration filename: $fname (expected Vnnn__name.sql)" }
+                $ver = $Matches[1]; $nm = $Matches[2]
+                if (Test-Applied $ver) { Write-Host "$tag  $fname -- already applied, skipped" -ForegroundColor DarkGray; break }
+                Write-Host "$tag  applying $fname ..." -ForegroundColor Cyan
+                $sql  = [System.IO.File]::ReadAllText($path)
+                $hash = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($sql))) -replace '-').ToLower()
+                $vn = SqlLit $ver; $nme = SqlLit $nm
+                try { ExecBatches $sql }
+                catch {
+                    try { Exec1 "INSERT INTO Migrate.Schema_Version (Version,Name,Checksum,Applied_At,Success) VALUES ('$vn','$nme','$hash',SYSUTCDATETIME(),0)" } catch {}
+                    throw "MIGRATE $fname failed: $($_.Exception.Message)"
+                }
+                Exec1 "INSERT INTO Migrate.Schema_Version (Version,Name,Checksum,Applied_At,Success) VALUES ('$vn','$nme','$hash',SYSUTCDATETIME(),1)"
+                Write-Host "  OK" -ForegroundColor Green
             }
-            Exec1 "INSERT INTO Migrate.Schema_Version (Version,Name,Checksum,Applied_At,Success) VALUES ('$vn','$nme','$hash',SYSUTCDATETIME(),1)"
-            Write-Host "  OK" -ForegroundColor Green
-        }
 
-        'DEPLOY' {
-            $path = Resolve-RepoPath $a.Arg
-            Write-Host "$tag  $(Split-Path $path -Leaf)" -ForegroundColor Cyan
-            try { ExecBatches ([System.IO.File]::ReadAllText($path)) }
-            catch { Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red; $conn.Close(); exit 1 }
-            Write-Host "  OK" -ForegroundColor Green
-        }
+            'DEPLOY' {
+                $path = Resolve-RepoPath $a.Arg
+                Write-Host "$tag  $(Split-Path $path -Leaf)" -ForegroundColor Cyan
+                try { ExecBatches ([System.IO.File]::ReadAllText($path)) }
+                catch { throw "DEPLOY $(Split-Path $path -Leaf) failed: $($_.Exception.Message)" }
+                Write-Host "  OK" -ForegroundColor Green
+            }
 
-        'EXEC' {
-            Write-Host "$tag  $($a.Arg)" -ForegroundColor Cyan
-            try { Exec1 $a.Arg 600 }
-            catch { Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red; $conn.Close(); exit 1 }
-            Write-Host "  OK" -ForegroundColor Green
-        }
+            'EXEC' {
+                Write-Host "$tag  $($a.Arg)" -ForegroundColor Cyan
+                try { Exec1 $a.Arg 600 }
+                catch { throw "EXEC failed: $($_.Exception.Message)" }
+                Write-Host "  OK" -ForegroundColor Green
+            }
 
-        'TEST' {
-            Write-Host "$tag  running Run_Tests.ps1 gate ..." -ForegroundColor Cyan
-            $conn.Close()  # Run_Tests opens its own connection
-            & (Join-Path $PSScriptRoot 'Run_Tests.ps1')
-            if ($LASTEXITCODE -ne 0) { Write-Host "  TESTS FAILED (exit $LASTEXITCODE)" -ForegroundColor Red; exit 1 }
-            $conn = Open-Conn  # reopen in case more actions follow
-            Write-Host "  OK" -ForegroundColor Green
+            'TEST' {
+                Write-Host "$tag  running Run_Tests.ps1 gate ..." -ForegroundColor Cyan
+                & (Join-Path $PSScriptRoot 'Run_Tests.ps1')   # opens its own connection; ours stays open
+                if ($LASTEXITCODE -ne 0) { throw "Run_Tests gate failed (exit $LASTEXITCODE)" }
+                Write-Host "  OK" -ForegroundColor Green
+            }
         }
     }
 }
+catch {
+    Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red
+    try { Exec1 "UPDATE Migrate.Deploy_Log SET Status='FAILED' WHERE Deploy_Id='$deployId'" } catch {}
+    try { $conn.Close() } catch {}
+    exit 1
+}
 
+Exec1 "UPDATE Migrate.Deploy_Log SET Status='SUCCESS' WHERE Deploy_Id='$deployId'"
 $conn.Close()
-Write-Host "Manifest applied successfully." -ForegroundColor Green
+Write-Host "Manifest applied successfully.  (deploy $deployId, commit $shaLabel)" -ForegroundColor Green
 exit 0

@@ -98,7 +98,7 @@ GO
 -- Stage_Ingest has run at least once, so each CREATE VIEW is wrapped in
 -- TRY/CATCH and executed via EXEC() (which puts CREATE VIEW first in its
 -- own sub-batch).  A warning is printed for any that are skipped.
--- Re-running Deploy_To_Fabric.ps1 after Stage_Ingest will create them.
+-- Re-deploying this file (a DEPLOY step) after Stage_Ingest will create them.
 -- -----------------------------------------------------------------------
 
 BEGIN TRY

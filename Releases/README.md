@@ -62,6 +62,44 @@ TEST
 4. `Deploy.ps1 -WhatIf` to review, then run it against dev.
 5. Commit manifest + migration + objects together -- the manifest is the release.
 
+## Rolling back a release
+
+A release changes two things: **repo files** (manifest, migration SQL, `Fabric/*.sql`
+-- all in git) and **live warehouse state** (deployed objects, table schema, data
+-- not in git). How freely each rolls back depends on the action tag.
+
+Every real `Deploy.ps1` run is stamped into **`Migrate.Deploy_Log`** (manifest, git
+commit SHA, branch, who, when, status), so the exact pre-deploy code revision is
+recoverable. Inspect a release:
+
+```
+.\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest -Log
+#  -> deploy history (deployed SHA, when, status) + the MIGRATE/DEPLOY files
+```
+
+| Tag | Rolls back via | Notes |
+|---|---|---|
+| `DEPLOY` (proc/view/seed) | **git + redeploy** | `git checkout <deployed_sha>~1 -- <file>` then `DEPLOY` it again. Near-free: the object is just recreated at its prior version. |
+| `MIGRATE` (table ALTER) | **roll-forward** (new migration) | Git holds the *forward* ALTER only -- there is no auto-inverse. Write a new `Vnnn__revert_*.sql` that `DROP`s the column. **Dropping a column destroys its data** -- which is why we are forward-only. |
+| `EXEC` (reload/backfill) | **re-run with reverted code**, or restore a snapshot | Data is not in git. Reversal = redeploy the old load proc + reload, or restore from a pre-deploy backup (`Backup_/Restore_Test_Data.ps1` pattern). |
+
+**Recipe** to back out release `Vnnn`:
+1. `Deploy.ps1 -Manifest Releases\Vnnn__*.manifest -Log` -- note the deployed SHA and the file list.
+2. **Objects:** `git checkout <deployed_sha>~1 -- <each DEPLOY file>`, then re-`DEPLOY` them
+   (a small rollback manifest, or redeploy the prior versions directly).
+3. **Schema:** add a forward `Migrations/Vmmm__revert_*.sql` (`DROP COLUMN`) and a
+   release manifest for it -- do *not* try to "un-apply" the original migration.
+4. **Data:** restore from the pre-deploy snapshot if one was taken; otherwise reload
+   from the reverted load procs.
+5. `git revert` the release commit(s) so the repo matches the rolled-back warehouse.
+
+**Policy: forward-only / roll-forward.** Migrations and deploys are never "un-applied";
+a bad release is corrected by a new forward release. This is deliberate -- a true
+schema/data rollback loses data, and forward-only keeps a single, honest history
+(`Schema_Version` + `Deploy_Log`) of what is actually live. For releases whose `EXEC`
+steps are destructive, take a snapshot of the affected tables *before* the run so
+step 4 has something to restore.
+
 ## CI
 
 `.github/workflows/deploy-warehouse.yml` runs a manifest via `Deploy.ps1` (as the
