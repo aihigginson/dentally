@@ -44,12 +44,17 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [ ] Confirm DAX (Tabular Editor scripts) is the sole KPI definition
 - [ ] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven
 
-## 5. ETL refactor & Gold scalability  _(High)_
+## 5. ETL refactor & incremental Gold  _(Medium — cost optimisation, NOT a scaling blocker)_
 
-- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config`
+> Note: Fabric handles the volume fine — proven at ~1000 practices loading in
+> seconds; throughput is a function of capacity, not the full-rebuild design. The
+> driver here is **reducing CU consumption / cost**, so incrementals are worthwhile
+> but not urgent. Full DROP/CREATE rebuilds are not a correctness or scale risk.
+
+- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config` (maintainability)
 - [ ] Make `usp_Load_All` idempotent (CREATE OR ALTER / DROP+CREATE, not bare `ALTER PROCEDURE`); remove dead commented `EXEC`s; standardise on UTC timestamps
 - [ ] Design **stable Gold surrogate keys** (survive reloads) to enable incremental fact loading
-- [ ] Add an incremental Gold load path; stop full DROP/CREATE rebuilds before data volumes grow
+- [ ] Add an incremental Gold load path to cut rebuild cost (CU spend), once surrogate keys are stable
 
 ## 6. Operability / observability  _(Medium)_
 
