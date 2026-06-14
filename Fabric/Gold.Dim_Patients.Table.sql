@@ -27,6 +27,8 @@ CREATE TABLE [Gold].[Dim_Patients](
 	[Home_Phone] [VARCHAR](50) NULL,
 	[Mobile_Phone] [VARCHAR](50) NULL,
 	[Work_Phone] [VARCHAR](50) NULL,
+	[Is_Email_Missing] [bit] NULL,
+	[Is_Phone_Missing] [bit] NULL,
 	[Address_Line_1] [VARCHAR](255) NULL,
 	[Address_Line_2] [VARCHAR](255) NULL,
 	[Town] [VARCHAR](100) NULL,
