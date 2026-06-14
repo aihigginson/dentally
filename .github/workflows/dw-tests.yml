@@ -1,10 +1,12 @@
 name: DW Tests
 
-# Runs two gates against the live tenant using the Test Runner service principal:
-#   1. Scripts/Run_Tests.ps1        -- DW regression + integrity (SQL via SqlClient)
-#   2. Scripts/Check_RLS_Coverage.ps1 -- model-layer RLS leak guard (XMLA via ADOMD)
+# Runs three gates against the live tenant using the Test Runner service principal:
+#   1. Scripts/Run_Tests.ps1          -- DW regression + integrity (SQL via SqlClient)
+#   2. Scripts/Check_RLS_Coverage.ps1  -- model-layer RLS leak guard (XMLA via ADOMD)
+#   3. Scripts/Check_RLS_Isolation.ps1 -- behavioral RLS isolation (XMLA EffectiveUserName)
 # Used as a deploy gate (called by deploy-prod.yml) and for PR-time signal.
 # Exits non-zero -> the job fails -> the deploy is blocked.
+# NB: the isolation gate needs the SP to remain a workspace ADMIN (EffectiveUserName).
 #
 # Requires repo secrets:
 #   FABRIC_SP_TENANT, FABRIC_SP_CLIENT_ID, FABRIC_SP_CLIENT_SECRET
@@ -58,3 +60,11 @@ jobs:
           FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
           FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
         run: .\Scripts\Check_RLS_Coverage.ps1
+
+      - name: RLS isolation check (behavioral)
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Check_RLS_Isolation.ps1
