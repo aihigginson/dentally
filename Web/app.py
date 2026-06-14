@@ -5,11 +5,16 @@ import requests
 import pyodbc
 import struct
 import os
+import logging
 from dotenv import load_dotenv
 import jwt
 from jwt import PyJWKClient
 
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 # Restrict CORS to the app's own origins (UI + API are same-origin, so this
@@ -27,8 +32,6 @@ CLIENT_ID      = os.environ['CLIENT_ID']
 CLIENT_SECRET  = os.environ['CLIENT_SECRET']
 WORKSPACE_ID   = os.environ['WORKSPACE_ID']
 DATASET_ID     = os.environ['DATASET_ID']
-USERNAME       = os.environ['PBI_USERNAME']
-PASSWORD       = os.environ['PBI_PASSWORD']
 AZURE_CLIENT_ID     = os.environ.get('AZURE_CLIENT_ID', CLIENT_ID)
 AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET', CLIENT_SECRET)
 # RLS role(s) applied to EVERY embed token. Defaults to 'RLS' so it is never
@@ -82,6 +85,12 @@ def _auth():
     except Exception:
         return None, (jsonify({'error': 'Authentication required'}), 401)
 
+
+def _server_error(e, context):
+    """Log full detail server-side; return a generic message to the client."""
+    app.logger.exception("%s failed: %s", context, e)
+    return jsonify({'error': 'Internal server error'}), 500
+
 # ── Service-principal helpers (PBI + Fabric) ──────────────────────────────────
 
 def _pbi_token():
@@ -90,15 +99,6 @@ def _pbi_token():
     ).acquire_token_for_client(scopes=PBI_SCOPE)
     if 'access_token' not in result:
         raise RuntimeError(result.get('error_description', 'MSAL token acquisition failed'))
-    return result['access_token']
-
-
-def _pbi_delegated_token():
-    result = msal.ConfidentialClientApplication(
-        CLIENT_ID, authority=PBI_AUTHORITY, client_credential=CLIENT_SECRET,
-    ).acquire_token_by_username_password(username=USERNAME, password=PASSWORD, scopes=PBI_SCOPE)
-    if 'access_token' not in result:
-        raise RuntimeError(result.get('error_description', 'MSAL delegated token acquisition failed'))
     return result['access_token']
 
 
@@ -198,9 +198,10 @@ def embed_token():
         return jsonify({'token': r2.json()['token'], 'embedUrl': embed_url, 'reportId': report_id})
 
     except requests.HTTPError as e:
-        return jsonify({'error': str(e), 'detail': e.response.text}), 502
+        app.logger.exception("embed-token upstream PBI error: %s | %s", e, getattr(e.response, 'text', ''))
+        return jsonify({'error': 'Upstream service error'}), 502
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _server_error(e, 'embed-token')
 
 
 @app.route('/api/me')
@@ -234,9 +235,7 @@ def me():
             'env':              APP_ENV,
         })
     except Exception as e:
-        import traceback
-        print(f"ME ERROR: {e}\n{traceback.format_exc()}", flush=True)
-        return jsonify({'error': str(e)}), 500
+        return _server_error(e, 'me')
 
 
 @app.route('/api/filters')
@@ -281,7 +280,9 @@ def filters():
         return jsonify({'sites': sites, 'practitioners': practitioners})
 
     except Exception as e:
-        return jsonify({'sites': [], 'practitioners': [], '_error': str(e)})
+        # Preserve the 200 + empty-lists client contract; log detail server-side.
+        app.logger.exception("filters failed: %s", e)
+        return jsonify({'sites': [], 'practitioners': []})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -359,7 +360,7 @@ def get_targets():
         conn.close()
         return jsonify({'metrics': metrics, 'tenants': tenants, 'targets': targets})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _server_error(e, 'get_targets')
 
 
 @app.route('/api/targets', methods=['POST'])
@@ -409,10 +410,9 @@ def save_targets():
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        import traceback
-        print(f"[save_targets] ERROR: {repr(e)}\n{traceback.format_exc()}", flush=True)
-        return jsonify({'error': str(e)}), 500
+        return _server_error(e, 'save_targets')
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+    _debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=_debug)

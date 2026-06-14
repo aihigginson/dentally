@@ -12,13 +12,13 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [x] Make embed RLS **mandatory and fail-closed** — `/api/embed-token` always attaches the RLS effective identity, 403s unprovisioned users, refuses if no role configured (commit 943985e, **live in prod**).
 - [x] Drive RLS roles/identity from the user's actual tenant — embed-token verifies the caller maps to >=1 tenant via `Security.Application_Users` before issuing (same fix).
 - [~] Verify token **issuer** — N/A as a simple pin: the app is **multi-tenant** (`authority=.../common`, users span analytically.info / mapledental.co.uk / outlook.com), so pinning one issuer would break legit sign-ins. Already mitigated by signature (Microsoft JWKS) + audience check + the `Application_Users` allowlist. Optional later: verify `iss` is consistent with the token's `tid`.
-- [ ] Remove the ROPC master-user password flow (`_pbi_delegated_token`, `PBI_PASSWORD`); SP-only
+- [x] Remove the ROPC master-user password flow (`_pbi_delegated_token`, `PBI_PASSWORD`); SP-only — dead code removed (`USERNAME`/`PASSWORD`/`PBI_USERNAME` gone); embed + Fabric are SP-only. Also fixed the dead `rfgx` endpoint in `.env.example`.
 - [x] Restrict CORS to known origins — `CORS(app, origins=[...])`, defaults to the app domains, `ALLOWED_ORIGINS` override (commit 6a19cd2, on dev).
-- [ ] Return generic error responses to clients; log detail server-side (remove `str(e)` / `_error` leakage)
-- [ ] Run container as non-root (`Web/Dockerfile`); disable `debug=True` path (`Web/app.py:814`)
+- [x] Return generic error responses to clients; log detail server-side — all 6 `str(e)`/`_error` leaks masked via `_server_error()` (logs full detail via `app.logger`, returns generic message); embed upstream error no longer echoes `e.response.text`.
+- [x] Run container as non-root (`Web/Dockerfile`); disable `debug=True` path — Dockerfile adds `appuser` (uid 10001) + `USER appuser`; Flask `debug` now env-gated (`FLASK_DEBUG`, default off).
 - [x] Model-layer **RLS coverage guard** (`Scripts/Check_RLS_Coverage.ps1`, XMLA/ADOMD) — verifies the `RLS` role filters every tenant-bearing table; first run caught + closed 2 real leaks (`_NHS Claims`, `List NHS Contracts`); now green 29/29. **Wired into the `dw-tests` CI deploy gate** (ADOMD installed via NuGet, proven on the runner).
 - [x] Behavioral **RLS isolation test** (`Scripts/Check_RLS_Isolation.ps1`, XMLA `EffectiveUserName`) — impersonates a user and proves every tenant-bearing table exposes only their tenant (+ sentinel). Verified: `admin@analytically.info` (T11) sees only T11 across all 29 tables with T12 data present. Closes off the blocked `executeQueries` path. **Now a third `dw-tests` CI gate** (proven on the runner; SP kept as workspace Admin).
-- [ ] Document the health-data compliance posture: encryption-at-rest, data-access auditing, retention/DSAR, backup/DR
+- [x] Document the health-data compliance posture: encryption-at-rest, data-access auditing, retention/DSAR, backup/DR — `COMPLIANCE.md` (honest posture: in-place controls vs. TODOs; key gaps = data-access auditing, retention/DSAR policy, Key Vault for secrets, tested DR).
 
 ## 2. Database release engineering  _(Critical — unblocks everything else)_  — DONE
 
