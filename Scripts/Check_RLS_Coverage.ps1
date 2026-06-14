@@ -36,17 +36,21 @@ if (-not ($Tenant -and $ClientId -and $Secret)) {
     exit 2
 }
 
-# Load ADOMD.NET (prefer the standalone install, fall back to a search).
-$adomd = "$env:ProgramFiles\Microsoft.NET\ADOMD.NET\170\Microsoft.AnalysisServices.AdomdClient.dll"
+# Load ADOMD.NET. Prefer an explicit path (CI sets $env:ADOMD_DLL to the
+# NuGet-restored assembly), then the standalone install, then a search.
+$adomd = $env:ADOMD_DLL
+if (-not $adomd -or -not (Test-Path $adomd)) {
+    $adomd = "$env:ProgramFiles\Microsoft.NET\ADOMD.NET\170\Microsoft.AnalysisServices.AdomdClient.dll"
+}
 if (-not (Test-Path $adomd)) {
     $adomd = (Get-ChildItem "$env:ProgramFiles\Microsoft.NET\ADOMD.NET" -Recurse -Filter 'Microsoft.AnalysisServices.AdomdClient.dll' -ErrorAction SilentlyContinue |
               Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName)
 }
-if (-not $adomd -or -not (Test-Path $adomd)) { Write-Host "ADOMD.NET client not found." -ForegroundColor Red; exit 2 }
+if (-not $adomd -or -not (Test-Path $adomd)) { Write-Host "ADOMD.NET client not found (set ADOMD_DLL)." -ForegroundColor Red; exit 2 }
 Add-Type -Path $adomd
 
 $dataSource = "powerbi://api.powerbi.com/v1.0/myorg/$WsName"
-$connStr = "Provider=MSOLAP;Data Source=$dataSource;Initial Catalog=$DsName;User ID=app:$ClientId@$Tenant;Password=$Secret;"
+$connStr = "Data Source=$dataSource;Initial Catalog=$DsName;User ID=app:$ClientId@$Tenant;Password=$Secret;"
 
 $conn = New-Object Microsoft.AnalysisServices.AdomdClient.AdomdConnection($connStr)
 try { $conn.Open() } catch { Write-Host "XMLA connection failed: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }

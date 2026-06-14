@@ -1,9 +1,10 @@
 name: DW Tests
 
-# Runs the data-warehouse regression + integrity test harness
-# (Scripts/Run_Tests.ps1) against WH_Dentally using the Test Runner service
-# principal. Used as a deploy gate (called by deploy-prod.yml) and for PR-time
-# signal. Exits non-zero -> the job fails -> the deploy is blocked.
+# Runs two gates against the live tenant using the Test Runner service principal:
+#   1. Scripts/Run_Tests.ps1        -- DW regression + integrity (SQL via SqlClient)
+#   2. Scripts/Check_RLS_Coverage.ps1 -- model-layer RLS leak guard (XMLA via ADOMD)
+# Used as a deploy gate (called by deploy-prod.yml) and for PR-time signal.
+# Exits non-zero -> the job fails -> the deploy is blocked.
 #
 # Requires repo secrets:
 #   FABRIC_SP_TENANT, FABRIC_SP_CLIENT_ID, FABRIC_SP_CLIENT_SECRET
@@ -36,3 +37,24 @@ jobs:
           FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
           FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
         run: .\Scripts\Run_Tests.ps1 -RunTag "ci-${{ github.run_number }}"
+
+      - name: Install ADOMD.NET client (for the RLS coverage check)
+        shell: powershell
+        run: |
+          nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 -OutputDirectory "$env:RUNNER_TEMP\adomd" -ExcludeVersion -NonInteractive
+          $dll = Get-ChildItem "$env:RUNNER_TEMP\adomd" -Recurse -Filter 'Microsoft.AnalysisServices.AdomdClient.dll' |
+                 Where-Object { $_.FullName -match 'net4' } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dll) {
+            $dll = Get-ChildItem "$env:RUNNER_TEMP\adomd" -Recurse -Filter 'Microsoft.AnalysisServices.AdomdClient.dll' | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $dll) { Write-Error 'ADOMD.NET dll not found in NuGet package'; exit 1 }
+          "ADOMD_DLL=$dll" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          Write-Host "ADOMD_DLL=$dll"
+
+      - name: RLS coverage check (model-layer leak guard)
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Check_RLS_Coverage.ps1
