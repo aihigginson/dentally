@@ -25,7 +25,7 @@
         -OnPremDatabase "Dentally" `
         -FabricServer   "rfgx72m2ckiuzetkplc54cbksu-rhorptch4uoenghfp4noadcjn4.datawarehouse.fabric.microsoft.com" `
         -FabricDatabase "WH_Dentally" `
-        -FabricUser     "aihigginson@2rrjxy.onmicrosoft.com"
+        -FabricUser     "admin@Analytically.info"
 #>
 param(
     [Parameter(Mandatory)] [string]   $OnPremServer,

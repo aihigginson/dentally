@@ -24,7 +24,10 @@ USERNAME       = os.environ['PBI_USERNAME']
 PASSWORD       = os.environ['PBI_PASSWORD']
 AZURE_CLIENT_ID     = os.environ.get('AZURE_CLIENT_ID', CLIENT_ID)
 AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET', CLIENT_SECRET)
-REPORT_ROLES   = [r.strip() for r in os.environ.get('REPORT_ROLES', '').split(',') if r.strip()]
+# RLS role(s) applied to EVERY embed token. Defaults to 'RLS' so it is never
+# silently empty; if it is ever explicitly emptied, /api/embed-token fails closed
+# (refuses to mint a token) rather than handing out an unfiltered, all-tenant one.
+REPORT_ROLES   = [r.strip() for r in os.environ.get('REPORT_ROLES', 'RLS').split(',') if r.strip()]
 FABRIC_SERVER  = os.environ['FABRIC_SERVER']
 FABRIC_DB      = os.environ.get('FABRIC_DB', 'WH_Dentally')
 
@@ -140,6 +143,23 @@ def embed_token():
     if not report_id:
         return jsonify({'error': f"Report '{report_name}' not configured"}), 404
 
+    # ── Fail closed: never issue an embed token without RLS row-scoping ───────────
+    # 1. The RLS role must be configured. If not, refuse -- do NOT fall back to an
+    #    unfiltered token that would expose every tenant's data.
+    if not REPORT_ROLES:
+        print("[embed-token] REFUSED: REPORT_ROLES is empty", flush=True)
+        return jsonify({'error': 'Server RLS misconfiguration'}), 500
+    # 2. The caller must be a provisioned application user mapped to >= 1 tenant.
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        conn.close()
+    except Exception:
+        return jsonify({'error': 'Authorization check failed'}), 500
+    if client_id is None or not tids:
+        return jsonify({'error': 'Forbidden'}), 403
+
     try:
         token   = _pbi_token()
         headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
@@ -153,13 +173,15 @@ def embed_token():
         embed_url   = report_meta['embedUrl']
         dataset_id  = report_meta['datasetId']
 
-        token_body = {'accessLevel': 'View'}
-        if REPORT_ROLES:
-            token_body['identities'] = [{
+        # The RLS effective identity is ALWAYS attached -- row filtering is mandatory.
+        token_body = {
+            'accessLevel': 'View',
+            'identities': [{
                 'username': upn,
                 'roles':    REPORT_ROLES,
                 'datasets': [dataset_id],
-            }]
+            }],
+        }
         print(f"[embed-token] upn={upn!r} roles={REPORT_ROLES!r} report={report_name}", flush=True)
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',

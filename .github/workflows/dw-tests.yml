@@ -1,0 +1,70 @@
+name: DW Tests
+
+# Runs three gates against the live tenant using the Test Runner service principal:
+#   1. Scripts/Run_Tests.ps1          -- DW regression + integrity (SQL via SqlClient)
+#   2. Scripts/Check_RLS_Coverage.ps1  -- model-layer RLS leak guard (XMLA via ADOMD)
+#   3. Scripts/Check_RLS_Isolation.ps1 -- behavioral RLS isolation (XMLA EffectiveUserName)
+# Used as a deploy gate (called by deploy-prod.yml) and for PR-time signal.
+# Exits non-zero -> the job fails -> the deploy is blocked.
+# NB: the isolation gate needs the SP to remain a workspace ADMIN (EffectiveUserName).
+#
+# Requires repo secrets:
+#   FABRIC_SP_TENANT, FABRIC_SP_CLIENT_ID, FABRIC_SP_CLIENT_SECRET
+#
+# Notes:
+# - windows-latest + shell: powershell (Windows PowerShell 5.1) so the harness'
+#   System.Data.SqlClient usage resolves (matches local dev).
+# - The harness re-seeds the Test schema each run, so the enforced gate is the
+#   RECONCILE checks (FK NULLs, revenue split, cross-layer counts, sentinel) +
+#   zero capture errors. Regression-vs-baseline drift needs a persisted
+#   baseline (a separate roadmap item) and is not enforced here yet.
+# - Same-repo PRs only get the secrets; fork PRs will skip auth (by design).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+jobs:
+  dw-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run DW regression + integrity tests
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Run_Tests.ps1 -RunTag "ci-${{ github.run_number }}"
+
+      - name: Install ADOMD.NET client (for the RLS coverage check)
+        shell: powershell
+        run: |
+          nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 -OutputDirectory "$env:RUNNER_TEMP\adomd" -ExcludeVersion -NonInteractive
+          $dll = Get-ChildItem "$env:RUNNER_TEMP\adomd" -Recurse -Filter 'Microsoft.AnalysisServices.AdomdClient.dll' |
+                 Where-Object { $_.FullName -match 'net4' } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dll) {
+            $dll = Get-ChildItem "$env:RUNNER_TEMP\adomd" -Recurse -Filter 'Microsoft.AnalysisServices.AdomdClient.dll' | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $dll) { Write-Error 'ADOMD.NET dll not found in NuGet package'; exit 1 }
+          "ADOMD_DLL=$dll" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          Write-Host "ADOMD_DLL=$dll"
+
+      - name: RLS coverage check (model-layer leak guard)
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Check_RLS_Coverage.ps1
+
+      - name: RLS isolation check (behavioral)
+        shell: powershell
+        env:
+          FABRIC_SP_TENANT:        ${{ secrets.FABRIC_SP_TENANT }}
+          FABRIC_SP_CLIENT_ID:     ${{ secrets.FABRIC_SP_CLIENT_ID }}
+          FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
+        run: .\Scripts\Check_RLS_Isolation.ps1

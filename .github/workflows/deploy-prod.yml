@@ -9,7 +9,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Gate: the DW regression + integrity tests must pass before prod deploys.
+  dw-tests:
+    uses: ./.github/workflows/dw-tests.yml
+    secrets: inherit
+
   deploy:
+    needs: dw-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
