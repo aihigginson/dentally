@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V006 -- Incremental Gold: Fact_Invoice_Items 2-source watermark delta
+# =====================================================================
+# The fact is delta-pure after V005 (no time column, no per-invoice window), so it
+# now joins to a watermark delta. It is 2-source: a fact line changes if the line
+# (Silver.Invoice_Items) OR its invoice header (Silver.Invoices) changed -- so the
+# #src filter is `ii.DW_Updated_At > wm OR inv.DW_Updated_At > wm`. No invoice
+# expansion needed (the window is gone). Orphan deletes via key-only anti-join vs
+# full Silver. Gold.Load_Watermark already exists (V002).
+#
+# Establishing run uses @Full_Reload=1 (full load + seed watermark); then delta.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V006__incremental_fact_invoice_items.manifest
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+
+# Establishing full reload -- seeds the Fact_Invoice_Items watermark
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Invoice_Items @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# Verify -- regression + reconciliation + RLS gate
+TEST

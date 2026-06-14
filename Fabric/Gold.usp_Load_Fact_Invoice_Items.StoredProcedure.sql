@@ -15,6 +15,11 @@
 --                            exception) moves to a tiny positive table Gold.Invoice_Discount,
 --                            rebuilt here and LEFT JOINed in the view. Removes the per-invoice
 --                            window so the table is delta-ready (delta == full refresh).
+--    *08     15/06/2026  AIH Incremental 2-source watermark delta. #src filtered to lines where
+--                            the line OR its invoice header changed (ii/inv DW_Updated_At > wm);
+--                            no per-invoice window now, so no invoice-expansion needed. Orphan
+--                            delete via key-only anti-join vs full Silver. Watermark advanced
+--                            on success. Invoice_Discount still rebuilt fully (tiny).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Invoice_Items]    Script Date: 20/04/2026 10:15:06 ******/
@@ -33,6 +38,7 @@ CREATE PROCEDURE [Gold].[usp_Load_Fact_Invoice_Items]
     , @Run_Inserts   BIGINT OUT
     , @Run_Updates   BIGINT OUT
     , @Run_Deletes   BIGINT OUT
+    , @Full_Reload   BIT = 0
 )
 AS
 BEGIN
@@ -44,6 +50,19 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- Incremental 2-source watermark: process only lines whose line (ii) OR
+        -- invoice header (inv) changed since the last successful load. Both Silver
+        -- tables bump DW_Updated_At only on real change (hash-gated). No per-invoice
+        -- window remains, so no invoice-expansion is needed. Missing watermark (first
+        -- run) or @Full_Reload = 1 -> full load.
+        DECLARE @Run_Start datetime2(3) = SYSUTCDATETIME();
+        DECLARE @Watermark datetime2(3) =
+            CASE WHEN @Full_Reload = 1 THEN CONVERT(datetime2(3), '1900-01-01')
+                 ELSE ISNULL((SELECT Last_Loaded_At FROM Gold.Load_Watermark
+                              WHERE Entity_Name = 'Fact_Invoice_Items'),
+                             CONVERT(datetime2(3), '1900-01-01'))
+            END;
 
         SELECT
             ii.Tenant_ID                                                AS Tenant_ID,
@@ -93,12 +112,15 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_due         ON dd_due.Full_Date      = CAST(inv.Due_On AS DATE)
         LEFT JOIN Gold.Dim_Date dd_paid        ON dd_paid.Full_Date     = CAST(inv.Paid_On AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c           ON dd_c.Full_Date        = TRY_CAST(NULLIF(TRIM(ii.Created_At),'') AS DATE)
-        WHERE ii.Id IS NOT NULL;
+        WHERE ii.Id IS NOT NULL
+          AND (ii.DW_Updated_At > @Watermark OR inv.DW_Updated_At > @Watermark);  -- 2-source delta: line OR header changed
 
-        -- Remove rows no longer in source
+        -- Remove rows no longer in source. #src is now a DELTA, so orphan detection
+        -- runs against the FULL Silver key set (keys only -- cheap).
         DELETE tgt
         FROM Gold.Fact_Invoice_Items tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Invoice_Item_ID = tgt.bk_Invoice_Item_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Silver.Invoice_Items s
+                          WHERE s.Id = tgt.bk_Invoice_Item_ID AND s.Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -224,6 +246,14 @@ BEGIN
         WHERE  Invoice_ID IS NOT NULL
         GROUP BY Tenant_ID, Invoice_ID
         HAVING MAX(Invoice_Amount) > SUM(Total_Price);
+
+        -- Advance the watermark only after a successful load (inside TRY).
+        UPDATE Gold.Load_Watermark
+           SET Last_Loaded_At = @Run_Start, DW_Updated_At = SYSUTCDATETIME()
+         WHERE Entity_Name = 'Fact_Invoice_Items';
+        IF @@ROWCOUNT = 0
+            INSERT INTO Gold.Load_Watermark (Entity_Name, Last_Loaded_At, DW_Updated_At)
+            VALUES ('Fact_Invoice_Items', @Run_Start, SYSUTCDATETIME());
 
         DROP TABLE #src;
         --*********************************
