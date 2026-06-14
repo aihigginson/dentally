@@ -20,18 +20,20 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [x] Behavioral **RLS isolation test** (`Scripts/Check_RLS_Isolation.ps1`, XMLA `EffectiveUserName`) — impersonates a user and proves every tenant-bearing table exposes only their tenant (+ sentinel). Verified: `admin@analytically.info` (T11) sees only T11 across all 29 tables with T12 data present. Closes off the blocked `executeQueries` path. **Now a third `dw-tests` CI gate** (proven on the runner; SP kept as workspace Admin).
 - [ ] Document the health-data compliance posture: encryption-at-rest, data-access auditing, retention/DSAR, backup/DR
 
-## 2. Database release engineering  _(Critical — unblocks everything else)_
+## 2. Database release engineering  _(Critical — unblocks everything else)_  — DONE
 
-- [ ] Adopt a migration tool (Flyway / DbUp / sqlpackage-style) with versioned, ordered, idempotent migrations
-- [ ] Add a `schema_version` (migration state) table so applied state is known per environment
-- [ ] Run migrations from CI against dev -> prod
-- [ ] Retire the ~25 ad-hoc `Scripts/Deploy_*.ps1` scripts once migrations replace them
+- [x] Adopt a migration tool — home-grown but complete: `Migrations/Vnnn__*.sql` (forward-only, idempotent ALTERs) applied by `Scripts/Migrate.ps1`, and the standard manifest runner `Scripts/Deploy.ps1` driving versioned `Releases/Vnnn__*.manifest` (tags `MIGRATE`/`DEPLOY`/`EXEC`/`TEST`). Piloted on the patient-cohort release.
+- [x] Add a `schema_version` (migration state) table — `Migrate.Schema_Version` (version, checksum, applied-at, success), plus `Migrate.Deploy_Log` (per-deploy provenance: manifest, git commit SHA, branch, who, when, status) for audit + deterministic rollback.
+- [x] Run migrations from CI against dev -> prod — `.github/workflows/deploy-warehouse.yml` runs a manifest via `Deploy.ps1` (as the SP) then the `dw-tests` gate. Deliberately `workflow_dispatch`-triggered (a controlled release, not an implicit push deploy) — by design, kept deliberate.
+- [x] Retire the ~25 ad-hoc `Scripts/Deploy_*.ps1` scripts — all 24 bespoke/template/patch scripts + the two on-prem->Fabric bootstraps deleted (commits 130b588, 44e54d3). EVALUATION's "biggest maintainability risk" marked Resolved.
 - [x] Service-principal auth + `Scripts/Run_Tests.ps1` harness (first step off manual interactive deploys)
+- [ ] _Nicety:_ state-based diff (SqlPackage/DACPAC) to auto-generate migrations from `Fabric/*.Table.sql`, instead of hand-syncing the ALTER + the table definition.
+- [ ] _Nicety:_ rollback policy is forward-only (roll-forward DROP-COLUMN migration); optional paired down-scripts not implemented (deliberately — avoids data-losing rollbacks).
 
 ## 3. Testing & CI gates  _(High)_
 
-- [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Active and verified green in CI** (secrets `FABRIC_SP_*` added). Enforces reconcile/FK integrity + capture success; regression-drift gate awaits a persisted baseline.
-- [x] Establish the first known-good baseline (`Test.usp_Promote`) — `baseline-v2`, 45 reconciles PASS / 115 OK / 2 OK(null), exit 0
+- [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Active and verified green in CI** (secrets `FABRIC_SP_*` added). Enforces reconcile/FK integrity + capture success **+ regression drift** — the latter now real after fixing the `Test.Capture_Baseline` DROP/CREATE bug (it was wiped on every deploy; commit a7a35e6) so the baseline survives redeploys.
+- [x] Establish the first known-good baseline (`Test.usp_Promote`) — current baseline 122 metrics, **45 reconciles PASS / 120 OK / 2 OK(null)**, exit 0 (re-baselined after the patient-cohort feature added 5 cohort metrics).
 - [ ] Add a post-deploy smoke test against the web app
 - [ ] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers
 - [ ] Add a minimal E2E check for the embed flow
