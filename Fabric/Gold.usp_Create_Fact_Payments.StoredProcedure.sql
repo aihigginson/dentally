@@ -41,8 +41,6 @@ BEGIN
         fk_Date_Payment     BIGINT          NULL,
         Payment_Method      VARCHAR(100)    NULL,
         Payment_Amount      DECIMAL(12,2)   NULL,
-        Is_Deposit          BIT             NULL,
-        Deposit_Amount      DECIMAL(12,2)   NULL,
         DW_Created_At       datetime2(6)    NOT NULL,
         DW_Updated_At       datetime2(6)    NOT NULL
     );
