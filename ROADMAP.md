@@ -16,6 +16,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [ ] Restrict CORS to known origins (`Web/app.py:15`)
 - [ ] Return generic error responses to clients; log detail server-side (remove `str(e)` / `_error` leakage)
 - [ ] Run container as non-root (`Web/Dockerfile`); disable `debug=True` path (`Web/app.py:814`)
+- [x] Model-layer **RLS coverage guard** (`Scripts/Check_RLS_Coverage.ps1`, XMLA/ADOMD) — verifies the `RLS` role filters every tenant-bearing table; first run caught + closed 2 real leaks (`_NHS Claims`, `List NHS Contracts`); now green 29/29. _(Next: wire into CI; add the behavioral isolation test — needs the parked executeQueries/impersonation path.)_
 - [ ] Document the health-data compliance posture: encryption-at-rest, data-access auditing, retention/DSAR, backup/DR
 
 ## 2. Database release engineering  _(Critical — unblocks everything else)_
