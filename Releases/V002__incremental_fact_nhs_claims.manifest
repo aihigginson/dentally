@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V002 -- Incremental Gold pilot: Fact_NHS_Claims delta load
+# =====================================================================
+# Adds Gold.Load_Watermark and converts Fact_NHS_Claims to a watermark-driven
+# delta load (cost optimisation -- the costly #src build now processes only
+# changed claims instead of the full history). Fact_NHS_Claims is the naturally
+# "well-behaved" case: every column derives from the claim row + stable dim pks,
+# so a delta load is 1-1 with a full refresh.
+#
+# The establishing run uses @Full_Reload=1 to load all claims and seed the
+# watermark; subsequent loads are delta.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V002__incremental_fact_nhs_claims.manifest
+# =====================================================================
+
+# 1. Watermark infrastructure table (data-bearing, guarded create)
+MIGRATE  Migrations\V002__gold_load_watermark.sql
+
+# 2. Deploy the delta-aware load proc (references Gold.Load_Watermark -> must exist first)
+DEPLOY   Fabric\Gold.usp_Load_Fact_NHS_Claims.StoredProcedure.sql
+
+# 3. Establishing full reload -- loads all claims, seeds the watermark
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_NHS_Claims @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 4. Verify -- regression + reconciliation + RLS gate
+TEST
