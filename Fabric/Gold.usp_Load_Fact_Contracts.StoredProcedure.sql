@@ -7,6 +7,8 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID, NHS, PDS, UDA, UOA)
+--    *04     14/06/2026  AIH Incremental (watermark) delta load. Clean single-source fact
+--                            (Silver.Contracts + stable dim pks), so delta == full refresh.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Contracts @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Contracts]    Script Date: 20/04/2026 10:15:06 ******/
@@ -25,6 +27,7 @@ CREATE PROCEDURE [Gold].[usp_Load_Fact_Contracts]
     , @Run_Inserts   BIGINT OUT
     , @Run_Updates   BIGINT OUT
     , @Run_Deletes   BIGINT OUT
+    , @Full_Reload   BIT = 0
 )
 AS
 BEGIN
@@ -36,6 +39,17 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- Incremental watermark: process only Silver contracts changed since the
+        -- last successful load (DW_Updated_At is hash-gated, so this is an exact
+        -- delta). Missing watermark (first run) or @Full_Reload = 1 -> full load.
+        DECLARE @Run_Start datetime2(3) = SYSUTCDATETIME();
+        DECLARE @Watermark datetime2(3) =
+            CASE WHEN @Full_Reload = 1 THEN CONVERT(datetime2(3), '1900-01-01')
+                 ELSE ISNULL((SELECT Last_Loaded_At FROM Gold.Load_Watermark
+                              WHERE Entity_Name = 'Fact_Contracts'),
+                             CONVERT(datetime2(3), '1900-01-01'))
+            END;
 
         SELECT
             c.Tenant_ID                                                 AS Tenant_ID,
@@ -60,12 +74,15 @@ BEGIN
         LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = NULLIF(TRIM(c.Site_ID),'') AND dps.Tenant_ID = c.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s          ON dd_s.Full_Date = CAST(c.Start_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_e          ON dd_e.Full_Date = CAST(c.End_Date AS DATE)
-        WHERE c.Id IS NOT NULL;
+        WHERE c.Id IS NOT NULL
+          AND c.DW_Updated_At > @Watermark;   -- delta: only changed/new contracts
 
-        -- Remove rows no longer in source
+        -- Remove rows no longer in source. #src is now a DELTA, so orphan detection
+        -- runs against the FULL Silver key set (keys only -- cheap).
         DELETE tgt
         FROM Gold.Fact_Contracts tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_Contract_ID = tgt.bk_Contract_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Silver.Contracts s
+                          WHERE s.Id = tgt.bk_Contract_ID AND s.Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -142,6 +159,14 @@ BEGIN
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Contracts tgt WHERE tgt.bk_Contract_ID = src.bk_Contract_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- Advance the watermark only after a successful load (inside TRY).
+        UPDATE Gold.Load_Watermark
+           SET Last_Loaded_At = @Run_Start, DW_Updated_At = SYSUTCDATETIME()
+         WHERE Entity_Name = 'Fact_Contracts';
+        IF @@ROWCOUNT = 0
+            INSERT INTO Gold.Load_Watermark (Entity_Name, Last_Loaded_At, DW_Updated_At)
+            VALUES ('Fact_Contracts', @Run_Start, SYSUTCDATETIME());
 
         DROP TABLE #src;
         --*********************************

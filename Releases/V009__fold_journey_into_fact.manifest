@@ -1,0 +1,27 @@
+# =====================================================================
+# Release V009 -- Fold the appointment journey into the fact load
+# =====================================================================
+# Retires the separate Silver.Appointment_Journey_Attributes table/proc/pipeline
+# step. Booking + Appointment_Reason (the two static columns) are now computed
+# inside Gold.usp_Load_Fact_Appointments via a #journey preamble. Booking is
+# backward-looking (settled at create), so folding it in has no delta cost.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V009__fold_journey_into_fact.manifest
+# =====================================================================
+
+# 1. Fact load with the journey derivation folded in
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+
+# 2. Orchestration without the journey step
+DEPLOY  Fabric\Audit.usp_Load_All.sql
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+# 3. Drop the retired Silver journey table
+MIGRATE Migrations\V009__retire_journey_table.sql
+
+# 4. Reload Fact_Appointments (now computes Booking + Appointment_Reason itself)
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 5. Verify -- regression + reconciliation + RLS gate
+TEST

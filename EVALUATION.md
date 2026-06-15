@@ -39,11 +39,22 @@ This is health data (dental records = UK GDPR **special-category** data). The ba
 
 ---
 
-## [Critical] Database release engineering — the biggest maintainability risk
+## [Resolved 2026-06-14] Database release engineering — was the biggest maintainability risk
+
+**Status: addressed.** The original criticism (kept below) is resolved by the migration + manifest deployment system.
+
+- **Migration/versioning system in place.** `Migrations/Vnnn__*.sql` (forward-only, idempotent ALTERs) applied by `Scripts/Migrate.ps1`, tracked in a **`Migrate.Schema_Version`** state table (version, checksum, applied-at, success) so what's applied where is recorded. Data-preserving by design (no DROP/CREATE of populated tables).
+- **One standard runner replaces the ~25 bespoke scripts.** `Scripts/Deploy.ps1` applies a versioned, reviewable `Releases/Vnnn__*.manifest` of ordered, tagged actions (`MIGRATE`/`DEPLOY`/`EXEC`/`TEST`). The 24 one-off `Deploy_*.ps1`/`Patch_*.ps1` scripts have been **retired** (commit follows this edit); only the fresh-install bootstraps (`Deploy_To_Fabric.ps1`, `Migrate_Data_To_Fabric.ps1`) remain. The dead-`rfgx`-endpoint drift is gone with them.
+- **Non-interactive + CI.** Everything authenticates as the Test Runner **service principal** (no MFA/one-person dependency). `.github/workflows/deploy-warehouse.yml` runs a manifest then the `dw-tests` gate; `Run_Tests.ps1` provides regression/reconcile/RLS gating. (Note: live prod object changes are driven by Fabric pipelines; these scripts are the dev/release path.)
+- **Remaining nicety:** a state-based diff (SqlPackage/DACPAC) to auto-generate migrations from the target table definitions, instead of keeping `Fabric/*.Table.sql` and the `ALTER` migration in sync by hand.
+
+<details><summary>Original criticism (now resolved)</summary>
 
 - **There is no migration / versioning system for the warehouse.** Releases are ~25 hand-authored, accreting `Deploy_*.ps1` scripts (`Deploy_Gold_Only`, `Deploy_Fix_Recalls_SP`, `Deploy_KPI_Snapshot`, `Deploy_Fix_Journey_Issues`, ...). There is **no schema-migration state table**, so nothing records what has been applied to which environment. Proof: most of those scripts still point at the **dead `rfgx...` tenant endpoint** — they drift because there is no single source of truth.
 - **DB deploys are fully manual and interactive** (one person's MFA). No CI, no reproducibility, high bus factor. (The service-principal + `Scripts/Run_Tests.ps1` work is the first step out of this.)
 - **Recommendation:** adopt a real migration tool (Flyway / DbUp / sqlpackage-style) with versioned, ordered, idempotent migrations and a `schema_version` table, run from CI against dev -> prod. Retire the one-off scripts.
+
+</details>
 
 ---
 

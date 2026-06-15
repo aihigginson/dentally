@@ -12,6 +12,7 @@
 --                             replaces Patient_Stats API value which cannot guarantee cancelled appts are excluded
 --    *06     22/05/2026  AIH Add Patient_Count (1 for real rows, 0 for sentinel) for use in SUM-based measures
 --    *07     29/05/2026  AIH Add fk_Acquisition_Source snowflake FK to Gold.Dim_Acquisition_Sources
+--    *08     14/06/2026  AIH Add Is_Email_Missing + Is_Phone_Missing (phone missing = both mobile and home absent)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -109,7 +110,10 @@ BEGIN
             TRY_CAST(ps.NHS_Exemption_Code AS INT)                                                  AS NHS_Exemption_Code,
             TRY_CAST(p.Created_At AS DATE)                                                          AS Patient_Created_Date,
             TRY_CAST(p.Updated_At AS DATE)                                                          AS Patient_Updated_Date,
-            CAST(1 AS INT)                                                                          AS Patient_Count
+            CAST(1 AS INT)                                                                          AS Patient_Count,
+            CASE WHEN NULLIF(TRIM(p.Email_Address),'') IS NULL THEN 1 ELSE 0 END                     AS Is_Email_Missing,
+            CASE WHEN NULLIF(TRIM(p.Mobile_Phone),'') IS NULL
+                  AND NULLIF(TRIM(p.Home_Phone),'')   IS NULL THEN 1 ELSE 0 END                      AS Is_Phone_Missing
         INTO #src
         FROM Silver.Patients p
         LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_ID = p.Patient_ID AND ps.Tenant_ID = p.Tenant_ID
@@ -184,6 +188,8 @@ BEGIN
             Total_Invoiced                      = src.Total_Invoiced,
             NHS_Exemption_Code                  = src.NHS_Exemption_Code,
             Patient_Updated_Date                = src.Patient_Updated_Date,
+            Is_Email_Missing                    = src.Is_Email_Missing,
+            Is_Phone_Missing                    = src.Is_Phone_Missing,
             DW_Updated_At                       = SYSUTCDATETIME()
         FROM Gold.Dim_Patients tgt
         INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -234,7 +240,9 @@ BEGIN
            ISNULL(CAST(tgt.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Phone_Missing] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Account_ID] AS VARCHAR(500)), ''),
@@ -283,7 +291,9 @@ BEGIN
            ISNULL(CAST(src.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Phone_Missing] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -293,7 +303,7 @@ BEGIN
             pk_Patient,
             Tenant_ID, Patient_ID, Account_ID, Title, First_Name, Middle_Name, Last_Name, Preferred_Name, Full_Name,
             Date_Of_Birth, Age_Years, Gender_Description, Ethnicity_Code,
-            NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone,
+            NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone, Is_Email_Missing, Is_Phone_Missing,
             Address_Line_1, Address_Line_2, Town, County, Postcode,
             Active, Medical_Alert, Medical_Alert_Text, Payment_Plan_ID, Site_ID, Family_ID,
             Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
@@ -312,7 +322,7 @@ BEGIN
             src.Tenant_ID, src.Patient_ID, src.Account_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name,
             src.Preferred_Name, src.Full_Name, src.Date_Of_Birth, src.Age_Years,
             src.Gender_Description, src.Ethnicity_Code, src.NHS_Number, src.NI_Number, src.Email_Address,
-            src.Home_Phone, src.Mobile_Phone, src.Work_Phone,
+            src.Home_Phone, src.Mobile_Phone, src.Work_Phone, src.Is_Email_Missing, src.Is_Phone_Missing,
             src.Address_Line_1, src.Address_Line_2, src.Town, src.County, src.Postcode,
             src.Active, src.Medical_Alert, src.Medical_Alert_Text, src.Payment_Plan_ID, src.Site_ID, src.Family_ID,
             src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,

@@ -169,3 +169,18 @@ VALUES
 ,('GOLD_FKNULL_AGGPRACCUR_PRACTITIONER_T11','FK Null','Gold','count','SELECT COUNT(*) FROM Gold.Aggregate_Site_Practitioner_Current WHERE Tenant_ID = 11 AND fk_Practitioner IS NULL','NULL count of fk_Practitioner in Gold.Aggregate_Site_Practitioner_Current (tenant 11)',1)
 ,('GOLD_FKNULL_DIMPAT_ACQUISITION_SOURCE_T11','FK Null','Gold','count','SELECT COUNT(*) FROM Gold.Dim_Patients WHERE Tenant_ID = 11 AND fk_Acquisition_Source IS NULL','NULL count of fk_Acquisition_Source in Gold.Dim_Patients (tenant 11)',1)
 GO
+
+-- =====================================================================
+-- Patient cohort metrics (mirror the Patient Cohorts DAX measures).
+-- Distinct patients meeting a condition, Tenant 11. Depend on the cohort
+-- flags (V001 migration) being applied + Gold reloaded.
+-- =====================================================================
+INSERT INTO [Test].[Metric_Definition]
+    ([Metric_Name], [Metric_Group], [Layer], [Value_Type], [SQL_Text], [Description], [Is_Active])
+VALUES
+ ('GOLD_PATIENTS_WITH_DISCOUNT_T11','KPI Value','Gold','count','SELECT COUNT(DISTINCT f.fk_Patient) FROM Gold.Fact_Invoice_Items f JOIN Gold.Invoice_Discount d ON d.Tenant_ID = f.Tenant_ID AND d.Invoice_ID = f.Invoice_ID WHERE f.Tenant_ID = 11','Distinct patients with a discounted invoice (positive set)',1)
+,('GOLD_PATIENTS_WITH_OUTSTANDING_T11','KPI Value','Gold','count','SELECT COUNT(DISTINCT fk_Patient) FROM Gold.Fact_Invoice_Items WHERE Tenant_ID = 11 AND Is_Invoice_Outstanding = 1','Distinct patients with an outstanding invoice',1)
+,('GOLD_PATIENTS_WITH_DEPOSIT_T11','KPI Value','Gold','count','SELECT COUNT(DISTINCT f.fk_Patient) FROM Gold.Fact_Payments f JOIN Gold.Payment_Deposit d ON d.Tenant_ID = f.Tenant_ID AND d.Payment_ID = f.bk_Payment_ID WHERE f.Tenant_ID = 11','Distinct patients who left a deposit (positive set)',1)
+,('GOLD_PATIENTS_EMAIL_NOT_CAPTURED_T11','KPI Value','Gold','count','SELECT COUNT(DISTINCT a.fk_Patient) FROM Gold.Fact_Appointments a JOIN Gold.Dim_Patients p ON p.pk_Patient = a.fk_Patient AND p.Tenant_ID = a.Tenant_ID WHERE a.Tenant_ID = 11 AND a.Is_Arrived = 1 AND p.Is_Email_Missing = 1','Distinct attended patients still missing email',1)
+,('GOLD_PATIENTS_PHONE_NOT_CAPTURED_T11','KPI Value','Gold','count','SELECT COUNT(DISTINCT a.fk_Patient) FROM Gold.Fact_Appointments a JOIN Gold.Dim_Patients p ON p.pk_Patient = a.fk_Patient AND p.Tenant_ID = a.Tenant_ID WHERE a.Tenant_ID = 11 AND a.Is_Arrived = 1 AND p.Is_Phone_Missing = 1','Distinct attended patients still missing phone',1)
+GO

@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V003 -- Gold view layer: PBI views 1-1 from Gold views AND tables
+# =====================================================================
+# Architecture: processing lives in a Gold VIEW; the PBI view is a purely
+# cosmetic 1-1 wrapper of a Gold table OR a Gold view (no logic in the PBI layer).
+#
+# Demonstrated with the time-derived Aged_Debt_Band: Gold.vw_Fact_Invoice_Items
+# computes it LIVE (never stale under deltas). Meta.usp_Create_Gold_Views now wraps
+# Gold views 1-1 like tables, with vw_<X> superseding table <X> -> PBI.[_Invoice
+# Items] is regenerated from the view (same columns, live aged band).
+#
+# No schema change (additive view + generator proc), so no migration.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V003__gold_view_layer.manifest
+# =====================================================================
+
+# 1. The Gold computed view (presentation source for Fact_Invoice_Items)
+DEPLOY  Fabric\Gold.vw_Fact_Invoice_Items.View.sql
+
+# 2. The enhanced PBI view generator (handles Gold views + vw_ supersede)
+DEPLOY  Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+
+# 3. Regenerate the PBI views (now _Invoice Items sources from the Gold view)
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# 4. Verify -- regression + reconciliation + RLS gate
+TEST

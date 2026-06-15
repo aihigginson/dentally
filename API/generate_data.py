@@ -2037,86 +2037,93 @@ def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.01, ramp_days=30
     t = min(1.0, days_since_due / ramp_days)
     return rate_recent + (rate_old - rate_recent) * t
 
-def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng):
-    tid = tdef["tenant_id"]
-    nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
-    today = date.today()
+def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed):
+    """One recall record (dental or hygiene) with realistic reminder/suppression state."""
     reminder_lead = timedelta(days=42)   # first reminder 6 weeks before due
     second_lead   = timedelta(days=14)   # second reminder 2 weeks before due
+    status = "Overdue" if due_date < today else "Pending"   # TitleCase to match real API
+    # Reminders are sent once within the window; a ramping proportion are suppressed
+    # to simulate unactioned / partially-actioned recalls.
+    first_sent  = due_date - reminder_lead
+    second_sent = due_date - second_lead
+    has_first_window  = first_sent  <= today
+    has_second_window = second_sent <= today and due_date < today   # 2nd only sent for overdue
+    if has_first_window:
+        suppress_first = rng.random() < _suppress_rate(max(0, (today - first_sent).days))
+    else:
+        suppress_first = False
+    has_first = has_first_window and not suppress_first
+    if has_second_window and has_first:
+        suppress_second = rng.random() < _suppress_rate(max(0, (today - second_sent).days))
+    else:
+        suppress_second = False
+    has_second = has_second_window and has_first and not suppress_second
+    first_sent_at  = _iso(first_sent)  if has_first  else None
+    second_sent_at = _iso(second_sent) if has_second else None
+    last_reminded  = second_sent_at if has_second else first_sent_at
+    latest_type    = ("Letter" if has_second else "SMS") if (has_first or has_second) else None
+    times_contacted = (2 if has_second else 1) if has_first else 0
+    return {
+        "id":                      _u5(id_seed, tid, pid),
+        "patient_id":              pid,
+        "site_id":                 site_id,
+        "due_date":                str(due_date),
+        "recall_type":             recall_type,
+        "recall_method":           "SMS",
+        "status":                  status,
+        "appointment_id":          None,
+        "prebooked":               False,
+        "first_reminder_sent_at":  first_sent_at,
+        "first_reminder_type":     "SMS"    if has_first  else None,
+        "second_reminder_sent_at": second_sent_at,
+        "second_reminder_type":    "Letter" if has_second else None,
+        "last_reminded_at":        last_reminded,
+        "latest_reminder_type":    latest_type,
+        "times_contacted":         times_contacted,
+        "run_date":                None,
+        "workflow_status":         "unprocessed",
+        "workflow_stage_id":       None,
+        "first_reminder_id":       None,
+        "second_reminder_id":      None,
+    }
+
+
+def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
+    # Dental and hygiene recalls run COMPLETELY SEPARATELY -- a patient can have
+    # either, neither, or both, depending on whether they attend for exams and/or
+    # hygiene. Cadence (months from the last completed visit of that type):
+    #   Dental  : 6-18, heavy on 6 and 12 (based on dental need).
+    #   Hygiene : 3 / 6 / 12, most common 6 then 3.
+    # As in Dentally, a recall is deleted once the patient reattends for that type
+    # after the due date, so those are skipped.
+    tid = tdef["tenant_id"]
+    today = date.today()
+    exam_tx_ids    = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
+    hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
     recalls = []
     for pat in patients:
         pid = pat["id"]
-        pp_id = pat["payment_plan_id"]
-        all_apts = sorted(apts_by_pat.get(pid, []), key=lambda a: a["start_time"])
-        completed = [a for a in all_apts if a["state"] == "completed"]
+        completed = sorted(
+            [a for a in apts_by_pat.get(pid, []) if a["state"] == "completed"],
+            key=lambda a: a["start_time"])
         if not completed:
             continue
-        last_date = date.fromisoformat(completed[-1]["start_time"][:10])
-        interval = 6 if pp_id == nhs_pp_id else 12
-        due_date = _add_months(last_date, interval)
-        # Skip patients who have reattended after their recall date — Dentally deletes the recall
-        has_reattended = any(
-            date.fromisoformat(a["start_time"][:10]) >= due_date
-            for a in completed
-        )
-        if has_reattended:
-            continue
-        # Status — TitleCase to match real API
-        status = "Overdue" if due_date < today else "Pending"
-        # Reminder dates — sent once the recall is within the reminder window.
-        # A small proportion are suppressed to simulate unactioned / partially-actioned recalls.
-        # Rate ramps from 15% (due this week / reminder newly due) down to 1% (30+ days ago).
-        first_sent  = due_date - reminder_lead
-        second_sent = due_date - second_lead
-        has_first_window  = first_sent  <= today
-        has_second_window = second_sent <= today and due_date < today   # 2nd only sent for overdue
+        exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
+        hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
 
-        if has_first_window:
-            days_since_first = max(0, (today - first_sent).days)
-            p_skip_first = _suppress_rate(days_since_first)
-            suppress_first = rng.random() < p_skip_first
-        else:
-            suppress_first = False
+        # ── Dental recall (only if the patient attends for exams) ──
+        if exams:
+            last_exam = date.fromisoformat(exams[-1]["start_time"][:10])
+            d_due = _add_months(last_exam, rng.choices([6, 9, 12, 15, 18], weights=[38, 8, 38, 8, 8])[0])
+            if not any(date.fromisoformat(a["start_time"][:10]) >= d_due for a in exams):
+                recalls.append(_build_recall(tid, pid, pat["site_id"], "Dentist", d_due, today, rng, "recall"))
 
-        has_first  = has_first_window  and not suppress_first
-
-        if has_second_window and has_first:
-            days_since_second = max(0, (today - second_sent).days)
-            p_skip_second = _suppress_rate(days_since_second)
-            suppress_second = rng.random() < p_skip_second
-        else:
-            suppress_second = False
-
-        has_second = has_second_window and has_first and not suppress_second
-
-        first_sent_at  = _iso(first_sent)  if has_first  else None
-        second_sent_at = _iso(second_sent) if has_second else None
-        last_reminded  = second_sent_at if has_second else first_sent_at
-        latest_type    = ("Letter" if has_second else "SMS") if (has_first or has_second) else None
-        times_contacted = (2 if has_second else 1) if has_first else 0
-        recalls.append({
-            "id":                      _u5("recall", tid, pid),
-            "patient_id":              pid,
-            "site_id":                 pat["site_id"],
-            "due_date":                str(due_date),
-            "recall_type":             "Dentist",
-            "recall_method":           "SMS",
-            "status":                  status,
-            "appointment_id":          None,
-            "prebooked":               False,
-            "first_reminder_sent_at":  first_sent_at,
-            "first_reminder_type":     "SMS"    if has_first  else None,
-            "second_reminder_sent_at": second_sent_at,
-            "second_reminder_type":    "Letter" if has_second else None,
-            "last_reminded_at":        last_reminded,
-            "latest_reminder_type":    latest_type,
-            "times_contacted":         times_contacted,
-            "run_date":                None,
-            "workflow_status":         "unprocessed",
-            "workflow_stage_id":       None,
-            "first_reminder_id":       None,
-            "second_reminder_id":      None,
-        })
+        # ── Hygiene recall (only if the patient attends for hygiene) ──
+        if hygiene_apts:
+            last_hyg = date.fromisoformat(hygiene_apts[-1]["start_time"][:10])
+            h_due = _add_months(last_hyg, rng.choices([3, 6, 12], weights=[30, 55, 15])[0])
+            if not any(date.fromisoformat(a["start_time"][:10]) >= h_due for a in hygiene_apts):
+                recalls.append(_build_recall(tid, pid, pat["site_id"], "Hygiene", h_due, today, rng, "recall_hyg"))
     return recalls
 
 # ─── PATIENT RECALL DATE ENRICHMENT ─────────────────────────────────────────
@@ -2289,7 +2296,7 @@ def generate_tenant(tdef):
         pay_by_pat.setdefault(p["patient_id"], []).append(p)
 
     patient_stats      = gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat)
-    recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, rng)
+    recalls            = gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng)
     patient_referrals  = gen_patient_referrals(tdef, patients, apts_by_pat, rng)
 
     # Link booked recall appointments back to their recall records
@@ -2300,7 +2307,7 @@ def generate_tenant(tdef):
     }
     for r in recalls:
         booked_apt = _recall_apt_by_patient.get(r["patient_id"])
-        if booked_apt:
+        if booked_apt and r["recall_type"] == "Dentist":   # Recall Examination is a dental booking
             r["appointment_id"] = booked_apt
 
     return {

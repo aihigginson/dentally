@@ -1,0 +1,42 @@
+# =====================================================================
+# Release V008 -- Appointments journey: move Delay/Next/Current_State to DAX
+# =====================================================================
+# Trims the appointment journey to the two STATIC columns (Booking,
+# Appointment_Reason) and drops Delay / Next_Appointment / Current_State from
+# both Silver.Appointment_Journey_Attributes and Gold.Fact_Appointments. Those
+# three move to DAX (appointment self-relationship + Recalls, with an
+# Include/Exclude hygiene toggle); Current_State is simplified to "In Recall
+# Process" with the recall detail going to its own report.
+#
+# DOWNSTREAM: PBI.[_Appointments Sankey] is removed (it was built from the dropped
+# columns) and the Schedule report's Sankey visual will be down until the DAX
+# rebuild. This makes Fact_Appointments delta-PURE (the watermark delta is a
+# later follow-up -- its journey-attrs source is full-recompute and needs
+# hash-gating first).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V008__appointments_journey_to_dax.manifest
+# =====================================================================
+
+# 1. Trimmed Silver journey load (Booking + Appointment_Reason only)
+DEPLOY  Fabric\Silver.usp_Load_Appointment_Journey_Attributes.StoredProcedure.sql
+
+# 2. Trimmed Gold fact load (no Delay/Next/Current_State)
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+
+# 3. Generator with the Sankey view removed
+DEPLOY  Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+
+# 4. Drop the three columns from both tables
+MIGRATE Migrations\V008__appointments_journey_to_dax.sql
+
+# 5. Reload Silver journey (repopulate Booking + Appointment_Reason)
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Appointment_Journey_Attributes @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 6. Reload Fact_Appointments (Booking + Appointment_Reason from journey)
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 7. Regenerate PBI views (drops the old Sankey; _Appointments loses the 3 columns)
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# 8. Verify -- regression + reconciliation + RLS gate
+TEST

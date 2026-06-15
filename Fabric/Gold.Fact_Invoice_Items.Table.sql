@@ -35,7 +35,7 @@ CREATE TABLE [Gold].[Fact_Invoice_Items](
 	[Invoice_Amount] [decimal](12, 2) NULL,
 	[Invoice_Amount_Outstanding] [decimal](12, 2) NULL,
 	[Invoice_NHS_Amount] [decimal](12, 2) NULL,
-	[Aged_Debt_Band] [VARCHAR](20) NULL,
+	[Is_Invoice_Outstanding] [bit] NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

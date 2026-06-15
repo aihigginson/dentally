@@ -1,0 +1,34 @@
+# =====================================================================
+# Release V007 -- Fact_Payments: delta-pure (deposit positive table) + delta
+# =====================================================================
+# Decouples the rare deposit (Is_Deposit / Deposit_Amount) to a tiny positive table
+# Gold.Payment_Deposit (LEFT JOINed in Gold.vw_Fact_Payments). With the cross-entity
+# deposit out of the fact, Fact_Payments is a CLEAN single-source delta
+# (p.DW_Updated_At > watermark) -- so this release does both the delta-pure refactor
+# and the delta conversion. Gold.Load_Watermark already exists (V002).
+#
+# Order: positive table + view + load must exist (and stop referencing the columns)
+# BEFORE the migration drops them. Establishing run uses @Full_Reload=1.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V007__incremental_fact_payments.manifest
+# =====================================================================
+
+# 1. Tiny positive table for deposit payments (guarded create)
+DEPLOY  Fabric\Gold.Payment_Deposit.Table.sql
+
+# 2. View: Is_Deposit / Deposit_Amount via LEFT JOIN to the positive set
+DEPLOY  Fabric\Gold.vw_Fact_Payments.View.sql
+
+# 3. Load proc: deposit decoupled + single-source watermark delta; rebuilds the positive set
+DEPLOY  Fabric\Gold.usp_Load_Fact_Payments.StoredProcedure.sql
+
+# 4. Drop the two deposit columns from the table (now unreferenced)
+MIGRATE Migrations\V007__payments_delta_pure.sql
+
+# 5. Establishing full reload -- repopulate + build Payment_Deposit + seed watermark
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Payments @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 6. Regenerate PBI views (PBI.[_Payments] now from the view, same columns)
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# 7. Verify -- the deposit metric (rewritten to the positive set) must still match baseline
+TEST

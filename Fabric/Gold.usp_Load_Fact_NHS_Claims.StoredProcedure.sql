@@ -5,6 +5,12 @@
 --  Initital Date    :  03/06/2026
 --  History          :
 --    *01     03/06/2026  AIH Initial Release
+--    *02     14/06/2026  AIH Incremental (watermark) delta load -- PILOT for incremental Gold (cost).
+--                            Reads Gold.Load_Watermark; #src filtered to Silver claims with
+--                            DW_Updated_At > watermark (full when @Full_Reload=1 or no watermark
+--                            yet). Orphan deletes via key-only anti-join vs full Silver. Watermark
+--                            advanced on success. Correct because every fact column derives only
+--                            from the claim row + stable dim pks (no cross-entity derivation).
 --  To Run           :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_NHS_Claims @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_NHS_Claims]    Script Date: 03/06/2026 ******/
@@ -23,6 +29,7 @@ CREATE PROCEDURE [Gold].[usp_Load_Fact_NHS_Claims]
     , @Run_Inserts   BIGINT OUT
     , @Run_Updates   BIGINT OUT
     , @Run_Deletes   BIGINT OUT
+    , @Full_Reload   BIT = 0
 )
 AS
 BEGIN
@@ -34,6 +41,19 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- Incremental watermark: process only Silver claims changed since the last
+        -- successful load. Silver bumps DW_Updated_At only on real content change
+        -- (hash-gated), and every fact column derives solely from the claim row +
+        -- stable dim pks, so DW_Updated_At > watermark is an exact delta. A missing
+        -- watermark (first run) or @Full_Reload = 1 processes everything.
+        DECLARE @Run_Start datetime2(3) = SYSUTCDATETIME();
+        DECLARE @Watermark datetime2(3) =
+            CASE WHEN @Full_Reload = 1 THEN CONVERT(datetime2(3), '1900-01-01')
+                 ELSE ISNULL((SELECT Last_Loaded_At FROM Gold.Load_Watermark
+                              WHERE Entity_Name = 'Fact_NHS_Claims'),
+                             CONVERT(datetime2(3), '1900-01-01'))
+            END;
 
         SELECT
             nc.Tenant_ID,
@@ -74,12 +94,15 @@ BEGIN
         LEFT JOIN Gold.Dim_NHS_Contracts dnc    ON dnc.bk_Contract_ID   = NULLIF(TRIM(nc.Contract_ID), '')  AND dnc.Tenant_ID = nc.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_sub          ON dd_sub.Full_Date     = nc.Submitted_Date
         LEFT JOIN Gold.Dim_Date dd_app          ON dd_app.Full_Date     = nc.Approval_Date
-        WHERE nc.NHS_Claim_ID IS NOT NULL;
+        WHERE nc.NHS_Claim_ID IS NOT NULL
+          AND nc.DW_Updated_At > @Watermark;   -- delta: only changed/new claims
 
-        -- Remove rows no longer in source
+        -- Remove rows no longer in source. #src is now a DELTA, so orphan detection
+        -- runs against the FULL Silver key set (keys only -- no dim joins, cheap).
         DELETE tgt
         FROM Gold.Fact_NHS_Claims tgt
-        WHERE NOT EXISTS (SELECT 1 FROM #src WHERE bk_NHS_Claim_ID = tgt.bk_NHS_Claim_ID AND Tenant_ID = tgt.Tenant_ID);
+        WHERE NOT EXISTS (SELECT 1 FROM Silver.NHS_Claims s
+                          WHERE s.NHS_Claim_ID = tgt.bk_NHS_Claim_ID AND s.Tenant_ID = tgt.Tenant_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -184,6 +207,15 @@ BEGIN
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_NHS_Claims tgt WHERE tgt.bk_NHS_Claim_ID = src.bk_NHS_Claim_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- Advance the watermark only after a successful load (still inside TRY, so a
+        -- failure leaves it unchanged and the next run safely re-processes).
+        UPDATE Gold.Load_Watermark
+           SET Last_Loaded_At = @Run_Start, DW_Updated_At = SYSUTCDATETIME()
+         WHERE Entity_Name = 'Fact_NHS_Claims';
+        IF @@ROWCOUNT = 0
+            INSERT INTO Gold.Load_Watermark (Entity_Name, Last_Loaded_At, DW_Updated_At)
+            VALUES ('Fact_NHS_Claims', @Run_Start, SYSUTCDATETIME());
 
         DROP TABLE #src;
 

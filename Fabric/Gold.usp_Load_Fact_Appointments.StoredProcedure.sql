@@ -13,6 +13,12 @@
 --    *07     31/05/2026  AIH Join to Silver.Appointment_Journey_Attributes (renamed from Attrs);
 --                            rename This_Visit->Appointment_Reason, Next_Visit->Next_Appointment,
 --                            Future_Appointment->Current_State; add Delay phase
+--    *08     15/06/2026  AIH Drop Delay / Next_Appointment / Current_State -- moved to DAX (computed
+--                            from the appointment self-relationship + Recalls, with a hygiene toggle).
+--                            Keep Booking + Appointment_Reason (static). Table is now delta-pure.
+--    *09     15/06/2026  AIH Fold the journey derivation in (#journey preamble) -- Booking +
+--                            Appointment_Reason computed here; retired the separate
+--                            Silver.Appointment_Journey_Attributes table/proc/pipeline step.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -42,6 +48,73 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- ── Journey attributes (folded in from the former Silver derived table) ──
+        -- Booking + Appointment_Reason are STATIC, backward-looking attributes of an
+        -- appointment (referral / first-visit / BBYL / online / reception, and the
+        -- reason-map category). Computed here so there is no separate Silver derived
+        -- table/proc/pipeline step. Booking only ever looks at the patient's PAST, so
+        -- it is settled at create and never changes.
+        DROP TABLE IF EXISTS #appts;
+        DROP TABLE IF EXISTS #first_attended;
+        DROP TABLE IF EXISTS #referrals;
+        DROP TABLE IF EXISTS #journey;
+
+        SELECT
+            a.Tenant_ID, a.Appointment_ID, a.Patient_ID, a.Reason, a.Booked_Via_API,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 23) AS datetime2(3)) AS Start_DT,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Completed_At), ''), 23) AS datetime2(3)) AS Completed_DT,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Pending_At), ''), 23) AS datetime2(3)) AS Pending_DT
+        INTO #appts
+        FROM Silver.Appointments a
+        WHERE a.Appointment_ID IS NOT NULL;
+
+        SELECT Tenant_ID, Patient_ID, MIN(Appointment_ID) AS First_Appt_ID
+        INTO #first_attended FROM #appts WHERE Completed_DT IS NOT NULL GROUP BY Tenant_ID, Patient_ID;
+
+        SELECT Tenant_ID, Patient_ID, MIN(COALESCE(Created_At, DW_Created_At)) AS Earliest_Referral_DT
+        INTO #referrals FROM Silver.Patient_Referrals GROUP BY Tenant_ID, Patient_ID;
+
+        SELECT
+            a.Tenant_ID,
+            a.Appointment_ID,
+            CASE
+                WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New'-- - ' + COALESCE(iam.Standard_Acquisition_Source, aqs.Name)
+                WHEN a.Booked_Via_API = 1
+                     AND prev_appt.Prev_Date IS NOT NULL
+                     AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
+                WHEN a.Booked_Via_API = 1                                  THEN 'Online'
+                ELSE 'Reception'
+            END AS Booking,
+            COALESCE(arm_this.Category, NULLIF(TRIM(a.Reason), '')) AS Appointment_Reason
+        INTO #journey
+        FROM #appts a
+        LEFT JOIN #first_attended  fa   ON fa.Tenant_ID  = a.Tenant_ID  AND fa.Patient_ID  = a.Patient_ID
+        LEFT JOIN #referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_ID = a.Patient_ID
+        LEFT JOIN Silver.Patients  pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_ID = a.Patient_ID
+        LEFT JOIN Silver.Acquisition_Sources     aqs ON aqs.Tenant_ID = pat.Tenant_ID AND aqs.Acquisition_Source_ID = pat.Acquisition_Source_ID
+        LEFT JOIN Input.Acquisition_Source_Map  iam ON iam.Tenant_ID = pat.Tenant_ID AND iam.Source_Acquisition_Source = aqs.Name
+        LEFT JOIN Silver.Appointment_Reason_Map arm_this ON arm_this.Reason_Text = NULLIF(TRIM(a.Reason), '')
+        OUTER APPLY (
+            SELECT TOP 1 CAST(pa.Start_DT AS DATE) AS Prev_Date
+            FROM #appts pa
+            WHERE pa.Tenant_ID = a.Tenant_ID AND pa.Patient_ID = a.Patient_ID
+              AND pa.Completed_DT IS NOT NULL AND pa.Start_DT < a.Start_DT
+            ORDER BY pa.Start_DT DESC, pa.Appointment_ID DESC
+        ) prev_appt
+        OUTER APPLY (
+            SELECT TOP 1 ra.Appointment_ID
+            FROM #appts ra
+            WHERE ref.Earliest_Referral_DT IS NOT NULL
+              AND ra.Tenant_ID = a.Tenant_ID AND ra.Patient_ID = a.Patient_ID
+              AND ra.Start_DT >= ref.Earliest_Referral_DT
+            ORDER BY ra.Start_DT, ra.Appointment_ID
+        ) ref_appt;
+
+        DROP TABLE IF EXISTS #appts;
+        DROP TABLE IF EXISTS #first_attended;
+        DROP TABLE IF EXISTS #referrals;
 
         SELECT
             a.Tenant_ID                                                 AS Tenant_ID,
@@ -96,10 +169,7 @@ BEGIN
             END                                                         AS In_Surgery_Mins,
 
             ja.Booking                                                  AS Booking,
-            ja.Appointment_Reason                                       AS Appointment_Reason,
-            ja.Delay                                                    AS Delay,
-            ja.Next_Appointment                                         AS Next_Appointment,
-            ja.Current_State                                            AS Current_State
+            ja.Appointment_Reason                                       AS Appointment_Reason
         INTO #src
         FROM Silver.Appointments a
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
@@ -111,8 +181,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
         LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Silver.Appointment_Journey_Attributes ja
-                                                ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
+        LEFT JOIN #journey ja                   ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -156,9 +225,6 @@ BEGIN
             In_Surgery_Mins         = src.In_Surgery_Mins,
             Booking                 = src.Booking,
             Appointment_Reason      = src.Appointment_Reason,
-            Delay                   = src.Delay,
-            Next_Appointment        = src.Next_Appointment,
-            Current_State           = src.Current_State,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Appointments tgt
         INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -195,10 +261,7 @@ BEGIN
            ISNULL(CAST(tgt.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Delay] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Next_Appointment] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Current_State] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
@@ -233,10 +296,7 @@ BEGIN
            ISNULL(CAST(src.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Delay] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Next_Appointment] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Current_State] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -251,7 +311,7 @@ BEGIN
             Start_Time, Finish_Time, Pending_At,
             Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived,
             Duration_Mins, Waiting_Mins, In_Surgery_Mins,
-            Booking, Appointment_Reason, Delay, Next_Appointment, Current_State,
+            Booking, Appointment_Reason,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -264,13 +324,14 @@ BEGIN
             src.Start_Time, src.Finish_Time, src.Pending_At,
             src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived,
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
-            src.Booking, src.Appointment_Reason, src.Delay, src.Next_Appointment, src.Current_State,
+            src.Booking, src.Appointment_Reason,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+        DROP TABLE IF EXISTS #journey;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

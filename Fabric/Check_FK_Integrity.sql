@@ -14,7 +14,7 @@
 --         rows visible, real Fact rows vanish.
 --
 --   2. -1 seed row missing from a Dim
---      => Deploy_To_Fabric drops the table; seed row only
+--      => a full table rebuild drops the table; seed row only
 --         comes back when the load SP runs. Fact rows with
 --         fk_* = -1 lose their Dim match.
 --

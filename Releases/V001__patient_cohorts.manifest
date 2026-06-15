@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V001 -- Patient cohort flags
+# =====================================================================
+# Adds the patient-cohort BIT flags, populates them, and surfaces them to
+# Power BI:
+#   Fact_Invoice_Items : Is_Discount, Is_Invoice_Outstanding
+#   Dim_Patients       : Is_Email_Missing, Is_Phone_Missing
+#
+# Run:    .\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest
+# Dry:    .\Scripts\Deploy.ps1 -Manifest Releases\V001__patient_cohorts.manifest -WhatIf
+#
+# Tags:   MIGRATE = tracked schema delta (once)   DEPLOY = (re)create object
+#         EXEC    = run T-SQL                      TEST   = regression gate
+# =====================================================================
+
+# 1. Schema delta -- add the flag columns (data-preserving, applied once)
+MIGRATE  Migrations\V001__patient_cohort_flags.sql
+
+# 2. (Re)deploy the load procs that compute + populate the flags
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+
+# 3. Reload Gold so the new columns backfill (dims before facts)
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Invoice_Items @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 4. Regenerate the PBI presentation views (metadata-driven; new cols auto-surface)
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# 5. Verify -- regression + reconciliation + RLS gate
+TEST
