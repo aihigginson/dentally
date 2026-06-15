@@ -55,8 +55,8 @@ IF( NOT ISBLANK(cur) && NOT ISBLANK(pat),
             '_Appointments'[fk Patient]  = pat
             && '_Appointments'[Tenant ID] = tid
             && '_Appointments'[Start Time] > cur
-            && '_Appointments'[Is Cancelled] = 0
-            && '_Appointments'[Is DNA]       = 0
+            && '_Appointments'[Is Cancelled] = FALSE()
+            && '_Appointments'[Is DNA]       = FALSE()
             && ( NOT exclHyg || '_Appointments'[Appointment Reason] <> ""Hygiene"" )
         )
     )
@@ -89,8 +89,8 @@ VAR reason  =
             '_Appointments'[fk Patient]  = pat
             && '_Appointments'[Tenant ID] = tid
             && '_Appointments'[Start Time] = nxt
-            && '_Appointments'[Is Cancelled] = 0
-            && '_Appointments'[Is DNA]       = 0 )
+            && '_Appointments'[Is Cancelled] = FALSE()
+            && '_Appointments'[Is DNA]       = FALSE() )
     )
 RETURN
 SWITCH( TRUE(),
@@ -113,18 +113,18 @@ VAR baseFilter =
 -- a later COMPLETED visit exists
 VAR seenAgain =
     CALCULATE( COUNTROWS('_Appointments'),
-        baseFilter, '_Appointments'[Is Completed] = 1 ) > 0
+        baseFilter, '_Appointments'[Is Completed] = TRUE() ) > 0
 -- the chronologically next ACTIVE (uncompleted, non-cancelled, non-DNA) booking
 VAR nextActiveStart =
     CALCULATE( MIN('_Appointments'[Start Time]),
-        baseFilter, '_Appointments'[Is Completed] = 0,
-        '_Appointments'[Is Cancelled] = 0, '_Appointments'[Is DNA] = 0 )
+        baseFilter, '_Appointments'[Is Completed] = FALSE(),
+        '_Appointments'[Is Cancelled] = FALSE(), '_Appointments'[Is DNA] = FALSE() )
 VAR nextActiveBooking =
     CALCULATE( MIN('_Appointments'[Booking]),
         ALL('_Appointments'),
         '_Appointments'[fk Patient]  = pat, '_Appointments'[Tenant ID] = tid,
         '_Appointments'[Start Time] = nextActiveStart,
-        '_Appointments'[Is Completed] = 0, '_Appointments'[Is Cancelled] = 0, '_Appointments'[Is DNA] = 0 )
+        '_Appointments'[Is Completed] = FALSE(), '_Appointments'[Is Cancelled] = FALSE(), '_Appointments'[Is DNA] = FALSE() )
 VAR hasActive = NOT ISBLANK(nextActiveStart)
 VAR patActive = SELECTEDVALUE('List Patients'[Active])
 RETURN
