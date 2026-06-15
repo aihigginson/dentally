@@ -21,13 +21,17 @@
 // Run in Tabular Editor against the 'PBI Dentally' model, then Save to model.
 // =====================================================================
 
-// ── Journey filter (disconnected 4-way slicer table) ─────────────────────────
-// Drives which appointment type counts as the 'next' link in the journey measures.
-foreach (var tn in new[] { "Hygiene Toggle", "Journey Filter" })
-    if (Model.Tables.Any(x => x.Name == tn)) Model.Tables[tn].Delete();
-var jf = Model.AddCalculatedTable("Journey Filter",
-    "DATATABLE(\"Mode\", STRING, {{\"All Appointments\"}, {\"Exclude Hygiene\"}, {\"Exams Only\"}, {\"Hygiene Only\"}})");
-jf.Description = "Disconnected slicer: which appointment type counts as the 'next appointment' in the journey measures. All Appointments / Exclude Hygiene / Exams Only / Hygiene Only.";
+// ── Journey filter table -- CREATE MANUALLY (not here) ───────────────────────
+// The 'Journey Filter' disconnected slicer must be made via Home > Enter data:
+//   table 'Journey Filter', one column [Mode], four rows:
+//     All Appointments | Exclude Hygiene | Exams Only | Hygiene Only
+// Leave it unrelated to anything. (Calculated tables added by an external tool
+// often won't populate in PBI Desktop -- the slicer shows blank -- so Enter data
+// is the reliable route.) The measures below bind to 'Journey Filter'[Mode] by
+// name, defaulting to "All Appointments" when nothing is selected.
+// Tidy up the obsolete 2-way table if it is still present:
+if (Model.Tables.Any(x => x.Name == "Hygiene Toggle"))
+    Model.Tables["Hygiene Toggle"].Delete();
 
 var jmTable  = Model.Tables["_Measures"];
 var jmFolder = "Appointment Journey";
@@ -152,4 +156,4 @@ SWITCH( TRUE(),
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
 addJ("Patient Count", "COUNTROWS('_Appointments')", "#,##0");
 
-Info("Appointment Journey measures + 'Journey Filter' (4-way) created. Put Journey Filter[Mode] on a slicer (All Appointments / Exclude Hygiene / Exams Only / Hygiene Only). Add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
+Info("Appointment Journey measures created. NEXT: create the 'Journey Filter' table via Home > Enter data (column 'Mode', rows: All Appointments / Exclude Hygiene / Exams Only / Hygiene Only), leave it disconnected, put Mode on a slicer. Then add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
