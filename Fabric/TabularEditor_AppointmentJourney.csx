@@ -45,6 +45,21 @@ Action<string,string,string> addJ = (name, dax, fmt) => {
     if (fmt != "") meas.FormatString = fmt;
 };
 
+// ── Does the CURRENT appointment match the active filter mode? (hidden) ──────
+// Gates EVERY visible journey measure: when the current appointment does not match
+// the mode, all measures return BLANK, so Power BI drops the row entirely. The
+// dataset then holds only matching current appointments and every Alluvial stage
+// (the Booking/Appointment Reason columns AND the measures) stays consistent.
+addJ("Journey Current Matches", @"
+VAR mode   = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
+VAR reason = SELECTEDVALUE('_Appointments'[Appointment Reason])
+RETURN
+    mode = ""All Appointments""
+    || ( mode = ""Exclude Hygiene"" && reason <> ""Hygiene"" )
+    || ( mode = ""Exams Only""      && reason = ""Exam"" )
+    || ( mode = ""Hygiene Only""    && reason = ""Hygiene"" )", "");
+jmTable.Measures["Journey Current Matches"].IsHidden = true;
+
 // ── Helper: chronologically next non-cancelled/non-DNA appointment start ──────
 // (hidden; the other measures build on it). Hygiene-aware.
 addJ("Next Appt Start", @"
@@ -77,13 +92,14 @@ VAR cur = SELECTEDVALUE('_Appointments'[Start Time])
 VAR nxt = [Next Appt Start]
 VAR d   = DATEDIFF(cur, nxt, DAY)
 RETURN
+IF( NOT [Journey Current Matches], BLANK(),
 SWITCH( TRUE(),
     ISBLANK(nxt), ""No Future Appointment"",
     d = 0,   ""Same Day"",
     d <= 30, ""Within 1 Month"",
     d <= 182,""Within 6 Months"",
     d <= 365,""Within 12 Months"",
-    ""More than 12 Months"" )", "");
+    ""More than 12 Months"" ) )", "");
 
 // ── Next Appointment: reason of the next appointment (Emergency -> Exam) ──────
 addJ("Next Appointment", @"
@@ -106,10 +122,11 @@ VAR reason  =
                  || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) )
     )
 RETURN
+IF( NOT [Journey Current Matches], BLANK(),
 SWITCH( TRUE(),
     ISBLANK(nxt),        ""No Future Appointment"",
     reason = ""Emergency"", ""Exam"",
-    reason )", "");
+    reason ) )", "");
 
 // ── Current State: post-visit status (simplified; recall detail -> own report) ─
 addJ("Current State", @"
@@ -152,27 +169,19 @@ VAR hasActive = NOT ISBLANK(nextActiveStart)
 -- single-direction relationship, so SELECTEDVALUE would be BLANK -> mislabels).
 VAR patActive = LOOKUPVALUE('List Patients'[Active], 'List Patients'[pk Patient], pat)
 RETURN
+IF( NOT [Journey Current Matches], BLANK(),
 SWITCH( TRUE(),
     seenAgain,                                              ""Seen Again"",
     hasActive && nextActiveBooking IN {""BBYL"", ""Online""}, ""Treatment BBYL"",
     hasActive,                                              ""Treatment Booked"",
     NOT ISBLANK(patActive) && NOT patActive,               ""Will Not See Again"",
-    ""In Recall Process"" )", "");
+    ""In Recall Process"" ) )", "");
 
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
 // Mode also applies to the CURRENT appointment: a current that doesn't match the
 // mode returns BLANK so it drops out of the Alluvial (node + flows go to zero).
 // So the filter affects BOTH ends -- e.g. Exams Only shows exam -> next-exam.
-addJ("Patient Count", @"
-VAR mode   = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
-VAR reason = SELECTEDVALUE('_Appointments'[Appointment Reason])
-RETURN
-IF(
-    mode = ""All Appointments""
-    || ( mode = ""Exclude Hygiene"" && reason <> ""Hygiene"" )
-    || ( mode = ""Exams Only""      && reason = ""Exam"" )
-    || ( mode = ""Hygiene Only""    && reason = ""Hygiene"" ),
-    COUNTROWS('_Appointments'),
-    BLANK() )", "#,##0");
+addJ("Patient Count",
+    @"IF( [Journey Current Matches], COUNTROWS('_Appointments'), BLANK() )", "#,##0");
 
 Info("Appointment Journey measures created. NEXT: create the 'Journey Filter' table via Home > Enter data (column 'Mode', rows: All Appointments / Exclude Hygiene / Exams Only / Hygiene Only), leave it disconnected, put Mode on a slicer. Then add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
