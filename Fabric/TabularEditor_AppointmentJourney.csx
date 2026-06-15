@@ -28,21 +28,21 @@ var hyg = Model.AddCalculatedTable("Hygiene Toggle",
     "DATATABLE(\"Mode\", STRING, {{\"Include Hygiene\"}, {\"Exclude Hygiene\"}})");
 hyg.Description = "Disconnected slicer: include or exclude Hygiene appointments from the journey 'next appointment' calculation.";
 
-var t = Model.Tables["_Measures"];
-var g = "Appointment Journey";
+var jmTable  = Model.Tables["_Measures"];
+var jmFolder = "Appointment Journey";
 
-foreach (var m in t.Measures.Where(m => m.DisplayFolder == g).ToList())
-    m.Delete();
+foreach (var existing in jmTable.Measures.Where(x => x.DisplayFolder == jmFolder).ToList())
+    existing.Delete();
 
-Action<string,string,string> add = (name, dax, fmt) => {
-    var m = t.AddMeasure(name, dax);
-    m.DisplayFolder = g;
-    if (fmt != "") m.FormatString = fmt;
+Action<string,string,string> addJ = (name, dax, fmt) => {
+    var meas = jmTable.AddMeasure(name, dax);
+    meas.DisplayFolder = jmFolder;
+    if (fmt != "") meas.FormatString = fmt;
 };
 
 // ── Helper: chronologically next non-cancelled/non-DNA appointment start ──────
 // (hidden; the other measures build on it). Hygiene-aware.
-add("Next Appt Start", @"
+addJ("Next Appt Start", @"
 VAR cur     = SELECTEDVALUE('_Appointments'[Start Time])
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
@@ -61,10 +61,10 @@ IF( NOT ISBLANK(cur) && NOT ISBLANK(pat),
         )
     )
 )", "");
-t.Measures["Next Appt Start"].IsHidden = true;
+jmTable.Measures["Next Appt Start"].IsHidden = true;
 
 // ── Delay: banded gap to the next appointment ────────────────────────────────
-add("Delay", @"
+addJ("Delay", @"
 VAR cur = SELECTEDVALUE('_Appointments'[Start Time])
 VAR nxt = [Next Appt Start]
 VAR d   = DATEDIFF(cur, nxt, DAY)
@@ -78,7 +78,7 @@ SWITCH( TRUE(),
     ""More than 12 Months"" )", "");
 
 // ── Next Appointment: reason of the next appointment (Emergency -> Exam) ──────
-add("Next Appointment", @"
+addJ("Next Appointment", @"
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
 VAR nxt     = [Next Appt Start]
@@ -99,7 +99,7 @@ SWITCH( TRUE(),
     reason )", "");
 
 // ── Current State: post-visit status (simplified; recall detail -> own report) ─
-add("Current State", @"
+addJ("Current State", @"
 VAR cur     = SELECTEDVALUE('_Appointments'[Start Time])
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
@@ -136,6 +136,6 @@ SWITCH( TRUE(),
     ""In Recall Process"" )", "");
 
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
-add("Patient Count", "COUNTROWS('_Appointments')", "#,##0");
+addJ("Patient Count", "COUNTROWS('_Appointments')", "#,##0");
 
 Info("Appointment Journey measures + Hygiene Toggle created. Validate in PBI: hygiene = Appointment Reason 'Hygiene'; List Patients[Active] boolean; add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
