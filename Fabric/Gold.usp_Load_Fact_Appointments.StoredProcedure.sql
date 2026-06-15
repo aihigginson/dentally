@@ -80,7 +80,7 @@ BEGIN
             a.Appointment_ID,
             CASE
                 WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
-                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New - ' + COALESCE(iam.Standard_Acquisition_Source, aqs.Name)
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New'-- - ' + COALESCE(iam.Standard_Acquisition_Source, aqs.Name)
                 WHEN a.Booked_Via_API = 1
                      AND prev_appt.Prev_Date IS NOT NULL
                      AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
