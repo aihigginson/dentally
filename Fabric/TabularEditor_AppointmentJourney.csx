@@ -154,6 +154,19 @@ SWITCH( TRUE(),
     ""In Recall Process"" )", "");
 
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
-addJ("Patient Count", "COUNTROWS('_Appointments')", "#,##0");
+// Mode also applies to the CURRENT appointment: a current that doesn't match the
+// mode returns BLANK so it drops out of the Alluvial (node + flows go to zero).
+// So the filter affects BOTH ends -- e.g. Exams Only shows exam -> next-exam.
+addJ("Patient Count", @"
+VAR mode   = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
+VAR reason = SELECTEDVALUE('_Appointments'[Appointment Reason])
+RETURN
+IF(
+    mode = ""All Appointments""
+    || ( mode = ""Exclude Hygiene"" && reason <> ""Hygiene"" )
+    || ( mode = ""Exams Only""      && reason = ""Exam"" )
+    || ( mode = ""Hygiene Only""    && reason = ""Hygiene"" ),
+    COUNTROWS('_Appointments'),
+    BLANK() )", "#,##0");
 
 Info("Appointment Journey measures created. NEXT: create the 'Journey Filter' table via Home > Enter data (column 'Mode', rows: All Appointments / Exclude Hygiene / Exams Only / Hygiene Only), leave it disconnected, put Mode on a slicer. Then add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
