@@ -13,6 +13,9 @@
 --    *07     31/05/2026  AIH Join to Silver.Appointment_Journey_Attributes (renamed from Attrs);
 --                            rename This_Visit->Appointment_Reason, Next_Visit->Next_Appointment,
 --                            Future_Appointment->Current_State; add Delay phase
+--    *08     15/06/2026  AIH Drop Delay / Next_Appointment / Current_State -- moved to DAX (computed
+--                            from the appointment self-relationship + Recalls, with a hygiene toggle).
+--                            Keep Booking + Appointment_Reason (static). Table is now delta-pure.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -96,10 +99,7 @@ BEGIN
             END                                                         AS In_Surgery_Mins,
 
             ja.Booking                                                  AS Booking,
-            ja.Appointment_Reason                                       AS Appointment_Reason,
-            ja.Delay                                                    AS Delay,
-            ja.Next_Appointment                                         AS Next_Appointment,
-            ja.Current_State                                            AS Current_State
+            ja.Appointment_Reason                                       AS Appointment_Reason
         INTO #src
         FROM Silver.Appointments a
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
@@ -156,9 +156,6 @@ BEGIN
             In_Surgery_Mins         = src.In_Surgery_Mins,
             Booking                 = src.Booking,
             Appointment_Reason      = src.Appointment_Reason,
-            Delay                   = src.Delay,
-            Next_Appointment        = src.Next_Appointment,
-            Current_State           = src.Current_State,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Appointments tgt
         INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -195,10 +192,7 @@ BEGIN
            ISNULL(CAST(tgt.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Delay] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Next_Appointment] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Current_State] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
@@ -233,10 +227,7 @@ BEGIN
            ISNULL(CAST(src.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Delay] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Next_Appointment] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Current_State] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -251,7 +242,7 @@ BEGIN
             Start_Time, Finish_Time, Pending_At,
             Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived,
             Duration_Mins, Waiting_Mins, In_Surgery_Mins,
-            Booking, Appointment_Reason, Delay, Next_Appointment, Current_State,
+            Booking, Appointment_Reason,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -264,7 +255,7 @@ BEGIN
             src.Start_Time, src.Finish_Time, src.Pending_At,
             src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived,
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
-            src.Booking, src.Appointment_Reason, src.Delay, src.Next_Appointment, src.Current_State,
+            src.Booking, src.Appointment_Reason,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);

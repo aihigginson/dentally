@@ -13,6 +13,8 @@
 --                            view vw_<X> supersedes table <X> (same PBI name), so processing
 --                            (e.g. live time-derived columns) lives in the Gold view and the
 --                            PBI view stays a purely cosmetic rename wrapper.
+--    *08     15/06/2026  AIH Remove PBI.[_Appointments Sankey] (built from Delay/Next_Appointment/
+--                            Current_State, which moved off the fact to DAX). To be rebuilt in DAX.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Meta.usp_Create_Gold_Views @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Meta].[usp_Create_Gold_Views]    Script Date: 20/04/2026 10:15:06 ******/
@@ -131,22 +133,10 @@ SELECT [User_UPN] AS [User UPN], [Tenant_ID] AS [Tenant ID]
 FROM Security.Application_Users a JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID;';
     EXEC (@SQL);
 
-    -- Sankey source-destination view for the Microsoft Sankey visual.
-    -- Stage prefixes (Booking:/Reason:/Delay:/Next:/State:) prevent same-named
-    -- nodes (e.g. "Exam" in Appointment Reason and Next Appointment) from merging.
-    SET @SQL = N'CREATE VIEW PBI.[_Appointments Sankey] AS
-SELECT [Tenant_ID] AS [Tenant ID], [fk_Date_Start] AS [fk_Date_Start], [fk_Practice_Site] AS [fk_Practice_Site], [fk_Practitioner] AS [fk_Practitioner], [Booking] [Source],[Appointment_Reason] AS [Destination], COUNT(*) AS [Weight]
-FROM Gold.Fact_Appointments WHERE [Booking] IS NOT NULL AND [Appointment_Reason] IS NOT NULL GROUP BY [Tenant_ID],[fk_Date_Start],[fk_Practice_Site],[fk_Practitioner],[Booking],[Appointment_Reason]
-UNION ALL
-SELECT [Tenant_ID], [fk_Date_Start], [fk_Practice_Site], [fk_Practitioner], [Appointment_Reason],[Delay], COUNT(*)
-FROM Gold.Fact_Appointments WHERE [Appointment_Reason] IS NOT NULL AND [Delay] IS NOT NULL GROUP BY [Tenant_ID],[fk_Date_Start],[fk_Practice_Site],[fk_Practitioner],[Appointment_Reason],[Delay]
-UNION ALL
-SELECT [Tenant_ID], [fk_Date_Start], [fk_Practice_Site], [fk_Practitioner], [Delay], CONCAT(N''->'',[Next_Appointment]), COUNT(*)
-FROM Gold.Fact_Appointments WHERE [Delay] IS NOT NULL AND [Next_Appointment] IS NOT NULL GROUP BY [Tenant_ID],[fk_Date_Start],[fk_Practice_Site],[fk_Practitioner],[Delay],[Next_Appointment]
-UNION ALL
-SELECT [Tenant_ID], [fk_Date_Start], [fk_Practice_Site], [fk_Practitioner], CONCAT(N''->'',[Next_Appointment]), [Current_State], COUNT(*)
-FROM Gold.Fact_Appointments WHERE [Next_Appointment] IS NOT NULL AND [Current_State] IS NOT NULL GROUP BY [Tenant_ID],[fk_Date_Start],[fk_Practice_Site],[fk_Practitioner],[Next_Appointment],[Current_State];';
-    EXEC (@SQL);
+    -- NOTE: PBI.[_Appointments Sankey] removed (V008). It was built from the journey
+    -- columns Delay / Next_Appointment / Current_State, which have moved off the fact
+    -- table to DAX (computed from the appointment self-relationship + Recalls, with a
+    -- hygiene toggle). The Sankey will be rebuilt from those DAX measures.
 
 END;
 
