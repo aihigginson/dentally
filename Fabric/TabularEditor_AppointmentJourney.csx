@@ -21,12 +21,13 @@
 // Run in Tabular Editor against the 'PBI Dentally' model, then Save to model.
 // =====================================================================
 
-// ── Hygiene toggle (disconnected slicer table) ───────────────────────────────
-if (Model.Tables.Any(t => t.Name == "Hygiene Toggle"))
-    Model.Tables["Hygiene Toggle"].Delete();
-var hyg = Model.AddCalculatedTable("Hygiene Toggle",
-    "DATATABLE(\"Mode\", STRING, {{\"Include Hygiene\"}, {\"Exclude Hygiene\"}})");
-hyg.Description = "Disconnected slicer: include or exclude Hygiene appointments from the journey 'next appointment' calculation.";
+// ── Journey filter (disconnected 4-way slicer table) ─────────────────────────
+// Drives which appointment type counts as the 'next' link in the journey measures.
+foreach (var tn in new[] { "Hygiene Toggle", "Journey Filter" })
+    if (Model.Tables.Any(x => x.Name == tn)) Model.Tables[tn].Delete();
+var jf = Model.AddCalculatedTable("Journey Filter",
+    "DATATABLE(\"Mode\", STRING, {{\"All Appointments\"}, {\"Exclude Hygiene\"}, {\"Exams Only\"}, {\"Hygiene Only\"}})");
+jf.Description = "Disconnected slicer: which appointment type counts as the 'next appointment' in the journey measures. All Appointments / Exclude Hygiene / Exams Only / Hygiene Only.";
 
 var jmTable  = Model.Tables["_Measures"];
 var jmFolder = "Appointment Journey";
@@ -46,7 +47,7 @@ addJ("Next Appt Start", @"
 VAR cur     = SELECTEDVALUE('_Appointments'[Start Time])
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
-VAR exclHyg = SELECTEDVALUE('Hygiene Toggle'[Mode], ""Include Hygiene"") = ""Exclude Hygiene""
+VAR mode = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
 RETURN
 IF( NOT ISBLANK(cur) && NOT ISBLANK(pat),
     CALCULATE(
@@ -57,7 +58,10 @@ IF( NOT ISBLANK(cur) && NOT ISBLANK(pat),
             && '_Appointments'[Start Time] > cur
             && '_Appointments'[Is Cancelled] = FALSE()
             && '_Appointments'[Is DNA]       = FALSE()
-            && ( NOT exclHyg || '_Appointments'[Appointment Reason] <> ""Hygiene"" )
+            && ( mode = ""All Appointments""
+                 || ( mode = ""Exclude Hygiene"" && '_Appointments'[Appointment Reason] <> ""Hygiene"" )
+                 || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
+                 || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) )
         )
     )
 )", "");
@@ -81,6 +85,7 @@ SWITCH( TRUE(),
 addJ("Next Appointment", @"
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
+VAR mode    = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
 VAR nxt     = [Next Appt Start]
 VAR reason  =
     CALCULATE(
@@ -90,7 +95,11 @@ VAR reason  =
             && '_Appointments'[Tenant ID] = tid
             && '_Appointments'[Start Time] = nxt
             && '_Appointments'[Is Cancelled] = FALSE()
-            && '_Appointments'[Is DNA]       = FALSE() )
+            && '_Appointments'[Is DNA]       = FALSE()
+            && ( mode = ""All Appointments""
+                 || ( mode = ""Exclude Hygiene"" && '_Appointments'[Appointment Reason] <> ""Hygiene"" )
+                 || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
+                 || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) )
     )
 RETURN
 SWITCH( TRUE(),
@@ -103,13 +112,16 @@ addJ("Current State", @"
 VAR cur     = SELECTEDVALUE('_Appointments'[Start Time])
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
 VAR tid     = SELECTEDVALUE('_Appointments'[Tenant ID])
-VAR exclHyg = SELECTEDVALUE('Hygiene Toggle'[Mode], ""Include Hygiene"") = ""Exclude Hygiene""
+VAR mode = SELECTEDVALUE('Journey Filter'[Mode], ""All Appointments"")
 VAR baseFilter =
     FILTER( ALL('_Appointments'),
         '_Appointments'[fk Patient]  = pat
         && '_Appointments'[Tenant ID] = tid
         && '_Appointments'[Start Time] > cur
-        && ( NOT exclHyg || '_Appointments'[Appointment Reason] <> ""Hygiene"" ) )
+        && ( mode = ""All Appointments""
+             || ( mode = ""Exclude Hygiene"" && '_Appointments'[Appointment Reason] <> ""Hygiene"" )
+             || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
+             || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) )
 -- a later COMPLETED visit exists
 VAR seenAgain =
     CALCULATE( COUNTROWS('_Appointments'),
@@ -140,4 +152,4 @@ SWITCH( TRUE(),
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
 addJ("Patient Count", "COUNTROWS('_Appointments')", "#,##0");
 
-Info("Appointment Journey measures + Hygiene Toggle created. Validate in PBI: hygiene = Appointment Reason 'Hygiene'; List Patients[Active] boolean; add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
+Info("Appointment Journey measures + 'Journey Filter' (4-way) created. Put Journey Filter[Mode] on a slicer (All Appointments / Exclude Hygiene / Exams Only / Hygiene Only). Add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
