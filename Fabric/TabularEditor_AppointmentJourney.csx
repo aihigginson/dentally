@@ -127,20 +127,26 @@ VAR baseFilter =
              || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
              || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) )
 -- a later COMPLETED visit exists
+-- Filter the baseFilter TABLE explicitly (mixing a table filter with separate
+-- column predicates in CALCULATE does not intersect reliably -- it made seenAgain
+-- count any later appointment, so Treatment Booked/BBYL collapsed into Seen Again).
 VAR seenAgain =
     CALCULATE( COUNTROWS('_Appointments'),
-        baseFilter, '_Appointments'[Is Completed] = TRUE() ) > 0
+        FILTER( baseFilter, '_Appointments'[Is Completed] = TRUE() ) ) > 0
 -- the chronologically next ACTIVE (uncompleted, non-cancelled, non-DNA) booking
 VAR nextActiveStart =
     CALCULATE( MIN('_Appointments'[Start Time]),
-        baseFilter, '_Appointments'[Is Completed] = FALSE(),
-        '_Appointments'[Is Cancelled] = FALSE(), '_Appointments'[Is DNA] = FALSE() )
+        FILTER( baseFilter,
+            '_Appointments'[Is Completed] = FALSE()
+            && '_Appointments'[Is Cancelled] = FALSE()
+            && '_Appointments'[Is DNA] = FALSE() ) )
 VAR nextActiveBooking =
     CALCULATE( MIN('_Appointments'[Booking]),
-        ALL('_Appointments'),
-        '_Appointments'[fk Patient]  = pat, '_Appointments'[Tenant ID] = tid,
-        '_Appointments'[Start Time] = nextActiveStart,
-        '_Appointments'[Is Completed] = FALSE(), '_Appointments'[Is Cancelled] = FALSE(), '_Appointments'[Is DNA] = FALSE() )
+        FILTER( baseFilter,
+            '_Appointments'[Start Time] = nextActiveStart
+            && '_Appointments'[Is Completed] = FALSE()
+            && '_Appointments'[Is Cancelled] = FALSE()
+            && '_Appointments'[Is DNA] = FALSE() ) )
 VAR hasActive = NOT ISBLANK(nextActiveStart)
 -- Look the patient up directly (the fact can't filter the patient dim through the
 -- single-direction relationship, so SELECTEDVALUE would be BLANK -> mislabels).
