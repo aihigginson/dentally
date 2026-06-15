@@ -317,15 +317,9 @@ DECLARE @Msg        nvarchar(500);
     IF @Mode='TEST' PRINT @Step + ' completed in '
     + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
 
-    -- ── Silver derived attributes (run after all source Silver entities are loaded) ─
-
-    SET @Step = 'Appointment_Journey_Attributes';
-    SET @Start = SYSUTCDATETIME();
-    SET @Process_Code = 'SILVER_APPOINTMENT_JOURNEY_ATTRIBUTES'
-    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
- -- EXEC Silver.usp_Load_Appointment_Journey_Attributes @Mode=@Mode, @Logging=@Logging, @Run_UUID=@Run_UUID, @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
-    IF @Mode='TEST' PRINT @Step + ' completed in '
-    + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
+    -- (Appointment_Journey_Attributes step retired: Booking + Appointment_Reason are
+    --  now computed inside Gold.usp_Load_Fact_Appointments; the journey relationship
+    --  columns moved to DAX.)
 
 
     -- ---- DIMENSIONS (load before facts) ----

@@ -16,6 +16,9 @@
 --    *08     15/06/2026  AIH Drop Delay / Next_Appointment / Current_State -- moved to DAX (computed
 --                            from the appointment self-relationship + Recalls, with a hygiene toggle).
 --                            Keep Booking + Appointment_Reason (static). Table is now delta-pure.
+--    *09     15/06/2026  AIH Fold the journey derivation in (#journey preamble) -- Booking +
+--                            Appointment_Reason computed here; retired the separate
+--                            Silver.Appointment_Journey_Attributes table/proc/pipeline step.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -45,6 +48,73 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- ── Journey attributes (folded in from the former Silver derived table) ──
+        -- Booking + Appointment_Reason are STATIC, backward-looking attributes of an
+        -- appointment (referral / first-visit / BBYL / online / reception, and the
+        -- reason-map category). Computed here so there is no separate Silver derived
+        -- table/proc/pipeline step. Booking only ever looks at the patient's PAST, so
+        -- it is settled at create and never changes.
+        DROP TABLE IF EXISTS #appts;
+        DROP TABLE IF EXISTS #first_attended;
+        DROP TABLE IF EXISTS #referrals;
+        DROP TABLE IF EXISTS #journey;
+
+        SELECT
+            a.Tenant_ID, a.Appointment_ID, a.Patient_ID, a.Reason, a.Booked_Via_API,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 23) AS datetime2(3)) AS Start_DT,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Completed_At), ''), 23) AS datetime2(3)) AS Completed_DT,
+            TRY_CAST(LEFT(NULLIF(TRIM(a.Pending_At), ''), 23) AS datetime2(3)) AS Pending_DT
+        INTO #appts
+        FROM Silver.Appointments a
+        WHERE a.Appointment_ID IS NOT NULL;
+
+        SELECT Tenant_ID, Patient_ID, MIN(Appointment_ID) AS First_Appt_ID
+        INTO #first_attended FROM #appts WHERE Completed_DT IS NOT NULL GROUP BY Tenant_ID, Patient_ID;
+
+        SELECT Tenant_ID, Patient_ID, MIN(COALESCE(Created_At, DW_Created_At)) AS Earliest_Referral_DT
+        INTO #referrals FROM Silver.Patient_Referrals GROUP BY Tenant_ID, Patient_ID;
+
+        SELECT
+            a.Tenant_ID,
+            a.Appointment_ID,
+            CASE
+                WHEN ref_appt.Appointment_ID = a.Appointment_ID THEN 'Referral'
+                WHEN fa.First_Appt_ID        = a.Appointment_ID THEN 'New - ' + COALESCE(iam.Standard_Acquisition_Source, aqs.Name)
+                WHEN a.Booked_Via_API = 1
+                     AND prev_appt.Prev_Date IS NOT NULL
+                     AND CAST(a.Pending_DT AS DATE) = prev_appt.Prev_Date THEN 'BBYL'
+                WHEN a.Booked_Via_API = 1                                  THEN 'Online'
+                ELSE 'Reception'
+            END AS Booking,
+            COALESCE(arm_this.Category, NULLIF(TRIM(a.Reason), '')) AS Appointment_Reason
+        INTO #journey
+        FROM #appts a
+        LEFT JOIN #first_attended  fa   ON fa.Tenant_ID  = a.Tenant_ID  AND fa.Patient_ID  = a.Patient_ID
+        LEFT JOIN #referrals       ref  ON ref.Tenant_ID = a.Tenant_ID  AND ref.Patient_ID = a.Patient_ID
+        LEFT JOIN Silver.Patients  pat  ON pat.Tenant_ID = a.Tenant_ID  AND pat.Patient_ID = a.Patient_ID
+        LEFT JOIN Silver.Acquisition_Sources     aqs ON aqs.Tenant_ID = pat.Tenant_ID AND aqs.Acquisition_Source_ID = pat.Acquisition_Source_ID
+        LEFT JOIN Input.Acquisition_Source_Map  iam ON iam.Tenant_ID = pat.Tenant_ID AND iam.Source_Acquisition_Source = aqs.Name
+        LEFT JOIN Silver.Appointment_Reason_Map arm_this ON arm_this.Reason_Text = NULLIF(TRIM(a.Reason), '')
+        OUTER APPLY (
+            SELECT TOP 1 CAST(pa.Start_DT AS DATE) AS Prev_Date
+            FROM #appts pa
+            WHERE pa.Tenant_ID = a.Tenant_ID AND pa.Patient_ID = a.Patient_ID
+              AND pa.Completed_DT IS NOT NULL AND pa.Start_DT < a.Start_DT
+            ORDER BY pa.Start_DT DESC, pa.Appointment_ID DESC
+        ) prev_appt
+        OUTER APPLY (
+            SELECT TOP 1 ra.Appointment_ID
+            FROM #appts ra
+            WHERE ref.Earliest_Referral_DT IS NOT NULL
+              AND ra.Tenant_ID = a.Tenant_ID AND ra.Patient_ID = a.Patient_ID
+              AND ra.Start_DT >= ref.Earliest_Referral_DT
+            ORDER BY ra.Start_DT, ra.Appointment_ID
+        ) ref_appt;
+
+        DROP TABLE IF EXISTS #appts;
+        DROP TABLE IF EXISTS #first_attended;
+        DROP TABLE IF EXISTS #referrals;
 
         SELECT
             a.Tenant_ID                                                 AS Tenant_ID,
@@ -111,8 +181,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
         LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Silver.Appointment_Journey_Attributes ja
-                                                ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
+        LEFT JOIN #journey ja                   ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -262,6 +331,7 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+        DROP TABLE IF EXISTS #journey;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************
