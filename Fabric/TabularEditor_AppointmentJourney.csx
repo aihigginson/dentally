@@ -126,13 +126,15 @@ VAR nextActiveBooking =
         '_Appointments'[Start Time] = nextActiveStart,
         '_Appointments'[Is Completed] = FALSE(), '_Appointments'[Is Cancelled] = FALSE(), '_Appointments'[Is DNA] = FALSE() )
 VAR hasActive = NOT ISBLANK(nextActiveStart)
-VAR patActive = SELECTEDVALUE('List Patients'[Active])
+-- Look the patient up directly (the fact can't filter the patient dim through the
+-- single-direction relationship, so SELECTEDVALUE would be BLANK -> mislabels).
+VAR patActive = LOOKUPVALUE('List Patients'[Active], 'List Patients'[pk Patient], pat)
 RETURN
 SWITCH( TRUE(),
     seenAgain,                                              ""Seen Again"",
     hasActive && nextActiveBooking IN {""BBYL"", ""Online""}, ""Treatment BBYL"",
     hasActive,                                              ""Treatment Booked"",
-    patActive = FALSE(),                                    ""Will Not See Again"",
+    NOT ISBLANK(patActive) && NOT patActive,               ""Will Not See Again"",
     ""In Recall Process"" )", "");
 
 // ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
