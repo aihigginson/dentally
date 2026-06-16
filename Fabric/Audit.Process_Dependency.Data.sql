@@ -11,11 +11,13 @@ GO
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -25,6 +27,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T1_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -38,11 +41,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -52,6 +57,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T11_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -65,11 +71,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -79,6 +87,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T12_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -92,11 +101,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -106,6 +117,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T13_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -119,11 +131,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -133,6 +147,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T14_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -146,11 +161,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -160,6 +177,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T2_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -173,11 +191,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -187,6 +207,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T3_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -200,11 +221,13 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_CONTRACTS', 'SILVER_CONTRACTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_FEES', 'SILVER_FEES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_INVOICE_ITEMS', 'SILVER_INVOICE_ITEMS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_INVOICES', 'SILVER_INVOICES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_NHS_CLAIMS', 'SILVER_NHS_CLAIMS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PATIENT_REFERRALS', 'SILVER_PATIENT_REFERRALS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PATIENT_STATS', 'SILVER_PATIENT_STATS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PATIENTS', 'SILVER_PATIENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PAYMENT_ALLOCATIONS', 'SILVER_PAYMENT_ALLOCATIONS', 'DATA', 1, 1);
@@ -214,6 +237,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PRACTICE', 'SILVER_PRACTICE', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PRACTITIONER_DIARY_BREAKS', 'SILVER_PRACTITIONER_DIARY_BREAKS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PRACTITIONER_DIARY_ENTRIES', 'SILVER_PRACTITIONER_DIARY', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_SITES', 'SILVER_SITES', 'DATA', 1, 1);
@@ -225,24 +249,35 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_TREATMENTS', 'SILVER_TREATMENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_T4_USERS', 'SILVER_USERS', 'DATA', 1, 1);
 
--- (Silver -> Silver level-2 journey deps retired: the journey derivation folded
---  into GOLD_FACT_APPOINTMENTS; its source deps appear at level 3 below.)
-
 -- Silver -> Gold    (level 3)
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACCOUNTS', 'GOLD_DIM_ACCOUNTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACQUISITION_SOURCES', 'GOLD_DIM_ACQUISITION_SOURCES', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACQUISITION_SOURCES', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENT_CANCELLATION_REASONS', 'GOLD_DIM_CANCELLATION_REASONS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENTS', 'GOLD_AGG_DAILY', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENTS', 'GOLD_DIM_PATIENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENTS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENTS', 'GOLD_FACT_RECALLS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENTS', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_CONTRACTS', 'GOLD_DIM_NHS_CONTRACTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_CONTRACTS', 'GOLD_FACT_CONTRACTS', 'DATA', 3, 1);
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENT_REFERRALS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENTS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_INVOICE_ITEMS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_INVOICE_ITEMS', 'GOLD_FACT_PAYMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_INVOICES', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_NHS_CLAIMS', 'GOLD_AGG_DAILY', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_NHS_CLAIMS', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENT_REFERRALS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENT_STATS', 'GOLD_DIM_PATIENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENT_STATS', 'GOLD_FACT_RECALLS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENTS', 'GOLD_DIM_PATIENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENTS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PATIENTS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PAYMENT_ALLOCATIONS', 'GOLD_FACT_PAYMENTS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PAYMENT_EXPLANATIONS', 'GOLD_FACT_PAYMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PAYMENT_PLANS', 'GOLD_DIM_PAYMENT_PLANS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PAYMENTS', 'GOLD_FACT_PAYMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTICE', 'GOLD_DIM_PRACTICE_SITES', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONER_CONTRACT_TARGETS', 'GOLD_FACT_NHS_CONTRACT_WEEK', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONER_DIARY_BREAKS', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONER_DIARY', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONERS', 'GOLD_DIM_PRACTITIONERS', 'DATA', 3, 1);
@@ -252,20 +287,33 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_CATEGORIES', 'GOLD_DIM_TREATMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_PLAN_ITEMS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_PLANS', 'GOLD_DIM_TREATMENT_PLANS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_PLANS', 'GOLD_FACT_PAYMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENTS', 'GOLD_DIM_TREATMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_USERS', 'GOLD_DIM_USERS', 'DATA', 3, 1);
 
 -- Gold Dim -> Fact  (level 4)
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_ACCOUNTS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_CANCELLATION_REASONS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_CONTRACTS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_DAILY_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_KPI_SNAPSHOT', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_NHS_CONTRACT_WEEK', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_PAYMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_RECALLS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_NHS_CONTRACTS', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_NHS_CONTRACTS', 'GOLD_FACT_NHS_CONTRACT_WEEK', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_KPI_SNAPSHOT', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_PAYMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_RECALLS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
@@ -274,12 +322,27 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PAYMENT_PLANS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_CONTRACTS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_DAILY_TARGETS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_EFFECTIVE_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_KPI_SNAPSHOT', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_NHS_CONTRACT_WEEK', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_PAYMENTS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_FACT_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_DAILY_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_KPI_SNAPSHOT', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_NHS_CONTRACT_WEEK', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_PAYMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_TARGETS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_FACT_KPI_SNAPSHOT', 'DATA', 4, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_FACT_NHS_CLAIMS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENTS', 'GOLD_FACT_TREATMENT_PLAN_ITEMS', 'DATA', 4, 1);
@@ -287,6 +350,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_USERS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
 
 -- Gold -> Agg       (level 5)
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_CANCELLATION_REASONS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_AGG_SITE_PRACT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
