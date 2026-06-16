@@ -62,6 +62,14 @@ jmTable.Measures["Journey Current Matches"].IsHidden = true;
 
 // ── Helper: chronologically next non-cancelled/non-DNA appointment start ──────
 // (hidden; the other measures build on it). Hygiene-aware.
+// IMPORTANT: every look-ahead CALCULATE adds REMOVEFILTERS('List Date') +
+// REMOVEFILTERS('List Date Grouping'). The anchor (current appointment) is meant
+// to stay date-filtered, but the LOOK-AHEAD must see the full timeline incl. the
+// FUTURE -- the report's whole point is the forward book ("already booked").
+// The embed pushes a report-level 'List Date Grouping'[Date Grouping]='Last 3 Months'
+// filter; ALL('_Appointments') does NOT clear it (it arrives via the date relationship),
+// so without REMOVEFILTERS the next-appt search is silently capped at today and the
+// forward book (Treatment Booked/BBYL, future Next Appointment) vanishes in the embed.
 addJ("Next Appt Start", @"
 VAR cur     = SELECTEDVALUE('_Appointments'[Start Time])
 VAR pat     = SELECTEDVALUE('_Appointments'[fk Patient])
@@ -81,7 +89,8 @@ IF( NOT ISBLANK(cur) && NOT ISBLANK(pat),
                  || ( mode = ""Exclude Hygiene"" && '_Appointments'[Appointment Reason] <> ""Hygiene"" )
                  || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
                  || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) )
-        )
+        ),
+        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping')
     )
 )", "");
 jmTable.Measures["Next Appt Start"].IsHidden = true;
@@ -119,7 +128,8 @@ VAR reason  =
             && ( mode = ""All Appointments""
                  || ( mode = ""Exclude Hygiene"" && '_Appointments'[Appointment Reason] <> ""Hygiene"" )
                  || ( mode = ""Exams Only""      && '_Appointments'[Appointment Reason] = ""Exam"" )
-                 || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) )
+                 || ( mode = ""Hygiene Only""    && '_Appointments'[Appointment Reason] = ""Hygiene"" ) ) ),
+        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping')
     )
 RETURN
 IF( NOT [Journey Current Matches], BLANK(),
@@ -149,21 +159,24 @@ VAR baseFilter =
 -- count any later appointment, so Treatment Booked/BBYL collapsed into Seen Again).
 VAR seenAgain =
     CALCULATE( COUNTROWS('_Appointments'),
-        FILTER( baseFilter, '_Appointments'[Is Completed] = TRUE() ) ) > 0
+        FILTER( baseFilter, '_Appointments'[Is Completed] = TRUE() ),
+        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping') ) > 0
 -- the chronologically next ACTIVE (uncompleted, non-cancelled, non-DNA) booking
 VAR nextActiveStart =
     CALCULATE( MIN('_Appointments'[Start Time]),
         FILTER( baseFilter,
             '_Appointments'[Is Completed] = FALSE()
             && '_Appointments'[Is Cancelled] = FALSE()
-            && '_Appointments'[Is DNA] = FALSE() ) )
+            && '_Appointments'[Is DNA] = FALSE() ),
+        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping') )
 VAR nextActiveBooking =
     CALCULATE( MIN('_Appointments'[Booking]),
         FILTER( baseFilter,
             '_Appointments'[Start Time] = nextActiveStart
             && '_Appointments'[Is Completed] = FALSE()
             && '_Appointments'[Is Cancelled] = FALSE()
-            && '_Appointments'[Is DNA] = FALSE() ) )
+            && '_Appointments'[Is DNA] = FALSE() ),
+        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping') )
 VAR hasActive = NOT ISBLANK(nextActiveStart)
 -- Look the patient up directly (the fact can't filter the patient dim through the
 -- single-direction relationship, so SELECTEDVALUE would be BLANK -> mislabels).
