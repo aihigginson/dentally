@@ -1,0 +1,51 @@
+# =====================================================================
+# Release V000 -- Metadata seed baseline (environment-invariant)
+# =====================================================================
+# Seeds the ETL control + business/config reference tables that the
+# Fabric DATA pipelines do NOT populate. The pipelines move source data
+# (Bronze->Silver->Gold); these control/config tables must be seeded
+# separately, or orchestration + lookups have nothing to run against.
+#
+# Re-runnable: every file below is idempotent (DELETE+INSERT full
+# refresh, or MERGE). So this manifest always brings the target to the
+# CURRENT committed seed content -- editing an existing seed file is
+# automatically covered on the next run. Adding a brand-NEW seed table
+# is the only manual step: add one DEPLOY line below.
+#
+# Deliberately an EXPLICIT list, not a *.Data.sql glob: three seed files
+# are ENVIRONMENT-SPECIFIC and must NOT be deployed from these dev values
+# (they are managed per-environment, e.g. via the app / Fabric config):
+#     Audit.Tenants.Data.sql            (dev tenants + dev API secrets)
+#     Security.Clients.Data.sql         (dev client orgs)
+#     Security.Application_Users.Data.sql (dev user-to-client mappings)
+# A glob would leak those into prod; an explicit list cannot.
+#
+# PREREQUISITE: the target warehouse already has the schema (tables).
+# This manifest seeds data only -- it does not create objects.
+#
+# Run (set FABRIC_SERVER for the target environment first):
+#   $env:FABRIC_SERVER = '<endpoint>'   # omit for the dev default
+#   .\Scripts\Deploy.ps1 -Manifest Releases\V000__metadata_seed_baseline.manifest
+# No TEST gate here: the regression tests assert against deterministic
+# T11 data and would not reconcile against another environment.
+# =====================================================================
+
+# 1. ETL orchestration control (Category/Type before Config; Config before Dependency)
+DEPLOY  Fabric\Audit.Process_Category.Data.sql
+DEPLOY  Fabric\Audit.Process_Type.Data.sql
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+# 2. Business / KPI + standard-mapping reference config
+DEPLOY  Fabric\Config.Metric_Period_Types.Data.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY  Fabric\Config.Acquisition_Source_Standard.Data.sql
+DEPLOY  Fabric\Config.Cancellation_Reason_Standard.Data.sql
+DEPLOY  Fabric\Config.Payment_Plan_Standard.Data.sql
+DEPLOY  Fabric\Config.Treatment_Category_Standard.Data.sql
+DEPLOY  Fabric\Silver.Appointment_Reason_Map.Data.sql
+
+# 3. Regression-test framework definitions (only used if Run_Tests targets
+#    this warehouse; harmless config otherwise)
+DEPLOY  Fabric\Test.Comparison_Definition.Data.sql
+DEPLOY  Fabric\Test.Metric_Definition.Data.sql
