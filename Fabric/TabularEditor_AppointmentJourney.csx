@@ -10,7 +10,7 @@
 // Deneb setup (in PBI, not here): put '_Appointments'[bk Appointment ID] (hidden) in
 // the visual's Values so the dataset is one row per appointment, then add the columns
 // [Booking],[Appointment Reason] and the measures [Delay],[Next Appointment],
-// [Current State],[Patient Count]. The Alluvial does its own aggregation.
+// [Current State],[Journey Count]. The Alluvial does its own aggregation.
 //
 // ASSUMPTIONS (validate in the model): a hygiene appointment is
 // '_Appointments'[Appointment Reason] = "Hygiene"; 'List Patients'[Active] exists and
@@ -190,11 +190,15 @@ SWITCH( TRUE(),
     NOT ISBLANK(patActive) && NOT patActive,               ""Will Not See Again"",
     ""In Recall Process"" ) )", "");
 
-// ── Patient Count: the Alluvial weight (one per appointment at appt grain) ────
+// ── Journey Count: the Alluvial weight (one per appointment at appt grain) ────
+// RENAMED from "Patient Count": that collided with the COLUMN 'List Patients'[Patient Count],
+// so the Deneb visual was binding its weight to the patient column (ambiguous by-name lookup)
+// instead of this gated measure -- which is why the stage totals matched no clean appt metric
+// and were inconsistent across modes. Counts APPOINTMENTS (COUNTROWS), gated by mode.
 // Mode also applies to the CURRENT appointment: a current that doesn't match the
 // mode returns BLANK so it drops out of the Alluvial (node + flows go to zero).
 // So the filter affects BOTH ends -- e.g. Exams Only shows exam -> next-exam.
-addJ("Patient Count",
+addJ("Journey Count",
     @"IF( [Journey Current Matches], COUNTROWS('_Appointments'), BLANK() )", "#,##0");
 
 Info("Appointment Journey measures created. NEXT: create the 'Journey Filter' table via Home > Enter data (column 'Mode', rows: All Appointments / Exclude Hygiene / Exams Only / Hygiene Only), leave it disconnected, put Mode on a slicer. Then add bk Appointment ID (hidden) + the 5 fields to the Deneb Alluvial.");
