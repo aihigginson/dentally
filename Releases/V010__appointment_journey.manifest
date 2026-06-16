@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V010 -- Appointment Journey: scalable Alluvial source
+# =====================================================================
+# Replaces the per-appointment-grain DAX journey (which blew Deneb's 30k data
+# cap) with a Gold pointer table + resolver view. The view is MODE-LONG with the
+# journey stages as COLUMNS, so Power BI aggregates server-side and Deneb only
+# ever receives the distinct stage-combinations -- scales to any tenant volume.
+# Also folds in the reason-map fix: Recall Examination -> Exam.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V010__appointment_journey.manifest
+# =====================================================================
+
+# 1. Reason-map fix (Recall Examination -> Exam)
+DEPLOY  Fabric\Silver.Appointment_Reason_Map.Data.sql
+
+# 2. Journey objects: base pointer table, full-rebuild load SP, resolver view
+DEPLOY  Fabric\Gold.Fact_Appointment_Journey.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointment_Journey.StoredProcedure.sql
+DEPLOY  Fabric\Gold.vw_Fact_Appointment_Journey.View.sql
+
+# 3. Orchestration registration (GOLD_AGG_APPOINTMENT_JOURNEY + Fact_Appointments dependency)
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+# 4. Reload Fact_Appointments (applies the reason-map fix), then build the journey
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# 5. Regenerate PBI views so PBI.[_Appointment Journey] is created from the Gold view
+EXEC    EXEC Meta.usp_Create_Gold_Views;

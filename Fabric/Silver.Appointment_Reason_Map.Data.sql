@@ -15,6 +15,7 @@ INSERT INTO [Silver].[Appointment_Reason_Map] ([Reason_Text], [Category], [Sort_
     ('Full Case Assessment',               'Exam', 1),
     ('Routine Examination',                'Exam', 1),
     ('New Patient Examination',            'Exam', 1),
+    ('Recall Examination',                 'Exam', 1),
 -- ── Hygiene ──────────────────────────────────────────────────────────────────
     ('Hygiene',                            'Hygiene', 2),
     ('Hygiene Appointment',                'Hygiene', 2),

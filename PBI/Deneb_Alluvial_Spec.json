@@ -56,6 +56,10 @@
         },
         {
             "name": "cFlowNeutral",
+            "value": "#C2874A"
+        },
+        {
+            "name": "cNotBooked",
             "value": "#B0C4CE"
         },
         {
@@ -143,7 +147,7 @@
             "transform": [
                 {
                     "type": "aggregate",
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "grand_val" ]
                 }
@@ -157,7 +161,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Booking" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "tot" ]
                 },
@@ -190,7 +194,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Appointment Reason" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "tot" ]
                 },
@@ -223,7 +227,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Delay" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "tot" ]
                 },
@@ -244,7 +248,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum.lab==='Same Day'?0:datum.lab==='Within 1 Month'?1:datum.lab==='Within 6 Months'?2:datum.lab==='Within 12 Months'?3:datum.lab==='More than 12 Months'?4:datum.lab==='No Future Appointment'?5:6",
+                    "expr": "datum.lab==='Same Day'?0:datum.lab==='Within 1 Month'?1:datum.lab==='Within 6 Months'?2:datum.lab==='Within 12 Months'?3:datum.lab==='More than 12 Months'?4:datum.lab==='Not Booked'?6:5",
                     "as": "sort_key"
                 }
             ]
@@ -256,7 +260,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Next Appointment" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "tot" ]
                 },
@@ -277,7 +281,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:datum.lab==='No Future Appointment'?7:8",
+                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:datum.lab==='Not Booked'?8:7",
                     "as": "sort_key"
                 }
             ]
@@ -289,7 +293,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Current State" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "tot" ]
                 },
@@ -355,7 +359,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Booking", "Appointment Reason" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "flow" ]
                 },
@@ -383,7 +387,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Appointment Reason", "Delay" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "flow" ]
                 },
@@ -411,7 +415,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Delay", "Next Appointment" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "flow" ]
                 },
@@ -427,7 +431,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum['Next Appointment'] !== 'No Future Appointment' ? datum['Next Appointment'] : null",
+                    "expr": "datum['Next Appointment']",
                     "as": "colorKey"
                 }
             ]
@@ -439,7 +443,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Next Appointment", "Current State" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "flow" ]
                 },
@@ -455,7 +459,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum['Next Appointment'] !== 'No Future Appointment' ? datum['Next Appointment'] : null",
+                    "expr": "datum['Next Appointment']",
                     "as": "colorKey"
                 }
             ]
@@ -555,7 +559,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Booking", "Appointment Reason" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cflow" ]
                 },
@@ -573,7 +577,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Appointment Reason", "Delay" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cflow" ]
                 },
@@ -591,7 +595,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Delay", "Next Appointment" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cflow" ]
                 },
@@ -609,7 +613,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Next Appointment", "Current State" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cflow" ]
                 },
@@ -676,7 +680,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Booking" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cohort_tot" ]
                 },
@@ -694,7 +698,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Appointment Reason" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cohort_tot" ]
                 },
@@ -712,7 +716,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Delay" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cohort_tot" ]
                 },
@@ -730,7 +734,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Next Appointment" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cohort_tot" ]
                 },
@@ -748,7 +752,7 @@
                 {
                     "type": "aggregate",
                     "groupby": [ "Current State" ],
-                    "fields": [ "Patient Count" ],
+                    "fields": [ "Journey Count" ],
                     "ops": [ "sum" ],
                     "as": [ "cohort_tot" ]
                 },
@@ -801,7 +805,7 @@
             "encode": {
                 "enter": {
                     "path": { "signal": "isValid(datum.bsy0) && isValid(datum.bsy1) && isValid(datum.bty0) && isValid(datum.bty1) ? ('M'+(datum.sx+nW)+','+(datum.bsy0)+' C'+datum.mx+','+(datum.bsy0)+' '+datum.mx+','+(datum.bty0)+' '+datum.tx+','+(datum.bty0)+' L'+datum.tx+','+(datum.bty1)+' C'+datum.mx+','+(datum.bty1)+' '+datum.mx+','+(datum.bsy1)+' '+(datum.sx+nW)+','+(datum.bsy1)+' Z') : 'M0,0Z'" },
-                    "fill": { "signal": "datum.colorKey ? scale('reasonColor', datum.colorKey) : cFlowNeutral" },
+                    "fill": { "signal": "(!datum.colorKey || datum.colorKey === 'Not Booked') ? cNotBooked : (indexof(datum.colorKey, 'Booked') >= 0 ? cFlowNeutral : scale('reasonColor', datum.colorKey))" },
                     "stroke": { "value": "none" },
                     "cursor": { "value": "pointer" }
                 },
@@ -838,7 +842,7 @@
                     "cornerRadius": { "value": 2 }
                 },
                 "update": {
-                    "fill": { "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : ((datum.si === 1 || datum.si === 3) && datum.lab !== 'No Future Appointment' ? scale('reasonColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))" },
+                    "fill": { "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : ((datum.si === 1 || datum.si === 3) && indexof(datum.lab, 'Booked') < 0 ? scale('reasonColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))" },
                     "cursor": { "value": "pointer" }
                 }
             }
