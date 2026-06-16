@@ -59,6 +59,10 @@
             "value": "#C2874A"
         },
         {
+            "name": "cNotBooked",
+            "value": "#B0C4CE"
+        },
+        {
             "name": "cHeaderText",
             "value": "#1A527A"
         },
@@ -244,7 +248,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum.lab==='Same Day'?0:datum.lab==='Within 1 Month'?1:datum.lab==='Within 6 Months'?2:datum.lab==='Within 12 Months'?3:datum.lab==='More than 12 Months'?4:datum.lab==='No Future Appointment'?5:6",
+                    "expr": "datum.lab==='Same Day'?0:datum.lab==='Within 1 Month'?1:datum.lab==='Within 6 Months'?2:datum.lab==='Within 12 Months'?3:datum.lab==='More than 12 Months'?4:datum.lab==='Not Booked'?6:5",
                     "as": "sort_key"
                 }
             ]
@@ -277,7 +281,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:datum.lab==='No Future Appointment'?7:8",
+                    "expr": "datum.lab==='Hygiene'?0:datum.lab==='Exam'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Review'?3:datum.lab==='Recall Examination'?4:datum.lab==='Emergency'?5:datum.lab==='Other'?6:datum.lab==='Not Booked'?8:7",
                     "as": "sort_key"
                 }
             ]
@@ -427,7 +431,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "indexof(datum['Next Appointment'], 'Booked') < 0 ? datum['Next Appointment'] : null",
+                    "expr": "datum['Next Appointment']",
                     "as": "colorKey"
                 }
             ]
@@ -455,7 +459,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "indexof(datum['Next Appointment'], 'Booked') < 0 ? datum['Next Appointment'] : null",
+                    "expr": "datum['Next Appointment']",
                     "as": "colorKey"
                 }
             ]
@@ -801,7 +805,7 @@
             "encode": {
                 "enter": {
                     "path": { "signal": "isValid(datum.bsy0) && isValid(datum.bsy1) && isValid(datum.bty0) && isValid(datum.bty1) ? ('M'+(datum.sx+nW)+','+(datum.bsy0)+' C'+datum.mx+','+(datum.bsy0)+' '+datum.mx+','+(datum.bty0)+' '+datum.tx+','+(datum.bty0)+' L'+datum.tx+','+(datum.bty1)+' C'+datum.mx+','+(datum.bty1)+' '+datum.mx+','+(datum.bsy1)+' '+(datum.sx+nW)+','+(datum.bsy1)+' Z') : 'M0,0Z'" },
-                    "fill": { "signal": "datum.colorKey ? scale('reasonColor', datum.colorKey) : cFlowNeutral" },
+                    "fill": { "signal": "(!datum.colorKey || datum.colorKey === 'Not Booked') ? cNotBooked : (indexof(datum.colorKey, 'Booked') >= 0 ? cFlowNeutral : scale('reasonColor', datum.colorKey))" },
                     "stroke": { "value": "none" },
                     "cursor": { "value": "pointer" }
                 },
