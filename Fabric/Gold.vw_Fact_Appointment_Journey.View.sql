@@ -44,11 +44,11 @@ keyed AS (
         -- "nothing booked" from "something of another type booked".
         CASE
             WHEN e.Mode_Next IS NOT NULL THEN NULL
-            WHEN e.fk_Appointment_Next IS NULL THEN 'No Appointment Booked'
-            WHEN e.Mode = 'Exams Only'      THEN 'Non-Exam Appointment Booked'
-            WHEN e.Mode = 'Hygiene Only'    THEN 'Non-Hygiene Appointment Booked'
-            WHEN e.Mode = 'Exclude Hygiene' THEN 'Hygiene Appointment Booked'
-            ELSE 'No Appointment Booked'
+            WHEN e.fk_Appointment_Next IS NULL THEN 'Not Booked'
+            WHEN e.Mode = 'Exams Only'      THEN 'Non-Exam Booked'
+            WHEN e.Mode = 'Hygiene Only'    THEN 'Non-Hygiene Booked'
+            WHEN e.Mode = 'Exclude Hygiene' THEN 'Hygiene Booked'
+            ELSE 'Not Booked'
         END AS Terminal_Label
     FROM expanded e
 )

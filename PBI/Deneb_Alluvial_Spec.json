@@ -427,7 +427,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "indexof(datum['Next Appointment'], 'Appointment Booked') < 0 ? datum['Next Appointment'] : null",
+                    "expr": "indexof(datum['Next Appointment'], 'Booked') < 0 ? datum['Next Appointment'] : null",
                     "as": "colorKey"
                 }
             ]
@@ -455,7 +455,7 @@
                 },
                 {
                     "type": "formula",
-                    "expr": "indexof(datum['Next Appointment'], 'Appointment Booked') < 0 ? datum['Next Appointment'] : null",
+                    "expr": "indexof(datum['Next Appointment'], 'Booked') < 0 ? datum['Next Appointment'] : null",
                     "as": "colorKey"
                 }
             ]
@@ -838,7 +838,7 @@
                     "cornerRadius": { "value": 2 }
                 },
                 "update": {
-                    "fill": { "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : ((datum.si === 1 || datum.si === 3) && indexof(datum.lab, 'Appointment Booked') < 0 ? scale('reasonColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))" },
+                    "fill": { "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : ((datum.si === 1 || datum.si === 3) && indexof(datum.lab, 'Booked') < 0 ? scale('reasonColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))" },
                     "cursor": { "value": "pointer" }
                 }
             }
