@@ -71,6 +71,9 @@ function SqlLit([string] $s) { if ($null -eq $s) { return '' } return $s.Replace
 # --- resolve + parse the manifest into an ordered action list --------------
 if (-not (Test-Path $Manifest)) { $Manifest = Join-Path $RepoRoot $Manifest }
 if (-not (Test-Path $Manifest)) { Write-Host "Manifest not found: $Manifest" -ForegroundColor Red; exit 2 }
+# Make absolute: [System.IO.File] calls below resolve relative paths against the
+# .NET process cwd (often the user's home dir), not the PowerShell location.
+$Manifest = (Resolve-Path $Manifest).Path
 $manifestLeaf = Split-Path $Manifest -Leaf
 
 $valid   = @('MIGRATE', 'DEPLOY', 'EXEC', 'TEST')
