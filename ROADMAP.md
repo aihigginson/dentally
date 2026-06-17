@@ -64,7 +64,7 @@ _Last refreshed: 2026-06-17._
 - [ ] Error tracking (Sentry / App Insights) and alerting
 - [~] Health / readiness endpoint for Container Apps probes — `/health` added (unauthenticated, returns 200 `{status:ok}`, no external deps); deploys on next dev push. Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
 - [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
-- [ ] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — **★ high value: stale `:latest` was the root cause of the 2026-06-15 prod outage** (security hardening removed an env var the old `:latest` image still required at boot; rebuilding `:latest` fixed it)
+- [x] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — both `deploy-dev.yml` + `deploy-prod.yml` now build **and deploy `:${{ github.sha }}`** (the mutable `:dev`/`:latest` tags are still built as "newest" pointers). Each revision is pinned to an exact build; rollback = redeploy a prior commit's sha. Directly fixes the stale-`:latest` failure mode behind the 2026-06-15 outage.
 
 ## 7. Documentation  _(Medium)_
 

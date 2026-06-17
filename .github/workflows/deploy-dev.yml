@@ -26,7 +26,9 @@ jobs:
         with:
           context: ./Web
           push: true
-          tags: analyticallyacr.azurecr.io/analytically:dev
+          tags: |
+            analyticallyacr.azurecr.io/analytically:dev
+            analyticallyacr.azurecr.io/analytically:${{ github.sha }}
 
       - name: Log in to Azure
         uses: azure/login@v2
@@ -38,5 +40,5 @@ jobs:
           az containerapp update \
             --name ca-analytically-dev \
             --resource-group rg-analytically \
-            --image analyticallyacr.azurecr.io/analytically:dev \
+            --image analyticallyacr.azurecr.io/analytically:${{ github.sha }} \
             --revision-suffix r${{ github.run_number }}

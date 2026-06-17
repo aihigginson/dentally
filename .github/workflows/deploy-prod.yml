@@ -46,5 +46,5 @@ jobs:
           az containerapp update \
             --name ca-analytically-prod \
             --resource-group rg-analytically \
-            --image analyticallyacr.azurecr.io/analytically:latest \
+            --image analyticallyacr.azurecr.io/analytically:${{ github.sha }} \
             --revision-suffix r${{ github.run_number }}
