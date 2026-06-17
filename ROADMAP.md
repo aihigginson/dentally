@@ -73,7 +73,7 @@ _Last refreshed: 2026-06-17._
 - [x] README (what the product is, how to run it locally, how to deploy) — `README.md`
 - [x] Architecture overview (medallion layers, data flow, components) — covered in `README.md` (Architecture section) + `CLAUDE.md`
 - [x] Runbook — `RUNBOOK.md`: environments, deploy procedures (web/warehouse/PBI + rollback), the golden rules, incident playbook (A–E for the failures actually hit), diagnostics, and the access-control model. Captures the 2026-06 learnings (dev/prod warehouse split, warehouse-out-of-pipeline, parameterised source, the `:latest` outage).
-- [ ] Tenant-onboarding guide (currently manual `Security.Application_Users` + workspace setup)
+- [x] Tenant-onboarding guide — `TENANT_ONBOARDING.md` (the manual `Audit.Tenants` + `Security.Clients`/`Application_Users` chain, data load, RLS verification, gotchas)
 - [ ] Data dictionary (Gold tables / PBI views)
 
 ## 8. SaaS-readiness  _(Medium)_
