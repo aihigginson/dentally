@@ -15,6 +15,11 @@
 #      (set $env:FABRIC_SERVER for prod)
 # =====================================================================
 
+# --- Silver layer (feeds Gold; deploy first) ---
+DEPLOY  Fabric\Silver.Patients.Table.sql
+DEPLOY  Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
 # --- Gold layer ---
 DEPLOY  Fabric\Gold.Dim_Patients.Table.sql
 DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
