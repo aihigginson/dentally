@@ -5,6 +5,8 @@ Check items off as they land; keep this file as the single source of truth for t
 
 Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
+_Last refreshed: 2026-06-17._
+
 ---
 
 ## 1. Lock down multi-tenant security  _(Critical — gating for real tenants)_
@@ -51,10 +53,10 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 > driver here is **reducing CU consumption / cost**, so incrementals are worthwhile
 > but not urgent. Full DROP/CREATE rebuilds are not a correctness or scale risk.
 
-- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config` (maintainability)
-- [ ] Make `usp_Load_All` idempotent (CREATE OR ALTER / DROP+CREATE, not bare `ALTER PROCEDURE`); remove dead commented `EXEC`s; standardise on UTC timestamps
-- [ ] Design **stable Gold surrogate keys** (survive reloads) to enable incremental fact loading
-- [ ] Add an incremental Gold load path to cut rebuild cost (CU spend), once surrogate keys are stable
+- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config` (maintainability) — **still todo** (the main remaining ETL item)
+- [ ] Make `usp_Load_All` idempotent (CREATE OR ALTER / DROP+CREATE, not bare `ALTER PROCEDURE`); remove dead commented `EXEC`s; standardise on UTC timestamps — **still todo**
+- [x] **Stable Gold surrogate keys** — effectively already stable: Gold dims/facts upsert (DELETE-orphan + hash-gated UPDATE + INSERT, keyed on bk + Tenant_ID); pks are preserved across reloads, never reassigned. No redesign needed.
+- [~] **Incremental Gold load path** — substantially done: 5 of 6 transactional facts converted to watermark deltas (NHS Claims `V002`, Contracts + Treatment Plan Items `V004`, Invoice Items `V005`/`V006`, Payments `V007`). Patterns established: time-derived columns → live Gold `vw_` view (`V003`); sparse/derived flags → tiny positive table + LEFT JOIN in the view (`V005` discount, `V007` deposit). Remaining full-rebuild (cheap, acceptable): `Fact_Appointments` and the new `Fact_Appointment_Journey` (`V010`).
 
 ## 6. Operability / observability  _(Medium)_
 
@@ -62,7 +64,7 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [ ] Error tracking (Sentry / App Insights) and alerting
 - [ ] Health / readiness endpoint for Container Apps probes
 - [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
-- [ ] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback
+- [ ] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — **★ high value: stale `:latest` was the root cause of the 2026-06-15 prod outage** (security hardening removed an env var the old `:latest` image still required at boot; rebuilding `:latest` fixed it)
 
 ## 7. Documentation  _(Medium)_
 
@@ -70,11 +72,12 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 - [x] ROADMAP.md (this file)
 - [ ] README (what the product is, how to run it locally, how to deploy)
 - [ ] Architecture overview (medallion layers, data flow, components)
-- [ ] Runbook (deploys, common failures, recovery)
+- [ ] Runbook (deploys, common failures, recovery) — **★ rich material from 2026-06 to capture:** dev/prod are SEPARATE Fabric workspaces + warehouses; **keep the warehouse OUT of the Fabric deployment pipeline** (it copies object definitions only → empty tables + two sources of truth — manage the warehouse via the `Vxxx` SQL deploys); parameterise the semantic-model source (`pServer`/`pDatabase`) so every table repoints together (a named connection is invisible to the pipeline's parameter rule); the `:latest`-staleness outage + recovery
 - [ ] Tenant-onboarding guide (currently manual `Security.Application_Users` + workspace setup)
 - [ ] Data dictionary (Gold tables / PBI views)
 
 ## 8. SaaS-readiness  _(Medium)_
 
-- [ ] Automate tenant provisioning (replace manual `Security.Application_Users` inserts + workspace/report/target setup)
+- [x] **Separate prod environment** — dev and prod are now distinct Fabric workspaces + warehouses (`…-4i26…` dev / `…-eljz…` prod); the prod Container App `FABRIC_SERVER` and the prod semantic model both point at the prod warehouse (parameterised source + deployment-pipeline parameter rule). (2026-06)
+- [ ] Automate tenant provisioning (replace manual `Security.Application_Users` + `Security.Clients` + `Audit.Tenants` inserts + workspace/report/target setup) — **★ live now** (onboarding Maple Dental; real data targeted as Tenant 20). NB access-control tables are managed out-of-git per environment; secrets via a gitignored local `.sql`.
 - [ ] Review cost/scale model (full Gold rebuilds, single capacity) as tenant count grows
