@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V011 -- Patient data minimisation (DPIA, DPIA.md sec 7)
+# =====================================================================
+# Drops special-category + excess-identifier columns from the patient surface
+# (NHS/NI numbers, Ethnicity, DOB/Age, Gender, Medical Alert, full Address,
+# Emergency Contact, Title/Middle name, Family/Custom/Legacy, NHS exemption).
+# Retains identity-for-contact (names + preferred, phone, email), contactability
+# flags, and non-sensitive operational analytics.
+#
+# Phased: GOLD layer first (this section, user-facing surface + PBI view),
+# then SILVER + BRONZE (added below as the cascade lands), then the ingestion
+# stops landing them in Stage.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V011__patient_minimisation.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Gold layer ---
+DEPLOY  Fabric\Gold.Dim_Patients.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    EXEC Meta.usp_Create_Gold_Views;
