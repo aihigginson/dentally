@@ -137,6 +137,14 @@ def auth_config():
     """Returns MSAL config needed by the frontend — no auth required."""
     return jsonify({'client_id': CLIENT_ID, 'tenant_id': TENANT_ID})
 
+
+@app.route('/health')
+def health():
+    """Liveness/readiness probe for Container Apps — unauthenticated, no external
+    deps. Reaching here means the process is up and required config loaded at
+    import (the app would have failed to boot otherwise)."""
+    return jsonify({'status': 'ok'}), 200
+
 # ── Protected routes ──────────────────────────────────────────────────────────
 
 @app.route('/api/embed-token')

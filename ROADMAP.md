@@ -43,7 +43,7 @@ _Last refreshed: 2026-06-17._
 ## 4. Single source of truth for KPI logic  _(High)_
 
 - [x] Delete the dead Flask KPI code: `/api/kpis`, all `_kpis_*`, `_wrap` + helpers in `Web/app.py` — ~400 lines removed (commit 28e5c40, on dev; preserved by tag `flask-kpi-cards-complete`)
-- [ ] Confirm DAX (Tabular Editor scripts) is the sole KPI definition
+- [x] Confirm DAX (Tabular Editor scripts) is the sole KPI definition — verified: no KPI computation remains in `Web/app.py` (routes are `/`, `/health`, auth-config, embed-token, me, filters, targets); dead Flask KPI code already removed (commit 28e5c40)
 - [ ] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven
 
 ## 5. ETL refactor & incremental Gold  _(Medium — cost optimisation, NOT a scaling blocker)_
@@ -62,7 +62,7 @@ _Last refreshed: 2026-06-17._
 
 - [ ] Structured logging + correlation IDs (replace `print()`)
 - [ ] Error tracking (Sentry / App Insights) and alerting
-- [ ] Health / readiness endpoint for Container Apps probes
+- [~] Health / readiness endpoint for Container Apps probes — `/health` added (unauthenticated, returns 200 `{status:ok}`, no external deps); deploys on next dev push. Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
 - [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
 - [ ] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — **★ high value: stale `:latest` was the root cause of the 2026-06-15 prod outage** (security hardening removed an env var the old `:latest` image still required at boot; rebuilding `:latest` fixed it)
 
