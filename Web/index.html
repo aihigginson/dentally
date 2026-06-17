@@ -473,9 +473,18 @@
     // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
     // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
     // fixed panel at the bottom of the screen so issues can be seen on a phone.
+    // The on-screen panel is OFF by default (it crowds the page layout). Re-enable
+    // on demand with ?devlog=1 in the URL (?devlog=0 turns it off again); the panel
+    // is mainly for mobile where there's no reachable console. console.log always fires.
+    function _devLogEnabled() {
+        const q = new URLSearchParams(location.search);
+        if (q.get('devlog') === '1') localStorage.setItem('_anly_devlog', '1');
+        if (q.get('devlog') === '0') localStorage.removeItem('_anly_devlog');
+        return localStorage.getItem('_anly_devlog') === '1';
+    }
     function _devLog(...args) {
         try { console.log(...args); } catch (e) {}
-        if (!document.body.classList.contains('dev-mode')) return;
+        if (!document.body.classList.contains('dev-mode') || !_devLogEnabled()) return;
         let panel = document.getElementById('dev-log');
         if (!panel) {
             panel = document.createElement('div');
