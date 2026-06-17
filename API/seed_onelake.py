@@ -63,7 +63,10 @@ def write_stage(records: list, table_name: str):
         table_path(table_name),
         tbl,
         mode            = "overwrite",
-        schema_mode     = "merge",
+        # V011 data minimisation: "overwrite" (not "merge") so dropped columns are
+        # removed from the Delta schema, not retained as nulls. The combined frame
+        # already unions all tenants' columns, so this enforces the current schema.
+        schema_mode     = "overwrite",
         storage_options = get_storage_options(),
     )
     print(" done.")
