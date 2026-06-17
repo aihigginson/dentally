@@ -49,7 +49,6 @@ BEGIN
         ISNULL(CAST(staged.[Practitioner_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Fee_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Description] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Quantity] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Price] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Total_Price] AS VARCHAR(500)), ''),
@@ -62,10 +61,8 @@ BEGIN
         ISNULL(CAST(staged.[Treatment_Appointment_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Referrer_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Nomenclature] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Patient_Nomenclature] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[NHS_Treatment_Cat] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[UDA_Band] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Position] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Base_Chart] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Completed] AS VARCHAR(500)), ''),
@@ -93,8 +90,6 @@ BEGIN
                 -- Fee_ID not in Bronze
         NULL  AS [Name],
                 -- Name not in Bronze (Nomenclature used instead)
-        NULL  AS [Description],
-                -- Description not in Bronze
         NULL  AS [Quantity],
                 -- Quantity not in Bronze
         Price  AS [Price],
@@ -112,10 +107,8 @@ BEGIN
                 -- Bronze Referrer_ID is decimal(18,4); Silver is VARCHAR(255)
         LEFT(CAST(TRY_CAST(ROUND(CAST(Referrer_ID AS float),0) AS bigint) AS VARCHAR(255)), 255)  AS [Referrer_ID],
                 LEFT(Nomenclature,         255)  AS [Nomenclature],
-                LEFT(Patient_Nomenclature, 255)  AS [Patient_Nomenclature],
                 LEFT(NHS_Treatment_Cat,    255)  AS [NHS_Treatment_Cat],
                 LEFT(UDA_Band,             255)  AS [UDA_Band],
-                LEFT(Notes,                255)  AS [Notes],
                 TRY_CAST(ROUND(CAST(Position AS float),0) AS int)  AS [Position],
                 TRY_CAST(ROUND(CAST(Base_Chart AS float),0) AS int)  AS [Base_Chart],
                 CASE WHEN LOWER(TRIM(Completed))       IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
@@ -138,7 +131,6 @@ BEGIN
             [Practitioner_ID] = src.[Practitioner_ID],
             [Fee_ID] = src.[Fee_ID],
             [Name] = src.[Name],
-            [Description] = src.[Description],
             [Quantity] = src.[Quantity],
             [Price] = src.[Price],
             [Total_Price] = src.[Total_Price],
@@ -151,10 +143,8 @@ BEGIN
             [Treatment_Appointment_ID] = src.[Treatment_Appointment_ID],
             [Referrer_ID] = src.[Referrer_ID],
             [Nomenclature] = src.[Nomenclature],
-            [Patient_Nomenclature] = src.[Patient_Nomenclature],
             [NHS_Treatment_Cat] = src.[NHS_Treatment_Cat],
             [UDA_Band] = src.[UDA_Band],
-            [Notes] = src.[Notes],
             [Position] = src.[Position],
             [Base_Chart] = src.[Base_Chart],
             [Completed] = src.[Completed],
@@ -171,9 +161,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Plan_Items] ([Tenant_ID], [Id], [Treatment_Plan_ID], [Payment_Plan_ID], [Treatment_ID], [Patient_ID], [Practitioner_ID], [Fee_ID], [Name], [Description], [Quantity], [Price], [Total_Price], [NHS_Charge], [Status], [Tooth], [Surface], [Region], [Invoice_ID], [Treatment_Appointment_ID], [Referrer_ID], [Nomenclature], [Patient_Nomenclature], [NHS_Treatment_Cat], [UDA_Band], [Notes], [Position], [Base_Chart], [Completed], [Charged], [Appear_On_Invoice], [Duration], [Completed_At], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Treatment_Plan_Items] ([Tenant_ID], [Id], [Treatment_Plan_ID], [Payment_Plan_ID], [Treatment_ID], [Patient_ID], [Practitioner_ID], [Fee_ID], [Name], [Quantity], [Price], [Total_Price], [NHS_Charge], [Status], [Tooth], [Surface], [Region], [Invoice_ID], [Treatment_Appointment_ID], [Referrer_ID], [Nomenclature], [NHS_Treatment_Cat], [UDA_Band], [Position], [Base_Chart], [Completed], [Charged], [Appear_On_Invoice], [Duration], [Completed_At], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Id], src.[Treatment_Plan_ID], src.[Payment_Plan_ID], src.[Treatment_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Fee_ID], src.[Name], src.[Description], src.[Quantity], src.[Price], src.[Total_Price], src.[NHS_Charge], src.[Status], src.[Tooth], src.[Surface], src.[Region], src.[Invoice_ID], src.[Treatment_Appointment_ID], src.[Referrer_ID], src.[Nomenclature], src.[Patient_Nomenclature], src.[NHS_Treatment_Cat], src.[UDA_Band], src.[Notes], src.[Position], src.[Base_Chart], src.[Completed], src.[Charged], src.[Appear_On_Invoice], src.[Duration], src.[Completed_At], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Treatment_Plan_ID], src.[Payment_Plan_ID], src.[Treatment_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Fee_ID], src.[Name], src.[Quantity], src.[Price], src.[Total_Price], src.[NHS_Charge], src.[Status], src.[Tooth], src.[Surface], src.[Region], src.[Invoice_ID], src.[Treatment_Appointment_ID], src.[Referrer_ID], src.[Nomenclature], src.[NHS_Treatment_Cat], src.[UDA_Band], src.[Position], src.[Base_Chart], src.[Completed], src.[Charged], src.[Appear_On_Invoice], src.[Duration], src.[Completed_At], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

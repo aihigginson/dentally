@@ -39,9 +39,7 @@ BEGIN
             , TRY_CAST(patient_id      AS DECIMAL(18,4))                               AS Patient_ID
             , TRY_CAST(practitioner_id AS INT)                                         AS Practitioner_ID
             , TRY_CAST(treatment_id    AS DECIMAL(18,4))                               AS Treatment_ID
-            , LEFT(COALESCE(
-                  NULLIF(CAST(nomenclature         AS VARCHAR(255)), ''),
-                         CAST(patient_nomenclature AS VARCHAR(255))), 255)              AS Nomenclature
+            , LEFT(CAST(nomenclature AS VARCHAR(255)), 255)                            AS Nomenclature
             , TRY_CAST(price            AS DECIMAL(18,4))                              AS Price
             , TRY_CAST(duration         AS DECIMAL(18,4))                              AS Duration
             , LEFT(created_at,           255)                                          AS Created_At
@@ -53,8 +51,6 @@ BEGIN
             , LEFT(completed_at,         255)                                          AS Completed_At
             , LEFT(invoice_id,           255)                                          AS Invoice_ID
             , LEFT(nhs_treatment_cat,    255)                                          AS NHS_Treatment_Cat
-            , LEFT(notes,                255)                                          AS Notes
-            , LEFT(patient_nomenclature, 255)                                          AS Patient_Nomenclature
             , TRY_CAST(payment_plan_id   AS INT)                                       AS Payment_Plan_ID
             , TRY_CAST(position          AS DECIMAL(18,4))                             AS Position
             , TRY_CAST(referrer_id       AS DECIMAL(18,4))                             AS Referrer_ID
@@ -85,8 +81,6 @@ BEGIN
             , tgt.Completed_At             = src.Completed_At
             , tgt.Invoice_ID               = src.Invoice_ID
             , tgt.NHS_Treatment_Cat        = src.NHS_Treatment_Cat
-            , tgt.Notes                    = src.Notes
-            , tgt.Patient_Nomenclature     = src.Patient_Nomenclature
             , tgt.Payment_Plan_ID          = src.Payment_Plan_ID
             , tgt.Position                 = src.Position
             , tgt.Referrer_ID              = src.Referrer_ID
@@ -104,7 +98,7 @@ BEGIN
             Tenant_ID, ID, Treatment_Plan_ID, Patient_ID, Practitioner_ID, Treatment_ID,
             Nomenclature, Price, Duration, Created_At, Updated_At,
             Appear_On_Invoice, Base_Chart, Charged, Completed, Completed_At,
-            Invoice_ID, NHS_Treatment_Cat, Notes, Patient_Nomenclature, Payment_Plan_ID,
+            Invoice_ID, NHS_Treatment_Cat, Payment_Plan_ID,
             Position, Referrer_ID, Region, Treatment_Appointment_ID, UDA_Band,
             Surfaces, Teeth,
             DW_Loaded_At
@@ -113,7 +107,7 @@ BEGIN
             src.Tenant_ID, src.ID, src.Treatment_Plan_ID, src.Patient_ID, src.Practitioner_ID, src.Treatment_ID,
             src.Nomenclature, src.Price, src.Duration, src.Created_At, src.Updated_At,
             src.Appear_On_Invoice, src.Base_Chart, src.Charged, src.Completed, src.Completed_At,
-            src.Invoice_ID, src.NHS_Treatment_Cat, src.Notes, src.Patient_Nomenclature, src.Payment_Plan_ID,
+            src.Invoice_ID, src.NHS_Treatment_Cat, src.Payment_Plan_ID,
             src.Position, src.Referrer_ID, src.Region, src.Treatment_Appointment_ID, src.UDA_Band,
             src.Surfaces, src.Teeth,
             SYSUTCDATETIME()

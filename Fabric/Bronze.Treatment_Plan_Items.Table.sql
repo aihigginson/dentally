@@ -15,8 +15,6 @@ CREATE TABLE [Bronze].[Treatment_Plan_Items](
 	[Duration] [decimal](18, 4) NULL,
 	[NHS_Treatment_Cat] [VARCHAR](255) NULL,
 	[Nomenclature] [VARCHAR](255) NULL,
-	[Notes] [VARCHAR](255) NULL,
-	[Patient_Nomenclature] [VARCHAR](255) NULL,
 	[Position] [decimal](18, 4) NULL,
 	[Price] [decimal](18, 4) NULL,
 	[Region] [VARCHAR](255) NULL,
