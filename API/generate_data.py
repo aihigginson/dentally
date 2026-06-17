@@ -1070,50 +1070,33 @@ def gen_patients(tdef, rng):
 
         pp_def = pp_by_id.get(pp_id, {})
 
+        # DATA MINIMISATION (V011, DPIA sec 7): only emit identity-for-contact
+        # (names + preferred name, mobile/home phone, email), marketing consent
+        # and non-sensitive operational analytics. Special-category and excess-
+        # identifier fields (title, middle name, DOB, gender, ethnicity, NHS/NI
+        # numbers, NHS exemption, full address, work phone, preferred phone,
+        # medical alert, occupation, use_email/sms, emergency contact x3, archived
+        # reason, legacy id) are no longer landed. The locals above are retained
+        # only because other generation logic still derives from them.
         patients.append({
             "id": i,
-            "title": pat_title,
             "first_name": first,
             "preferred_name": preferred_name,
-            "middle_name": None,
             "last_name": last,
-            "date_of_birth": str(dob),
-            "gender": "Female" if is_female else "Male",
             "email_address": f"{first.lower()}.{last.lower()}{i}@example.com" if rng.random() < email_rate else None,
             "mobile_phone": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}" if rng.random() < phone_rate else None,
             "home_phone": f"0{rng.randint(1000,9999)} {rng.randint(100000,999999)}" if rng.random() < 0.20 else None,
-            "work_phone": work_phone,
-            "address_line_1": f"{house_num} {street}",
-            "address_line_2": None,
-            "town": town,
-            "county": None,
-            "postcode": postcode,
             "site_id": site_id,
             "dentist_id": dentist["id"],
             "hygienist_id": hygienist_id,
             "payment_plan_id": pp_id,
             "account_id": i,
             "active": is_active,
-            "nhs_exemption_code": exemption,
-            "nhs_number": f"NHS{rng.randint(100000000,999999999)}" if use_nhs else None,
-            "ni_number": f"{rng.choice('ABCEGHJKLMNOPRSTWXYZ')}{rng.choice('ABCEGHJKLMNPRSTWXYZ')}{rng.randint(100000,999999)}{rng.choice('ABCD')}" if age >= 16 else None,
-            "ethnicity_id": ethnicity,
             "acquisition_source_id": acq_id,
             "recall_method": recall_method,
             "dentist_recall_interval": pp_def.get("dentist_recall_interval", 6),
             "hygienist_recall_interval": pp_def.get("hygienist_recall_interval", 6),
             "marketing": rng.random() < 0.70,
-            "medical_alert": has_alert,
-            "medical_alert_text": rng.choice(alert_texts) if has_alert else None,
-            "occupation": None,
-            "use_email": use_email,
-            "use_sms": use_sms,
-            "preferred_phone_number": preferred_phone,
-            "emergency_contact_name": ec_name,
-            "emergency_contact_relationship": ec_rel,
-            "emergency_contact_phone": ec_phone,
-            "archived_reason": archived_reason,
-            "legacy_id": None,
             "created_at": _iso(created),
             "updated_at": _iso(created),
         })
