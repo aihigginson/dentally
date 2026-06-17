@@ -49,7 +49,6 @@ BEGIN
             ta.Treatment_Plan_ID                                        AS Treatment_Plan_ID,
             ta.Position                                                 AS Position,
             ta.Bookable                                                 AS Bookable,
-            NULLIF(TRIM(ta.Notes),'')                                   AS Notes,
             CAST(NULL AS datetime2(3))                                  AS Created_At,
             CAST(NULL AS datetime2(3))                                  AS Updated_At
         INTO #src
@@ -77,7 +76,6 @@ BEGIN
             Treatment_Plan_ID       = src.Treatment_Plan_ID,
             Position                = src.Position,
             Bookable                = src.Bookable,
-            Notes                   = src.Notes,
             Updated_At              = src.Updated_At,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Treatment_Appointments tgt
@@ -91,7 +89,6 @@ BEGIN
            ISNULL(CAST(tgt.[Treatment_Plan_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Position] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Bookable] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Notes] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Updated_At] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
@@ -103,7 +100,6 @@ BEGIN
            ISNULL(CAST(src.[Treatment_Plan_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Position] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Bookable] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Notes] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Updated_At] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
@@ -114,7 +110,7 @@ BEGIN
             bk_Treatment_Appointment_ID,
             fk_Patient, fk_Treatment_Plan,
             fk_Date_Appointment, fk_Date_Created,
-            Appointment_ID, Treatment_Plan_ID, Position, Bookable, Notes,
+            Appointment_ID, Treatment_Plan_ID, Position, Bookable,
             Created_At, Updated_At, DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -122,7 +118,7 @@ BEGIN
             src.bk_Treatment_Appointment_ID,
             src.fk_Patient, src.fk_Treatment_Plan,
             src.fk_Date_Appointment, src.fk_Date_Created,
-            src.Appointment_ID, src.Treatment_Plan_ID, src.Position, src.Bookable, src.Notes,
+            src.Appointment_ID, src.Treatment_Plan_ID, src.Position, src.Bookable,
             src.Created_At, src.Updated_At, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Appointments tgt WHERE tgt.bk_Treatment_Appointment_ID = src.bk_Treatment_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);

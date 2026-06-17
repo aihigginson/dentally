@@ -8,7 +8,6 @@ GO
 CREATE TABLE [Bronze].[Treatment_Appointments](
 	[ID] [varchar](255) NULL,
 	[Bookable] [VARCHAR](255) NULL,
-	[Notes] [varchar](4000) NULL,
 	[Position] [int] NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[Updated_At] [VARCHAR](255) NULL,
