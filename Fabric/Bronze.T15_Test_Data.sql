@@ -174,8 +174,7 @@ GO
 
 DELETE FROM Bronze.Patients WHERE Tenant_ID = 15;
 INSERT INTO Bronze.Patients
-    (Patient_ID, First_Name, Last_Name, Title, Gender,
-     Date_Of_Birth, Active, Site_ID,
+    (Patient_ID, First_Name, Last_Name, Active, Site_ID,
      Dentist_ID, Dentist_Recall_Interval,
      Payment_Plan_ID,
      Acquisition_Source_ID,
@@ -183,15 +182,15 @@ INSERT INTO Bronze.Patients
      Created_At, Updated_At,
      Tenant_ID, DW_Loaded_At)
 VALUES
-    (15001, 'James',   'Smith',   'Mr',  1, '1985-03-15', 1, '1500', 15001, 6, 1501, '1', 'james.smith@devtest.test',  '07700000001', '2020-06-01T00:00:00Z', '2025-10-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15002, 'Sarah',   'Jones',   'Mrs', 2, '1990-07-22', 1, '1500', 15001, 6, 1500, '2', 'sarah.jones@devtest.test',  '07700000002', '2021-01-15T00:00:00Z', '2025-09-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15003, 'Michael', 'Brown',   'Mr',  1, '1975-11-08', 1, '1500', 15001, 6, 1501, '3', NULL,                        '07700000003', '2019-03-10T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15004, 'Emma',    'Wilson',  'Ms',  2, '1992-04-30', 1, '1500', 15002, 6, 1501, '1', 'emma.wilson@devtest.test',  '07700000004', '2022-02-20T00:00:00Z', '2025-10-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15005, 'David',   'Taylor',  'Mr',  1, '1968-09-12', 1, '1500', 15002, 6, 1501, '2', NULL,                        NULL,          '2018-07-05T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15001, 'James',   'Smith',   1, '1500', 15001, 6, 1501, '1', 'james.smith@devtest.test',  '07700000001', '2020-06-01T00:00:00Z', '2025-10-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15002, 'Sarah',   'Jones',   1, '1500', 15001, 6, 1500, '2', 'sarah.jones@devtest.test',  '07700000002', '2021-01-15T00:00:00Z', '2025-09-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15003, 'Michael', 'Brown',   1, '1500', 15001, 6, 1501, '3', NULL,                        '07700000003', '2019-03-10T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15004, 'Emma',    'Wilson',  1, '1500', 15002, 6, 1501, '1', 'emma.wilson@devtest.test',  '07700000004', '2022-02-20T00:00:00Z', '2025-10-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15005, 'David',   'Taylor',  1, '1500', 15002, 6, 1501, '2', NULL,                        NULL,          '2018-07-05T00:00:00Z', '2025-11-01T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
     -- New patients added in FY 2025-26 / FY 2026-27 to lift email rate and new patient count
-    (15006, 'Olivia',  'Harris',  'Ms',  2, '1995-06-14', 1, '1500', 15001, 6, 1501, '2', 'olivia.harris@devtest.test', '07700000006', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15007, 'Tom',     'Clarke',  'Mr',  1, '1988-02-28', 1, '1500', 15002, 6, 1501, '1', 'tom.clarke@devtest.test',    '07700000007', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
-    (15008, 'Priya',   'Patel',   'Mrs', 2, '2000-11-03', 1, '1500', 15001, 6, 1501, '3', 'priya.patel@devtest.test',   '07700000008', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
+    (15006, 'Olivia',  'Harris',  1, '1500', 15001, 6, 1501, '2', 'olivia.harris@devtest.test', '07700000006', '2025-09-15T00:00:00Z', '2025-09-15T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15007, 'Tom',     'Clarke',  1, '1500', 15002, 6, 1501, '1', 'tom.clarke@devtest.test',    '07700000007', '2026-01-20T00:00:00Z', '2026-01-20T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3))),
+    (15008, 'Priya',   'Patel',   1, '1500', 15001, 6, 1501, '3', 'priya.patel@devtest.test',   '07700000008', '2026-04-07T00:00:00Z', '2026-04-07T00:00:00Z', 15, CAST(GETUTCDATE() AS datetime2(3)));
 GO
 
 -- =============================================================================
