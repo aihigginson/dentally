@@ -62,7 +62,7 @@ _Last refreshed: 2026-06-17._
 
 - [ ] Structured logging + correlation IDs (replace `print()`)
 - [ ] Error tracking (Sentry / App Insights) and alerting
-- [~] Health / readiness endpoint for Container Apps probes — `/health` added (unauthenticated, returns 200 `{status:ok}`, no external deps); deploys on next dev push. Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
+- [~] Health / readiness endpoint for Container Apps probes — `/health` **live + verified on dev** (200 `{status:ok}`, unauthenticated, no deps). Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
 - [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
 - [x] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — both `deploy-dev.yml` + `deploy-prod.yml` now build **and deploy `:${{ github.sha }}`** (the mutable `:dev`/`:latest` tags are still built as "newest" pointers). Each revision is pinned to an exact build; rollback = redeploy a prior commit's sha. Directly fixes the stale-`:latest` failure mode behind the 2026-06-15 outage.
 
@@ -72,7 +72,7 @@ _Last refreshed: 2026-06-17._
 - [x] ROADMAP.md (this file)
 - [ ] README (what the product is, how to run it locally, how to deploy)
 - [ ] Architecture overview (medallion layers, data flow, components)
-- [ ] Runbook (deploys, common failures, recovery) — **★ rich material from 2026-06 to capture:** dev/prod are SEPARATE Fabric workspaces + warehouses; **keep the warehouse OUT of the Fabric deployment pipeline** (it copies object definitions only → empty tables + two sources of truth — manage the warehouse via the `Vxxx` SQL deploys); parameterise the semantic-model source (`pServer`/`pDatabase`) so every table repoints together (a named connection is invisible to the pipeline's parameter rule); the `:latest`-staleness outage + recovery
+- [x] Runbook — `RUNBOOK.md`: environments, deploy procedures (web/warehouse/PBI + rollback), the golden rules, incident playbook (A–E for the failures actually hit), diagnostics, and the access-control model. Captures the 2026-06 learnings (dev/prod warehouse split, warehouse-out-of-pipeline, parameterised source, the `:latest` outage).
 - [ ] Tenant-onboarding guide (currently manual `Security.Application_Users` + workspace setup)
 - [ ] Data dictionary (Gold tables / PBI views)
 
