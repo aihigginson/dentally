@@ -58,8 +58,6 @@ BEGIN
         ISNULL(CAST(staged.[Duration] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Reason] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[State] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Treatment_Description] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Booked_Via_API] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Pending_At] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Confirmed_At] AS VARCHAR(500)), ''),
@@ -101,9 +99,6 @@ BEGIN
                 Duration  AS [Duration],
                 LEFT(Reason, 100)  AS [Reason],
                 LEFT(State,  50)  AS [State],
-                Notes  AS [Notes],
-                -- VARCHAR(max) → VARCHAR(max)  OK
-        Treatment_Description  AS [Treatment_Description],
                 -- Bronze Booked_Via_API is VARCHAR; Silver is bit
         CASE WHEN LOWER(TRIM(Booked_Via_API)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Booked_Via_API],
                 LEFT(Pending_At,        50)  AS [Pending_At],
@@ -143,8 +138,6 @@ BEGIN
             [Duration] = src.[Duration],
             [Reason] = src.[Reason],
             [State] = src.[State],
-            [Notes] = src.[Notes],
-            [Treatment_Description] = src.[Treatment_Description],
             [Booked_Via_API] = src.[Booked_Via_API],
             [Pending_At] = src.[Pending_At],
             [Confirmed_At] = src.[Confirmed_At],
@@ -168,9 +161,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_ID], [Appointment_UUID], [Appointment_Cancellation_Reason_ID], [Patient_ID], [Patient_Name], [Patient_Image_Url], [Practitioner_ID], [User_ID], [Payment_Plan_ID], [Room_ID], [Site_ID], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Notes], [Treatment_Description], [Booked_Via_API], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_ID], [Appointment_UUID], [Appointment_Cancellation_Reason_ID], [Patient_ID], [Patient_Name], [Patient_Image_Url], [Practitioner_ID], [User_ID], [Payment_Plan_ID], [Room_ID], [Site_ID], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Booked_Via_API], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Appointment_ID], src.[Appointment_UUID], src.[Appointment_Cancellation_Reason_ID], src.[Patient_ID], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_ID], src.[User_ID], src.[Payment_Plan_ID], src.[Room_ID], src.[Site_ID], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Notes], src.[Treatment_Description], src.[Booked_Via_API], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Appointment_ID], src.[Appointment_UUID], src.[Appointment_Cancellation_Reason_ID], src.[Patient_ID], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_ID], src.[User_ID], src.[Payment_Plan_ID], src.[Room_ID], src.[Site_ID], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Booked_Via_API], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

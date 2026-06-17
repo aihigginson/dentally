@@ -48,8 +48,6 @@ BEGIN
             , TRY_CAST(duration                          AS INT)  AS Duration
             , LEFT(reason,                                 255)   AS Reason
             , LEFT(state,                                  255)   AS State
-            , LEFT(notes,                                  255)   AS Notes
-            , LEFT(treatment_description,                  255)   AS Treatment_Description
             , LEFT(booked_via_api,                            255)   AS Booked_Via_API
             , LEFT(pending_at,                             255)   AS Pending_At
             , LEFT(confirmed_at,                           255)   AS Confirmed_At
@@ -77,8 +75,6 @@ BEGIN
             , tgt.Duration                           = src.Duration
             , tgt.Reason                             = src.Reason
             , tgt.State                              = src.State
-            , tgt.Notes                              = src.Notes
-            , tgt.Treatment_Description              = src.Treatment_Description
             , tgt.Booked_Via_API                     = src.Booked_Via_API
             , tgt.Pending_At                         = src.Pending_At
             , tgt.Confirmed_At                       = src.Confirmed_At
@@ -96,7 +92,7 @@ BEGIN
             Tenant_ID, ID, UUID, Appointment_Cancellation_Reason_ID,
             Patient_ID, Patient_Name, Patient_Image_Url,
             Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
-            Start_Time, Finish_Time, Duration, Reason, State, Notes, Treatment_Description,
+            Start_Time, Finish_Time, Duration, Reason, State,
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
             Completed_At, Cancelled_At, Did_Not_Attend_At,
@@ -106,7 +102,7 @@ BEGIN
             src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
             src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
-            src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State, src.Notes, src.Treatment_Description,
+            src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State,
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
             src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
