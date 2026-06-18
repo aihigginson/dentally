@@ -38,7 +38,7 @@ jobs:
     runs-on: windows-latest
     environment: ${{ inputs.target }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # --- PROD only: federated login (no secret) + acquire a warehouse token ---
       - name: Azure login (OIDC)
