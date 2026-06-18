@@ -1,0 +1,71 @@
+# =====================================================================
+# Release V012 -- Remove free-text / notes columns (DPIA, DPIA.md sec 2/7)
+# =====================================================================
+# Removes all free-text clinical content + Notes fields the reviewer flagged
+# as the highest remaining privacy risk: appointment Notes/Treatment_Description,
+# treatment Notes/Description/Patient_Nomenclature/Patient_Description, and the
+# config Notes (Acquisition_Sources, Contracts, Waiting_Lists). Keeps structured
+# treatment data (code, category, value, standard Nomenclature).
+#
+# Approach: ALTER TABLE DROP COLUMN (data-preserving). The dropped columns carry
+# no metric value, so NO reload and NO regression re-baseline are required.
+# Deploy the updated load SPs first, then drop the columns, then regenerate the
+# PBI views so the presentation layer follows.
+#
+# Bank_Holidays.Notes deliberately retained (public gov.uk reference data).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V012__remove_free_text.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- updated load SPs: Bronze ---
+DEPLOY  Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Acquisition_Sources.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Contracts.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Waiting_Lists.StoredProcedure.sql
+
+# --- updated load SPs: Silver ---
+DEPLOY  Fabric\Silver.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Silver.usp_Load_Treatment_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Silver.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY  Fabric\Silver.usp_Load_Treatments.StoredProcedure.sql
+DEPLOY  Fabric\Silver.usp_Load_Acquisition_Sources.StoredProcedure.sql
+DEPLOY  Fabric\Silver.usp_Load_Contracts.StoredProcedure.sql
+
+# --- updated load SPs: Gold ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Treatments.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Acquisition_Sources.StoredProcedure.sql
+
+# --- drop the columns (data preserved): Bronze ---
+EXEC    ALTER TABLE Bronze.Appointments DROP COLUMN Notes, Treatment_Description;
+EXEC    ALTER TABLE Bronze.Treatment_Appointments DROP COLUMN Notes;
+EXEC    ALTER TABLE Bronze.Treatment_Plan_Items DROP COLUMN Notes, Patient_Nomenclature;
+EXEC    ALTER TABLE Bronze.Treatments DROP COLUMN Description, Notes, Patient_Description, Patient_Nomenclature;
+EXEC    ALTER TABLE Bronze.Acquisition_Sources DROP COLUMN Notes;
+EXEC    ALTER TABLE Bronze.Contracts DROP COLUMN Notes;
+EXEC    ALTER TABLE Bronze.Waiting_Lists DROP COLUMN Default_Notes;
+
+# --- drop the columns: Silver ---
+EXEC    ALTER TABLE Silver.Appointments DROP COLUMN Notes, Treatment_Description;
+EXEC    ALTER TABLE Silver.Treatment_Appointments DROP COLUMN Notes;
+EXEC    ALTER TABLE Silver.Treatment_Plan_Items DROP COLUMN Description, Patient_Nomenclature, Notes;
+EXEC    ALTER TABLE Silver.Treatments DROP COLUMN Description, Patient_Nomenclature, Patient_Description, Notes;
+EXEC    ALTER TABLE Silver.Acquisition_Sources DROP COLUMN Notes;
+EXEC    ALTER TABLE Silver.Contracts DROP COLUMN Notes;
+EXEC    ALTER TABLE Silver.Waiting_List_Entries DROP COLUMN Notes;
+
+# --- drop the columns: Gold ---
+EXEC    ALTER TABLE Gold.Fact_Appointments DROP COLUMN Treatment_Description, Notes;
+EXEC    ALTER TABLE Gold.Fact_Treatment_Appointments DROP COLUMN Notes;
+EXEC    ALTER TABLE Gold.Fact_Treatment_Plan_Items DROP COLUMN Patient_Nomenclature, Notes;
+EXEC    ALTER TABLE Gold.Dim_Treatments DROP COLUMN Patient_Nomenclature, Description, Patient_Description, Notes;
+EXEC    ALTER TABLE Gold.Dim_Acquisition_Sources DROP COLUMN Notes;
+
+# --- regenerate PBI presentation views (follow the new Gold shape) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;
