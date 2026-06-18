@@ -44,7 +44,7 @@ _Last refreshed: 2026-06-17._
 
 - [x] Delete the dead Flask KPI code: `/api/kpis`, all `_kpis_*`, `_wrap` + helpers in `Web/app.py` — ~400 lines removed (commit 28e5c40, on dev; preserved by tag `flask-kpi-cards-complete`)
 - [x] Confirm DAX (Tabular Editor scripts) is the sole KPI definition — verified: no KPI computation remains in `Web/app.py` (routes are `/`, `/health`, auth-config, embed-token, me, filters, targets); dead Flask KPI code already removed (commit 28e5c40)
-- [ ] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven
+- [~] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven — **Revenue script refactored** (`TabularEditor_Revenue.csx`): per-KPI Target/vs-Target/BG blocks replaced by builder functions (`tDaily`/`tEff`/`tEff100`, `vPct`/`vPctGrey`/`vPp`, `bgHigherRef`/`bgHigherEff`/`bgLowerEff`/`bgHigherPp`/`bgLowerPp`) + 10 one-line `kpi()` calls; ~500→~245 lines, functionally-identical DAX. **Pending:** validate in dev Tabular Editor, then propagate the pattern to Patients/Scheduling/NHS/Clinical/Home.
 
 ## 5. ETL refactor & incremental Gold  _(Medium — cost optimisation, NOT a scaling blocker)_
 
