@@ -74,7 +74,7 @@ _Last refreshed: 2026-06-17._
 - [x] Architecture overview (medallion layers, data flow, components) — covered in `README.md` (Architecture section) + `CLAUDE.md`
 - [x] Runbook — `RUNBOOK.md`: environments, deploy procedures (web/warehouse/PBI + rollback), the golden rules, incident playbook (A–E for the failures actually hit), diagnostics, and the access-control model. Captures the 2026-06 learnings (dev/prod warehouse split, warehouse-out-of-pipeline, parameterised source, the `:latest` outage).
 - [x] Tenant-onboarding guide — `TENANT_ONBOARDING.md` (the manual `Audit.Tenants` + `Security.Clients`/`Application_Users` chain, data load, RLS verification, gotchas)
-- [ ] Data dictionary (Gold tables / PBI views)
+- [x] Data dictionary (Gold tables / PBI views) — `DATA_DICTIONARY.md`, generated from the live schema (36 PBI views + 38 Gold tables, 1,328 columns); reflects the minimised model and cross-refs `DPIA.md` / `DPA_SCHEDULE_1.md`. Regenerate from `INFORMATION_SCHEMA` when the schema changes.
 
 ## 8. SaaS-readiness  _(Medium)_
 
