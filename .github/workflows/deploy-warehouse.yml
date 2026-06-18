@@ -1,22 +1,34 @@
 name: Deploy Warehouse
 
-# Manifest-driven warehouse deployment. Applies an ordered release manifest via
-# the standard Scripts/Deploy.ps1 runner (authenticated as the Test Runner SP),
-# then runs the dw-tests gate to verify the new state.
+# Manifest-driven warehouse deployment via the standard Scripts/Deploy.ps1 runner.
+# Triggered by hand (workflow_dispatch) with the manifest filename + target env.
 #
-# Deliberate, controlled release: triggered by hand (workflow_dispatch) with the
-# manifest filename, not on every push.
+# Auth model (DPIA / ACCESS_MODEL.md sec 4):
+#   - target=dev  : authenticates with the DEV service principal's client secret
+#                   (GitHub secrets FABRIC_SP_*), deploys to the dev warehouse.
+#   - target=prod : authenticates with the PROD service principal via GitHub OIDC
+#                   federation (NO stored secret) -> acquires a warehouse token ->
+#                   Deploy.ps1 uses it (FABRIC_ACCESS_TOKEN). Prod is gated by the
+#                   'prod' GitHub Environment (add a required reviewer there if you
+#                   want manual approval).
 
 on:
   workflow_dispatch:
     inputs:
       manifest:
-        description: 'Release manifest filename under Releases/ (e.g. V001__patient_cohorts.manifest)'
+        description: 'Release manifest filename under Releases/ (e.g. V012__remove_free_text.manifest)'
         required: true
+      target:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [dev, prod]
+        default: dev
 
-# Serialise warehouse deploys against each other (single shared warehouse). A
-# different group from dw-tests so the verify job (which calls dw-tests) does not
-# deadlock against this workflow's own concurrency slot.
+permissions:
+  id-token: write   # required for OIDC federation (prod)
+  contents: read
+
 concurrency:
   group: dw-deploy-shared-warehouse
   cancel-in-progress: false
@@ -24,9 +36,28 @@ concurrency:
 jobs:
   deploy:
     runs-on: windows-latest
+    environment: ${{ inputs.target }}
     steps:
       - uses: actions/checkout@v4
 
+      # --- PROD only: federated login (no secret) + acquire a warehouse token ---
+      - name: Azure login (OIDC)
+        if: ${{ inputs.target == 'prod' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.PROD_SP_CLIENT_ID }}
+          tenant-id: ${{ vars.FABRIC_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Acquire prod warehouse token
+        if: ${{ inputs.target == 'prod' }}
+        shell: bash
+        run: |
+          echo "FABRIC_ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net --query accessToken -o tsv)" >> "$GITHUB_ENV"
+          echo "FABRIC_SERVER=emeh72n2ntdufpj4q665b2lzx4-eljzajgm5cpe5i64szgon7sej4.datawarehouse.fabric.microsoft.com" >> "$GITHUB_ENV"
+
+      # --- Apply the manifest. Dev uses the SP secret; prod uses FABRIC_ACCESS_TOKEN
+      #     set above (Deploy.ps1 prefers the pre-acquired token when present). ---
       - name: Apply release manifest
         shell: powershell
         env:
@@ -35,8 +66,10 @@ jobs:
           FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
         run: .\Scripts\Deploy.ps1 -Manifest "Releases\${{ inputs.manifest }}"
 
-  # Verify the deployed warehouse passes regression + reconciliation + RLS.
+  # Regression/reconciliation/RLS gate runs against the DEV test tenant (deterministic
+  # T11 baseline), so it only applies to dev deploys. Prod is verified separately.
   verify:
     needs: deploy
+    if: ${{ inputs.target == 'dev' }}
     uses: ./.github/workflows/dw-tests.yml
     secrets: inherit

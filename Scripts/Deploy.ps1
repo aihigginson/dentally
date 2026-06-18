@@ -53,9 +53,15 @@ if (Test-Path $credFile) { . $credFile }
 $Tenant   = $env:FABRIC_SP_TENANT
 $ClientId = $env:FABRIC_SP_CLIENT_ID
 $Secret   = $env:FABRIC_SP_CLIENT_SECRET
+$PreToken = $env:FABRIC_ACCESS_TOKEN   # OIDC/CI: a pre-acquired AAD token for the warehouse (no client secret)
 $Server   = if ($env:FABRIC_SERVER) { $env:FABRIC_SERVER } else { 'emeh72n2ntdufpj4q665b2lzx4-4i26eirspjiujnltrvplquzkem.datawarehouse.fabric.microsoft.com' }
 $Database = if ($env:FABRIC_DB)     { $env:FABRIC_DB }     else { 'WH_Dentally' }
-if (-not ($Tenant -and $ClientId -and $Secret)) { Write-Host 'Missing FABRIC_SP_* creds.' -ForegroundColor Red; exit 2 }
+# Auth is either a pre-acquired token (FABRIC_ACCESS_TOKEN, e.g. from a GitHub OIDC
+# login -> az account get-access-token) or an SP client-credentials grant
+# (FABRIC_SP_TENANT/CLIENT_ID/CLIENT_SECRET). Prod CI uses the former (no stored secret).
+if (-not $PreToken -and -not ($Tenant -and $ClientId -and $Secret)) {
+    Write-Host 'Missing credentials: set FABRIC_ACCESS_TOKEN, or FABRIC_SP_TENANT/CLIENT_ID/CLIENT_SECRET.' -ForegroundColor Red; exit 2
+}
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 
@@ -98,9 +104,15 @@ if ($WhatIf) {
 }
 
 # --- connect (SP token + SqlClient) ----------------------------------------
-$body = @{ grant_type = 'client_credentials'; client_id = $ClientId; client_secret = $Secret; scope = 'https://database.windows.net/.default' }
-try { $tok = (Invoke-RestMethod -Method Post -ContentType 'application/x-www-form-urlencoded' -Uri "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/token" -Body $body).access_token }
-catch { Write-Host "Token request failed: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+if ($PreToken) {
+    # Token already acquired upstream (e.g. GitHub OIDC login -> az account get-access-token
+    # --resource https://database.windows.net). No client secret involved.
+    $tok = $PreToken
+} else {
+    $body = @{ grant_type = 'client_credentials'; client_id = $ClientId; client_secret = $Secret; scope = 'https://database.windows.net/.default' }
+    try { $tok = (Invoke-RestMethod -Method Post -ContentType 'application/x-www-form-urlencoded' -Uri "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/token" -Body $body).access_token }
+    catch { Write-Host "Token request failed: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+}
 
 function Open-Conn {
     $c = New-Object System.Data.SqlClient.SqlConnection
