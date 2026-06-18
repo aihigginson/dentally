@@ -47,7 +47,6 @@ BEGIN
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[NHS_Location_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[NHS_Site_ID] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[PDS_Plus] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Start_Date] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[End_Date] AS VARCHAR(500)), ''),
@@ -67,7 +66,6 @@ BEGIN
                 LEFT(Name, 255)  AS [Name],
                 LEFT(NHS_Location_ID, 50)  AS [NHS_Location_ID],
                 LEFT(NHS_Site_ID, 50)  AS [NHS_Site_ID],
-                Notes  AS [Notes],
                 CASE WHEN LOWER(TRIM(PDS_Plus)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [PDS_Plus],
                 TRY_CAST(Start_Date AS date)  AS [Start_Date],
                 TRY_CAST(End_Date   AS date)  AS [End_Date],
@@ -86,7 +84,6 @@ BEGIN
             [Name] = src.[Name],
             [NHS_Location_ID] = src.[NHS_Location_ID],
             [NHS_Site_ID] = src.[NHS_Site_ID],
-            [Notes] = src.[Notes],
             [PDS_Plus] = src.[PDS_Plus],
             [Start_Date] = src.[Start_Date],
             [End_Date] = src.[End_Date],
@@ -102,8 +99,8 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Contracts] ([Tenant_ID], [Id], [Site_ID], [Active], [Contract_Number], [Name], [NHS_Location_ID], [NHS_Site_ID], [Notes], [PDS_Plus], [Start_Date], [End_Date], [Target], [UDA_Value], [UOA_Target], [UOA_Value], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Id], src.[Site_ID], src.[Active], src.[Contract_Number], src.[Name], src.[NHS_Location_ID], src.[NHS_Site_ID], src.[Notes], src.[PDS_Plus], src.[Start_Date], src.[End_Date], src.[Target], src.[UDA_Value], src.[UOA_Target], src.[UOA_Value], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Contracts] ([Tenant_ID], [Id], [Site_ID], [Active], [Contract_Number], [Name], [NHS_Location_ID], [NHS_Site_ID], [PDS_Plus], [Start_Date], [End_Date], [Target], [UDA_Value], [UOA_Target], [UOA_Value], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Site_ID], src.[Active], src.[Contract_Number], src.[Name], src.[NHS_Location_ID], src.[NHS_Site_ID], src.[PDS_Plus], src.[Start_Date], src.[End_Date], src.[Target], src.[UDA_Value], src.[UOA_Target], src.[UOA_Value], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Contracts] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]

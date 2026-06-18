@@ -41,8 +41,7 @@ BEGIN
             staged.*,
             CONVERT(VARBINARY(32), HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
         ISNULL(CAST(staged.[Active] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), '')
+        ISNULL(CAST(staged.[Name] AS VARCHAR(500)), '')
         ))) AS _Hash
         INTO #src
         FROM (
@@ -52,9 +51,7 @@ BEGIN
         LEFT(CAST(ID AS VARCHAR(255)), 50)  AS [Acquisition_Source_ID],
                 -- Bronze Active is VARCHAR; Silver is bit
         CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
-                Name  AS [Name],
-                -- Bronze Notes is VARCHAR(max); Silver is VARCHAR(1000)
-        LEFT(Notes, 1000)  AS [Notes]
+                Name  AS [Name]
             FROM Bronze.Acquisition_Sources
         ) AS staged;
 
@@ -62,7 +59,6 @@ BEGIN
         SET
             [Active] = src.[Active],
             [Name] = src.[Name],
-            [Notes] = src.[Notes],
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash
         FROM [Silver].[Acquisition_Sources] AS tgt
@@ -70,9 +66,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Acquisition_Sources] ([Tenant_ID], [Acquisition_Source_ID], [Active], [Name], [Notes],
+        INSERT INTO [Silver].[Acquisition_Sources] ([Tenant_ID], [Acquisition_Source_ID], [Active], [Name],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Acquisition_Source_ID], src.[Active], src.[Name], src.[Notes],
+        SELECT src.[Tenant_ID], src.[Acquisition_Source_ID], src.[Active], src.[Name],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
