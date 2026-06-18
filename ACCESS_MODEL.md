@@ -97,6 +97,7 @@ for routine development."*
 | **Reports, semantic model, notebooks, lakehouse** | the **Fabric deployment pipeline** "DEV TO PROD" | `ops@` (release identity) |
 
 - **Do not deploy the warehouse (`DM Dentally`) through the Fabric deployment pipeline** — untick it on Deploy. It only syncs schema (no migrations, no data reload, no regression gate); the Git manifest path does all three and is the source of truth.
+- **Semantic-model data-source connection:** after a deployment-pipeline promotion the prod semantic model's data source must be **bound** to a connection to the prod warehouse, and that **connection must be shared with `Analytically-Prod-Admin`** (connections have their own access list, separate from workspace roles) — otherwise the release operator gets "missing connection details / disconnected". Currently bound via a person's OAuth; **TODO: move the dataset connection to a service principal / service account** so it isn't tied to an individual.
 - **`ops@` is the release identity** — access granted via the **`Analytically-Prod-Admin` group** (consistent with the group-based model, not direct-to-user): the group is **Member** on the **dev** workspace (read the source stage), **Admin** on **prod**, and **Admin** on the DEV->PROD deployment pipeline. This lets a single operator build as `dev@` and promote as `ops@` without the `Admin@` break-glass. Reading dev (synthetic data) is an accepted, low-risk loosening.
 
 ---
