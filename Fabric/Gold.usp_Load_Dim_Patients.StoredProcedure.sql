@@ -18,6 +18,8 @@
 --                            identity-for-contact (names + preferred, phone, email), contactability
 --                            flags + the non-sensitive operational analytics. Full_Name now First+Last
 --                            (no Title). See DPIA.md sec 7.
+--    *10     18/06/2026  AIH V014: inactive patients (Active=0) are NOT flagged Is_Email/Phone_Missing
+--                            (their contact is deliberately removed in V013, not actionable-missing)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -60,8 +62,12 @@ BEGIN
             NULLIF(TRIM(p.Email_Address), '')                                                       AS Email_Address,
             NULLIF(TRIM(p.Home_Phone), '')                                                          AS Home_Phone,
             NULLIF(TRIM(p.Mobile_Phone), '')                                                        AS Mobile_Phone,
-            CASE WHEN NULLIF(TRIM(p.Email_Address),'') IS NULL THEN 1 ELSE 0 END                     AS Is_Email_Missing,
-            CASE WHEN NULLIF(TRIM(p.Mobile_Phone),'') IS NULL
+            -- Inactive patients have contact deliberately removed (V013), so they are NOT "missing"
+            -- contact (the flag drives actionable lists for active patients) -> force 0 when inactive.
+            CASE WHEN ISNULL(p.Active,0)=0 THEN 0
+                 WHEN NULLIF(TRIM(p.Email_Address),'') IS NULL THEN 1 ELSE 0 END                     AS Is_Email_Missing,
+            CASE WHEN ISNULL(p.Active,0)=0 THEN 0
+                 WHEN NULLIF(TRIM(p.Mobile_Phone),'') IS NULL
                   AND NULLIF(TRIM(p.Home_Phone),'')   IS NULL THEN 1 ELSE 0 END                      AS Is_Phone_Missing,
             CAST(ISNULL(p.Active, 0) AS BIT)                                                        AS Active,
             CAST(p.Payment_Plan_ID AS INT)                                                          AS Payment_Plan_ID,
