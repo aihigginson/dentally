@@ -21,7 +21,7 @@ honestly for a single-person company.
 |---|---|---|---|
 | **`Admin@analytically.info`** | Global Admin (everything) | **Off — break-glass** | Untouched; the guaranteed way in. Excluded from all MFA enforcement. |
 | **`dev@analytically.info`** | Dev workspace (Contributor), synthetic data only | **On** (Authenticator / passkey) | ✅ created, MFA enforced, workspace access confirmed |
-| **`ops@analytically.info`** | Prod workspace (Admin) + dev workspace (Member, read/release) + DEV->PROD deployment pipeline (Admin) — the **release identity** | **On** (Authenticator / passkey) | ✅ created, MFA enforced |
+| **`ops@analytically.info`** | via `Analytically-Prod-Admin` group: prod ws (Admin) + dev ws (Member, read/release) + DEV->PROD deployment pipeline (Admin) — the **release identity** | **On** (Authenticator / passkey) | ✅ created, MFA enforced |
 | **`viewer@analytically.info`** | Embedded app reports only; **no** DB/workspace | **On** | ✅ created; **pending** `Security.Application_Users` entry → demo tenant before it can see anything |
 | **`analytically-deploy-dev` SP** | Dev workspace (Admin) | n/a (client secret — local creds + dev CI) | ✅ created + tested green |
 | **`analytically-deploy-prod` SP** | Prod workspace (Admin) | n/a (**GitHub OIDC**, no stored secret) | ✅ created + tested green |
@@ -97,7 +97,7 @@ for routine development."*
 | **Reports, semantic model, notebooks, lakehouse** | the **Fabric deployment pipeline** "DEV TO PROD" | `ops@` (release identity) |
 
 - **Do not deploy the warehouse (`DM Dentally`) through the Fabric deployment pipeline** — untick it on Deploy. It only syncs schema (no migrations, no data reload, no regression gate); the Git manifest path does all three and is the source of truth.
-- **`ops@` is the release identity:** Member on the **dev** workspace (read the source stage) + Admin on **prod** + Admin on the DEV->PROD deployment pipeline. This lets a single operator build as `dev@` and promote as `ops@` without using the `Admin@` break-glass. Reading dev (synthetic data) is an accepted, low-risk loosening.
+- **`ops@` is the release identity** — access granted via the **`Analytically-Prod-Admin` group** (consistent with the group-based model, not direct-to-user): the group is **Member** on the **dev** workspace (read the source stage), **Admin** on **prod**, and **Admin** on the DEV->PROD deployment pipeline. This lets a single operator build as `dev@` and promote as `ops@` without the `Admin@` break-glass. Reading dev (synthetic data) is an accepted, low-risk loosening.
 
 ---
 
