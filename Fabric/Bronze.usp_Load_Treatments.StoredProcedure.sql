@@ -37,8 +37,6 @@ BEGIN
             , LEFT(nhs_treatment_cat,     255) AS NHS_Treatment_Cat
             , TRY_CAST(uda_band         AS DECIMAL(18,4)) AS UDA_Band
             , TRY_CAST(treatment_category_id AS DECIMAL(18,4)) AS Treatment_Category_ID
-            , LEFT(patient_nomenclature,  255) AS Patient_Nomenclature
-            , LEFT(description,           255) AS Description
             , LEFT(created_at,            255) AS Created_At
             , LEFT(updated_at,            255) AS Updated_At
         INTO #src
@@ -52,8 +50,6 @@ BEGIN
             , tgt.NHS_Treatment_Cat      = src.NHS_Treatment_Cat
             , tgt.UDA_Band               = src.UDA_Band
             , tgt.Treatment_Category_ID  = src.Treatment_Category_ID
-            , tgt.Patient_Nomenclature   = src.Patient_Nomenclature
-            , tgt.Description            = src.Description
             , tgt.Created_At             = src.Created_At
             , tgt.Updated_At             = src.Updated_At
             , tgt.DW_Loaded_At           = SYSUTCDATETIME()
@@ -61,8 +57,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Treatments (Tenant_ID, ID, Nomenclature, Code, Active, NHS_Treatment_Cat, UDA_Band, Treatment_Category_ID, Patient_Nomenclature, Description, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Nomenclature, src.Code, src.Active, src.NHS_Treatment_Cat, src.UDA_Band, src.Treatment_Category_ID, src.Patient_Nomenclature, src.Description, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Treatments (Tenant_ID, ID, Nomenclature, Code, Active, NHS_Treatment_Cat, UDA_Band, Treatment_Category_ID, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Nomenclature, src.Code, src.Active, src.NHS_Treatment_Cat, src.UDA_Band, src.Treatment_Category_ID, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Treatments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

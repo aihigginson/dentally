@@ -44,13 +44,9 @@ BEGIN
         ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Code] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Name] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Description] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Type] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Active] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Nomenclature] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Patient_Nomenclature] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Patient_Description] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Region] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[UDA_Band] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[NHS_Treatment_Cat] AS VARCHAR(500)), ''),
@@ -67,15 +63,10 @@ BEGIN
                 -- Site_ID not in Bronze.Treatments
         LEFT(Code, 50)  AS [Code],
                 NULL  AS [Name],
-                -- Name not in Bronze (Description used instead)
-        LEFT(Description, 255)  AS [Description],
                 NULL  AS [Type],
                 -- Type not in Bronze
         CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Active],
                 LEFT(Nomenclature,         255)  AS [Nomenclature],
-                LEFT(Patient_Nomenclature, 255)  AS [Patient_Nomenclature],
-                LEFT(Patient_Description,  255)  AS [Patient_Description],
-                LEFT(Notes,                255)  AS [Notes],
                 LEFT(Region,               255)  AS [Region],
                 TRY_CAST(UDA_Band           AS decimal(10,2))  AS [UDA_Band],
                 TRY_CAST(NHS_Treatment_Cat  AS decimal(10,2))  AS [NHS_Treatment_Cat],
@@ -91,13 +82,9 @@ BEGIN
             [Site_ID] = src.[Site_ID],
             [Code] = src.[Code],
             [Name] = src.[Name],
-            [Description] = src.[Description],
             [Type] = src.[Type],
             [Active] = src.[Active],
             [Nomenclature] = src.[Nomenclature],
-            [Patient_Nomenclature] = src.[Patient_Nomenclature],
-            [Patient_Description] = src.[Patient_Description],
-            [Notes] = src.[Notes],
             [Region] = src.[Region],
             [UDA_Band] = src.[UDA_Band],
             [NHS_Treatment_Cat] = src.[NHS_Treatment_Cat],
@@ -111,9 +98,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatments] ([Tenant_ID], [Id], [Site_ID], [Code], [Name], [Description], [Type], [Active], [Nomenclature], [Patient_Nomenclature], [Patient_Description], [Notes], [Region], [UDA_Band], [NHS_Treatment_Cat], [Treatment_Category_ID], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Treatments] ([Tenant_ID], [Id], [Site_ID], [Code], [Name], [Type], [Active], [Nomenclature], [Region], [UDA_Band], [NHS_Treatment_Cat], [Treatment_Category_ID], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Id], src.[Site_ID], src.[Code], src.[Name], src.[Description], src.[Type], src.[Active], src.[Nomenclature], src.[Patient_Nomenclature], src.[Patient_Description], src.[Notes], src.[Region], src.[UDA_Band], src.[NHS_Treatment_Cat], src.[Treatment_Category_ID], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Id], src.[Site_ID], src.[Code], src.[Name], src.[Type], src.[Active], src.[Nomenclature], src.[Region], src.[UDA_Band], src.[NHS_Treatment_Cat], src.[Treatment_Category_ID], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (
