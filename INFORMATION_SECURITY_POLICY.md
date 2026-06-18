@@ -59,9 +59,12 @@ P1 becomes available.)
 ## 7. Hosting & data residency
 
 Microsoft **Azure** (Container Apps) and Microsoft **Fabric/OneLake**, **UK South**
-(UK data residency). **No international transfers** are intended. Development and
-production are **fully separated** — separate workspaces, warehouses and app
-environments; **no production data is copied into development**.
+(UK data residency). Customer/patient data is stored in the UK; certain Microsoft
+platform-level operations (Entra ID, support, telemetry) may process limited data outside
+the UK under Microsoft's safeguards, and **any international transfer is subject to an
+appropriate UK GDPR transfer mechanism** (DPA §12). Development and production are
+**fully separated** — separate workspaces, warehouses and app environments; **no
+production data is copied into development**.
 
 ## 8. Secure development & change management
 

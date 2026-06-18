@@ -5,8 +5,11 @@
 processes on behalf of customer practices (the **Controllers**). It is the canonical
 list referenced by the DPIA (§13) and the customer DPA.
 
-All data-bearing services are hosted within **Microsoft Azure / Microsoft 365, UK South**
-(UK data residency). **No international transfers of personal data are intended.**
+Customer/patient data is hosted within **Microsoft Azure / Microsoft Fabric, UK South**
+(UK data residency). Microsoft platform-level operations (e.g. Entra ID authentication,
+support, telemetry) may involve limited processing outside the UK under Microsoft's own
+transfer safeguards; **any international transfer of personal data is subject to an
+appropriate UK GDPR transfer mechanism.**
 
 ---
 
@@ -21,6 +24,8 @@ All data-bearing services are hosted within **Microsoft Azure / Microsoft 365, U
 
 **Not a sub-processor:** the upstream **Dentally** practice-management system is the
 Controller's own clinical record and **source of data**, not a sub-processor of Analytically.
+Likewise, **any customer-controlled integrations** the practice chooses to connect are
+**not** sub-processors of Analytically and remain under the Controller's responsibility.
 
 ---
 

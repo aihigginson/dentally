@@ -79,7 +79,7 @@ Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = 
 
 ## 5. Hosting and security
 
-**5.1 Stored in UK West?** **No — UK South.** The Azure resources (Container Apps, resource group) and Fabric capacity are in **UK South** (data residency is UK). **[CONFIRM whether "UK West" is a hard requirement; if so this is a gap to address.]**
+**5.1 Data residency / region:** **Azure UK South** (United Kingdom). The Azure resources (Container Apps, resource group `rg-analytically`, Container Apps environment) and the Fabric capacity are all in **UK South** — verified via the resource group, the Container Apps environment, and the live endpoint (`…uksouth.azurecontainerapps.io`). Customer/patient data is stored in the UK; certain Microsoft platform-level operations (Entra ID authentication, support, telemetry) may process limited data outside the UK under Microsoft's transfer safeguards (§13, DPA §12). **[CONFIRM only if a customer mandates a specific UK region other than UK South.]**
 
 **5.2 Backups encrypted:** Yes — Fabric/OneLake stores all data with Microsoft-managed encryption; platform redundancy applies to backups/durability.
 

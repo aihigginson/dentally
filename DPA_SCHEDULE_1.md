@@ -70,8 +70,14 @@ erasure (on termination / retention rules).
 
 ## 8. Sub-processors
 
-- **Microsoft** — Azure (hosting, UK South) and Microsoft Fabric / Power BI (data
-  warehouse + embedded analytics) and Entra ID (authentication).
+Maintained canonically in **`SUB_PROCESSOR_REGISTER.md`**:
+- **Microsoft** — Azure (hosting, UK South), Microsoft Fabric / Power BI (data
+  warehouse + embedded analytics), and Entra ID (authentication).
+- **GitHub** (a Microsoft company) — source control & CI/CD deployment automation;
+  processes no patient data.
+
+Customer-controlled integrations connected by the practice are **not** sub-processors of
+the Processor and remain the Controller's responsibility.
 
 ## 9. Technical and organisational measures
 
@@ -83,7 +89,11 @@ free-text clinical data); defined retention and deletion.
 
 ## 10. International transfers
 
-None intended — processing and storage are within the United Kingdom (Azure UK South).
+The Controller's customer/patient data is hosted within the United Kingdom (Azure UK
+South). Microsoft platform-level operations (e.g. Entra ID authentication, support,
+telemetry) may involve limited processing outside the UK under Microsoft's own transfer
+safeguards. Any international transfer of personal data is subject to an appropriate UK
+GDPR transfer mechanism.
 
 ---
 

@@ -26,7 +26,8 @@ organisational measures** are set out in **Schedule 2** (below) and in
 ## 2. Roles
 
 The Controller (practice) determines the purposes and means of processing its patients'
-data. The Processor (Analytically) processes that data **only to provide the service**.
+data. The Processor (Analytically) processes that data **only to provide, secure,
+maintain and support the service**.
 
 ## 3. Processing on documented instructions
 
@@ -56,7 +57,7 @@ separated dev/prod with synthetic dev data, data minimisation, and logging.
   those in this DPA, and remains liable for their performance.
 - The Processor will give the Controller **prior notice** of any intended addition or
   replacement of a sub-processor, and a **reasonable opportunity to object** on
-  reasonable data-protection grounds. **[CONFIRM notice period — e.g. 30 days.]**
+  reasonable data-protection grounds, on **30 days' prior notice**.
 
 ## 7. Assistance with data-subject rights
 
@@ -69,10 +70,10 @@ directly to the Controller.
 
 ## 8. Personal data breach
 
-The Processor notifies the Controller **without undue delay** after becoming aware of a
-personal data breach affecting the Controller's data, with the information the Controller
-needs to meet its own notification obligations. **[CONFIRM target — e.g. within 48 hours.]**
-Security contact: **[CONFIRM].**
+The Processor notifies the Controller **without undue delay, and in any event targeting
+within 48 hours**, after becoming aware of a personal data breach affecting the
+Controller's data, with the information the Controller needs to meet its own notification
+obligations. Security contact: **[CONFIRM — security@analytically.info or equivalent].**
 
 ## 9. DPIA & prior consultation
 
@@ -94,20 +95,26 @@ confirms deletion on request.
 The Processor makes available information necessary to demonstrate compliance with
 Article 28 (e.g. this DPA, the DPIA, the Security Overview, sub-processor register), and
 allows for and contributes to audits, including inspections, by the Controller or an
-auditor it mandates — subject to reasonable notice, confidentiality, frequency limits and
-not compromising other customers' security. **[CONFIRM audit process / frequency.]**
+auditor it mandates. To protect other customers' security and confidentiality, this is
+satisfied by **up to one remote audit request per year** (the Processor providing the
+relevant documentation and written responses), on reasonable notice — with on-site or more
+frequent audits only where required by a supervisory authority or following a confirmed breach.
 
 ## 12. International transfers
 
-The Processor does **not** transfer the Controller's personal data outside the UK.
-Processing and storage are within **Azure UK South**. Any future transfer would require an
-appropriate UK GDPR transfer mechanism and prior notice.
+The Controller's **customer/patient data is hosted in Azure UK South**, and the Processor
+does not itself transfer that data outside the UK. The Processor relies on Microsoft as a
+sub-processor (§6); certain Microsoft platform-level operations — e.g. authentication
+(Entra ID), support and telemetry — may involve processing outside the UK under
+Microsoft's own data-protection terms and transfer safeguards. **Any international
+transfer of personal data will be subject to an appropriate UK GDPR transfer mechanism**
+(e.g. the UK International Data Transfer Agreement / Addendum or an adequacy decision).
 
 ## 13. Liability, term & governing law
 
 Liability is as set out in the Agreement. This DPA runs for the term of the Agreement and
 survives to the extent needed for return/deletion obligations. Governed by the laws of
-**England and Wales [CONFIRM jurisdiction].**
+**England and Wales.**
 
 ---
 
@@ -121,7 +128,7 @@ international transfers).
 
 | Area | Measure |
 |---|---|
-| **Data residency** | Microsoft Azure / Fabric, **UK South**; no international transfers |
+| **Data residency** | Customer/patient data hosted in Microsoft Azure / Fabric, **UK South**; any international transfer subject to an appropriate UK GDPR transfer mechanism (§12) |
 | **Encryption** | TLS in transit (HTTPS, `Encrypt=True` SQL); Microsoft-managed encryption at rest |
 | **Tenant isolation** | Per-row `Tenant_ID` + Power BI row-level security (effective identity); **fail-closed** embed token; automated RLS coverage + isolation tests in CI |
 | **Authentication** | Entra ID; **per-user MFA** on all human production access; break-glass admin excluded; automation via service principals (prod = GitHub OIDC, no stored secret) |
@@ -136,5 +143,7 @@ international transfers).
 
 ---
 
-*Placeholders to finalise with the Controller: legal entity details, notice/breach
-periods, audit process, security contact, and governing jurisdiction.*
+*Remaining placeholders to finalise: the Processor's **legal entity name & company number**
+(parties block) and the **security contact** address (§8). Defaults now set: 30-day
+sub-processor notice, breach notification targeting 48 hours, one remote audit/year,
+governing law England & Wales.*
