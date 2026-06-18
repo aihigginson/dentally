@@ -1,0 +1,20 @@
+# =====================================================================
+# Release V013 -- Obfuscate inactive-patient PII (DPIA sec 6.2)
+# =====================================================================
+# Retention control: hold identifying/contact PII for ACTIVE patients only.
+# The Silver patient load now nulls name + contact (First/Last/Preferred name,
+# Email, Mobile/Home phone) when Active = 0; non-identifying operational/financial
+# history is retained. Reload Silver then Gold so existing inactive patients are
+# obfuscated. No schema change (PBI views unaffected).
+#
+# NOTE: this changes data, so the regression baseline must be re-reviewed/re-captured
+# (the email/phone "not captured" metrics shift as inactive patients become
+# uncontactable). Run Run_Tests.ps1 and re-baseline if the only changes are expected.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V013__obfuscate_inactive_pii.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+DEPLOY  Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
