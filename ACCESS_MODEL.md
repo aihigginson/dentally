@@ -9,8 +9,9 @@ honestly for a single-person company.
 > **Status — 2026-06-18:** human accounts + groups **created and live**; per-user
 > MFA enforced on `dev@` / `ops@` / `viewer@`; `Admin@` deliberately MFA-exempt as
 > the break-glass account. Dev/ops have their Fabric workspace roles. Viewer pending
-> its app access-table entry. **Service-principal split (§4) is the remaining piece
-> (in progress).**
+> its app access-table entry. **Service-principal split (§4) complete** — dev SP
+> (secret, dev-only) + prod SP (OIDC, no stored secret) both tested green; old
+> Test Runner SP workspace access revoked (delete the app registration when confident).
 
 ---
 
@@ -22,8 +23,9 @@ honestly for a single-person company.
 | **`dev@analytically.info`** | Dev workspace (Contributor), synthetic data only | **On** (Authenticator / passkey) | ✅ created, MFA enforced, workspace access confirmed |
 | **`ops@analytically.info`** | Prod workspace (Admin), used on demand | **On** (Authenticator / passkey) | ✅ created, MFA enforced, workspace access confirmed |
 | **`viewer@analytically.info`** | Embedded app reports only; **no** DB/workspace | **On** | ✅ created; **pending** `Security.Application_Users` entry → demo tenant before it can see anything |
-| **`…-deploy-dev` SP** | Dev warehouse (DDL+DML) | n/a (client secret) | ⏳ to create — replaces local use of the combined SP |
-| **`…-deploy-prod` SP** | Prod warehouse (DDL+DML) | n/a (**GitHub OIDC**, no stored secret) | ⏳ to create — prod deploys run in CI via federation |
+| **`analytically-deploy-dev` SP** | Dev workspace (Admin) | n/a (client secret — local creds + dev CI) | ✅ created + tested green |
+| **`analytically-deploy-prod` SP** | Prod workspace (Admin) | n/a (**GitHub OIDC**, no stored secret) | ✅ created + tested green |
+| **`Dentally DW Test Runner` (old)** | — (access revoked) | — | ⛔ retired: workspace access removed; delete app registration when confident |
 
 **Principle:** the only identity used day-to-day (`dev@` + the dev SP) cannot reach
 production or real patient data. Reaching production is a deliberate, separate,
@@ -62,7 +64,7 @@ speculatively.
 
 ---
 
-## 4. Service-principal split + OIDC (in progress)
+## 4. Service-principal split + OIDC (done — 2026-06-18)
 
 Today a single "Test Runner" SP is a member of **both** workspaces and its secret sits in
 the local creds file — so the everyday local environment can query **prod** directly.
