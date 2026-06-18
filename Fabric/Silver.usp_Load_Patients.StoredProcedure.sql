@@ -11,8 +11,8 @@
 --    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --    *06     17/06/2026  AIH DATA MINIMISATION (V011): drop special-category + excess-identifier columns;
 --                            keep identity-for-contact, marketing consent + operational analytics only
---    *07     18/06/2026  AIH DATA MINIMISATION (V013): obfuscate name + contact for INACTIVE patients
---                            (Active=0 -> NULL); PII held for active patients only
+--    *07     18/06/2026  AIH DATA MINIMISATION (V013): inactive patients (Active=0) -> name replaced with
+--                            placeholder 'Inactive Patient', contact NULLed; PII held for active patients only
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -78,10 +78,11 @@ BEGIN
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Active,
                     -- DATA MINIMISATION (V013): hold identifying/contact PII for ACTIVE patients only.
-                    -- Inactive patients are no longer contactable, so name + contact are obfuscated to
-                    -- NULL (CASE with no ELSE returns NULL); non-identifying history is retained.
-                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(First_Name,    100) END AS First_Name,
-                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Last_Name,     100) END AS Last_Name,
+                    -- Inactive patients are no longer contactable: their real name is replaced with the
+                    -- placeholder "Inactive Patient" (so they remain identifiable as such on reports) and
+                    -- contact details are obfuscated to NULL. Non-identifying history is retained.
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(First_Name,    100) ELSE 'Inactive' END AS First_Name,
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Last_Name,     100) ELSE 'Patient'  END AS Last_Name,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Name,100) END AS Preferred_Name,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN Email_Address            END AS Email_Address,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Mobile_Phone,   50) END AS Mobile_Phone,
