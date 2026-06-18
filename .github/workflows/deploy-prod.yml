@@ -48,3 +48,12 @@ jobs:
             --resource-group rg-analytically \
             --image analyticallyacr.azurecr.io/analytically:${{ github.sha }} \
             --revision-suffix r${{ github.run_number }}
+
+      - name: Smoke test /health
+        run: |
+          for i in $(seq 1 6); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://analytically.info/health || true)
+            if [ "$code" = "200" ]; then echo "health OK ($code)"; exit 0; fi
+            echo "attempt $i: got $code, retrying in 10s"; sleep 10
+          done
+          echo "::error::/health did not return 200 after retries"; exit 1

@@ -36,9 +36,9 @@ _Last refreshed: 2026-06-17._
 
 - [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Active and verified green in CI** (secrets `FABRIC_SP_*` added). Enforces reconcile/FK integrity + capture success **+ regression drift** — the latter now real after fixing the `Test.Capture_Baseline` DROP/CREATE bug (it was wiped on every deploy; commit a7a35e6) so the baseline survives redeploys.
 - [x] Establish the first known-good baseline (`Test.usp_Promote`) — current baseline 122 metrics, **45 reconciles PASS / 120 OK / 2 OK(null)**, exit 0 (re-baselined after the patient-cohort feature added 5 cohort metrics).
-- [ ] Add a post-deploy smoke test against the web app
-- [ ] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers
-- [ ] Add a minimal E2E check for the embed flow
+- [x] Add a post-deploy smoke test against the web app — `deploy-dev.yml` + `deploy-prod.yml` now curl `/health` (6× retry) after the Container App update and fail the deploy if it's not 200.
+- [x] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers — `Web/tests/` (16 tests): `_auth` (token→upn, expiry, missing/no-upn), `_get_user_info` (UPN→client/tenants), and the **fail-closed embed token** (401 unauth, 404 unknown report, 500 if RLS roles empty, 403 unprovisioned, 200 happy path), + `/api/me` & `/api/targets` 403-when-unprovisioned. Run in CI via `app-tests.yml`.
+- [ ] Add a minimal E2E check for the embed flow — *(still todo; needs a live auth'd browser session — heavier than the unit + smoke layers above)*
 
 ## 4. Single source of truth for KPI logic  _(High)_
 
