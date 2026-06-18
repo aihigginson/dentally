@@ -20,7 +20,7 @@ business/policy decision are marked **[CONFIRM]** / **[DECISION NEEDED]**. Not l
 
 ## 2. Data collected
 
-Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = present in the warehouse/model; visibility in reports is narrower (§1.4). The table below reflects the **minimised** model after release V011 (2026-06-17).
+Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = present in the warehouse/model; visibility in reports is narrower (§1.4). The table below reflects the **minimised** model after releases V011–V014 (June 2026).
 
 **Patient identity**
 | Field | Collected |
@@ -97,7 +97,7 @@ Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = 
 
 **6.1 If a customer (practice) leaves:** Access is **suspended immediately** (`Audit.Tenants.Is_Active = 0`, `Application_Users` removed), a **30-day recovery window** applies (in case of accidental or disputed termination), and the tenant's warehouse data is **permanently deleted within 90 days**. The source of record remains the upstream Dentally system.
 
-**6.2 Retention of patient data while a practice is active — PII held for active patients only.** Identifying/contact data (name, email, phone) is **retained only for active patients**, because the operational purpose (contacting patients) only applies to them. When a patient becomes **inactive**, their **real name is replaced with the placeholder "Inactive Patient"** and their **contact details (email, phone) are removed (set to NULL)** across the analytics layers (Silver → Gold → Power BI) — so inactive patients remain *identifiable as inactive* on operational reports (e.g. recalls) but are no longer contactable and carry no personal identifiers; non-identifying operational/financial history is retained for trend analytics. **Live on dev and production (release V013, 2026-06-18).** Active-patient history is retained while the practice is active **[CONFIRM the period — full Dentally history vs e.g. last 7 years]**. A **DSAR / right-to-erasure workflow** remains **[DECISION NEEDED]** (note: erasure is materially simplified by the minimisation above and by inactive-patient obfuscation).
+**6.2 Retention of patient data while a practice is active — PII held for active patients only.** Identifying/contact data (name, email, phone) is **retained only for active patients**, because the operational purpose (contacting patients) only applies to them. When a patient becomes **inactive**, their **real name is replaced with the placeholder "Inactive Patient"** and their **contact details (email, phone) are removed (set to NULL)** across the analytics layers (Silver → Gold → Power BI) — so inactive patients remain *identifiable as inactive* on operational reports (e.g. recalls) but are no longer contactable and carry no personal identifiers; non-identifying operational/financial history is retained for trend analytics. **Live on dev and production (release V013, 2026-06-18).** Because their contact is deliberately removed, inactive patients are **not** flagged as "missing contact" and do **not** appear on contact/recall action lists (release V014). Active-patient history is retained while the practice is active **[CONFIRM the period — full Dentally history vs e.g. last 7 years]**. A **DSAR / right-to-erasure workflow** remains **[DECISION NEEDED]** (note: erasure is materially simplified by the minimisation above and by inactive-patient obfuscation).
 
 ---
 
