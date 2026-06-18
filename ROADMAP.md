@@ -60,10 +60,10 @@ _Last refreshed: 2026-06-17._
 
 ## 6. Operability / observability  _(Medium)_
 
-- [ ] Structured logging + correlation IDs (replace `print()`)
-- [ ] Error tracking (Sentry / App Insights) and alerting
+- [x] Structured logging + correlation IDs (replace `print()`) — all `print()` replaced with `app.logger`; a per-request correlation id (`X-Request-ID`, honoured if inbound else minted) is injected into every log line via a logging filter and echoed back in the response header for client↔server tracing.
+- [ ] Error tracking (Sentry / App Insights) and alerting — *(needs the Sentry/App Insights resource + DSN created first; then a gated init hook)*
 - [~] Health / readiness endpoint for Container Apps probes — `/health` **live + verified on dev** (200 `{status:ok}`, unauthenticated, no deps). Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
-- [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
+- [~] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling — **MSAL done**: `_pbi_msal`/`_fabric_msal` are now reused lazy singletons (in-memory token cache; previously rebuilt on every call, so AAD was hit per request). DB connection pooling **deferred** — token-auth connections (token in `attrs_before`, not the conn string) don't pool cleanly, so connect-per-request is kept deliberately.
 - [x] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — both `deploy-dev.yml` + `deploy-prod.yml` now build **and deploy `:${{ github.sha }}`** (the mutable `:dev`/`:latest` tags are still built as "newest" pointers). Each revision is pinned to an exact build; rollback = redeploy a prior commit's sha. Directly fixes the stale-`:latest` failure mode behind the 2026-06-15 outage.
 
 ## 7. Documentation  _(Medium)_
