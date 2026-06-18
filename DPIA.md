@@ -174,7 +174,7 @@ An independent penetration test is **planned prior to launch** (not yet performe
 
 ## 13. Sub-processors
 
-The platform relies on the following third-party services. Customers (controllers) routinely request this list during due diligence; it should be kept current and reflected in the customer DPA. All data-bearing services are hosted in **Microsoft Azure / Microsoft 365, UK South** (UK data residency — §5.1).
+The platform relies on the following third-party services. Customers (controllers) routinely request this list during due diligence. The **canonical, maintained version is `SUB_PROCESSOR_REGISTER.md`** (with the change-notification commitment); the table below mirrors it for the DPIA reader. All data-bearing services are hosted in **Microsoft Azure / Microsoft 365, UK South** (UK data residency — §5.1).
 
 | Service | Purpose | Personal data processed |
 |---|---|---|
