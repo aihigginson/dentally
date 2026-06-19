@@ -82,7 +82,6 @@
             transition: background 0.12s;
         }
         .contact-email:hover { background: #163f5e; }
-        .contact-phone { font-size: 13px; color: var(--text-3); margin-bottom: 24px; }
         .contact-switch {
             background: none; border: none; color: var(--text-3); font-size: 12px;
             cursor: pointer; text-decoration: underline; font-family: var(--font);
@@ -347,12 +346,11 @@
             </div>
             <h1>Access Required</h1>
             <p id="contact-msg">
-                Your account doesn't have access to Analytically. Please get in touch to arrange access or discuss pricing for your dental practice.
+                Your account doesn't have access to Analytically. Please contact us by email to arrange access or discuss pricing for your dental practice.
             </p>
             <div>
-                <a class="contact-email" href="mailto:hello@analytically.io">hello@analytically.io</a>
+                <a class="contact-email" href="mailto:sales@analytically.info">sales@analytically.info</a>
             </div>
-            <div class="contact-phone">+44 (0)800 123 456</div>
             <button class="contact-switch" id="contact-switch-btn">Sign in with a different account</button>
         </div>
     </div>
@@ -653,7 +651,7 @@
         if (msalAccount) {
             document.getElementById('contact-msg').textContent =
                 `Your account (${msalAccount.username}) doesn't have access to Analytically. ` +
-                `Please get in touch to arrange access or discuss pricing for your dental practice.`;
+                `Please contact us by email to arrange access or discuss pricing for your dental practice.`;
         }
         document.getElementById('contact-overlay').style.display = 'flex';
     }
