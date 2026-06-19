@@ -25,6 +25,12 @@
 # usual (the new columns are nullable, so the existing T15 insert still works).
 # =====================================================================
 
+# --- Stage views: recreate so the SQL endpoint sees the new stage_patients
+#     columns (use_email/use_sms/preferred_phone). Must run AFTER seed_onelake has
+#     written them to the Delta table, else the Bronze SP CREATE below fails
+#     validation ("Invalid column name 'use_email'"). ---
+DEPLOY  Fabric\Stage.Views.sql
+
 # --- Bronze layer (raw ingestion schema; feeds Silver; deploy first) ---
 DEPLOY  Fabric\Bronze.Patients.Table.sql
 DEPLOY  Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
