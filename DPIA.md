@@ -20,7 +20,7 @@ business/policy decision are marked **[CONFIRM]** / **[DECISION NEEDED]**. Not l
 
 ## 2. Data collected
 
-Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = present in the warehouse/model; visibility in reports is narrower (§1.4). The table below reflects the **minimised** model after releases V011–V014 (June 2026).
+Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = present in the warehouse/model; visibility in reports is narrower (§1.4). The table below reflects the **minimised** model after releases V011–V015 (June 2026).
 
 **Patient identity**
 | Field | Collected |
@@ -41,7 +41,8 @@ Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = 
 | Work phone | **No** — removed (V011) |
 | Address (lines, town, county, postcode) | **No** — removed (V011) |
 | Marketing consent (`Marketing_Consent`) | Yes |
-| `Use_Email` / `Use_SMS` per-channel flags | **No** — removed (V011) |
+| Contact preference: `Use_Email` / `Use_SMS` flags | **Yes** — re-added (V015) as contactability metadata |
+| Preferred phone (`Preferred_Phone`: mobile/home) | **Yes** — re-added (V015) |
 
 **Appointment data:** appointment dates — Yes; status — Yes; missed/DNA — Yes; cancellations (+ reason) — Yes; recall information (dates, intervals, status) — Yes.
 

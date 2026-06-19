@@ -10,6 +10,7 @@
 --    *05     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
 --    *06     17/06/2026  AIH DATA MINIMISATION (V011): stop landing special-category + excess-identifier fields;
 --                            load identity-for-contact, marketing flag + operational analytics only
+--    *07     19/06/2026  AIH V015: re-land contact-preference fields (use_email, use_sms, preferred_phone)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patients]
@@ -41,6 +42,9 @@ BEGIN
             , LEFT(email_address,                 255)            AS Email_Address
             , LEFT(mobile_phone,                  255)            AS Mobile_Phone
             , LEFT(home_phone,                    255)            AS Home_Phone
+            , LEFT(use_email,                     255)            AS Use_Email
+            , LEFT(use_sms,                       255)            AS Use_SMS
+            , LEFT(preferred_phone,               255)            AS Preferred_Phone
             , TRY_CAST(payment_plan_id           AS INT)          AS Payment_Plan_ID
             , TRY_CAST(dentist_id                AS INT)          AS Dentist_ID
             , TRY_CAST(hygienist_id              AS INT)          AS Hygienist_ID
@@ -67,6 +71,9 @@ BEGIN
             , tgt.Email_Address            = src.Email_Address
             , tgt.Mobile_Phone             = src.Mobile_Phone
             , tgt.Home_Phone               = src.Home_Phone
+            , tgt.Use_Email                = src.Use_Email
+            , tgt.Use_SMS                  = src.Use_SMS
+            , tgt.Preferred_Phone          = src.Preferred_Phone
             , tgt.Payment_Plan_ID          = src.Payment_Plan_ID
             , tgt.Dentist_ID               = src.Dentist_ID
             , tgt.Hygienist_ID             = src.Hygienist_ID
@@ -96,6 +103,9 @@ BEGIN
             Email_Address,
             Mobile_Phone,
             Home_Phone,
+            Use_Email,
+            Use_SMS,
+            Preferred_Phone,
             Payment_Plan_ID,
             Dentist_ID,
             Hygienist_ID,
@@ -122,6 +132,9 @@ BEGIN
             src.Email_Address,
             src.Mobile_Phone,
             src.Home_Phone,
+            src.Use_Email,
+            src.Use_SMS,
+            src.Preferred_Phone,
             src.Payment_Plan_ID,
             src.Dentist_ID,
             src.Hygienist_ID,

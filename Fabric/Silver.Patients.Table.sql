@@ -2,9 +2,10 @@
 -- Data-minimised patient table (V011, 2026-06-17). Special-category and excess-
 -- identifier fields removed (Title/Middle name, DOB, Gender, Ethnicity, NHS/NI/PPS
 -- numbers, phone country codes, Work phone, full Address, Custom fields, Status,
--- Recalls flag, Medical Alert, SMS/Email comms flags, Archived reason, Consent to
--- share, Family ID, Emergency Contact x3, Preferred phone). Retained: identity-for-
--- contact (names + preferred name, mobile/home phone, email), marketing consent,
+-- Recalls flag, Medical Alert, Archived reason, Consent to share, Family ID,
+-- Emergency Contact x3, Work phone). Retained: identity-for-contact (names +
+-- preferred name, mobile/home phone, email), the contact-preference fields
+-- (Use_Email / Use_SMS / Preferred_Phone, re-added V015), marketing consent,
 -- and non-sensitive operational analytics (active, recall dates, acquisition,
 -- payment plan, site/practitioner). See DPIA.md sec 7.
 SET ANSI_NULLS ON
@@ -25,6 +26,9 @@ CREATE TABLE [Silver].[Patients](
 	[Email_Address] [VARCHAR](255) NULL,
 	[Mobile_Phone] [VARCHAR](50) NULL,
 	[Home_Phone] [VARCHAR](50) NULL,
+	[Use_Email] [bit] NULL,
+	[Use_SMS] [bit] NULL,
+	[Preferred_Phone] [VARCHAR](20) NULL,
 	[Marketing_Opt_In] [bit] NULL,
 	[Dentist_Practitioner_ID] [int] NULL,
 	[Hygienist_Practitioner_ID] [int] NULL,

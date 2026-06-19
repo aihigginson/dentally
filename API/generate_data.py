@@ -1043,7 +1043,12 @@ def gen_patients(tdef, rng):
 
         use_email = rng.random() > 0.1
         use_sms   = rng.random() > 0.15
+        # Keep this rng.choice EXACTLY as-is (same list): the shared per-tenant rng
+        # threads every downstream entity, so changing the draw would shift all
+        # subsequent data. Work phone is not stored (V011), so fold 'work' -> 'mobile'
+        # AFTER the draw (deterministic, consumes no randomness).
         preferred_phone = rng.choice(["mobile","mobile","mobile","home","work"])
+        preferred_phone = "mobile" if preferred_phone == "work" else preferred_phone
 
         # preferred_name: ~15% chance
         preferred_name = first if rng.random() < 0.15 else None
@@ -1070,14 +1075,15 @@ def gen_patients(tdef, rng):
 
         pp_def = pp_by_id.get(pp_id, {})
 
-        # DATA MINIMISATION (V011, DPIA sec 7): only emit identity-for-contact
-        # (names + preferred name, mobile/home phone, email), marketing consent
-        # and non-sensitive operational analytics. Special-category and excess-
-        # identifier fields (title, middle name, DOB, gender, ethnicity, NHS/NI
-        # numbers, NHS exemption, full address, work phone, preferred phone,
-        # medical alert, occupation, use_email/sms, emergency contact x3, archived
-        # reason, legacy id) are no longer landed. The locals above are retained
-        # only because other generation logic still derives from them.
+        # DATA MINIMISATION (V011, DPIA sec 7) + CONTACTABILITY (V015): emit
+        # identity-for-contact (names + preferred name, mobile/home phone, email),
+        # marketing consent, the contact-preference fields (use_email / use_sms /
+        # preferred_phone) and non-sensitive operational analytics. Special-category
+        # and excess-identifier fields (title, middle name, DOB, gender, ethnicity,
+        # NHS/NI numbers, NHS exemption, full address, work phone, medical alert,
+        # occupation, emergency contact x3, archived reason, legacy id) are NOT
+        # landed. The other locals above are retained only because other generation
+        # logic still derives from them.
         patients.append({
             "id": i,
             "first_name": first,
@@ -1086,6 +1092,9 @@ def gen_patients(tdef, rng):
             "email_address": f"{first.lower()}.{last.lower()}{i}@example.com" if rng.random() < email_rate else None,
             "mobile_phone": f"07{rng.randint(100,999)} {rng.randint(100000,999999)}" if rng.random() < phone_rate else None,
             "home_phone": f"0{rng.randint(1000,9999)} {rng.randint(100000,999999)}" if rng.random() < 0.20 else None,
+            "use_email": use_email,
+            "use_sms": use_sms,
+            "preferred_phone": preferred_phone,
             "site_id": site_id,
             "dentist_id": dentist["id"],
             "hygienist_id": hygienist_id,

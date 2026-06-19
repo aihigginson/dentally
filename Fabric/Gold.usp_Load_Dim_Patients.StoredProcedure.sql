@@ -20,6 +20,8 @@
 --                            (no Title). See DPIA.md sec 7.
 --    *10     18/06/2026  AIH V014: inactive patients (Active=0) are NOT flagged Is_Email/Phone_Missing
 --                            (their contact is deliberately removed in V013, not actionable-missing)
+--    *11     19/06/2026  AIH V015: carry contact-preference fields (Use_Email, Use_SMS, Preferred_Phone)
+--                            through from Silver (active patients only; NULL for inactive per V013)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -81,6 +83,9 @@ BEGIN
             CAST(p.Hygienist_Recall_Date AS DATE)                                                   AS Hygienist_Recall_Date,
             CAST(p.Hygienist_Recall_Interval AS INT)                                                AS Hygienist_Recall_Interval_Months,
             NULLIF(TRIM(p.Recall_Method), '')                                                       AS Recall_Method,
+            p.Use_Email                                                                             AS Use_Email,
+            p.Use_SMS                                                                               AS Use_SMS,
+            NULLIF(TRIM(p.Preferred_Phone), '')                                                     AS Preferred_Phone,
             NULLIF(p.Marketing_Opt_In, 0)                                                           AS Marketing_Consent,
             TRY_CAST(NULLIF(TRIM(ps.First_Appointment_Date), '') AS DATE)                           AS First_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date), '') AS DATE)                            AS Last_Appointment_Date,
@@ -142,6 +147,9 @@ BEGIN
             Hygienist_Recall_Date               = src.Hygienist_Recall_Date,
             Hygienist_Recall_Interval_Months    = src.Hygienist_Recall_Interval_Months,
             Recall_Method                       = src.Recall_Method,
+            Use_Email                           = src.Use_Email,
+            Use_SMS                             = src.Use_SMS,
+            Preferred_Phone                     = src.Preferred_Phone,
             Marketing_Consent                   = src.Marketing_Consent,
             First_Appointment_Date              = src.First_Appointment_Date,
             Last_Appointment_Date               = src.Last_Appointment_Date,
@@ -179,6 +187,9 @@ BEGIN
            ISNULL(CAST(tgt.[Hygienist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Hygienist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Recall_Method] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Use_Email] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Use_SMS] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Preferred_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Marketing_Consent] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[First_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Last_Appointment_Date] AS VARCHAR(500)), ''),
@@ -214,6 +225,9 @@ BEGIN
            ISNULL(CAST(src.[Hygienist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Hygienist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Recall_Method] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Use_Email] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Use_SMS] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Preferred_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Marketing_Consent] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[First_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Last_Appointment_Date] AS VARCHAR(500)), ''),
@@ -241,7 +255,7 @@ BEGIN
             Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
             Dentist_Recall_Date, Dentist_Recall_Interval_Months,
             Hygienist_Recall_Date, Hygienist_Recall_Interval_Months,
-            Recall_Method, Marketing_Consent,
+            Recall_Method, Use_Email, Use_SMS, Preferred_Phone, Marketing_Consent,
             First_Appointment_Date, Last_Appointment_Date, Next_Appointment_Date,
             First_Exam_Date, Last_Exam_Date, Next_Exam_Date,
             Last_Scale_Polish_Date, Next_Scale_Polish_Date,
@@ -258,7 +272,7 @@ BEGIN
             src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,
             src.Dentist_Recall_Date, src.Dentist_Recall_Interval_Months,
             src.Hygienist_Recall_Date, src.Hygienist_Recall_Interval_Months,
-            src.Recall_Method, src.Marketing_Consent,
+            src.Recall_Method, src.Use_Email, src.Use_SMS, src.Preferred_Phone, src.Marketing_Consent,
             src.First_Appointment_Date, src.Last_Appointment_Date, src.Next_Appointment_Date,
             src.First_Exam_Date, src.Last_Exam_Date, src.Next_Exam_Date,
             src.Last_Scale_Polish_Date, src.Next_Scale_Polish_Date,

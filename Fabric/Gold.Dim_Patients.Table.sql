@@ -3,9 +3,10 @@
 -- excess-identifier fields removed (NHS/NI/PPS numbers, Ethnicity, DOB/Age,
 -- Gender, Medical Alert, full Address, Emergency Contact, Title/Middle name,
 -- Family/Custom/Legacy, NHS exemption). Retained: identity-for-contact (names +
--- preferred name, phone, email), contactability flags, and non-sensitive
--- operational analytics (active, recall/appointment/exam dates, acquisition,
--- financial totals, site/practitioner). See DPIA.md sec 7.
+-- preferred name, phone, email), contactability flags (Recall_Method + the
+-- contact-preference fields Use_Email / Use_SMS / Preferred_Phone, re-added V015),
+-- and non-sensitive operational analytics (active, recall/appointment/exam dates,
+-- acquisition, financial totals, site/practitioner). See DPIA.md sec 7.
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -38,6 +39,9 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Hygienist_Recall_Date]              [date]          NULL,
     [Hygienist_Recall_Interval_Months]   [int]           NULL,
     [Recall_Method]                      [varchar](100)  NULL,
+    [Use_Email]                          [bit]           NULL,
+    [Use_SMS]                            [bit]           NULL,
+    [Preferred_Phone]                    [varchar](20)   NULL,
     [Marketing_Consent]                  [varchar](255)  NULL,
     [First_Appointment_Date]             [date]          NULL,
     [Last_Appointment_Date]              [date]          NULL,

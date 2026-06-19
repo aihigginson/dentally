@@ -32,6 +32,7 @@ training.
 - Patient identifier (Dentally ID)
 - Name (first, last, preferred)
 - Contact details: email address, mobile phone, home phone
+- Contact preferences: use-email / use-SMS flags and preferred phone (which stored number to use)
 - Marketing-consent flag
 - Appointment data: dates, status, attendance/DNA, cancellations, recall dates/intervals
 - Treatment data: structured treatment **codes, categories, values** and standard

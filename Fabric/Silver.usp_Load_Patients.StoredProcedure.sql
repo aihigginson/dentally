@@ -13,6 +13,8 @@
 --                            keep identity-for-contact, marketing consent + operational analytics only
 --    *07     18/06/2026  AIH DATA MINIMISATION (V013): inactive patients (Active=0) -> name replaced with
 --                            placeholder 'Inactive Patient', contact NULLed; PII held for active patients only
+--    *08     19/06/2026  AIH V015: add contact-preference fields (Use_Email, Use_SMS, Preferred_Phone);
+--                            held for active patients only (NULL for inactive, per V013)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -55,6 +57,9 @@ BEGIN
                     ISNULL(CAST(staged.[Email_Address] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Mobile_Phone] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Home_Phone] AS VARCHAR(500)), ''),
+                    ISNULL(CAST(staged.[Use_Email] AS VARCHAR(500)), ''),
+                    ISNULL(CAST(staged.[Use_SMS] AS VARCHAR(500)), ''),
+                    ISNULL(CAST(staged.[Preferred_Phone] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Marketing_Opt_In] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Dentist_Practitioner_ID] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Hygienist_Practitioner_ID] AS VARCHAR(500)), ''),
@@ -87,6 +92,13 @@ BEGIN
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN Email_Address            END AS Email_Address,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Mobile_Phone,   50) END AS Mobile_Phone,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Home_Phone,     50) END AS Home_Phone,
+                    -- Contact-preference fields (V015): held for ACTIVE patients only (V013); inactive -> NULL.
+                    -- Bronze Use_Email/Use_SMS are VARCHAR booleans -> Silver bit.
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
+                         THEN CASE WHEN LOWER(TRIM(Use_Email)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_Email,
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
+                         THEN CASE WHEN LOWER(TRIM(Use_SMS)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_SMS,
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Phone, 20) END AS Preferred_Phone,
                     -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
                     CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
@@ -118,6 +130,9 @@ BEGIN
             [Email_Address] = src.[Email_Address],
             [Mobile_Phone] = src.[Mobile_Phone],
             [Home_Phone] = src.[Home_Phone],
+            [Use_Email] = src.[Use_Email],
+            [Use_SMS] = src.[Use_SMS],
+            [Preferred_Phone] = src.[Preferred_Phone],
             [Marketing_Opt_In] = src.[Marketing_Opt_In],
             [Dentist_Practitioner_ID] = src.[Dentist_Practitioner_ID],
             [Hygienist_Practitioner_ID] = src.[Hygienist_Practitioner_ID],
@@ -137,9 +152,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Patients] ([Tenant_ID], [Patient_ID], [Account_ID], [Site_ID], [Active], [First_Name], [Last_Name], [Preferred_Name], [Email_Address], [Mobile_Phone], [Home_Phone], [Marketing_Opt_In], [Dentist_Practitioner_ID], [Hygienist_Practitioner_ID], [Payment_Plan_ID], [Acquisition_Source_ID], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Patients] ([Tenant_ID], [Patient_ID], [Account_ID], [Site_ID], [Active], [First_Name], [Last_Name], [Preferred_Name], [Email_Address], [Mobile_Phone], [Home_Phone], [Use_Email], [Use_SMS], [Preferred_Phone], [Marketing_Opt_In], [Dentist_Practitioner_ID], [Hygienist_Practitioner_ID], [Payment_Plan_ID], [Acquisition_Source_ID], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Patient_ID], src.[Account_ID], src.[Site_ID], src.[Active], src.[First_Name], src.[Last_Name], src.[Preferred_Name], src.[Email_Address], src.[Mobile_Phone], src.[Home_Phone], src.[Marketing_Opt_In], src.[Dentist_Practitioner_ID], src.[Hygienist_Practitioner_ID], src.[Payment_Plan_ID], src.[Acquisition_Source_ID], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Patient_ID], src.[Account_ID], src.[Site_ID], src.[Active], src.[First_Name], src.[Last_Name], src.[Preferred_Name], src.[Email_Address], src.[Mobile_Phone], src.[Home_Phone], src.[Use_Email], src.[Use_SMS], src.[Preferred_Phone], src.[Marketing_Opt_In], src.[Dentist_Practitioner_ID], src.[Hygienist_Practitioner_ID], src.[Payment_Plan_ID], src.[Acquisition_Source_ID], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

@@ -36,6 +36,7 @@ BEGIN
                 WHEN LOWER(@token) = 'nhs' THEN 'NHS'
                 WHEN LOWER(@token) = 'uda' THEN 'UDA'
                 WHEN LOWER(@token) = 'uoa' THEN 'UOA'
+                WHEN LOWER(@token) = 'sms' THEN 'SMS'
                 ELSE UPPER(LEFT(@token,1)) + LOWER(SUBSTRING(@token,2,200))
             END;
 

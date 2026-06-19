@@ -40,7 +40,7 @@ Object types in filenames: `Table`, `Stored Procedure`, `View`, `User Defined Fu
 | Foreign keys | `fk_[referenced_entity]` | `fk_practitioner` |
 | DW metadata cols | `DW_` prefix | `DW_Loaded_At`, `DW_Created_At` |
 
-Acronyms always fully capitalised: `ID`, `NHS`, `UDA`, `UOA`.
+Acronyms always fully capitalised: `ID`, `NHS`, `UDA`, `UOA`, `SMS`.
 
 ## Key Patterns
 
@@ -58,7 +58,7 @@ Acronyms always fully capitalised: `ID`, `NHS`, `UDA`, `UOA`.
 
 ## Special Acronyms (for `dbo.CapitaliseSnakeCase`)
 
-The function handles these as special cases: `ID`, `NHS`, `UDA`, `UOA`. Keep this list in mind when adding new column names that include abbreviations.
+The function handles these as special cases: `ID`, `NHS`, `UDA`, `UOA`, `SMS`. Keep this list in mind when adding new column names that include abbreviations.
 
 ## File Encoding
 

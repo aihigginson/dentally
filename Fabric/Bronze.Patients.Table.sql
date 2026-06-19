@@ -2,10 +2,11 @@
 -- Data-minimised patient table (V011, 2026-06-17). Special-category and excess-
 -- identifier fields are no longer landed in the warehouse (Title/Middle name, DOB,
 -- Gender, Ethnicity, NHS/NI numbers, phone country codes, Work phone, Address,
--- Custom/Legacy fields, Occupation, Image URL, Medical Alert, SMS/Email comms
--- flags, Archived reason, Emergency Contact x3, Preferred phone). Retained:
--- identity-for-contact (names + preferred name, mobile/home phone, email),
--- marketing flag + operational analytics. See DPIA.md sec 7.
+-- Custom/Legacy fields, Occupation, Image URL, Medical Alert, Archived reason,
+-- Emergency Contact x3, Work phone). Retained: identity-for-contact (names +
+-- preferred name, mobile/home phone, email), the contact-preference fields
+-- (Use_Email / Use_SMS / Preferred_Phone, re-added V015), marketing flag +
+-- operational analytics. See DPIA.md sec 7.
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -30,6 +31,9 @@ CREATE TABLE [Bronze].[Patients](
 	[Last_Name] [VARCHAR](255) NULL,
 	[Marketing] [VARCHAR](255) NULL,
 	[Mobile_Phone] [VARCHAR](255) NULL,
+	[Use_Email] [VARCHAR](255) NULL,
+	[Use_SMS] [VARCHAR](255) NULL,
+	[Preferred_Phone] [VARCHAR](255) NULL,
 	[Payment_Plan_ID] [int] NULL,
 	[Preferred_Name] [VARCHAR](255) NULL,
 	[Recall_Method] [VARCHAR](255) NULL,
