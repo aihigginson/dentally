@@ -1,0 +1,36 @@
+# =====================================================================
+# Release V017 -- Bronze: one Process_Config job per table
+# =====================================================================
+# Collapses the Bronze metadata from 248 per-tenant rows (BRONZE_T{tid}_{ENTITY})
+# to 31 per-table rows (BRONZE_{ENTITY}). The tenant + full-refresh are supplied at
+# RUNTIME: Audit.ETL_Run_Process gains optional @Tenant_ID/@Full_Refresh and resolves
+# {TID}/{FR} tokens in Process_Parameters, so one config row serves every tenant.
+# Execution stays per-tenant (Audit.usp_Load_Bronze is still called once per tenant by
+# Orchestrate_Bronze, tied to each async Dentally extract) and per-tenant audit
+# granularity is preserved (Process_Execution_Log records the resolved @Tenant_ID).
+#
+# Backward-compatible: Silver/Gold config rows have no tokens and callers pass no
+# tenant, so token resolution is a no-op -- Silver/Gold are untouched.
+#
+# usp_Rerun_Failed_Jobs is updated: it can no longer match Process_Options to the
+# (now templated) Process_Parameters, so it seeds by Process_Name (1:1 with code),
+# captures the failed run's resolved options (Rerun_Plan.Failed_Options) and re-runs
+# the correct tenant by parsing @Tenant_ID/@Full_Refresh back out.
+#
+# Data is unchanged (this is orchestration metadata only) -> NO regression re-baseline.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V017__bronze_one_job_per_table.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Audit objects ---
+DEPLOY  Fabric\Audit.Rerun_Plan.Table.sql
+DEPLOY  Fabric\Audit.ETL_Run_Process.StoredProcedure.sql
+DEPLOY  Fabric\Audit.usp_Rerun_Failed_Jobs.StoredProcedure.sql
+
+# --- Bronze orchestrator ---
+DEPLOY  Fabric\Audit.usp_Load_Bronze.StoredProcedure.sql
+
+# --- Re-seed metadata (idempotent DELETE + INSERT) ---
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql

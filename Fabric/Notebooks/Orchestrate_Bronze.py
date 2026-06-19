@@ -3,7 +3,7 @@
 # =============================================================================
 # Loops through all active tenants in Audit.Tenants and for each one:
 #   1. Runs Stage_Ingest  — pulls from the Dentally API into LH_Dentally
-#   2. Runs Bronze.usp_Load_All — upserts Stage data into WH_Dentally Bronze tables
+#   2. Runs Audit.usp_Load_Bronze — upserts Stage data into WH_Dentally Bronze tables
 #
 # After this notebook completes, run Silver/Gold procedures to process all
 # tenants downstream (those layers read Bronze directly and are not per-tenant).
@@ -118,9 +118,9 @@ for row in tenants:
     # Brief pause to allow Fabric's lakehouse metadata to propagate to the
     # Warehouse SQL engine before querying Stage views.
     time.sleep(30)
-    print("  [2/2] Bronze.usp_Load_All ...")
+    print("  [2/2] Audit.usp_Load_Bronze ...")
     cursor.execute(
-        "EXEC Bronze.usp_Load_All @Tenant_ID = ?, @Full_Refresh = ?",
+        "EXEC Audit.usp_Load_Bronze @Tenant_ID = ?, @Full_Refresh = ?",
         tenant_id, int(full_refresh)
     )
 

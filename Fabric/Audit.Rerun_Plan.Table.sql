@@ -13,6 +13,7 @@ CREATE TABLE [Audit].[Rerun_Plan](
     [Process_Category_Code] [varchar](100)     NULL,
     [Run_Level]             [int]              NULL,
     [Is_Downstream]         [int]              NULL,
+    [Failed_Options]        [varchar](4000)    NULL,   -- resolved Process_Options of the failed run (carries @Tenant_ID for per-tenant Bronze reruns)
     [Planned_At]            [datetime2](3)     NULL
 )
 GO

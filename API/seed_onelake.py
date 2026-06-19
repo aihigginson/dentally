@@ -640,7 +640,7 @@ def main():
     for _, stage_name, _ in TABLE_MAP:
         write_stage(combined[stage_name], stage_name)
 
-    print('\nAll tenants seeded. Run Bronze.usp_Load_All for tenants 11-14.')
+    print('\nAll tenants seeded. Run Audit.usp_Load_Bronze for tenants 11-14.')
 
 
 if __name__ == '__main__':
