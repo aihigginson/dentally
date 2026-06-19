@@ -15,7 +15,7 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 - [x] **dev:** `.\Scripts\Deploy.ps1 -Manifest Releases\V015__patient_contact_prefs.manifest` *(deploy `fc50c1e4`, all 19 OK)*
 - [x] **dev:** re-applied `Fabric\Bronze.T15_Test_Data.sql` + reloaded Silver/Gold patients *(deploy `a73cb7a3`)*
 - [x] **dev:** refresh the PBI model; add **Use Email / Use SMS / Preferred Phone** to visuals *(done 2026-06-19)*
-- [ ] **prod:** (1) reseed prod stage so `stage_patients` has the 3 new cols — ⚠️ `seed_onelake.py` is hard-coded to DEV GUIDs (lines 26-27); confirm how prod demo data is seeded; (2) **Deploy Warehouse** Action → manifest `V015__patient_contact_prefs.manifest`, target `prod`; (3) refresh the prod semantic model. *(No T15 on prod.)*
+- [ ] **prod:** (1) `python API/seed_onelake_prod.py` *(browser auth → prod lakehouse; generates from generate_data.py so it emits the 3 new cols, and `schema_mode="merge"` adds them to prod `stage_patients`)*; (2) ensure remote `dev` is pushed (done — V015 manifest is on origin/dev); (3) **Deploy Warehouse** Action → **change manifest to** `V015__patient_contact_prefs.manifest`, target `prod`; (4) refresh the prod semantic model. *(No T15 on prod.)*
 
 ### 2. V016 — drop dead `usp_Create_*` procs  *(dev DONE)*
 - [x] dev (deploy `2fb2e602`, 19 procs dropped)
