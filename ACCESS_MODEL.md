@@ -104,9 +104,15 @@ for routine development."*
 
 ## 5. Audit logging (supporting control)
 
-- Enable + retain **Entra sign-in logs** and **Fabric/Power BI activity logs**. Define a
-  retention period (e.g. 12 months) — **[DECISION NEEDED]**.
+- **Application logs — DONE (2026-06-19):** retained **365 days** in Log Analytics
+  (`workspace-rganalytically3no0`). These are the **per-user report-access audit** — the app
+  logs the authenticated UPN per report load (`[embed-token] upn=… report=…`). Authoritative
+  for end-user access because the embedded SP + effective-identity model means the PBI activity
+  log shows the SP, not the consumer.
 - Warehouse ETL + deploys are already audited (`Audit` schema, `Migrate.Deploy_Log`).
+- **Roadmap:** **Entra sign-in logs** (needs Entra ID P1 to export long-term — deferred while
+  single-operator) and **Fabric/Power BI activity logs** (daily export; low value now — the only
+  service-level job is the daily model refresh, one job/one identity).
 
 ---
 

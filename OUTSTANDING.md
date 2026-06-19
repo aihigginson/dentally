@@ -33,9 +33,11 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 
 ---
 
-## C. Logging  *(retention already decided: 12 months)*
+## C. Logging  *(retention decided: 12 months)*
 
-- [ ] **7. Enable + retain Entra sign-in logs + Power BI/Fabric activity logs** (export to durable storage).
+- [x] **7a. Application logs → 12-month retention + visible** *(done 2026-06-19)* — Log Analytics `workspace-rganalytically3no0` retention set to 365d; app logs the end-user UPN per report load (`[embed-token] upn=… report=…`) → the authoritative per-user report-access audit (the embedded SP model means the PBI activity log shows the SP, not the consumer). KQL in DPIA §4.4 / below.
+- [ ] **7b. (roadmap) Power BI/Fabric activity logs** — daily export to durable storage. Low priority: only recurring service-level job is the daily model refresh (one job, one identity).
+- [ ] **7c. (roadmap) Entra sign-in logs** — needs **Entra ID P1** to export long-term; deferred while single-operator (enable when staff > 1 / P1 acquired).
 
 ---
 
