@@ -25,9 +25,9 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 
 ## B. Entra / access-model housekeeping
 
-- [ ] **3. Delete the old "Dentally DW Test Runner" app registration** (workspace access already revoked).
+- [x] **3. Delete the old "Dentally DW Test Runner" app registration** (workspace access already revoked). *(done 2026-06-19)*
 - [ ] **4. Give `dev@` a permanent minimum licence** before the 60-day PBI Pro trial expires **(~mid-Aug 2026)** — Fabric Free if sufficient, else PBI Pro. *(Only dated item.)*
-- [ ] **5. Add `viewer@` to `Security.Application_Users`** → demo tenant, so it can see reports.
+- [x] **5. Add `viewer@` to `Security.Application_Users`** → demo tenant, so it can see reports. *(done 2026-06-19)*
 - [ ] **6. Move the prod semantic-model data-source connection to a service principal / service account** (currently a personal OAuth — `ACCESS_MODEL.md` §4b).
 
 ---
