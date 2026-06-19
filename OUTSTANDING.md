@@ -7,7 +7,7 @@ Updated 2026-06-19. Tick items off as they complete.
 
 ## A. Deploys (technical)
 
-### 1. V015 — patient contact prefs  *(committed `3748478`; dev deploy IN PROGRESS)*
+### 1. V015 — patient contact prefs  *(committed `3748478`; dev DONE, prod pending)*
 Re-adds `Use_Email`, `Use_SMS`, `Preferred_Phone` end-to-end. **Order matters** — the
 Bronze SP references new `stage_patients` columns that only exist after a reseed:
 
