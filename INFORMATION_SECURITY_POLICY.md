@@ -93,7 +93,7 @@ are **rebuildable from source**, and source data is **re-ingestible from Dentall
 
 ## 11. Incident & breach response
 
-Security issues are reported to **[security contact — CONFIRM]**. On a suspected
+Security issues are reported to **security@analytically.info**. On a suspected
 personal-data breach: contain, assess, and **notify affected customers in line with UK
 GDPR timelines** (and the ICO where applicable, within 72 hours of becoming aware). The
 controller (practice) is notified without undue delay.

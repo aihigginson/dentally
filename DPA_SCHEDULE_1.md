@@ -97,5 +97,6 @@ GDPR transfer mechanism.
 
 ---
 
-*Placeholders to confirm with the Controller: exact authorised-user roles, data-retention
-period for active practices, security contact, and breach-notification process.*
+*Placeholders to confirm with the Controller: exact authorised-user roles and the
+data-retention period for active practices. (Security contact: security@analytically.info;
+breach notification without undue delay, targeting 48 hours — see DPA §8.)*

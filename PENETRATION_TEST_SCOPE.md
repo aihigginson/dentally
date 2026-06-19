@@ -71,7 +71,7 @@ Provide independent assurance that, before real patient data is onboarded:
   finding; no DoS; stop-and-report immediately on discovering any real personal data.
 - Authorisation: written authorisation to test the in-scope assets will be provided
   (testing is authorised security assessment, not unauthorised access).
-- Point of contact during the test: **[security contact — CONFIRM].**
+- Point of contact during the test: **security@analytically.info**.
 
 ## 7. Approach
 

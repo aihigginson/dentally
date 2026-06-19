@@ -7,7 +7,7 @@ This Data Processing Agreement ("**DPA**") forms part of the service agreement (
 "**Agreement**") between:
 
 - the **customer practice** ("**Controller**"), and
-- **Analytically [legal entity / company no. — CONFIRM]** ("**Processor**"),
+- **Human Solutions Too** (company number **16242443**), trading as **Analytically** ("**Processor**"),
 
 and governs the Processor's processing of personal data on the Controller's behalf under
 **UK GDPR Article 28** and the Data Protection Act 2018.
@@ -73,7 +73,7 @@ directly to the Controller.
 The Processor notifies the Controller **without undue delay, and in any event targeting
 within 48 hours**, after becoming aware of a personal data breach affecting the
 Controller's data, with the information the Controller needs to meet its own notification
-obligations. Security contact: **[CONFIRM — security@analytically.info or equivalent].**
+obligations. Security contact: **security@analytically.info**.
 
 ## 9. DPIA & prior consultation
 
@@ -143,7 +143,7 @@ international transfers).
 
 ---
 
-*Remaining placeholders to finalise: the Processor's **legal entity name & company number**
-(parties block) and the **security contact** address (§8). Defaults now set: 30-day
-sub-processor notice, breach notification targeting 48 hours, one remote audit/year,
-governing law England & Wales.*
+*All key terms now set: Processor = Human Solutions Too (company no. 16242443) t/a
+Analytically; security contact security@analytically.info; 30-day sub-processor notice;
+breach notification targeting 48 hours; one remote audit/year; governing law England &
+Wales. Have a qualified adviser review before execution.*

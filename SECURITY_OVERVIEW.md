@@ -72,7 +72,7 @@ inactive patients' identifying data is obfuscated.
 
 ## Responsible disclosure / incidents
 
-- Security issues can be reported to **[security contact — CONFIRM]**. We will acknowledge,
+- Security issues can be reported to **security@analytically.info**. We will acknowledge,
   investigate, and notify affected customers of any personal-data breach in line with UK
   GDPR timelines.
 
