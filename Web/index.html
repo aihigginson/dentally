@@ -1069,11 +1069,17 @@
 
     function _buildConfig({ token, embedUrl, reportId }) {
         const mobile = isMobile();
+        // Lock down data egress (defence-in-depth with the tenant "Export and sharing"
+        // settings being off): no right-click context menu ("Show as table" / export),
+        // and the "Export data" command hidden from visual headers.
+        // displayOption 1 = models.CommandDisplayOption.Hidden (numeric, matching the
+        // tokenType: 1 convention used here rather than importing the models enum).
+        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 1 } }] };
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
-                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
+                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2, ...lockdown }
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 }, ...lockdown },
         };
     }
 
