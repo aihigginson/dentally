@@ -5,7 +5,7 @@ Updated 2026-06-19. Tick items off as they complete.
 
 ---
 
-## A. Deploys (technical)
+## A. Deploys (technical)  ✅ COMPLETE (dev + prod)
 
 ### 1. V015 — patient contact prefs  *(committed `3748478`; dev + prod DONE)*
 Re-adds `Use_Email`, `Use_SMS`, `Preferred_Phone` end-to-end. **Order matters** — the
@@ -16,7 +16,7 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 - [x] **dev:** re-applied `Fabric\Bronze.T15_Test_Data.sql` + reloaded Silver/Gold patients *(deploy `a73cb7a3`)*
 - [x] **dev:** refresh the PBI model; add **Use Email / Use SMS / Preferred Phone** to visuals *(done 2026-06-19)*
 - [x] **prod:** reseeded via `python API/seed_onelake_prod.py`, then Deploy Warehouse Action (V015, target prod) — **success 2026-06-19**
-- [ ] **prod:** refresh the prod semantic model (if not already done) so PBI picks up the new columns
+- [x] **prod:** refreshed the prod semantic model — **success 2026-06-19** (PBI now has the new columns)
 
 ### 2. V016 — drop dead `usp_Create_*` procs  *(dev + prod DONE)*
 - [x] dev (deploy `2fb2e602`, 19 procs dropped)
