@@ -31,7 +31,7 @@ Object types in filenames: `Table`, `Stored Procedure`, `View`, `User Defined Fu
 | Object | Pattern | Example |
 |--------|---------|---------|
 | Silver load procedures | `Silver.usp_Load_[Entity]` | `Silver.usp_Load_Patients` |
-| Gold dimension create | `Gold.usp_Create_Dim_[Name]` | `Gold.usp_Create_Dim_Date` |
+| Gold table DDL | `Gold.[Table].Table.sql` | `Gold.Dim_Patients.Table.sql` |
 | Gold dimension load | `Gold.usp_Load_Dim_[Name]` | `Gold.usp_Load_Dim_Practitioners` |
 | Audit procedures | `Audit.ETL_[Action]` | `Audit.ETL_Start_Run` |
 | Functions | `fn_` prefix | `Gold.fn_Get_Date_Key` |
