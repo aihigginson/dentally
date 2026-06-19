@@ -11,13 +11,11 @@ Updated 2026-06-19. Tick items off as they complete.
 Re-adds `Use_Email`, `Use_SMS`, `Preferred_Phone` end-to-end. **Order matters** — the
 Bronze SP references new `stage_patients` columns that only exist after a reseed:
 
-- [ ] **dev:** `python API/seed_onelake.py`  *(opens a browser for auth; rewrites the stage Delta with the new columns. Reseeds T11–14 — data is byte-identical except the 3 new columns, so no drift.)*
-- [ ] **dev:** `.\Scripts\Deploy.ps1 -Manifest Releases\V015__patient_contact_prefs.manifest`  *(now recreates the Stage views first, then Bronze→Silver→Gold→PBI)*
-- [ ] **dev:** re-apply `Fabric\Bronze.T15_Test_Data.sql`  *(the Bronze drop/create clears T15; new cols are nullable so the existing insert still works)*
+- [x] **dev:** `python API/seed_onelake.py` *(reseeded 2026-06-19)*
+- [x] **dev:** `.\Scripts\Deploy.ps1 -Manifest Releases\V015__patient_contact_prefs.manifest` *(deploy `fc50c1e4`, all 19 OK)*
+- [x] **dev:** re-applied `Fabric\Bronze.T15_Test_Data.sql` + reloaded Silver/Gold patients *(deploy `a73cb7a3`)*
 - [ ] **dev:** refresh the PBI model; add **Use Email / Use SMS / Preferred Phone** to visuals as wanted
 - [ ] **prod:** repeat seed (if prod data is reseeded that way) + `$env:FABRIC_SERVER='...-eljz...'` then the same manifest + refresh
-
-> Note: the first dev manifest run stopped at step 2 (Stage didn't have the columns yet) — expected. Just do the reseed, then re-run the whole manifest.
 
 ### 2. V016 — drop dead `usp_Create_*` procs  *(dev DONE)*
 - [x] dev (deploy `2fb2e602`, 19 procs dropped)
