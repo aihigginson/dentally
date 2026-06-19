@@ -14,12 +14,12 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 - [x] **dev:** `python API/seed_onelake.py` *(reseeded 2026-06-19)*
 - [x] **dev:** `.\Scripts\Deploy.ps1 -Manifest Releases\V015__patient_contact_prefs.manifest` *(deploy `fc50c1e4`, all 19 OK)*
 - [x] **dev:** re-applied `Fabric\Bronze.T15_Test_Data.sql` + reloaded Silver/Gold patients *(deploy `a73cb7a3`)*
-- [ ] **dev:** refresh the PBI model; add **Use Email / Use SMS / Preferred Phone** to visuals as wanted
-- [ ] **prod:** repeat seed (if prod data is reseeded that way) + `$env:FABRIC_SERVER='...-eljz...'` then the same manifest + refresh
+- [x] **dev:** refresh the PBI model; add **Use Email / Use SMS / Preferred Phone** to visuals *(done 2026-06-19)*
+- [ ] **prod:** (1) reseed prod stage so `stage_patients` has the 3 new cols — ⚠️ `seed_onelake.py` is hard-coded to DEV GUIDs (lines 26-27); confirm how prod demo data is seeded; (2) **Deploy Warehouse** Action → manifest `V015__patient_contact_prefs.manifest`, target `prod`; (3) refresh the prod semantic model. *(No T15 on prod.)*
 
 ### 2. V016 — drop dead `usp_Create_*` procs  *(dev DONE)*
 - [x] dev (deploy `2fb2e602`, 19 procs dropped)
-- [ ] **prod:** GitHub *Deploy Warehouse* action target=prod (or `$env:FABRIC_SERVER='...-eljz...'` + `.\Scripts\Deploy.ps1 -Manifest Releases\V016__drop_dead_create_procs.manifest`). Idempotent.
+- [ ] **prod:** GitHub **Actions → Deploy Warehouse → Run workflow** → manifest `V016__drop_dead_create_procs.manifest`, target `prod`. No data dependency; idempotent.
 
 ---
 
