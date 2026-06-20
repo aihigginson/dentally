@@ -1,0 +1,54 @@
+# =====================================================================
+# Release V018 -- Split Fact_Invoice_Items into invoice-grain + line-grain
+# =====================================================================
+# The line fact previously folded the invoice header amounts onto every line
+# (double-counting on multi-line invoices). Split into three star-schema objects:
+#   Gold.Dim_Invoices       -- invoice header ATTRIBUTES (1/invoice)  -> PBI.[List Invoices]
+#   Gold.Fact_Invoices      -- invoice-grain AMOUNTS    (1/invoice)  -> PBI.[_Invoices]
+#   Gold.Fact_Invoice_Items -- line-grain AMOUNTS (slimmed)          -> PBI.[_Invoice Items]
+# Both facts relate to Dim_Invoices via fk_Invoice. Aged_Debt_Band + Is_Discount move
+# to vw_Dim_Invoices; Invoice_Discount is now rebuilt by usp_Load_Dim_Invoices.
+#
+# Consumer repoints: Aggregate_Daily revenue -> line amounts (NHS_Charge flag-based;
+# fixes the multi-line overcount), KPI_Snapshot outstanding -> Fact_Invoices, DAX
+# Discounts -> per-invoice over 'List Invoices'. NUMBERS CHANGE -> RE-BASELINE after verify.
+#
+# Tables are DROP/CREATE'd then FULL-reloaded (@Full_Reload=1). Load order:
+# Dim_Invoices (also rebuilds Invoice_Discount) -> Fact_Invoices -> Fact_Invoice_Items
+# (needs the dim for fk_Invoice) -> KPI_Snapshot -> Aggregate_Daily -> PBI view regen.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V018__split_invoice_facts.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Tables (DROP/CREATE) ---
+DEPLOY  Fabric\Gold.Dim_Invoices.Table.sql
+DEPLOY  Fabric\Gold.Fact_Invoices.Table.sql
+DEPLOY  Fabric\Gold.Fact_Invoice_Items.Table.sql
+
+# --- Load procedures ---
+DEPLOY  Fabric\Gold.usp_Load_Dim_Invoices.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Invoices.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_KPI_Snapshot.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+DEPLOY  Fabric\Audit.usp_Load_All.sql
+
+# --- Views ---
+DEPLOY  Fabric\Gold.vw_Dim_Invoices.View.sql
+DEPLOY  Fabric\Gold.vw_Fact_Invoice_Items.View.sql
+
+# --- Re-seed metadata (idempotent DELETE + INSERT) ---
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+DEPLOY  Fabric\Test.Metric_Definition.Data.sql
+
+# --- Full reload in dependency order ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Invoices @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Invoices @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Invoice_Items @Mode='PROD',@Full_Reload=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_KPI_Snapshot @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Regenerate PBI presentation views (List Invoices / _Invoices / _Invoice Items) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;

@@ -243,14 +243,16 @@ add("Deposit Value",
     @"DIVIDE(SUM('_Payments'[Deposit Amount]), [Total Revenue])",
     "0.0%");
 
+// Invoice grain split: invoice header Amount now lives on '_Invoices' (1/invoice) and
+// line amounts on '_Invoice Items'; iterate the invoice dimension so each invoice's
+// header total is compared to the sum of its lines exactly once.
 add("Discounts",
     @"DIVIDE(
     SUMX(
-        SUMMARIZE('_Invoice Items',
-            '_Invoice Items'[Invoice ID],
-            ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
-            ""_items"", SUM('_Invoice Items'[Total Price])),
-        IF([_inv] > [_items], [_inv] - [_items], 0)),
+        'List Invoices',
+        VAR _inv   = CALCULATE(SUM('_Invoices'[Invoice Amount]))
+        VAR _items = CALCULATE(SUM('_Invoice Items'[Total Price]))
+        RETURN IF(_inv > _items, _inv - _items, 0)),
     [Total Revenue])",
     "0.0%");
 

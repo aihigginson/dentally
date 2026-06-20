@@ -403,6 +403,11 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Gold.usp_Load_Dim_NHS_Contracts @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
+    SET @Step = 'Dim_Invoices';        SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
     -- ---- FACTS ----
 
     SET @Step = 'Fact_Treatment_Plan_Items'; SET @Start = GETDATE();
@@ -415,6 +420,11 @@ DECLARE @Msg        nvarchar(500);
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts=@My_Inserts, @Run_Updates=@My_Updates, @Run_Deletes=@My_Deletes OUT
+    IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
+
+    SET @Step = 'Fact_Invoices';       SET @Start = GETDATE();
+    SET @Process_Code = 'GOLD_'+UPPER(@Step)
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
     SET @Step = 'Fact_Payments';       SET @Start = GETDATE();
