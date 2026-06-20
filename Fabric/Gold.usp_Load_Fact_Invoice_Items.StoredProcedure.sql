@@ -12,6 +12,13 @@
 --                            Invoice_Paid and fk_Date_Due/Paid. Added fk_Invoice (-> Dim_Invoices).
 --                            Invoice_Discount rebuild moved to usp_Load_Dim_Invoices. Header is
 --                            still joined for the line's patient/account/site/invoice-date context.
+--    *10     20/06/2026  AIH Added fk_Treatment: resolved line -> Silver.Treatment_Plan_Items
+--                            (Treatment_Plan_Item_ID -> Id, carries Treatment_ID) ->
+--                            Gold.Dim_Treatments. Sundry lines -> -1. Folded into V018.
+--                            Also: Treatment_Plan_Item_ID column bigint -> VARCHAR(50) storing the
+--                            RAW key (was TRY_CAST AS INT -> NULL for GUID ids -> silently broke
+--                            KPI_Snapshot 'charged'/open-courses detection). Now stores the GUID
+--                            so KPI_Snapshot's bk_Treatment_Plan_Item_ID join works for all data.
 --  To Run			 :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Invoice_Items @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -63,13 +70,14 @@ BEGIN
             ISNULL(dpr.pk_Practitioner, -1)                             AS fk_Practitioner,
             ISNULL(dpp.pk_Payment_Plan, -1)                             AS fk_Payment_Plan,
             ISNULL(dtp.pk_Treatment_Plan, -1)                           AS fk_Treatment_Plan,
+            ISNULL(dt.pk_Treatment, -1)                                 AS fk_Treatment,
             ISNULL(dacc.pk_Account, -1)                                 AS fk_Account,
             ISNULL(dps.pk_Practice_Site, -1)                            AS fk_Practice_Site,
             ISNULL(du.pk_User, -1)                                      AS fk_User,
             dd_inv.pk_Date                                              AS fk_Date_Invoice,
             dd_c.pk_Date                                                AS fk_Date_Created,
             CAST(ii.Invoice_ID AS INT)                                  AS Invoice_ID,
-            TRY_CAST(ii.Treatment_Plan_Item_ID AS INT)                  AS Treatment_Plan_Item_ID,
+            NULLIF(TRIM(ii.Treatment_Plan_Item_ID),'')                  AS Treatment_Plan_Item_ID,
             NULLIF(TRIM(ii.Sundry_ID),'')                               AS Sundry_ID,
             NULLIF(TRIM(ii.Name),'')                                    AS Item_Name,
             CAST(ISNULL(ii.Item_Price,0) AS DECIMAL(12,2))              AS Item_Price,
@@ -88,6 +96,11 @@ BEGIN
                                                     WHERE Patient_ID = inv.Patient_ID
                                                       AND Tenant_ID  = ii.Tenant_ID)                   AND dpp.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(ii.Treatment_Plan_ID AS INT) AND dtp.Tenant_ID = ii.Tenant_ID
+        -- Resolve the line's treatment via its treatment-plan-item: invoice line ->
+        -- Silver.Treatment_Plan_Items (carries Treatment_ID) -> Gold.Dim_Treatments.
+        -- Sundry lines (no treatment-plan-item) fall through to fk_Treatment = -1.
+        LEFT JOIN Silver.Treatment_Plan_Items tpi ON tpi.Id            = ii.Treatment_Plan_Item_ID AND tpi.Tenant_ID = ii.Tenant_ID
+        LEFT JOIN Gold.Dim_Treatments dt       ON dt.Treatment_ID      = tpi.Treatment_ID          AND dt.Tenant_ID  = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Accounts dacc       ON dacc.Account_ID       = CAST(inv.Account_ID AS INT)   AND dacc.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = NULLIF(TRIM(inv.Site_ID),'')  AND dps.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Users du            ON du.bk_User_ID         = TRY_CAST(NULLIF(TRIM(ii.User_ID),'') AS INT) AND du.Tenant_ID = ii.Tenant_ID
@@ -110,6 +123,7 @@ BEGIN
             fk_Practitioner          = src.fk_Practitioner,
             fk_Payment_Plan          = src.fk_Payment_Plan,
             fk_Treatment_Plan        = src.fk_Treatment_Plan,
+            fk_Treatment             = src.fk_Treatment,
             fk_Account               = src.fk_Account,
             fk_Practice_Site         = src.fk_Practice_Site,
             fk_User                  = src.fk_User,
@@ -132,6 +146,7 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Practitioner]        AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Payment_Plan]        AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Treatment_Plan]      AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Treatment]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Account]             AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_User]                AS VARCHAR(500)), ''),
@@ -152,6 +167,7 @@ BEGIN
            ISNULL(CAST(src.[fk_Practitioner]        AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Payment_Plan]        AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Treatment_Plan]      AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Treatment]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Account]             AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_User]                AS VARCHAR(500)), ''),
@@ -171,7 +187,7 @@ BEGIN
         -- Insert new rows
         INSERT INTO Gold.Fact_Invoice_Items (
             Tenant_ID, bk_Invoice_Item_ID, fk_Invoice,
-            fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Treatment_Plan,
+            fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Treatment_Plan, fk_Treatment,
             fk_Account, fk_Practice_Site, fk_User,
             fk_Date_Invoice, fk_Date_Created,
             Invoice_ID, Treatment_Plan_Item_ID, Sundry_ID, Item_Name,
@@ -180,7 +196,7 @@ BEGIN
         )
         SELECT
             src.Tenant_ID, src.bk_Invoice_Item_ID, src.fk_Invoice,
-            src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Treatment_Plan,
+            src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Treatment_Plan, src.fk_Treatment,
             src.fk_Account, src.fk_Practice_Site, src.fk_User,
             src.fk_Date_Invoice, src.fk_Date_Created,
             src.Invoice_ID, src.Treatment_Plan_Item_ID, src.Sundry_ID, src.Item_Name,

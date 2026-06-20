@@ -11,6 +11,7 @@
 --    *01     14/06/2026  AIH Initial release (Aged_Debt_Band moved off the table)
 --    *02     20/06/2026  AIH Grain split: dropped folded invoice columns + Aged_Debt_Band
 --                            + Is_Discount; added fk_Invoice; now a passthrough.
+--    *03     20/06/2026  AIH Added fk_Treatment (line -> treatment-plan-item -> Dim_Treatments).
 --------------------------------------------------------------------
 SET ANSI_NULLS ON
 GO
@@ -26,7 +27,7 @@ SELECT
     f.Tenant_ID,
     f.bk_Invoice_Item_ID,
     f.fk_Invoice,
-    f.fk_Patient, f.fk_Practitioner, f.fk_Payment_Plan, f.fk_Treatment_Plan,
+    f.fk_Patient, f.fk_Practitioner, f.fk_Payment_Plan, f.fk_Treatment_Plan, f.fk_Treatment,
     f.fk_Account, f.fk_Practice_Site, f.fk_User,
     f.fk_Date_Invoice, f.fk_Date_Created,
     f.Invoice_ID, f.Treatment_Plan_Item_ID, f.Sundry_ID, f.Item_Name,

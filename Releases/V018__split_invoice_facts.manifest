@@ -13,6 +13,14 @@
 # fixes the multi-line overcount), KPI_Snapshot outstanding -> Fact_Invoices, DAX
 # Discounts -> per-invoice over 'List Invoices'. NUMBERS CHANGE -> RE-BASELINE after verify.
 #
+# Also (20/06): Fact_Invoice_Items gains fk_Treatment, resolved line -> treatment-plan-item
+# (Silver.Treatment_Plan_Items.Treatment_ID) -> Gold.Dim_Treatments. New dependency edges
+# (Dim_Treatments + Silver.Treatment_Plan_Items -> Fact_Invoice_Items) in the regenerated
+# Process_Dependency. PBI: add _Invoice Items[fk Treatment] -> List Treatments[pk Treatment].
+# Plus: Treatment_Plan_Item_ID column bigint -> VARCHAR(50) storing the RAW key (was TRY_CAST
+# AS INT, NULL for GUID ids) -- this repairs KPI_Snapshot 'charged'/open-courses detection,
+# which previously only saw the 34 integer T15 rows. KPI_Snapshot NUMBERS CHANGE -> re-baseline.
+#
 # Tables are DROP/CREATE'd then FULL-reloaded (@Full_Reload=1). Load order:
 # Dim_Invoices (also rebuilds Invoice_Discount) -> Fact_Invoices -> Fact_Invoice_Items
 # (needs the dim for fk_Invoice) -> KPI_Snapshot -> Aggregate_Daily -> PBI view regen.
