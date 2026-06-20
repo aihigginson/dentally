@@ -19,10 +19,12 @@ CREATE TABLE [Gold].[Fact_Invoices](
     [fk_Account]                  [bigint]         NULL,
     [fk_Practice_Site]            [bigint]         NULL,
     [fk_User]                     [bigint]         NULL,
+    [fk_Practitioner]             [bigint]         NULL,   -- representative clinician on the invoice's lines (for per-practitioner attribution)
     [fk_Date_Invoice]             [bigint]         NULL,
     [fk_Date_Due]                 [bigint]         NULL,
     [fk_Date_Paid]                [bigint]         NULL,
     [Invoice_Amount]              [decimal](12, 2) NULL,
+    [Discount_Amount]             [decimal](12, 2) NULL,   -- header Amount - sum of line Total Price, when positive (0 otherwise)
     [Invoice_Amount_Outstanding]  [decimal](12, 2) NULL,
     [Invoice_NHS_Amount]          [decimal](12, 2) NULL,
     [Is_Invoice_Outstanding]      [bit]            NULL,

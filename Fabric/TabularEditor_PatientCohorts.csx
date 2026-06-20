@@ -20,11 +20,11 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // -- Financial cohorts: distinct patients tied to an invoice/payment condition --
 
 add("Patients With Discount",
-    @"CALCULATE(DISTINCTCOUNT('_Invoice Items'[fk Patient]), '_Invoice Items'[Is Discount] = TRUE())",
+    @"CALCULATE(DISTINCTCOUNT('_Invoice Items'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
     "#,##0");
 
 add("Patients With Outstanding Invoice",
-    @"CALCULATE(DISTINCTCOUNT('_Invoice Items'[fk Patient]), '_Invoice Items'[Is Invoice Outstanding] = TRUE())",
+    @"CALCULATE(DISTINCTCOUNT('_Invoices'[fk Patient]), '_Invoices'[Is Invoice Outstanding] = TRUE())",
     "#,##0");
 
 add("Patients With Deposit",

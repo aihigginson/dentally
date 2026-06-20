@@ -243,17 +243,10 @@ add("Deposit Value",
     @"DIVIDE(SUM('_Payments'[Deposit Amount]), [Total Revenue])",
     "0.0%");
 
-// Invoice grain split: invoice header Amount now lives on '_Invoices' (1/invoice) and
-// line amounts on '_Invoice Items'; iterate the invoice dimension so each invoice's
-// header total is compared to the sum of its lines exactly once.
+// Invoice grain split: per-invoice discount (header Amount - sum of its line Total Price,
+// when positive) is precomputed as Fact_Invoices.Discount_Amount, so this is a simple ratio.
 add("Discounts",
-    @"DIVIDE(
-    SUMX(
-        'List Invoices',
-        VAR _inv   = CALCULATE(SUM('_Invoices'[Invoice Amount]))
-        VAR _items = CALCULATE(SUM('_Invoice Items'[Total Price]))
-        RETURN IF(_inv > _items, _inv - _items, 0)),
-    [Total Revenue])",
+    @"DIVIDE(SUM('_Invoices'[Discount Amount]), [Total Revenue])",
     "0.0%");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────

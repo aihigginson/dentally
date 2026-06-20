@@ -6,9 +6,12 @@
 --  History          :
 --    *01     20/06/2026  AIH Initial release. Invoice-grain fact (1/invoice) holding the
 --                            additive invoice amounts previously folded onto Fact_Invoice_Items.
---                            Incremental single-source watermark delta on Silver.Invoices
---                            (mirrors Gold.usp_Load_Fact_Invoice_Items). fk_Invoice resolved
---                            via Gold.Dim_Invoices.
+--    *02     20/06/2026  AIH Add fk_Practitioner (representative clinician on the invoice's
+--                            lines -- prefer dentist/ortho/specialist, else any) and Discount_Amount
+--                            (header Amount - sum of line Total Price, when positive), both derived
+--                            from a per-invoice line roll-up. Enables per-practitioner attribution of
+--                            outstanding/discount without re-folding. Watermark is now 2-source
+--                            (header OR any line changed) so these stay correct under deltas.
 --  To Run			 :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Invoices @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -39,9 +42,9 @@ BEGIN
         --**** Procedure logic starts  ****
         --*********************************
 
-        -- Incremental single-source watermark: process only invoices whose header
-        -- changed since the last successful load. Missing watermark (first run) or
-        -- @Full_Reload = 1 -> full load.
+        -- Incremental 2-source watermark: process invoices whose header OR any of their
+        -- lines changed since the last load (lines drive fk_Practitioner + Discount_Amount).
+        -- Missing watermark (first run) or @Full_Reload = 1 -> full load.
         DECLARE @Run_Start datetime2(3) = SYSUTCDATETIME();
         DECLARE @Watermark datetime2(3) =
             CASE WHEN @Full_Reload = 1 THEN CONVERT(datetime2(3), '1900-01-01')
@@ -50,6 +53,19 @@ BEGIN
                              CONVERT(datetime2(3), '1900-01-01'))
             END;
 
+        ;WITH inv_lines AS (
+            -- Per-invoice line roll-up: representative clinician (prefer dentist/ortho/
+            -- specialist, else any line practitioner) + total of line Total Price.
+            SELECT  ii.Invoice_ID, ii.Tenant_ID,
+                    COALESCE(
+                        MAX(CASE WHEN dp.Role IN ('dentist','orthodontist','specialist') THEN dp.pk_Practitioner END),
+                        MAX(dp.pk_Practitioner)
+                    )                                AS fk_Practitioner,
+                    SUM(ISNULL(ii.Total_Price, 0))   AS Line_Total
+            FROM Silver.Invoice_Items ii
+            LEFT JOIN Gold.Dim_Practitioners dp ON dp.Practitioner_ID = ii.Practitioner_ID AND dp.Tenant_ID = ii.Tenant_ID
+            GROUP BY ii.Invoice_ID, ii.Tenant_ID
+        )
         SELECT
             inv.Tenant_ID                                              AS Tenant_ID,
             CAST(inv.Id AS INT)                                        AS bk_Invoice_ID,
@@ -58,15 +74,20 @@ BEGIN
             ISNULL(dacc.pk_Account, -1)                               AS fk_Account,
             ISNULL(dps.pk_Practice_Site, -1)                          AS fk_Practice_Site,
             ISNULL(du.pk_User, -1)                                    AS fk_User,
+            ISNULL(il.fk_Practitioner, -1)                           AS fk_Practitioner,
             dd_inv.pk_Date                                            AS fk_Date_Invoice,
             dd_due.pk_Date                                            AS fk_Date_Due,
             dd_paid.pk_Date                                           AS fk_Date_Paid,
             CAST(ISNULL(inv.Amount,0) AS DECIMAL(12,2))               AS Invoice_Amount,
+            CASE WHEN CAST(ISNULL(inv.Amount,0) AS DECIMAL(12,2)) > CAST(ISNULL(il.Line_Total,0) AS DECIMAL(12,2))
+                 THEN CAST(ISNULL(inv.Amount,0) AS DECIMAL(12,2)) - CAST(ISNULL(il.Line_Total,0) AS DECIMAL(12,2))
+                 ELSE 0 END                                           AS Discount_Amount,
             CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2))   AS Invoice_Amount_Outstanding,
             CAST(TRY_CAST(inv.NHS_Amount AS DECIMAL(12,2)) AS DECIMAL(12,2)) AS Invoice_NHS_Amount,
             CASE WHEN CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2)) > 0 THEN 1 ELSE 0 END AS Is_Invoice_Outstanding
         INTO #src
         FROM Silver.Invoices inv
+        LEFT JOIN inv_lines il                ON il.Invoice_ID       = inv.Id                       AND il.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Invoices dinv      ON dinv.bk_Invoice_ID  = CAST(inv.Id AS INT)         AND dinv.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_ID AS INT) AND dpat.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Accounts dacc      ON dacc.Account_ID     = CAST(inv.Account_ID AS INT) AND dacc.Tenant_ID = inv.Tenant_ID
@@ -76,7 +97,10 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_due        ON dd_due.Full_Date    = CAST(inv.Due_On AS DATE)
         LEFT JOIN Gold.Dim_Date dd_paid       ON dd_paid.Full_Date   = CAST(inv.Paid_On AS DATE)
         WHERE inv.Id IS NOT NULL
-          AND inv.DW_Updated_At > @Watermark;
+          AND (inv.DW_Updated_At > @Watermark
+               OR EXISTS (SELECT 1 FROM Silver.Invoice_Items ii
+                          WHERE ii.Invoice_ID = inv.Id AND ii.Tenant_ID = inv.Tenant_ID
+                            AND ii.DW_Updated_At > @Watermark));
 
         -- Remove rows no longer in source (key-only anti-join vs full Silver)
         DELETE tgt
@@ -92,10 +116,12 @@ BEGIN
             fk_Account                 = src.fk_Account,
             fk_Practice_Site           = src.fk_Practice_Site,
             fk_User                    = src.fk_User,
+            fk_Practitioner            = src.fk_Practitioner,
             fk_Date_Invoice            = src.fk_Date_Invoice,
             fk_Date_Due                = src.fk_Date_Due,
             fk_Date_Paid               = src.fk_Date_Paid,
             Invoice_Amount             = src.Invoice_Amount,
+            Discount_Amount            = src.Discount_Amount,
             Invoice_Amount_Outstanding = src.Invoice_Amount_Outstanding,
             Invoice_NHS_Amount         = src.Invoice_NHS_Amount,
             Is_Invoice_Outstanding     = src.Is_Invoice_Outstanding,
@@ -108,10 +134,12 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Account]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practice_Site]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_User]                    AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Practitioner]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Invoice]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Due]                AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Paid]               AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Invoice_Amount]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Discount_Amount]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Invoice_Amount_Outstanding] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Invoice_NHS_Amount]         AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Invoice_Outstanding]     AS VARCHAR(500)), '')
@@ -122,10 +150,12 @@ BEGIN
            ISNULL(CAST(src.[fk_Account]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practice_Site]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_User]                    AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Practitioner]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Invoice]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Due]                AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Paid]               AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Invoice_Amount]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Discount_Amount]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Invoice_Amount_Outstanding] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Invoice_NHS_Amount]         AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Invoice_Outstanding]     AS VARCHAR(500)), '')
@@ -135,14 +165,14 @@ BEGIN
         -- Insert new rows
         INSERT INTO Gold.Fact_Invoices (
             Tenant_ID, bk_Invoice_ID, fk_Invoice, fk_Patient, fk_Account,
-            fk_Practice_Site, fk_User, fk_Date_Invoice, fk_Date_Due, fk_Date_Paid,
-            Invoice_Amount, Invoice_Amount_Outstanding, Invoice_NHS_Amount, Is_Invoice_Outstanding,
+            fk_Practice_Site, fk_User, fk_Practitioner, fk_Date_Invoice, fk_Date_Due, fk_Date_Paid,
+            Invoice_Amount, Discount_Amount, Invoice_Amount_Outstanding, Invoice_NHS_Amount, Is_Invoice_Outstanding,
             DW_Created_At, DW_Updated_At
         )
         SELECT
             src.Tenant_ID, src.bk_Invoice_ID, src.fk_Invoice, src.fk_Patient, src.fk_Account,
-            src.fk_Practice_Site, src.fk_User, src.fk_Date_Invoice, src.fk_Date_Due, src.fk_Date_Paid,
-            src.Invoice_Amount, src.Invoice_Amount_Outstanding, src.Invoice_NHS_Amount, src.Is_Invoice_Outstanding,
+            src.fk_Practice_Site, src.fk_User, src.fk_Practitioner, src.fk_Date_Invoice, src.fk_Date_Due, src.fk_Date_Paid,
+            src.Invoice_Amount, src.Discount_Amount, src.Invoice_Amount_Outstanding, src.Invoice_NHS_Amount, src.Is_Invoice_Outstanding,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoices tgt
