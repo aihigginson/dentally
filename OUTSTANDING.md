@@ -45,7 +45,7 @@ Bronze SP references new `stage_patients` columns that only exist after a reseed
 
 - [ ] **8. Commission the external penetration test** (scope ready: `PENETRATION_TEST_SCOPE.md`).
 - [ ] **9. Get the DPA legally reviewed** before sending to customers (`DPA.md` — drafted, not legal advice).
-- [x] **10. "Power BI export disabled"** — **enforced 2026-06-19**: tenant Export-and-sharing settings off org-wide (Export to Excel/.csv, PowerPoint/PDF/image/paginated, Analyze-in-Excel live connection, Download .pbix); embed app also hides context menu + Export-data command (`Web/index.html`). Print + Copy/paste deliberately kept (screen-level, low-risk).
+- [x] **10. "Power BI export disabled"** — **enforced 2026-06-19**: tenant Export-and-sharing settings off org-wide (Export to Excel/.csv, PowerPoint/PDF/image/paginated, Download .pbix); embed app also hides context menu + Export-data command (`Web/index.html`). Print + Copy/paste deliberately kept (screen-level, low-risk). **Correction 2026-06-20:** the *Analyze-in-Excel / live-connection* setting had to be **re-enabled for a named report-author security group** (org-wide off broke Power BI Desktop "Connect to semantic model" — live connect on Fabric capacity uses the same XMLA-read endpoint). Bulk-export vectors stay off; this one is group-scoped, not org-wide.
 
 ---
 
