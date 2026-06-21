@@ -170,47 +170,40 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
 // Acceptance rate: plans that have progressed to having a start date / all plans.
-// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer,
-// because List Treatment Plans has no fk_Practitioner surrogate key relationship.
+// Plan grain via Gold.Fact_Treatment_Plans ('_Treatment Plans'): the plan's OWN fk_Practitioner
+// relationship drives the practitioner slicer -- no item routing. No ACTIVE date relationship on
+// the fact, so the page/embed date slicer is ignored (current-state), no REMOVEFILTERS needed.
 add("Treatment Acceptance Rate",
-    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
-RETURN DIVIDE(
+    @"DIVIDE(
     CALCULATE(
-        SUM('List Treatment Plans'[Treatment Plan Count]),
-        'List Treatment Plans'[Start Date] <> BLANK(),
-        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+        SUM('_Treatment Plans'[Treatment Plan Count]),
+        NOT ISBLANK('_Treatment Plans'[Start Date])
     ),
-    CALCULATE(
-        SUM('List Treatment Plans'[Treatment Plan Count]),
-        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
-    )
+    SUM('_Treatment Plans'[Treatment Plan Count])
 )",
     "#,##0.0%");
 
-// Open courses: live count of incomplete, started plans from List Treatment Plans.
-// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer.
+// Open courses: live count of incomplete, started plans. Plan grain via '_Treatment Plans'
+// (Gold.Fact_Treatment_Plans) -- the plan's own fk_Practitioner drives the slicer and there is
+// no active date relationship, so this is naturally current-state (date slicer ignored).
 add("Open Courses",
-    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
-RETURN CALCULATE(
-    SUM('List Treatment Plans'[Treatment Plan Count]),
-    'List Treatment Plans'[Completed]         = FALSE(),
-    NOT ISBLANK('List Treatment Plans'[Start Date]),
-    TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+    @"CALCULATE(
+    SUM('_Treatment Plans'[Treatment Plan Count]),
+    '_Treatment Plans'[Completed]   = FALSE(),
+    NOT ISBLANK('_Treatment Plans'[Start Date])
 )",
     "#,##0");
 
-// Open courses with no future appointment booked.
-// Routes through _Treatment Plan Items to pick up the practitioner slicer,
-// then checks List Patients[Next Appointment Date] (current-state) for no future booking.
+// Open courses with no future appointment booked. Open-plan patients come from the plan-grain
+// '_Treatment Plans' (plan's own practitioner slicer, no active date relationship), then we
+// check List Patients[Next Appointment Date] for no future booking.
 add("Open Courses Without Appointment",
     @"VAR today = TODAY()
 VAR open_plan_patients =
     CALCULATETABLE(
-        DISTINCT('_Treatment Plan Items'[fk Patient]),
-        '_Treatment Plan Items'[Completed]        = FALSE(),
-        '_Treatment Plan Items'[Charged]          = FALSE(),
-        'List Treatment Plans'[Completed]         = FALSE(),
-        NOT ISBLANK('List Treatment Plans'[Start Date])
+        DISTINCT('_Treatment Plans'[fk Patient]),
+        '_Treatment Plans'[Completed]   = FALSE(),
+        NOT ISBLANK('_Treatment Plans'[Start Date])
     )
 RETURN
 CALCULATE(
@@ -249,19 +242,14 @@ CALCULATE(
 )",
     "£#,##0");
 
-// Average private treatment value per plan that has been started.
-// Routes through _Treatment Plan Items[fk Treatment Plan] to pick up the practitioner slicer.
+// Average private treatment value per started plan. Plan grain via '_Treatment Plans'
+// (plan's own practitioner slicer, no active date relationship -> current-state).
 add("Average Plan Value",
-    @"VAR practitioner_plans = DISTINCT('_Treatment Plan Items'[fk Treatment Plan])
-RETURN DIVIDE(
+    @"DIVIDE(
+    SUM('_Treatment Plans'[Private Treatment Value]),
     CALCULATE(
-        SUM('List Treatment Plans'[Private Treatment Value]),
-        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
-    ),
-    CALCULATE(
-        COUNTROWS('List Treatment Plans'),
-        NOT ISBLANK('List Treatment Plans'[Start Date]),
-        TREATAS(practitioner_plans, 'List Treatment Plans'[pk Treatment Plan])
+        COUNTROWS('_Treatment Plans'),
+        NOT ISBLANK('_Treatment Plans'[Start Date])
     )
 )",
     "£#,##0");
