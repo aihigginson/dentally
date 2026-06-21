@@ -8,8 +8,8 @@
 DELETE FROM Audit.Process_Config;
 GO
 
--- ── GOLD orchestrator ─────────────────────────────────────────────────────────
-INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('GOLD_LOAD_ALL', 'Gold.usp_Load_All', 'Orchestrates full Gold layer load - all dimensions then all facts', '@Mode = ''LIVE'', @Logging = 1', 'GOLD', 'PROCEDURE');
+-- (GOLD_LOAD_ALL removed 2026-06-21: orchestrators are not DAG jobs; Gold.usp_Load_All
+--  doesn't exist -- the Silver+Gold orchestrator is Audit.usp_Load_All.)
 
 -- ── GOLD dimensions ───────────────────────────────────────────────────────────
 INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('GOLD_DIM_ACCOUNTS',        'Gold.usp_Load_Dim_Accounts',        'Load Gold.Dim_Accounts from Silver layer',        '@Mode = ''LIVE'', @Logging = 1', 'GOLD_DIM', 'PROCEDURE');

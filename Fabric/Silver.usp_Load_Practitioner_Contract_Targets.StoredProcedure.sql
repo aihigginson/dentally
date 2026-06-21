@@ -60,7 +60,10 @@ BEGIN
         ) ct
         WHERE p.Practitioner_ID IS NOT NULL
           AND p.Contract_Targets_String IS NOT NULL
-          AND LEN(LTRIM(RTRIM(p.Contract_Targets_String))) > 2;  -- exclude NULL and empty array '[]'
+          AND LEN(LTRIM(RTRIM(p.Contract_Targets_String))) > 2  -- exclude NULL and empty array '[]'
+          AND NULLIF(TRIM(ct.contract_id), '') IS NOT NULL;     -- skip malformed entries with no contract_id
+                                                                -- (bk_Contract_ID is the grain key; a target
+                                                                -- without a contract is meaningless)
 
         -- Remove rows no longer in source
         DELETE tgt
