@@ -225,20 +225,27 @@ add("Exam Ratio",
     SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
-// Open Courses Value: semi-additive point-in-time — picks the latest weekly snapshot
-// in the slicer selection so the card always shows one value, not a sum over time.
+// Open Courses Value: point-in-time CURRENT-STATE -- always the LATEST weekly snapshot,
+// independent of the page/embed period slicer. REMOVEFILTERS the date dims so it shows the
+// current open-course value (like the period-independent Open Courses count) instead of 0
+// under any non-current period (the snapshot spine only has current-FY rows). Practitioner/
+// site slicers still apply (only date is removed).
 add("Open Courses Value",
     @"VAR last_date =
-    MAXX(
-        FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-        '_KPI Snapshot'[fk Date]
+    CALCULATE(
+        MAX( '_KPI Snapshot'[fk Date] ),
+        '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
+        REMOVEFILTERS( 'List Date' ),
+        REMOVEFILTERS( 'List Date Grouping' )
     )
 RETURN
 CALCULATE(
     SUM( '_KPI Snapshot'[Value] ),
     '_KPI Snapshot'[fk Date]        = last_date,
     '_KPI Snapshot'[Metric]         = ""open_courses_value"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly""
+    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
+    REMOVEFILTERS( 'List Date' ),
+    REMOVEFILTERS( 'List Date Grouping' )
 )",
     "£#,##0");
 
