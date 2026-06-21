@@ -528,9 +528,17 @@
         localStorage.removeItem('_anly_id_token_exp');
     }
 
-    // Mobile browsers block popups — use redirect flow instead.
+    // Mobile / iOS-family browsers must use the redirect + cached-token path: Safari ITP
+    // blocks the hidden-iframe acquireTokenSilent the desktop path relies on. Detect iOS by
+    // UA, and ALSO iPadOS 13+ which reports a Mac desktop UA (caught via touch points) and
+    // whose wide screen would otherwise slip through the width check.
     // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
-    function _onMobile() { return window.matchMedia('(max-width: 767px)').matches; }
+    function _onMobile() {
+        const ua = navigator.userAgent || '';
+        const iOS = /iPhone|iPad|iPod/i.test(ua)
+                 || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+        return iOS || window.matchMedia('(max-width: 767px)').matches;
+    }
 
     async function initAuth() {
         const config = await fetch('/api/auth-config').then(r => r.json());
