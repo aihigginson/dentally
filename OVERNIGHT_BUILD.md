@@ -1,11 +1,22 @@
-# Overnight Build — Fabric Data Pipeline spec
+# Overnight Build — spec
 
 Purpose: a nightly, end-to-end refresh so the warehouse and the Power BI dataset never go
 stale (the disabled prod build is what stranded `Open Courses Value` — the KPI snapshot spine
-and `Dim_Date` stop advancing when nothing runs `usp_Load_All`).
+and `Dim_Date` stop advancing when nothing runs the build).
 
-This is a **build spec** — you create the Fabric Data Pipeline + schedule in the portal; the
-SQL orchestrators it calls already exist in the warehouse.
+## Chosen implementation: DAG-driven notebook
+`Fabric/Notebooks/Orchestrate_Build.py` is the orchestrator. It reads the metadata DAG
+(`Audit.Process_Config` + `Audit.Process_Dependency`) and fires `Audit.ETL_Run_Process` for
+each job in dependency order (Bronze per tenant), then refreshes the semantic model. The
+ordering metadata is the single source of truth — not the hardcoded `usp_Load_All` /
+`usp_Load_Bronze` scripts — and parallel execution is a one-line change later (raise
+`max_parallel`, run a wave on a ThreadPoolExecutor). **To deploy: create a Fabric notebook from
+that .py, set the parameters (Cell 1), and put it on a schedule** (notebook schedule, or a
+one-activity Data Pipeline with a Notebook activity if you want pipeline-level alerting).
+
+The sections below describe the logical stages the notebook performs and the operational
+settings (schedule / identity / refresh / rerun). The "Fabric Data Pipeline activities" detail
+in §2 is retained as the alternative wiring if you ever prefer a pure-pipeline build.
 
 ---
 
