@@ -31,7 +31,6 @@ BEGIN
             , LEFT(id, 255)                                                                                 AS ID
             , LEFT(active, 255)                                                                             AS Active
             , LEFT(name, 255)                                                                               AS Name
-            , CAST(notes AS VARCHAR(MAX))                                                                   AS Notes
         INTO #src
         FROM Stage.Acquisition_Sources
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -39,14 +38,13 @@ BEGIN
         UPDATE tgt SET
               tgt.Active       = src.Active
             , tgt.Name         = src.Name
-            , tgt.Notes        = src.Notes
             , tgt.DW_Loaded_At = SYSUTCDATETIME()
         FROM Bronze.Acquisition_Sources AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Acquisition_Sources (Tenant_ID, ID, Active, Name, Notes, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Active, src.Name, src.Notes, SYSUTCDATETIME()
+        INSERT INTO Bronze.Acquisition_Sources (Tenant_ID, ID, Active, Name, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Active, src.Name, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Acquisition_Sources tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

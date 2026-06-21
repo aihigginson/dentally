@@ -17,7 +17,6 @@ CREATE TABLE [Gold].[Fact_Treatment_Appointments](
 	[Treatment_Plan_ID] [int] NULL,
 	[Position] [int] NULL,
 	[Bookable] [bit] NULL,
-	[Notes] [VARCHAR](max) NULL,
 	[Created_At] [datetime2](3) NULL,
 	[Updated_At] [datetime2](3) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,

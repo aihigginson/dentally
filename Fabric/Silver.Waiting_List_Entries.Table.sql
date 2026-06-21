@@ -15,7 +15,6 @@ CREATE TABLE [Silver].[Waiting_List_Entries](
 	[Reason] [VARCHAR](255) NULL,
 	[Duration] [int] NULL,
 	[Status] [VARCHAR](50) NULL,
-	[Notes] [VARCHAR](max) NULL,
 	[Earliest_Date] [date] NULL,
 	[Latest_Date] [date] NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,

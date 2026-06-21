@@ -10,7 +10,6 @@ CREATE TABLE [Silver].[Acquisition_Sources](
 	[Acquisition_Source_ID] [VARCHAR](50) NOT NULL,
 	[Active] [bit] NULL,
 	[Name] [VARCHAR](255) NULL,
-	[Notes] [VARCHAR](1000) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL,
 	[_Row_Hash] [varbinary](32) NULL

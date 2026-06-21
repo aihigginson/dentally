@@ -42,7 +42,6 @@ BEGIN
             CAST(ISNULL(s.Active, 0) AS BIT)                        AS Active,
             NULLIF(TRIM(s.Name), '')                                AS Name,
             COALESCE(NULLIF(TRIM(m.Standard_Acquisition_Source),''), LEFT(NULLIF(TRIM(s.Name),''), 100)) AS Standard_Acquisition_Source,
-            NULLIF(TRIM(s.Notes), '')                               AS Notes,
             CAST(1 AS INT)                                          AS Acquisition_Source_Count
         INTO #src
         FROM Silver.Acquisition_Sources s
@@ -65,7 +64,6 @@ BEGIN
             Active                       = src.Active,
             Name                         = src.Name,
             Standard_Acquisition_Source  = src.Standard_Acquisition_Source,
-            Notes                        = src.Notes,
             DW_Updated_At                = SYSUTCDATETIME()
         FROM Gold.Dim_Acquisition_Sources tgt
         INNER JOIN #src src
@@ -74,14 +72,12 @@ BEGIN
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Active]                      AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Name]                        AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Standard_Acquisition_Source] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Notes]                       AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Standard_Acquisition_Source] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Active]                      AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Name]                        AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Standard_Acquisition_Source] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Notes]                       AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Standard_Acquisition_Source] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -90,13 +86,13 @@ BEGIN
         INSERT INTO Gold.Dim_Acquisition_Sources (
             pk_Acquisition_Source,
             Tenant_ID, Acquisition_Source_ID,
-            Active, Name, Standard_Acquisition_Source, Notes,
+            Active, Name, Standard_Acquisition_Source,
             Acquisition_Source_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Acquisition_Source_ID),
             src.Tenant_ID, src.Acquisition_Source_ID,
-            src.Active, src.Name, src.Standard_Acquisition_Source, src.Notes,
+            src.Active, src.Name, src.Standard_Acquisition_Source,
             src.Acquisition_Source_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (

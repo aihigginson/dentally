@@ -4,6 +4,9 @@
 --  Initital Date    :  29/04/2026
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
+--    *02     19/06/2026  AIH Add optional @Tenant_ID/@Full_Refresh runtime params; resolve {TID}/{FR}
+--                            tokens in Process_Parameters so one config row can serve all tenants
+--                            (Bronze "one job per table"). No-op for Silver/Gold (no tokens / NULL args).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Audit.ETL_Run_Process @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Audit].[ETL_Run_Process]    Script Date: 20/04/2026 10:15:06 ******/
@@ -18,6 +21,8 @@ CREATE   PROCEDURE [Audit].[ETL_Run_Process]
 (
       @Process_Code      VARCHAR(100)
     , @Parent_Run_UUID   VARCHAR(36) = '00000000-0000-0000-0000-000000000000'
+    , @Tenant_ID         INT         = NULL   -- runtime value for the {TID} token (per-tenant Bronze)
+    , @Full_Refresh      BIT         = NULL   -- runtime value for the {FR} token
 )
 AS
 BEGIN
@@ -44,6 +49,15 @@ BEGIN
             @My_Proc_Type        = Process_Type_Code
     FROM Audit.Process_Config
     WHERE Process_Code = @Process_Code;
+
+    -- Resolve runtime tokens in the parameter string. The resolved value is used for
+    -- BOTH the audit Process_Options (ETL_Start_Run) AND the dynamic call, so the
+    -- execution log records the actual tenant. No-op when the args are NULL or the
+    -- template has no token (Silver/Gold rows are unaffected).
+    IF @Tenant_ID IS NOT NULL
+        SET @My_Proc_Options = REPLACE(@My_Proc_Options, '{TID}', CAST(@Tenant_ID AS VARCHAR(10)));
+    IF @Full_Refresh IS NOT NULL
+        SET @My_Proc_Options = REPLACE(@My_Proc_Options, '{FR}', CAST(@Full_Refresh AS VARCHAR(1)));
 
     BEGIN TRY
 

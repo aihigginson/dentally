@@ -31,7 +31,6 @@ BEGIN
               TRY_CAST(tenant_id AS INT)                          AS Tenant_ID
             , LEFT(id, 255)                                       AS ID
             , LEFT(bookable, 255)                                            AS Bookable
-            , LEFT(notes, 4000)                                   AS Notes
             , TRY_CAST(position AS INT)                           AS Position
             , LEFT(created_at, 255)                               AS Created_At
             , LEFT(updated_at, 255)                               AS Updated_At
@@ -46,7 +45,6 @@ BEGIN
 
         UPDATE tgt SET
               tgt.Bookable          = src.Bookable
-            , tgt.Notes             = src.Notes
             , tgt.Position          = src.Position
             , tgt.Appointment_ID    = src.Appointment_ID
             , tgt.Patient_ID        = src.Patient_ID
@@ -59,8 +57,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Treatment_Appointments (Tenant_ID, ID, Bookable, Notes, Position, Created_At, Updated_At, Appointment_ID, Patient_ID, Treatment_Plan_ID, Completed, Completed_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Bookable, src.Notes, src.Position, src.Created_At, src.Updated_At, src.Appointment_ID, src.Patient_ID, src.Treatment_Plan_ID, src.Completed, src.Completed_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Treatment_Appointments (Tenant_ID, ID, Bookable, Position, Created_At, Updated_At, Appointment_ID, Patient_ID, Treatment_Plan_ID, Completed, Completed_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Bookable, src.Position, src.Created_At, src.Updated_At, src.Appointment_ID, src.Patient_ID, src.Treatment_Plan_ID, src.Completed, src.Completed_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Treatment_Appointments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

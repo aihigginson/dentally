@@ -7,15 +7,23 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     01/05/2026  AIH Add -1 unknown seed row; protect from DELETE
 --    *03     01/05/2026  AIH Remove IDENTITY from pk; use ROW_NUMBER for inserts; plain INSERT for -1 seed
---    *04     19/05/2026  AIH Compute Next_Appointment_Date from Silver.Appointments (Cancelled_At IS NULL, future only)
+--    *04     19/05/2026  AIH Compute Next_Appointment_Date from Silver.Appointments (future, non-cancelled)
 --    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID)
---                             replaces Patient_Stats API value which cannot guarantee cancelled appts are excluded
---    *06     22/05/2026  AIH Add Patient_Count (1 for real rows, 0 for sentinel) for use in SUM-based measures
---    *07     29/05/2026  AIH Add fk_Acquisition_Source snowflake FK to Gold.Dim_Acquisition_Sources
---    *08     14/06/2026  AIH Add Is_Email_Missing + Is_Phone_Missing (phone missing = both mobile and home absent)
+--    *06     22/05/2026  AIH Add Patient_Count (1 for real rows, 0 for sentinel)
+--    *07     29/05/2026  AIH Add fk_Acquisition_Source snowflake FK
+--    *08     14/06/2026  AIH Add Is_Email_Missing + Is_Phone_Missing
+--    *09     17/06/2026  AIH DATA MINIMISATION (V011): drop special-category + excess-identifier
+--                            columns (Title/Middle name, DOB/Age, Gender, Ethnicity, NHS/NI numbers,
+--                            Work phone, Address, Medical Alert, Family/Custom, NHS exemption). Retain
+--                            identity-for-contact (names + preferred, phone, email), contactability
+--                            flags + the non-sensitive operational analytics. Full_Name now First+Last
+--                            (no Title). See DPIA.md sec 7.
+--    *10     18/06/2026  AIH V014: inactive patients (Active=0) are NOT flagged Is_Email/Phone_Missing
+--                            (their contact is deliberately removed in V013, not actionable-missing)
+--    *11     19/06/2026  AIH V015: carry contact-preference fields (Use_Email, Use_SMS, Preferred_Phone)
+--                            through from Silver (active patients only; NULL for inactive per V013)
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
-/****** Object:  StoredProcedure [Gold].[usp_Load_Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -44,45 +52,28 @@ BEGIN
         --*********************************
 
         SELECT
-            p.Tenant_ID AS Tenant_ID,
+            p.Tenant_ID                                                                             AS Tenant_ID,
             CAST(p.Patient_ID AS INT)                                                               AS Patient_ID,
             CAST(p.Account_ID AS INT)                                                               AS Account_ID,
-            NULLIF(TRIM(p.Title), '')                                                               AS Title,
             NULLIF(TRIM(p.First_Name), '')                                                          AS First_Name,
-            NULLIF(TRIM(p.Middle_Name), '')                                                         AS Middle_Name,
             NULLIF(TRIM(p.Last_Name), '')                                                           AS Last_Name,
             NULLIF(TRIM(p.Preferred_Name), '')                                                      AS Preferred_Name,
             NULLIF(CONCAT_WS(' ',
-                NULLIF(TRIM(p.Title), ''),
                 NULLIF(TRIM(p.First_Name), ''),
                 NULLIF(TRIM(p.Last_Name), '')), '')                                                 AS Full_Name,
-            CAST(p.Date_Of_Birth AS DATE)                                                           AS Date_Of_Birth,
-            CASE WHEN p.Date_Of_Birth IS NOT NULL
-                      THEN DATEDIFF(YEAR, p.Date_Of_Birth, SYSUTCDATETIME())
-                          - CASE WHEN MONTH(SYSUTCDATETIME()) < MONTH(p.Date_Of_Birth)
-                                      OR (MONTH(SYSUTCDATETIME()) = MONTH(p.Date_Of_Birth)
-                                          AND DAY(SYSUTCDATETIME()) < DAY(p.Date_Of_Birth))
-                                THEN 1 ELSE 0 END
-                 END                                                                                AS Age_Years,
-            p.Gender                                                                                AS Gender_Description,
-            p.Ethnicity                                                                             AS Ethnicity_Code,
-            NULLIF(TRIM(p.NHS_Number), '')                                                          AS NHS_Number,
-            NULLIF(TRIM(p.NI_Number), '')                                                           AS NI_Number,
             NULLIF(TRIM(p.Email_Address), '')                                                       AS Email_Address,
             NULLIF(TRIM(p.Home_Phone), '')                                                          AS Home_Phone,
             NULLIF(TRIM(p.Mobile_Phone), '')                                                        AS Mobile_Phone,
-            NULLIF(TRIM(p.Work_Phone), '')                                                          AS Work_Phone,
-            NULLIF(TRIM(p.Address_Line_1), '')                                                      AS Address_Line_1,
-            NULLIF(TRIM(p.Address_Line_2), '')                                                      AS Address_Line_2,
-            NULLIF(TRIM(p.Town), '')                                                                AS Town,
-            NULLIF(TRIM(p.County), '')                                                              AS County,
-            NULLIF(TRIM(p.Postcode), '')                                                            AS Postcode,
+            -- Inactive patients have contact deliberately removed (V013), so they are NOT "missing"
+            -- contact (the flag drives actionable lists for active patients) -> force 0 when inactive.
+            CASE WHEN ISNULL(p.Active,0)=0 THEN 0
+                 WHEN NULLIF(TRIM(p.Email_Address),'') IS NULL THEN 1 ELSE 0 END                     AS Is_Email_Missing,
+            CASE WHEN ISNULL(p.Active,0)=0 THEN 0
+                 WHEN NULLIF(TRIM(p.Mobile_Phone),'') IS NULL
+                  AND NULLIF(TRIM(p.Home_Phone),'')   IS NULL THEN 1 ELSE 0 END                      AS Is_Phone_Missing,
             CAST(ISNULL(p.Active, 0) AS BIT)                                                        AS Active,
-            CAST(ISNULL(p.Medical_Alert, 0) AS BIT)                                                 AS Medical_Alert,
-            NULLIF(TRIM(p.Medical_Alert_Text), '')                                                  AS Medical_Alert_Text,
             CAST(p.Payment_Plan_ID AS INT)                                                          AS Payment_Plan_ID,
             NULLIF(TRIM(p.Site_ID), '')                                                             AS Site_ID,
-            NULLIF(TRIM(p.Family_ID), '')                                                           AS Family_ID,
             NULLIF(TRIM(p.Acquisition_Source_ID), '')                                               AS Acquisition_Source_ID,
             ISNULL(das.pk_Acquisition_Source, -1)                                                   AS fk_Acquisition_Source,
             CAST(p.Dentist_Practitioner_ID AS INT)                                                  AS Dentist_Practitioner_ID,
@@ -92,9 +83,10 @@ BEGIN
             CAST(p.Hygienist_Recall_Date AS DATE)                                                   AS Hygienist_Recall_Date,
             CAST(p.Hygienist_Recall_Interval AS INT)                                                AS Hygienist_Recall_Interval_Months,
             NULLIF(TRIM(p.Recall_Method), '')                                                       AS Recall_Method,
+            p.Use_Email                                                                             AS Use_Email,
+            p.Use_SMS                                                                               AS Use_SMS,
+            NULLIF(TRIM(p.Preferred_Phone), '')                                                     AS Preferred_Phone,
             NULLIF(p.Marketing_Opt_In, 0)                                                           AS Marketing_Consent,
-            NULLIF(TRIM(p.Custom_Field_1), '')                                                      AS Custom_Field_1,
-            NULLIF(TRIM(p.Custom_Field_2), '')                                                      AS Custom_Field_2,
             TRY_CAST(NULLIF(TRIM(ps.First_Appointment_Date), '') AS DATE)                           AS First_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date), '') AS DATE)                            AS Last_Appointment_Date,
             next_apt.Next_Appointment_Date                                                          AS Next_Appointment_Date,
@@ -107,13 +99,9 @@ BEGIN
             TRY_CAST(NULLIF(TRIM(ps.Last_Cancelled_Appointment_Date), '') AS DATE)                  AS Last_Cancelled_Appointment_Date,
             CAST(ps.Total_Paid AS DECIMAL(12,2))                                                    AS Total_Paid,
             CAST(ps.Total_Invoiced AS DECIMAL(12,2))                                                AS Total_Invoiced,
-            TRY_CAST(ps.NHS_Exemption_Code AS INT)                                                  AS NHS_Exemption_Code,
             TRY_CAST(p.Created_At AS DATE)                                                          AS Patient_Created_Date,
             TRY_CAST(p.Updated_At AS DATE)                                                          AS Patient_Updated_Date,
-            CAST(1 AS INT)                                                                          AS Patient_Count,
-            CASE WHEN NULLIF(TRIM(p.Email_Address),'') IS NULL THEN 1 ELSE 0 END                     AS Is_Email_Missing,
-            CASE WHEN NULLIF(TRIM(p.Mobile_Phone),'') IS NULL
-                  AND NULLIF(TRIM(p.Home_Phone),'')   IS NULL THEN 1 ELSE 0 END                      AS Is_Phone_Missing
+            CAST(1 AS INT)                                                                          AS Patient_Count
         INTO #src
         FROM Silver.Patients p
         LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_ID = p.Patient_ID AND ps.Tenant_ID = p.Tenant_ID
@@ -141,39 +129,28 @@ BEGIN
         -- Update changed rows
         UPDATE tgt SET
             Account_ID                          = src.Account_ID,
-            Title                               = src.Title,
             First_Name                          = src.First_Name,
-            Middle_Name                         = src.Middle_Name,
             Last_Name                           = src.Last_Name,
             Preferred_Name                      = src.Preferred_Name,
             Full_Name                           = src.Full_Name,
-            Date_Of_Birth                       = src.Date_Of_Birth,
-            Age_Years                           = src.Age_Years,
-            Gender_Description                  = src.Gender_Description,
-            Ethnicity_Code                      = src.Ethnicity_Code,
-            NHS_Number                          = src.NHS_Number,
-            NI_Number                           = src.NI_Number,
             Email_Address                       = src.Email_Address,
             Home_Phone                          = src.Home_Phone,
             Mobile_Phone                        = src.Mobile_Phone,
-            Work_Phone                          = src.Work_Phone,
-            Address_Line_1                      = src.Address_Line_1,
-            Address_Line_2                      = src.Address_Line_2,
-            Town                                = src.Town,
-            County                              = src.County,
-            Postcode                            = src.Postcode,
+            Is_Email_Missing                    = src.Is_Email_Missing,
+            Is_Phone_Missing                    = src.Is_Phone_Missing,
             Active                              = src.Active,
-            Medical_Alert                       = src.Medical_Alert,
-            Medical_Alert_Text                  = src.Medical_Alert_Text,
             Payment_Plan_ID                     = src.Payment_Plan_ID,
             Site_ID                             = src.Site_ID,
+            fk_Acquisition_Source               = src.fk_Acquisition_Source,
             Dentist_Recall_Date                 = src.Dentist_Recall_Date,
             Dentist_Recall_Interval_Months      = src.Dentist_Recall_Interval_Months,
             Hygienist_Recall_Date               = src.Hygienist_Recall_Date,
             Hygienist_Recall_Interval_Months    = src.Hygienist_Recall_Interval_Months,
             Recall_Method                       = src.Recall_Method,
+            Use_Email                           = src.Use_Email,
+            Use_SMS                             = src.Use_SMS,
+            Preferred_Phone                     = src.Preferred_Phone,
             Marketing_Consent                   = src.Marketing_Consent,
-            fk_Acquisition_Source               = src.fk_Acquisition_Source,
             First_Appointment_Date              = src.First_Appointment_Date,
             Last_Appointment_Date               = src.Last_Appointment_Date,
             Next_Appointment_Date               = src.Next_Appointment_Date,
@@ -186,46 +163,33 @@ BEGIN
             Last_Cancelled_Appointment_Date     = src.Last_Cancelled_Appointment_Date,
             Total_Paid                          = src.Total_Paid,
             Total_Invoiced                      = src.Total_Invoiced,
-            NHS_Exemption_Code                  = src.NHS_Exemption_Code,
             Patient_Updated_Date                = src.Patient_Updated_Date,
-            Is_Email_Missing                    = src.Is_Email_Missing,
-            Is_Phone_Missing                    = src.Is_Phone_Missing,
             DW_Updated_At                       = SYSUTCDATETIME()
         FROM Gold.Dim_Patients tgt
         INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Account_ID] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Title] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[First_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Middle_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Last_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Preferred_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Full_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Date_Of_Birth] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Age_Years] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Gender_Description] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Ethnicity_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[NHS_Number] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[NI_Number] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Email_Address] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Home_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Mobile_Phone] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Work_Phone] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Address_Line_1] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Address_Line_2] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Town] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[County] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Postcode] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Phone_Missing] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Medical_Alert] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Medical_Alert_Text] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Payment_Plan_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Site_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Acquisition_Source] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Dentist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Dentist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Hygienist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Hygienist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Recall_Method] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Use_Email] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Use_SMS] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Preferred_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Marketing_Consent] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[First_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Last_Appointment_Date] AS VARCHAR(500)), ''),
@@ -239,44 +203,31 @@ BEGIN
            ISNULL(CAST(tgt.[Last_Cancelled_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Is_Email_Missing] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Is_Phone_Missing] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Account_ID] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Title] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[First_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Middle_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Last_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Preferred_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Full_Name] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Date_Of_Birth] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Age_Years] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Gender_Description] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Ethnicity_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[NHS_Number] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[NI_Number] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Email_Address] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Home_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Mobile_Phone] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Work_Phone] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Address_Line_1] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Address_Line_2] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Town] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[County] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Postcode] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Email_Missing] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Phone_Missing] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Active] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Medical_Alert] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Medical_Alert_Text] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Payment_Plan_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Site_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Acquisition_Source] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Dentist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Dentist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Hygienist_Recall_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Hygienist_Recall_Interval_Months] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Recall_Method] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Use_Email] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Use_SMS] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Preferred_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Marketing_Consent] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[First_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Last_Appointment_Date] AS VARCHAR(500)), ''),
@@ -290,10 +241,7 @@ BEGIN
            ISNULL(CAST(src.[Last_Cancelled_Appointment_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[NHS_Exemption_Code] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Is_Email_Missing] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Is_Phone_Missing] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -301,39 +249,35 @@ BEGIN
         DECLARE @pk_Patient_base BIGINT = ISNULL((SELECT MAX(pk_Patient) FROM Gold.Dim_Patients WHERE pk_Patient > 0), 0);
         INSERT INTO Gold.Dim_Patients (
             pk_Patient,
-            Tenant_ID, Patient_ID, Account_ID, Title, First_Name, Middle_Name, Last_Name, Preferred_Name, Full_Name,
-            Date_Of_Birth, Age_Years, Gender_Description, Ethnicity_Code,
-            NHS_Number, NI_Number, Email_Address, Home_Phone, Mobile_Phone, Work_Phone, Is_Email_Missing, Is_Phone_Missing,
-            Address_Line_1, Address_Line_2, Town, County, Postcode,
-            Active, Medical_Alert, Medical_Alert_Text, Payment_Plan_ID, Site_ID, Family_ID,
+            Tenant_ID, Patient_ID, Account_ID, First_Name, Last_Name, Preferred_Name, Full_Name,
+            Email_Address, Home_Phone, Mobile_Phone, Is_Email_Missing, Is_Phone_Missing,
+            Active, Payment_Plan_ID, Site_ID,
             Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
             Dentist_Recall_Date, Dentist_Recall_Interval_Months,
             Hygienist_Recall_Date, Hygienist_Recall_Interval_Months,
-            Recall_Method, Marketing_Consent, Custom_Field_1, Custom_Field_2,
+            Recall_Method, Use_Email, Use_SMS, Preferred_Phone, Marketing_Consent,
             First_Appointment_Date, Last_Appointment_Date, Next_Appointment_Date,
             First_Exam_Date, Last_Exam_Date, Next_Exam_Date,
             Last_Scale_Polish_Date, Next_Scale_Polish_Date,
             Last_FTA_Date, Last_Cancelled_Appointment_Date,
-            Total_Paid, Total_Invoiced, NHS_Exemption_Code,
+            Total_Paid, Total_Invoiced,
             Patient_Created_Date, Patient_Updated_Date, Patient_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
-            src.Tenant_ID, src.Patient_ID, src.Account_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name,
-            src.Preferred_Name, src.Full_Name, src.Date_Of_Birth, src.Age_Years,
-            src.Gender_Description, src.Ethnicity_Code, src.NHS_Number, src.NI_Number, src.Email_Address,
-            src.Home_Phone, src.Mobile_Phone, src.Work_Phone, src.Is_Email_Missing, src.Is_Phone_Missing,
-            src.Address_Line_1, src.Address_Line_2, src.Town, src.County, src.Postcode,
-            src.Active, src.Medical_Alert, src.Medical_Alert_Text, src.Payment_Plan_ID, src.Site_ID, src.Family_ID,
+            src.Tenant_ID, src.Patient_ID, src.Account_ID, src.First_Name, src.Last_Name,
+            src.Preferred_Name, src.Full_Name, src.Email_Address,
+            src.Home_Phone, src.Mobile_Phone, src.Is_Email_Missing, src.Is_Phone_Missing,
+            src.Active, src.Payment_Plan_ID, src.Site_ID,
             src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,
             src.Dentist_Recall_Date, src.Dentist_Recall_Interval_Months,
             src.Hygienist_Recall_Date, src.Hygienist_Recall_Interval_Months,
-            src.Recall_Method, src.Marketing_Consent, src.Custom_Field_1, src.Custom_Field_2,
+            src.Recall_Method, src.Use_Email, src.Use_SMS, src.Preferred_Phone, src.Marketing_Consent,
             src.First_Appointment_Date, src.Last_Appointment_Date, src.Next_Appointment_Date,
             src.First_Exam_Date, src.Last_Exam_Date, src.Next_Exam_Date,
             src.Last_Scale_Polish_Date, src.Next_Scale_Polish_Date,
             src.Last_FTA_Date, src.Last_Cancelled_Appointment_Date,
-            src.Total_Paid, src.Total_Invoiced, src.NHS_Exemption_Code,
+            src.Total_Paid, src.Total_Invoiced,
             src.Patient_Created_Date, src.Patient_Updated_Date, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID);

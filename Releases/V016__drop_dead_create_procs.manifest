@@ -1,0 +1,40 @@
+# =====================================================================
+# Release V016 -- Drop dead Gold usp_Create_* stored procedures
+# =====================================================================
+# The Gold.usp_Create_Dim_* / usp_Create_Fact_* procedures were the original
+# schema-creation procs, kept against a possible drop-and-replace strategy that
+# was never adopted. The live model creates Gold tables from the .Table.sql DDL
+# files and loads them via usp_Load_* / usp_Create_Fact_* is unused. Nothing in
+# the repo (manifests, Audit orchestration, Process_Config, dependency graph,
+# other SPs, deploy scripts) references them -- verified 2026-06-19.
+#
+# DROP IF EXISTS is idempotent: harmless if a proc was never deployed to a given
+# environment. Meta.usp_Create_Gold_Views is NOT a Create_<Table> proc and is
+# retained (it generates the PBI presentation views).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V016__drop_dead_create_procs.manifest
+#      (set $env:FABRIC_SERVER for prod; run against dev AND prod)
+# =====================================================================
+
+# --- Dimensions ---
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Practitioners];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Payment_Plans];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Accounts];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Treatments];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Tenants];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Patients];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Users];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Practice_Sites];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_NHS_Contracts];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Dim_Treatment_Plans];
+
+# --- Facts ---
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Appointments];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Practitioner_Diaries];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Recalls];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Treatment_Appointments];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Treatment_Plan_Items];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Contracts];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_NHS_Claims];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Invoice_Items];
+EXEC    DROP PROCEDURE IF EXISTS [Gold].[usp_Create_Fact_Payments];

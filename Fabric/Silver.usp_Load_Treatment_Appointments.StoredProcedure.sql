@@ -50,7 +50,6 @@ BEGIN
         ISNULL(CAST(staged.[Status] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Position] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Bookable] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Notes] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Completed] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Completed_At] AS VARCHAR(500)), '')
         ))) AS _Hash
@@ -72,7 +71,6 @@ BEGIN
                 -- Status not in Bronze
         Position  AS [Position],
                 CASE WHEN LOWER(TRIM(Bookable))  IN ('true','1') THEN 1 ELSE 0 END  AS [Bookable],
-                Notes  AS [Notes],
                 CASE WHEN LOWER(TRIM(Completed)) IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
                 LEFT(Completed_At, 50)  AS [Completed_At]
             FROM Bronze.Treatment_Appointments
@@ -89,7 +87,6 @@ BEGIN
             [Status] = src.[Status],
             [Position] = src.[Position],
             [Bookable] = src.[Bookable],
-            [Notes] = src.[Notes],
             [Completed] = src.[Completed],
             [Completed_At] = src.[Completed_At],
             [DW_Updated_At] = SYSUTCDATETIME(),
@@ -100,8 +97,8 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Appointments] ([Tenant_ID], [Id], [Appointment_ID], [Treatment_Plan_Item_ID], [Treatment_Plan_ID], [Patient_ID], [Practitioner_ID], [Site_ID], [Status], [Position], [Bookable], [Notes], [Completed], [Completed_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Id], src.[Appointment_ID], src.[Treatment_Plan_Item_ID], src.[Treatment_Plan_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Site_ID], src.[Status], src.[Position], src.[Bookable], src.[Notes], src.[Completed], src.[Completed_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Treatment_Appointments] ([Tenant_ID], [Id], [Appointment_ID], [Treatment_Plan_Item_ID], [Treatment_Plan_ID], [Patient_ID], [Practitioner_ID], [Site_ID], [Status], [Position], [Bookable], [Completed], [Completed_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Appointment_ID], src.[Treatment_Plan_Item_ID], src.[Treatment_Plan_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Site_ID], src.[Status], src.[Position], src.[Bookable], src.[Completed], src.[Completed_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Treatment_Appointments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]

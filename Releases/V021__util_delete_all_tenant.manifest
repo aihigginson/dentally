@@ -1,0 +1,12 @@
+# =====================================================================
+# Release V021 -- Audit.usp_Delete_All_Tenant utility
+# =====================================================================
+# Metadata-driven full purge of one tenant: deletes every row WHERE Tenant_ID = @Tenant_ID
+# across EVERY tenant-bearing table in all schemas (Bronze/Silver/Gold data + Audit.Tenants +
+# Config/Input/Security per-tenant config/targets/RLS). @Dry_Run=1 previews counts. Refuses
+# the -1 sentinel. For test cleanup / tenant offboarding / DSAR erasure.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V021__util_delete_all_tenant.manifest
+# =====================================================================
+
+DEPLOY  Fabric\Audit.usp_Delete_All_Tenant.StoredProcedure.sql

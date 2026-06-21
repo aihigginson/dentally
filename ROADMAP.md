@@ -5,6 +5,8 @@ Check items off as they land; keep this file as the single source of truth for t
 
 Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
+_Last refreshed: 2026-06-17._
+
 ---
 
 ## 1. Lock down multi-tenant security  _(Critical — gating for real tenants)_
@@ -34,15 +36,15 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 
 - [x] Wire `Scripts/Run_Tests.ps1` into CI as a pre-deploy gate (`.github/workflows/dw-tests.yml`; prod deploy `needs: dw-tests`). **Active and verified green in CI** (secrets `FABRIC_SP_*` added). Enforces reconcile/FK integrity + capture success **+ regression drift** — the latter now real after fixing the `Test.Capture_Baseline` DROP/CREATE bug (it was wiped on every deploy; commit a7a35e6) so the baseline survives redeploys.
 - [x] Establish the first known-good baseline (`Test.usp_Promote`) — current baseline 122 metrics, **45 reconciles PASS / 120 OK / 2 OK(null)**, exit 0 (re-baselined after the patient-cohort feature added 5 cohort metrics).
-- [ ] Add a post-deploy smoke test against the web app
-- [ ] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers
-- [ ] Add a minimal E2E check for the embed flow
+- [x] Add a post-deploy smoke test against the web app — `deploy-dev.yml` + `deploy-prod.yml` now curl `/health` (6× retry) after the Container App update and fail the deploy if it's not 200.
+- [x] Add application tests (pytest) for `Web/app.py` auth + tenant-scoping helpers — `Web/tests/` (16 tests): `_auth` (token→upn, expiry, missing/no-upn), `_get_user_info` (UPN→client/tenants), and the **fail-closed embed token** (401 unauth, 404 unknown report, 500 if RLS roles empty, 403 unprovisioned, 200 happy path), + `/api/me` & `/api/targets` 403-when-unprovisioned. Run in CI via `app-tests.yml`.
+- [ ] Add a minimal E2E check for the embed flow — *(still todo; needs a live auth'd browser session — heavier than the unit + smoke layers above)*
 
 ## 4. Single source of truth for KPI logic  _(High)_
 
 - [x] Delete the dead Flask KPI code: `/api/kpis`, all `_kpis_*`, `_wrap` + helpers in `Web/app.py` — ~400 lines removed (commit 28e5c40, on dev; preserved by tag `flask-kpi-cards-complete`)
-- [ ] Confirm DAX (Tabular Editor scripts) is the sole KPI definition
-- [ ] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven
+- [x] Confirm DAX (Tabular Editor scripts) is the sole KPI definition — verified: no KPI computation remains in `Web/app.py` (routes are `/`, `/health`, auth-config, embed-token, me, filters, targets); dead Flask KPI code already removed (commit 28e5c40)
+- [x] Reduce DAX duplication: generate the repetitive Target / vs-Target / BG colour measures data-driven — per-KPI Target/vs-Target/BG blocks replaced by builder functions (`tDaily`/`tEff`/`tEff100`, `vPct`/`vPctP`/`vPctGrey`/`vPctGreyP`/`vPp`/`vPpP`/`vPpGreyP`, `bgHigher*`/`bgLower*`/`bgWithinPp`) + one-line `kpi()` calls. Refactored: **Revenue** (~500→245), **Patients** (618→367), **Scheduling** (339→178), **Clinical** (354→284) — all functionally-identical DAX, each validated by running in dev Tabular Editor. **`TabularEditor_NHS.csx` deliberately left as-is** — divergent target architecture (`_Daily Targets` tenant/site-fallback filters + `_Targets` COALESCE, not `_Effective`); only UDAs↔UOAs repeat, not worth a builder layer.
 
 ## 5. ETL refactor & incremental Gold  _(Medium — cost optimisation, NOT a scaling blocker)_
 
@@ -51,30 +53,31 @@ Status legend: `[ ]` todo &nbsp; `[~]` in progress &nbsp; `[x]` done
 > driver here is **reducing CU consumption / cost**, so incrementals are worthwhile
 > but not urgent. Full DROP/CREATE rebuilds are not a correctness or scale risk.
 
-- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config` (maintainability)
-- [ ] Make `usp_Load_All` idempotent (CREATE OR ALTER / DROP+CREATE, not bare `ALTER PROCEDURE`); remove dead commented `EXEC`s; standardise on UTC timestamps
-- [ ] Design **stable Gold surrogate keys** (survive reloads) to enable incremental fact loading
-- [ ] Add an incremental Gold load path to cut rebuild cost (CU spend), once surrogate keys are stable
+- [ ] Replace the ~60 hand-written blocks in `Audit.usp_Load_All` with a metadata-driven loop over `Process_Config` (maintainability) — **still todo** (the main remaining ETL item)
+- [ ] Make `usp_Load_All` idempotent (CREATE OR ALTER / DROP+CREATE, not bare `ALTER PROCEDURE`); remove dead commented `EXEC`s; standardise on UTC timestamps — **still todo**
+- [x] **Stable Gold surrogate keys** — effectively already stable: Gold dims/facts upsert (DELETE-orphan + hash-gated UPDATE + INSERT, keyed on bk + Tenant_ID); pks are preserved across reloads, never reassigned. No redesign needed.
+- [~] **Incremental Gold load path** — substantially done: 5 of 6 transactional facts converted to watermark deltas (NHS Claims `V002`, Contracts + Treatment Plan Items `V004`, Invoice Items `V005`/`V006`, Payments `V007`). Patterns established: time-derived columns → live Gold `vw_` view (`V003`); sparse/derived flags → tiny positive table + LEFT JOIN in the view (`V005` discount, `V007` deposit). Remaining full-rebuild (cheap, acceptable): `Fact_Appointments` and the new `Fact_Appointment_Journey` (`V010`).
 
 ## 6. Operability / observability  _(Medium)_
 
-- [ ] Structured logging + correlation IDs (replace `print()`)
-- [ ] Error tracking (Sentry / App Insights) and alerting
-- [ ] Health / readiness endpoint for Container Apps probes
-- [ ] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling (`_fabric_conn` / `_pbi_token`)
-- [ ] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback
+- [x] Structured logging + correlation IDs (replace `print()`) — all `print()` replaced with `app.logger`; a per-request correlation id (`X-Request-ID`, honoured if inbound else minted) is injected into every log line via a logging filter and echoed back in the response header for client↔server tracing.
+- [ ] Error tracking (Sentry / App Insights) and alerting — *(needs the Sentry/App Insights resource + DSN created first; then a gated init hook)*
+- [~] Health / readiness endpoint for Container Apps probes — `/health` **live + verified on dev** (200 `{status:ok}`, unauthenticated, no deps). Remaining: wire the Container App liveness/readiness probe to it (via `az`/workflow).
+- [~] Reuse the MSAL `ConfidentialClientApplication` (token cache) and add DB connection pooling — **MSAL done**: `_pbi_msal`/`_fabric_msal` are now reused lazy singletons (in-memory token cache; previously rebuilt on every call, so AAD was hit per request). DB connection pooling **deferred** — token-auth connections (token in `attrs_before`, not the conn string) don't pool cleanly, so connect-per-request is kept deliberately.
+- [x] Deploy the immutable `:sha` image tag, not `:latest`, for deterministic rollback — both `deploy-dev.yml` + `deploy-prod.yml` now build **and deploy `:${{ github.sha }}`** (the mutable `:dev`/`:latest` tags are still built as "newest" pointers). Each revision is pinned to an exact build; rollback = redeploy a prior commit's sha. Directly fixes the stale-`:latest` failure mode behind the 2026-06-15 outage.
 
 ## 7. Documentation  _(Medium)_
 
 - [x] EVALUATION.md (architecture critique)
 - [x] ROADMAP.md (this file)
-- [ ] README (what the product is, how to run it locally, how to deploy)
-- [ ] Architecture overview (medallion layers, data flow, components)
-- [ ] Runbook (deploys, common failures, recovery)
-- [ ] Tenant-onboarding guide (currently manual `Security.Application_Users` + workspace setup)
-- [ ] Data dictionary (Gold tables / PBI views)
+- [x] README (what the product is, how to run it locally, how to deploy) — `README.md`
+- [x] Architecture overview (medallion layers, data flow, components) — covered in `README.md` (Architecture section) + `CLAUDE.md`
+- [x] Runbook — `RUNBOOK.md`: environments, deploy procedures (web/warehouse/PBI + rollback), the golden rules, incident playbook (A–E for the failures actually hit), diagnostics, and the access-control model. Captures the 2026-06 learnings (dev/prod warehouse split, warehouse-out-of-pipeline, parameterised source, the `:latest` outage).
+- [x] Tenant-onboarding guide — `TENANT_ONBOARDING.md` (the manual `Audit.Tenants` + `Security.Clients`/`Application_Users` chain, data load, RLS verification, gotchas)
+- [x] Data dictionary (Gold tables / PBI views) — `DATA_DICTIONARY.md`, generated from the live schema (36 PBI views + 38 Gold tables, 1,328 columns); reflects the minimised model and cross-refs `DPIA.md` / `DPA_SCHEDULE_1.md`. Regenerate from `INFORMATION_SCHEMA` when the schema changes.
 
 ## 8. SaaS-readiness  _(Medium)_
 
-- [ ] Automate tenant provisioning (replace manual `Security.Application_Users` inserts + workspace/report/target setup)
+- [x] **Separate prod environment** — dev and prod are now distinct Fabric workspaces + warehouses (`…-4i26…` dev / `…-eljz…` prod); the prod Container App `FABRIC_SERVER` and the prod semantic model both point at the prod warehouse (parameterised source + deployment-pipeline parameter rule). (2026-06)
+- [ ] Automate tenant provisioning (replace manual `Security.Application_Users` + `Security.Clients` + `Audit.Tenants` inserts + workspace/report/target setup) — **★ live now** (onboarding Maple Dental; real data targeted as Tenant 20). NB access-control tables are managed out-of-git per environment; secrets via a gitignored local `.sql`.
 - [ ] Review cost/scale model (full Gold rebuilds, single capacity) as tenant count grows

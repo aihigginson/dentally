@@ -1,0 +1,190 @@
+# Data Protection Impact Assessment (DPIA) — Analytically
+
+**Draft, filled from the system's current state + `COMPLIANCE.md`.** Items needing a
+business/policy decision are marked **[CONFIRM]** / **[DECISION NEEDED]**. Not legal advice.
+
+---
+
+## 1. Product and processing description
+
+**1.1 Name:** Analytically (embedded analytics over a Dentally data warehouse on Microsoft Fabric).
+
+**1.2 Primary purpose:** Practice performance management — and specifically: recall optimisation, revenue analysis, treatment conversion/clinical analysis, NHS (UDA) performance, staff/practitioner performance, and patient-retention/contactability. (Reports: Home, Revenue, Patient, Schedule, Clinical, NHS.)
+
+**1.3 Intended users:** Practice owners, practice managers, and group management teams (primary); reception staff (to action operational lists e.g. overdue recalls / missing contact details); dentists & hygienists (own performance). Access is role-aware. **[CONFIRM the exact role list you want to support.]**
+
+**1.4 Classification — operational analytics with patient-contact workflows.** Reports are **primarily aggregated** (KPIs, trends, distributions). The platform also provides **patient-level drill-through** for operational action (e.g. the list of patients behind an "overdue recalls" figure), showing the **minimum needed to act**: Patient ID, Name, the actionable attribute (recall due date / outstanding balance / missing-contact flag), and the contact detail required to act (phone / email). Reception/practice staff therefore *do* see real patient names and contact details for the contact workflow — so this is accurately described as an **operational analytics platform with patient contact workflows**, not a pure aggregate-only analytics tool.
+> **Data minimisation implemented end-to-end (releases V011, 2026-06-17 and V012, 2026-06-18).** The pipeline (data generator → Stage → Bronze → Silver → Gold → Power BI) holds patient **name, contact details (email/phone), marketing consent, and operational/financial analytics only**. Removed and no longer collected or stored anywhere in the warehouse: special-category / excess identifiers (date of birth, gender, ethnicity, NHS/NI numbers, full address, medical alerts, emergency contacts — V011) **and all free-text clinical content** (appointment & treatment notes, treatment free-text descriptions — V012). Identifying/contact PII is held for **active patients only** — inactive patients are shown as "Inactive Patient" with contact removed (V013, §6.2). See §2 and §7. RLS additionally scopes everything per-tenant.
+
+---
+
+## 2. Data collected
+
+Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = present in the warehouse/model; visibility in reports is narrower (§1.4). The table below reflects the **minimised** model after releases V011–V015 (June 2026).
+
+**Patient identity**
+| Field | Collected |
+|---|---|
+| Patient ID | Yes |
+| First / Last / Preferred / Full Name | Yes — **active patients only** (inactive patients shown as "Inactive Patient", contact NULLed; §6.2) |
+| Date of Birth | **No** — removed (V011) |
+| Age (years) / age band | **No** — removed (V011) |
+| Gender | **No** — removed (V011) |
+| Ethnicity | **No** — removed (V011; *special category*) |
+| NHS Number / NI Number | **No** — removed (V011) |
+
+**Contact data** — both the **values and "missing" flags** are present:
+| Field | Collected |
+|---|---|
+| Email address | Yes (+ `Is_Email_Missing` flag) |
+| Mobile / Home phone | Yes (+ `Is_Phone_Missing` flag) |
+| Work phone | **No** — removed (V011) |
+| Address (lines, town, county, postcode) | **No** — removed (V011) |
+| Marketing consent (`Marketing_Consent`) | Yes |
+| Contact preference: `Use_Email` / `Use_SMS` flags | **Yes** — re-added (V015) as contactability metadata |
+| Preferred phone (`Preferred_Phone`: mobile/home) | **Yes** — re-added (V015) |
+
+**Appointment data:** appointment dates — Yes; status — Yes; missed/DNA — Yes; cancellations (+ reason) — Yes; recall information (dates, intervals, status) — Yes.
+
+**Clinical data:** treatment codes — Yes; treatment categories — Yes; treatment values — Yes; standard treatment name (nomenclature) — Yes. **No free-text clinical content is collected or stored** — clinical notes, treatment free-text descriptions, medical alerts, medical history, correspondence, X-rays / images / uploaded documents are all **No**. (Appointment & treatment `Notes` / `Treatment_Description` / `Patient_Nomenclature` / `Description` removed in V012, 2026-06-18; medical alerts removed in V011.)
+
+**Financial data:** treatment revenue — Yes; outstanding balances — Yes (`Total_Invoiced` − `Total_Paid`, invoices); payment history — Yes.
+
+---
+
+## 3. Data flow
+
+**3.1 Import frequency:** **Daily overnight synchronisation** via a scheduled Fabric data pipeline. Not real-time; operational lists (e.g. recalls, balances) reflect the previous night's snapshot.
+
+**3.2 Automated:** Yes — Fabric pipeline ingests from the Dentally API (Bronze) → Silver → Gold; no manual data entry.
+
+**3.3 Practice authorises the API connection:** Yes — each tenant is configured with its own Dentally API credentials (`Audit.Tenants`); ingestion only runs with credentials the practice provides. **[CONFIRM the contractual/consent mechanism + data-processor agreement with each practice.]**
+
+**3.4 Does data leave Microsoft Fabric?** Data is read out of Fabric in two intended ways, both **within Microsoft Azure (UK South — see §5.1)**: (a) the embedded Power BI reports render tenant-scoped data to the authenticated user's browser; (b) the Flask API reads tenant-scoped data (e.g. filters, targets) for the app. **No CSV exports, scheduled email reports, or report attachments are built into the product.** **Native Power BI data export is disabled** for this healthcare dataset (exporting patient lists to a spreadsheet would create a new, uncontrolled category of risk outside the platform's RLS/audit boundary). **Status: ENFORCED 2026-06-19** at the Fabric tenant **Export and sharing settings** — disabled org-wide: Export to Excel, Export to .csv, Export as PowerPoint/PDF, image and paginated Word/PDF, and Download .pbix. **Defence-in-depth:** the embedded app also disables the visual context menu and hides the *Export data* command (`Web/index.html` `_buildConfig`). **Deliberately retained** (low-risk, screen-level only, not bulk data): *Print dashboards and reports* and *Copy and paste visuals*. **Scoped exception:** *Users can work with Power BI semantic models in Excel using a live connection* (the "Analyze in Excel"/XMLA-read setting) is **enabled for a named security group of report authors only**, not org-wide — it is required because Power BI Desktop's live connection to published semantic models on Fabric capacity routes through this same endpoint. The residual risk (a report author with Build permission could read model data via the XMLA endpoint) is accepted as least-privilege and necessary for authoring; the bulk-export vectors above remain closed for all users.
+
+---
+
+## 4. User access
+
+**4.1 Who can access customer data:** End-users see **only their own tenant** (Power BI RLS, fail-closed). Development is performed in a **separate development environment using synthetic data only**; the day-to-day development account can reach the dev workspace/warehouse but **not** production. Production access is restricted, used **only when required for support, incident investigation or maintenance**, is **time-limited and removed when the task is complete**, and is **logged** through platform audit controls. The organisation currently consists of a **single developer-administrator** — so the honest, accurate statement is: access to customer data is restricted to authorised personnel on a least-privilege basis, production access is exceptional and audited, and no one accesses customer data through the app layer outside their own tenant. As the organisation grows, production access will be governed by privileged-access management and role separation.
+
+**Account separation is now built (2026-06-18 — see `ACCESS_MODEL.md`).** Even with a single operator, identities are role-separated and access is granted via Entra security groups (not direct-to-user): a **dev** account (`dev@`, Contributor on the dev workspace, synthetic data only, **cannot reach production**); a **release** identity (`ops@`, the only account used to promote dev→prod and exercise production); an embedded-report **viewer** account (`viewer@`, reports only, **no** database/workspace access); and an MFA-exempt **break-glass** Global Admin (`Admin@`) not used for routine work. Deployment automation uses **separate dev/prod service principals** (§5.6, risk #2). This realises the least-privilege/role-separation posture above rather than leaving it aspirational.
+
+**4.2 Can support see patient-level information:** Only the single developer-administrator, via the controlled production-access path above (least-privilege, time-limited, logged) and only when operationally necessary. There is no routine or shared support access to patient data.
+
+**4.3 MFA:** Authentication is Entra ID. **MFA is enforced (per-user MFA) on every human account except the break-glass Global Admin** — `dev@`, `ops@` and `viewer@` are all MFA-enabled. Per-user MFA is used rather than Conditional Access because this tenant has no spare **Entra ID P1** licence; it achieves the same control at no cost, and migration to a Conditional Access policy (require MFA for the access groups, exclude `Admin@`, roll out report-only first) is planned if/when P1 becomes available (`ACCESS_MODEL.md` §2). The `Admin@` break-glass account is **deliberately MFA-exempt** as the guaranteed recovery path and is excluded from routine use. The dev account operates exclusively against synthetic data with no production access (a remember-device window reduces repeated prompts so development is not impeded, but MFA remains enabled). Deployment automation is non-interactive: the **production** service principal authenticates via **GitHub OIDC (no stored secret)** rather than MFA (§5.6, risk #2).
+
+**4.4 Audit logs:** **Partial.** ETL execution and schema/deploy changes are audited (`Audit` schema; `Migrate.Deploy_Log`). The application layer now emits **structured logs with a per-request correlation ID** (`X-Request-ID` — honoured if inbound, else minted, and echoed back in the response) for client↔server request tracing (2026-06-18). **Per-user report-access audit — DONE (2026-06-19).** The application logs the authenticated end-user (UPN) on every report load (the embed-token line, e.g. `[embed-token] upn='jane@practice.co.uk' … report=revenue`), and these app logs are retained **12 months** in Azure Log Analytics (`workspace-rganalytically3no0`, retention set to 365 days). Because the platform embeds with a **service principal + effective identity**, the Power BI/Fabric activity log attributes embedded views to the *service principal*, not the end consumer — so the **application log is the authoritative record of which real user accessed which report**, queryable by UPN/report/time.
+**Roadmap (decided, not blocking first release):**
+- **Entra sign-in logs** (login success/failure, MFA) — long-term export needs Entra ID **P1** (not currently licensed); deferred while the org is a single operator, to be enabled when staff > 1 / P1 is acquired.
+- **Power BI/Fabric activity logs** (dataset refresh, sharing/permission changes, admin actions) — low immediate value: the only recurring service-level job is the daily semantic-model refresh (one job, one identity). A daily export to durable storage is on the roadmap for when service-level activity grows.
+
+---
+
+## 5. Hosting and security
+
+**5.1 Data residency / region:** **Azure UK South** (United Kingdom). The Azure resources (Container Apps, resource group `rg-analytically`, Container Apps environment) and the Fabric capacity are all in **UK South** — verified via the resource group, the Container Apps environment, and the live endpoint (`…uksouth.azurecontainerapps.io`). Customer/patient data is stored in the UK; certain Microsoft platform-level operations (Entra ID authentication, support, telemetry) may process limited data outside the UK under Microsoft's transfer safeguards (§13, DPA §12). **[CONFIRM only if a customer mandates a specific UK region other than UK South.]**
+
+**5.2 Backups encrypted:** Yes — Fabric/OneLake stores all data with Microsoft-managed encryption; platform redundancy applies to backups/durability.
+
+**5.3 Backups retained / how long:** Fabric/OneLake provides platform durability/redundancy; source data is re-ingestible from Dentally and Gold is rebuildable from Bronze/Silver. **Explicit warehouse backup/point-in-time retention is not yet documented — [CONFIRM Fabric PITR/restore retention; RPO/RTO not yet defined].**
+
+**5.4 Encrypted at rest:** Yes — Microsoft-managed keys (no customer-managed key configured; CMK is a TODO).
+
+**5.5 Encrypted in transit:** Yes — HTTPS at the edge; SQL with `Encrypt=True`; PBI/Fabric APIs over TLS.
+
+**5.6 Prod and dev separated:** **Yes** — separate Fabric workspaces + warehouses + Container Apps (`…-eljz…` prod / `…-4i26…` dev).
+
+**5.7 Production data copied into development:** **No.** Dev uses synthetic test tenants; prod currently holds only a clearly-labelled "Demonstration" tenant (synthetic). No real patient data is copied from prod into dev. **[CONFIRM this remains policy as real tenants onboard.]**
+
+---
+
+## 6. Data retention
+
+**6.1 If a customer (practice) leaves:** Access is **suspended immediately** (`Audit.Tenants.Is_Active = 0`, `Application_Users` removed), a **30-day recovery window** applies (in case of accidental or disputed termination), and the tenant's warehouse data is **permanently deleted within 90 days**. The source of record remains the upstream Dentally system.
+
+**6.2 Retention of patient data while a practice is active — PII held for active patients only.** Identifying/contact data (name, email, phone) is **retained only for active patients**, because the operational purpose (contacting patients) only applies to them. When a patient becomes **inactive**, their **real name is replaced with the placeholder "Inactive Patient"** and their **direct identifying and contact information (name, email, phone) is removed from the analytics layer** (set to NULL across Silver → Gold → Power BI) — so inactive patients remain *identifiable as inactive* on operational reports (e.g. recalls) but are no longer contactable and carry no direct identifiers in the warehouse; non-identifying operational/financial history is retained for trend analytics. **Note (precision, not anonymisation):** the patient's surrogate/business key is retained and the upstream Dentally record still holds the full identity, so this is **pseudonymisation within the analytics layer**, not anonymisation — a patient could still be re-identified by joining back to Dentally. This is an accepted, proportionate reduction of standing identifiable data in the analytics platform, not a claim of irreversible anonymity. **Live on dev and production (release V013, 2026-06-18).** Because their contact is deliberately removed, inactive patients are **not** flagged as "missing contact" and do **not** appear on contact/recall action lists (release V014). Active-patient history is retained while the practice is active **[CONFIRM the period — full Dentally history vs e.g. last 7 years]**.
+
+**6.3 DSAR / right to erasure.** Until volume justifies automation, **DSAR and erasure requests received via a customer practice will be actioned manually by the controller (the practice) and the processor (Analytically) working together** — locating the patient by ID/name within the requesting tenant and removing or obfuscating the relevant analytics-layer records (the upstream Dentally system remains the source of record). A formal, automated DSAR/erasure workflow will be introduced as the platform scales. Erasure is materially simplified by the minimisation above (no special-category or free-text content held) and by the inactive-patient pseudonymisation.
+
+---
+
+## 7. Special-category data assessment
+
+**7.1 Why patient-level data is needed:** To let practices **act** on operational issues the analytics surface — contact patients with overdue recalls, chase patients with missing contact details, follow up lapsed patients, and reconcile outstanding balances. The aggregate identifies *that* there is an issue; patient-level identifies *who* to contact.
+
+**7.2 Could the objective be met without patient-level data?** For the **reporting/analytics** (dashboards, KPIs, trends) — **yes**, aggregates are sufficient and no PII is needed. For the **operational action** (reception contacting specific patients) — **no**; you need the patient's identity and contact detail to act.
+
+**7.3 Fields actually required to identify a patient needing action:**
+- **Required (retained):** Patient ID, Name, the actionable attribute (e.g. recall due date / outstanding balance / "no email on file" flag), and the contact detail needed to act (phone / email).
+- **Not required — now removed (V011, 2026-06-17):** NHS Number, NI Number, Ethnicity, Gender, Date of Birth/Age, full Address, Work phone, Medical Alert flag/text, emergency contacts, title/middle name, and other excess identifiers. **★ Minimisation mitigation — DONE:** these special-category / excess-identifier fields have been removed from the **entire pipeline** — the data generator, the OneLake landing (Stage), and every warehouse layer (Bronze → Silver → Gold → Power BI). They are no longer ingested or stored. Verified end-to-end on dev and production (0 sensitive columns from `Stage.Patients` through to `PBI.[List Patients]`); the regression suite (45 integrity + 120 metric checks) passed against the minimised model.
+- **Free-text clinical content — removed (V012, 2026-06-18):** all free-text fields that could contain unstructured sensitive information (appointment `Notes`, treatment `Treatment_Description` / `Description` / `Patient_Nomenclature` / `Patient_Description`, and config `Notes`) have been **dropped from the entire warehouse and Power BI**, keeping only structured treatment code / category / value / standard nomenclature. This eliminates the highest-variance privacy risk (free text is where unexpected special-category data appears). Verified 0 free-text columns from Bronze through to the PBI presentation layer, dev and production. **Net effect: the platform does not process clinical notes, medical histories, correspondence, uploaded documents, diagnostic images, NHS numbers, ethnicity, addresses or other special-category clinical content.**
+- **Residual:** for the eventual **real** Dentally ingestion, the pipeline's API column mapping should also be trimmed so these fields are not pulled from the API at all (currently only synthetic/demo data flows; the warehouse drops the fields regardless). Tracked as the one remaining minimisation item.
+
+---
+
+## 8. Multi-tenancy
+
+**8.1 Shared Fabric environment:** Yes — practices share a warehouse per environment.
+
+**8.2 How tenants are separated:** **Shared warehouse with row-level security** — every row carries `Tenant_ID` (Bronze→Gold→PBI), and the Power BI `RLS` role filters every tenant-bearing table to the signed-in user's tenant(s) via effective identity. Dev and prod are separate workspaces (not per-tenant workspaces).
+
+**8.3 Tenant isolation tested:** **Yes** — two automated CI gates: `Check_RLS_Coverage` (every tenant-bearing table has an RLS filter; caught + closed 2 real leaks) and `Check_RLS_Isolation` (behavioural — an impersonated user sees only their tenant, verified with another tenant's data present). The embed token is mandatory/fail-closed (refuses if RLS unconfigured or the user maps to no tenant).
+
+---
+
+## 9. Future features  _(foreseeable evolution)_
+
+**9.1 AI features:** **[CONFIRM]** — none currently. Any AI feature touching patient data would need its own DPIA addendum.
+
+**9.2 Benchmark practices against each other:** **Not currently planned.** Cross-practice benchmarking (e.g. "your recall conversion is in the top 25% of comparable practices") is a recognised future commercial opportunity but is **not in scope for the first release**. If introduced, it must use **aggregated and anonymised data only and must not identify individual patients or practices** to one another — a material change requiring DPIA reassessment.
+
+**9.3 Data used for product improvement:** **[CONFIRM]** — not currently. If yes, define lawful basis + anonymisation.
+
+**9.4 Train ML models:** **[CONFIRM]** — not currently. Training on special-category data has significant DPIA implications and would need explicit assessment + lawful basis.
+
+---
+
+## 10. The most important question — a concrete metric and drill-through
+
+The **Home** dashboard shows **Overdue Recalls** as an aggregate (e.g. *997 overdue recalls*). A practice manager or receptionist clicks the metric and **drills through to a patient list** — **Patient ID, Name, recall due date, and contact details (phone/email)** — filtered to the same site/period as the dashboard, so reception can contact those patients to rebook.
+
+The aggregate (*997*) answers "is there a problem?"; the patient-level list is the **minimum data needed to act on it**. This is precisely why patient-level data is necessary and proportionate — and why the **identifying/contact** fields are required while the **special-category** fields (§7.3) are not.
+
+---
+
+## 11. Risk register (residual, after controls)
+
+| # | Risk | Likelihood | Impact | Key controls in place | Residual |
+|---|------|-----------|--------|-----------------------|----------|
+| 1 | **External breach** | Low | High | Microsoft-managed encryption at rest + TLS in transit; Entra auth + per-user MFA on prod access; UK-South residency; separate dev/prod; secrets gitignored / in CI secret store; **prod automation uses GitHub OIDC (no stored secret)**; container image build excludes all env files | **Medium** |
+| 2 | **Insider misuse** (admin/SP querying all tenants) | Low | Medium-High | Role-separated accounts (`dev@`/`ops@`/`viewer@` + break-glass `Admin@`) granted via security groups; per-user MFA on all but break-glass; prod access exceptional, time-limited, logged; dev uses synthetic data only; **dev/prod service principals split — prod SP authenticates via GitHub OIDC with no stored secret, dev SP secret is dev-only — and the combined "Test Runner" SP's access has been revoked** | **Low-Medium** |
+| 3 | **Tenant data leakage** (one practice sees another) | Low | High | Per-row `Tenant_ID` + Power BI RLS (effective identity); fail-closed embed token; two automated CI gates (`Check_RLS_Coverage`, `Check_RLS_Isolation`) | **Low-Medium** |
+| 4 | **Excessive data collection** | Low | Medium | Data minimised end-to-end (V011/V012); only name, contact, marketing consent + structured operational/financial/treatment-category data | **Low** |
+| 5 | **Clinical sensitivity exposure** (special-category / free text) | Low | High | All special-category fields + **all free-text clinical content removed** (V011/V012); no notes, medical history, images, correspondence | **Low** |
+| 6 | **Re-identification** (patient identifiable in drill-through) | n/a | — | Inherent and necessary for the contact workflow; minimised to the fields needed to act; per-tenant scoped; PII held for active patients only | **Accepted & necessary** |
+| 7 | **Data-minimisation failure** (sensitive field re-introduced) | Low | Medium | Schema is source-controlled + reviewed; regression suite; minimisation documented here | **Low** |
+| 8 | **Insufficient read-audit / breach detection** | Medium | Medium | ETL + deploy auditing present; Entra sign-in + Fabric/PBI activity logs available at platform level | **Medium — [enable + retain; define retention]** |
+
+**Overall residual risk: Medium-Low and acceptable with controls** — a normal posture for a healthcare-analytics SaaS. Production-access controls have now been built out (role-separated accounts, per-user MFA, dev/prod SP split with prod-OIDC — §4, `ACCESS_MODEL.md`); the remaining material items are *operational* (consolidated read-audit logging + activity-log retention, retention/DSAR workflow) rather than data-model issues.
+
+---
+
+## 12. Penetration testing
+
+An independent penetration test is **planned prior to launch** (not yet performed). Scope will cover the embedded app + auth flow, the embed-token/RLS isolation boundary, and the public endpoints. Deferred until the platform is launch-ready to avoid re-testing after material changes.
+
+---
+
+## 13. Sub-processors
+
+The platform relies on the following third-party services. Customers (controllers) routinely request this list during due diligence. The **canonical, maintained version is `SUB_PROCESSOR_REGISTER.md`** (with the change-notification commitment); the table below mirrors it for the DPIA reader. All data-bearing services are hosted in **Microsoft Azure / Microsoft 365, UK South** (UK data residency — §5.1).
+
+| Service | Purpose | Personal data processed |
+|---|---|---|
+| **Microsoft Fabric / OneLake** | Data warehouse, semantic model and report hosting | **Yes** — patient identity (active patients), contact details, marketing consent, and operational/financial/treatment analytics |
+| **Microsoft Azure** (Container Apps, resource group; UK South) | Application + API hosting | **Yes** — tenant-scoped data rendered/served in transit to authenticated users |
+| **Microsoft Entra ID** | Authentication and identity / access management | **Yes** — user (staff) account identifiers and sign-in metadata; **not** patient data |
+| **GitHub** (incl. GitHub Actions) | Source control and CI/CD deployment automation | **No patient data** — application code, configuration and deployment pipelines only (production deploys authenticate via OIDC, §4.3) |
+
+**Notes:** Microsoft Fabric, Azure and Entra ID are all Microsoft sub-processors under the Microsoft Products and Services DPA. GitHub (a Microsoft company) processes no patient data — only the codebase and deployment automation. The upstream **Dentally** system is the practice's own clinical record / source of data, not a sub-processor of Analytically. **[CONFIRM if any further services are added (e.g. error tracking such as Sentry/App Insights, email/notification providers) — each must be added here and to the customer DPA before going live.]**

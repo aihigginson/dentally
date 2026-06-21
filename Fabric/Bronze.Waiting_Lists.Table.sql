@@ -10,7 +10,6 @@ CREATE TABLE [Bronze].[Waiting_Lists](
 	[Active] [decimal](18, 4) NULL,
 	[Default_Appointment_Duration] [decimal](18, 4) NULL,
 	[Default_Appointment_Reason] [VARCHAR](255) NULL,
-	[Default_Notes] [VARCHAR](255) NULL,
 	[Default_Status] [VARCHAR](255) NULL,
 	[Default_Treatment_Duration] [decimal](18, 4) NULL,
 	[Default_Treatment_Reason] [VARCHAR](255) NULL,

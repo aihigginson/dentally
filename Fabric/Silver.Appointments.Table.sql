@@ -23,8 +23,6 @@ CREATE TABLE [Silver].[Appointments](
 	[Duration] [int] NULL,
 	[Reason] [VARCHAR](100) NULL,
 	[State] [VARCHAR](50) NULL,
-	[Notes] [VARCHAR](max) NULL,
-	[Treatment_Description] [VARCHAR](max) NULL,
 	[Booked_Via_API] [bit] NULL,
 	[Pending_At] [VARCHAR](50) NULL,
 	[Confirmed_At] [VARCHAR](50) NULL,

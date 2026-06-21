@@ -35,7 +35,6 @@ BEGIN
             , LEFT(site_id, 255)                                                        AS Site_ID
             , LEFT(default_appointment_reason, 255)                                     AS Default_Appointment_Reason
             , LEFT(default_treatment_reason,   255)                                     AS Default_Treatment_Reason
-            , LEFT(default_notes,              255)                                     AS Default_Notes
             , LEFT(default_status,             255)                                     AS Default_Status
             , TRY_CAST(default_appointment_duration AS DECIMAL(18,4))                  AS Default_Appointment_Duration
             , TRY_CAST(default_treatment_duration   AS DECIMAL(18,4))                  AS Default_Treatment_Duration
@@ -51,7 +50,6 @@ BEGIN
             , tgt.Site_ID                      = src.Site_ID
             , tgt.Default_Appointment_Reason   = src.Default_Appointment_Reason
             , tgt.Default_Treatment_Reason     = src.Default_Treatment_Reason
-            , tgt.Default_Notes                = src.Default_Notes
             , tgt.Default_Status               = src.Default_Status
             , tgt.Default_Appointment_Duration = src.Default_Appointment_Duration
             , tgt.Default_Treatment_Duration   = src.Default_Treatment_Duration
@@ -64,14 +62,14 @@ BEGIN
 
         INSERT INTO Bronze.Waiting_Lists (
             Tenant_ID, ID, Active, Name, Site_ID,
-            Default_Appointment_Reason, Default_Treatment_Reason, Default_Notes, Default_Status,
+            Default_Appointment_Reason, Default_Treatment_Reason, Default_Status,
             Default_Appointment_Duration, Default_Treatment_Duration,
             Target_Appointment_Days, Target_Treatment_Days,
             DW_Loaded_At
         )
         SELECT
             src.Tenant_ID, src.ID, src.Active, src.Name, src.Site_ID,
-            src.Default_Appointment_Reason, src.Default_Treatment_Reason, src.Default_Notes, src.Default_Status,
+            src.Default_Appointment_Reason, src.Default_Treatment_Reason, src.Default_Status,
             src.Default_Appointment_Duration, src.Default_Treatment_Duration,
             src.Target_Appointment_Days, src.Target_Treatment_Days,
             SYSUTCDATETIME()

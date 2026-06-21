@@ -20,7 +20,6 @@ CREATE TABLE [Bronze].[Contracts](
 	[UOA_Target] [VARCHAR](255) NULL,
 	[UOA_Value] [VARCHAR](255) NULL,
 	[Name] [VARCHAR](255) NULL,
-	[Notes] [VARCHAR](max) NULL,
 	[Created_At] [VARCHAR](255) NULL,
 	[Updated_At] [VARCHAR](255) NULL,
 	[Tenant_ID] [int] NULL,

@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V014 -- Inactive patients are not "missing contact"
+# =====================================================================
+# Follows V013: inactive patients have their contact deliberately removed, so the
+# Is_Email_Missing / Is_Phone_Missing flags must be 0 (false) for them -- the flags
+# drive actionable lists/KPIs for ACTIVE patients only. Without this, the ~inactive
+# population inflates "patients missing email/phone". Gold load now forces the flags
+# to 0 when Active = 0. Reload Gold.Dim_Patients to apply.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V014__inactive_contact_flags.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;

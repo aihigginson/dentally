@@ -1,0 +1,43 @@
+# =====================================================================
+# Release V011 -- Patient data minimisation (DPIA, DPIA.md sec 7)
+# =====================================================================
+# Drops special-category + excess-identifier columns from the patient surface
+# (NHS/NI numbers, Ethnicity, DOB/Age, Gender, Medical Alert, full Address,
+# Emergency Contact, Title/Middle name, Family/Custom/Legacy, NHS exemption).
+# Retains identity-for-contact (names + preferred, phone, email), contactability
+# flags, and non-sensitive operational analytics.
+#
+# Phased: GOLD layer first (this section, user-facing surface + PBI view),
+# then SILVER + BRONZE (added below as the cascade lands), then the ingestion
+# stops landing them in Stage.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V011__patient_minimisation.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Bronze layer (raw ingestion schema; feeds Silver; deploy first) ---
+# Recreates Bronze.Patients minimised, then reloads from Stage per tenant
+# (live 1-4, dev 11-14). A tenant absent from Stage is a harmless no-op, so the
+# same manifest is correct in both environments. T15 hand-seeded data (dev only)
+# is re-applied out of band (Bronze.T15_Test_Data.sql) -- not in this shared release.
+DEPLOY  Fabric\Bronze.Patients.Table.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=1,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=2,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=3,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=4,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=11,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=12,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=13,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=14,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Silver layer (feeds Gold) ---
+DEPLOY  Fabric\Silver.Patients.Table.sql
+DEPLOY  Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Gold layer ---
+DEPLOY  Fabric\Gold.Dim_Patients.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    EXEC Meta.usp_Create_Gold_Views;

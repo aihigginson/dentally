@@ -14,7 +14,7 @@ GO
 
 INSERT INTO Audit.Tenants (Tenant_ID, Client_ID, Tenant_Name, API_Base_URL, API_Key, Dentally_Client_ID, Dentally_Secret, Is_Active, Full_Refresh, Last_Loaded_At, Notes)
 VALUES
--- API tenants (tenants 1-4 — loaded via Stage_Ingest + Bronze.usp_Load_All)
+-- API tenants (tenants 1-4 — loaded via Stage_Ingest + Audit.usp_Load_Bronze)
   (1,  1,  'Smile Group (Dev)',          'https://dentally-production.up.railway.app', 'dev-mock-key-abc123',  NULL, NULL, 1, 1, NULL, 'Mock API — Smile Group, Oxford, 3 sites, NHS + ortho'),
   (2,  2,  'Bright Dental (Dev)',        'https://dentally-production.up.railway.app', 'dev-mock-key-tenant2', NULL, NULL, 1, 1, NULL, 'Mock API — Bright Dental, Brighton, 1 site, private'),
   (3,  3,  'ClearSmile Manchester (Dev)','https://dentally-production.up.railway.app', 'dev-mock-key-tenant3', NULL, NULL, 1, 1, NULL, 'Mock API — ClearSmile Manchester, 2 sites, NHS + private'),

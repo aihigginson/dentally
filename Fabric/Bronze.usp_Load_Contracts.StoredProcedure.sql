@@ -44,7 +44,6 @@ BEGIN
             , LEFT(uoa_target, 255)                                                                         AS UOA_Target
             , LEFT(uoa_value, 255)                                                                          AS UOA_Value
             , LEFT(name,  255)                                                                              AS Name
-            , LEFT(notes, 255)                                                                              AS Notes
             , LEFT(created_at, 255)                                                                         AS Created_At
             , LEFT(updated_at, 255)                                                                         AS Updated_At
         INTO #src
@@ -65,7 +64,6 @@ BEGIN
             , tgt.UOA_Target      = src.UOA_Target
             , tgt.UOA_Value       = src.UOA_Value
             , tgt.Name            = src.Name
-            , tgt.Notes           = src.Notes
             , tgt.Created_At      = src.Created_At
             , tgt.Updated_At      = src.Updated_At
             , tgt.DW_Loaded_At    = SYSUTCDATETIME()
@@ -73,8 +71,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Bronze.Contracts (Tenant_ID, ID, Active, Contract_Number, End_Date, NHS_Location_ID, NHS_Site_ID, PDS_Plus, Site_ID, Start_Date, Target, UDA_Value, UOA_Target, UOA_Value, Name, Notes, Created_At, Updated_At, DW_Loaded_At)
-        SELECT src.Tenant_ID, src.ID, src.Active, src.Contract_Number, src.End_Date, src.NHS_Location_ID, src.NHS_Site_ID, src.PDS_Plus, src.Site_ID, src.Start_Date, src.Target, src.UDA_Value, src.UOA_Target, src.UOA_Value, src.Name, src.Notes, src.Created_At, src.Updated_At, SYSUTCDATETIME()
+        INSERT INTO Bronze.Contracts (Tenant_ID, ID, Active, Contract_Number, End_Date, NHS_Location_ID, NHS_Site_ID, PDS_Plus, Site_ID, Start_Date, Target, UDA_Value, UOA_Target, UOA_Value, Name, Created_At, Updated_At, DW_Loaded_At)
+        SELECT src.Tenant_ID, src.ID, src.Active, src.Contract_Number, src.End_Date, src.NHS_Location_ID, src.NHS_Site_ID, src.PDS_Plus, src.Site_ID, src.Start_Date, src.Target, src.UDA_Value, src.UOA_Target, src.UOA_Value, src.Name, src.Created_At, src.Updated_At, SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Contracts tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;

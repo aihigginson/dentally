@@ -82,7 +82,6 @@
             transition: background 0.12s;
         }
         .contact-email:hover { background: #163f5e; }
-        .contact-phone { font-size: 13px; color: var(--text-3); margin-bottom: 24px; }
         .contact-switch {
             background: none; border: none; color: var(--text-3); font-size: 12px;
             cursor: pointer; text-decoration: underline; font-family: var(--font);
@@ -347,12 +346,11 @@
             </div>
             <h1>Access Required</h1>
             <p id="contact-msg">
-                Your account doesn't have access to Analytically. Please get in touch to arrange access or discuss pricing for your dental practice.
+                Your account doesn't have access to Analytically. Please contact us by email to arrange access or discuss pricing for your dental practice.
             </p>
             <div>
-                <a class="contact-email" href="mailto:hello@analytically.io">hello@analytically.io</a>
+                <a class="contact-email" href="mailto:sales@analytically.info">sales@analytically.info</a>
             </div>
-            <div class="contact-phone">+44 (0)800 123 456</div>
             <button class="contact-switch" id="contact-switch-btn">Sign in with a different account</button>
         </div>
     </div>
@@ -473,9 +471,18 @@
     // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
     // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
     // fixed panel at the bottom of the screen so issues can be seen on a phone.
+    // The on-screen panel is OFF by default (it crowds the page layout). Re-enable
+    // on demand with ?devlog=1 in the URL (?devlog=0 turns it off again); the panel
+    // is mainly for mobile where there's no reachable console. console.log always fires.
+    function _devLogEnabled() {
+        const q = new URLSearchParams(location.search);
+        if (q.get('devlog') === '1') localStorage.setItem('_anly_devlog', '1');
+        if (q.get('devlog') === '0') localStorage.removeItem('_anly_devlog');
+        return localStorage.getItem('_anly_devlog') === '1';
+    }
     function _devLog(...args) {
         try { console.log(...args); } catch (e) {}
-        if (!document.body.classList.contains('dev-mode')) return;
+        if (!document.body.classList.contains('dev-mode') || !_devLogEnabled()) return;
         let panel = document.getElementById('dev-log');
         if (!panel) {
             panel = document.createElement('div');
@@ -521,9 +528,17 @@
         localStorage.removeItem('_anly_id_token_exp');
     }
 
-    // Mobile browsers block popups — use redirect flow instead.
+    // Mobile / iOS-family browsers must use the redirect + cached-token path: Safari ITP
+    // blocks the hidden-iframe acquireTokenSilent the desktop path relies on. Detect iOS by
+    // UA, and ALSO iPadOS 13+ which reports a Mac desktop UA (caught via touch points) and
+    // whose wide screen would otherwise slip through the width check.
     // storeAuthStateInCookie: true preserves MSAL state across the page navigation.
-    function _onMobile() { return window.matchMedia('(max-width: 767px)').matches; }
+    function _onMobile() {
+        const ua = navigator.userAgent || '';
+        const iOS = /iPhone|iPad|iPod/i.test(ua)
+                 || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+        return iOS || window.matchMedia('(max-width: 767px)').matches;
+    }
 
     async function initAuth() {
         const config = await fetch('/api/auth-config').then(r => r.json());
@@ -644,7 +659,7 @@
         if (msalAccount) {
             document.getElementById('contact-msg').textContent =
                 `Your account (${msalAccount.username}) doesn't have access to Analytically. ` +
-                `Please get in touch to arrange access or discuss pricing for your dental practice.`;
+                `Please contact us by email to arrange access or discuss pricing for your dental practice.`;
         }
         document.getElementById('contact-overlay').style.display = 'flex';
     }
@@ -1060,11 +1075,17 @@
 
     function _buildConfig({ token, embedUrl, reportId }) {
         const mobile = isMobile();
+        // Lock down data egress (defence-in-depth with the tenant "Export and sharing"
+        // settings being off): no right-click context menu ("Show as table" / export),
+        // and the "Export data" command hidden from visual headers.
+        // displayOption 1 = models.CommandDisplayOption.Hidden (numeric, matching the
+        // tokenType: 1 convention used here rather than importing the models enum).
+        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 1 } }] };
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
-                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2 }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 } },
+                ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2, ...lockdown }
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 }, ...lockdown },
         };
     }
 

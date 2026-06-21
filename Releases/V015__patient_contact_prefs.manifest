@@ -1,0 +1,58 @@
+# =====================================================================
+# Release V015 -- Patient contact-preference fields
+#   (Use_Email, Use_SMS, Preferred_Phone)
+# =====================================================================
+# Re-lands the contact-preference fields that were stripped in V011, so staff can
+# see how a patient prefers to be contacted (email / SMS) and which phone to use.
+# These are non-sensitive contactability flags (DPIA.md sec 7 keep-list), held for
+# ACTIVE patients only (NULL for inactive, per V013).
+#
+# NO regression re-baseline needed: the generator adds these fields WITHOUT any new
+# rng draws (the values were already drawn; 'work' is folded to 'mobile' after the
+# draw), so every existing column is byte-identical -- aggregates/metrics unchanged.
+#
+# PREREQUISITE -- run BEFORE this manifest (Stage is schema-on-read; Fabric validates
+# Stage column refs when the Bronze SP is CREATEd, so the new stage_patients columns
+# must exist first):
+#   1. python API/seed_onelake.py     (schema_mode=overwrite -- writes the new Delta
+#                                       columns AND recreates the Stage.* views; the
+#                                       SQL endpoint caches the old schema otherwise)
+#   2. .\Scripts\Deploy.ps1 -Manifest Releases\V015__patient_contact_prefs.manifest
+#      (set $env:FABRIC_SERVER for prod)
+#
+# DEV note: the Bronze.Patients DROP/CREATE + per-tenant reload does not include the
+# hand-seeded T15 rows -- re-apply Fabric\Bronze.T15_Test_Data.sql out of band as
+# usual (the new columns are nullable, so the existing T15 insert still works).
+# =====================================================================
+
+# --- Stage views: recreate so the SQL endpoint sees the new stage_patients
+#     columns (use_email/use_sms/preferred_phone). Must run AFTER seed_onelake has
+#     written them to the Delta table, else the Bronze SP CREATE below fails
+#     validation ("Invalid column name 'use_email'"). ---
+DEPLOY  Fabric\Stage.Views.sql
+
+# --- Bronze layer (raw ingestion schema; feeds Silver; deploy first) ---
+DEPLOY  Fabric\Bronze.Patients.Table.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=1,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=2,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=3,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=4,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=11,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=12,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=13,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Patients @Tenant_ID=14,@Full_Refresh=1,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Silver layer (feeds Gold) ---
+DEPLOY  Fabric\Silver.Patients.Table.sql
+DEPLOY  Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Gold layer ---
+DEPLOY  Fabric\Gold.Dim_Patients.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- PBI presentation views (regenerate: picks up the new columns + the SMS acronym rule) ---
+DEPLOY  Fabric\dbo.CapitaliseSnakeCase.UserDefinedFunction.sql
+EXEC    EXEC Meta.usp_Create_Gold_Views;

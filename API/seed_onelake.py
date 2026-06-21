@@ -63,7 +63,10 @@ def write_stage(records: list, table_name: str):
         table_path(table_name),
         tbl,
         mode            = "overwrite",
-        schema_mode     = "merge",
+        # V011 data minimisation: "overwrite" (not "merge") so dropped columns are
+        # removed from the Delta schema, not retained as nulls. The combined frame
+        # already unions all tenants' columns, so this enforces the current schema.
+        schema_mode     = "overwrite",
         storage_options = get_storage_options(),
     )
     print(" done.")
@@ -637,7 +640,7 @@ def main():
     for _, stage_name, _ in TABLE_MAP:
         write_stage(combined[stage_name], stage_name)
 
-    print('\nAll tenants seeded. Run Bronze.usp_Load_All for tenants 11-14.')
+    print('\nAll tenants seeded. Run Audit.usp_Load_Bronze for tenants 11-14.')
 
 
 if __name__ == '__main__':

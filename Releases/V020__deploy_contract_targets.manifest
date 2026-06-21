@@ -1,0 +1,32 @@
+# =====================================================================
+# Release V020 -- deploy the (never-deployed) Practitioner_Contract_Targets entity
+# =====================================================================
+# Silver.Practitioner_Contract_Targets (table + load SP) were authored 2026-06-12 and
+# registered in Process_Config (SILVER_PRACTITIONER_CONTRACT_TARGETS) but never shipped in
+# any manifest -- so the proc/table don't exist in the warehouse. The new DAG-driven overnight
+# build (Orchestrate_Build) surfaced this: the job failed "procedure not found", and its
+# downstream consumer Gold.Fact_NHS_Contract_Week (reads Silver.Practitioner_Contract_Targets
+# for per-practitioner UDA/UOA targets) was being skipped/failing silently.
+#
+# Source is real: Bronze.Practitioners.Contract_Targets_String (the contract_targets[] JSON
+# array nested in the Dentally Practitioner endpoint); the SP CROSS APPLY OPENJSONs it to grain
+# Tenant x Practitioner x Contract.
+#
+# Also drops junk Process_Config row GOLD_LOAD_ALL (-> Gold.usp_Load_All, which doesn't exist;
+# the Silver+Gold orchestrator is Audit.usp_Load_All, and orchestrators are not DAG jobs).
+# Process_Config + Process_Dependency reseeded (idempotent DELETE+INSERT).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V020__deploy_contract_targets.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Table + load SP (were missing from the warehouse) ---
+DEPLOY  Fabric\Silver.Practitioner_Contract_Targets.Table.sql
+DEPLOY  Fabric\Silver.usp_Load_Practitioner_Contract_Targets.StoredProcedure.sql
+
+# --- Metadata reseed (GOLD_LOAD_ALL removed; deps regenerated) ---
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+# --- Populate Silver from Bronze (so Fact_NHS_Contract_Week has its targets) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Practitioner_Contract_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;

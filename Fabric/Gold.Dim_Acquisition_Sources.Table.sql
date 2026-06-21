@@ -12,7 +12,6 @@ CREATE TABLE [Gold].[Dim_Acquisition_Sources](
 	[Active] [bit] NULL,
 	[Name] [VARCHAR](255) NULL,
 	[Standard_Acquisition_Source] [VARCHAR](100) NULL,
-	[Notes] [VARCHAR](1000) NULL,
 	[Acquisition_Source_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL

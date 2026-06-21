@@ -1,5 +1,16 @@
+# Secrets / local env files — must never be baked into an image layer.
 .env
 .env.*
+*.env
+*.env.*
 Old.env2
+
+# Tests + dev-only deps (not needed at runtime)
+tests/
+requirements-dev.txt
+
+# Python caches / artifacts
 __pycache__
 *.pyc
+*.pyo
+.pytest_cache/

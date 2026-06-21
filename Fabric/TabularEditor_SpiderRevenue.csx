@@ -83,18 +83,18 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
     @"0.00");
 
 // Lower-is-better: per-prac threshold / actual → >1 means below threshold (good)
-// Uses _Invoice Items[Invoice Amount Outstanding] per practitioner (the snapshot-based
-// [Outstanding Invoices] measure uses REMOVEFILTERS and cannot split by practitioner).
+// Uses _Invoices[Invoice Amount Outstanding] attributed to the invoice's representative
+// clinician (Fact_Invoices.fk_Practitioner) -- invoice grain, no line-fold double count.
 add("Spider Rev Outstanding Invoices",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
 VAR actual      = COALESCE(
-    CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner])),
+    CALCULATE(SUM('_Invoices'[Invoice Amount Outstanding]), TREATAS(prac_pks, '_Invoices'[fk Practitioner])),
     0)
 VAR practice_tgt = [Outstanding Invoices Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
 VAR fallback    = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])),
-    CALCULATE(SUM('_Invoice Items'[Invoice Amount Outstanding]), TREATAS(VALUES('List Practitioners'[pk Practitioner]), '_Invoice Items'[fk Practitioner])))
+    CALCULATE(SUM('_Invoices'[Invoice Amount Outstanding]), TREATAS(VALUES('List Practitioners'[pk Practitioner]), '_Invoices'[fk Practitioner])))
 RETURN IF(ISBLANK(practice_tgt),
     IF(actual = 0, 2, IFERROR(DIVIDE(fallback, actual), 1)),
     IF(actual = 0, 2, IFERROR(DIVIDE(share, actual), 2)))",
@@ -122,14 +122,7 @@ RETURN IFERROR(DIVIDE(actual, IF(practice_avg > 0, practice_avg, 1)), 0)",
 add("Spider Rev Discounts",
     @"VAR prac_pks  = VALUES('List Practitioners'[pk Practitioner])
 VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
-VAR prac_disc = CALCULATE(
-    SUMX(
-        SUMMARIZE('_Invoice Items',
-            '_Invoice Items'[Invoice ID],
-            ""_inv"",   MAX('_Invoice Items'[Invoice Amount]),
-            ""_items"", SUM('_Invoice Items'[Total Price])),
-        IF([_inv] > [_items], [_inv] - [_items], 0)),
-    TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_disc = CALCULATE(SUM('_Invoices'[Discount Amount]), TREATAS(prac_pks, '_Invoices'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_disc, prac_rev)
 VAR tgt       = [Discounts Target]
 VAR fallback  = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Discounts])

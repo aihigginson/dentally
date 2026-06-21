@@ -1,0 +1,43 @@
+# =====================================================================
+# Release V019 -- Gold.Fact_Treatment_Plans (plan-grain fact)
+# =====================================================================
+# Treatment plans were modelled ONLY as a dimension (Gold.Dim_Treatment_Plans /
+# PBI.[List Treatment Plans]) with no FK relationships to Practitioner / Practice Site /
+# Date. The Clinical plan measures (Open Courses, Open Courses Without Appointment,
+# Average Plan Value, Treatment Acceptance Rate) therefore HACKED the practitioner/site/
+# date slicers by routing through the line-grain Gold.Fact_Treatment_Plan_Items via
+# DISTINCT(fk Treatment Plan) -- which attributed/dropped plans by their ITEMS'
+# practitioner/site/date, not the plan's own (e.g. embed showed 23 open courses vs 168).
+#
+# Fix: a real plan-grain fact, Gold.Fact_Treatment_Plans, carrying the plan's OWN
+# fk_Practitioner / fk_Patient / fk_Date_* + measures (Treatment Plan Count, Private/NHS
+# values, Completed, Start_Date). Dim_Treatment_Plans stays as the shared dimension. Loads
+# from existing Silver.Treatment_Plans -- NO reseed. NOTE: fk_Practice_Site is always -1 --
+# the Dentally treatment-plan object has no site, so plans cannot be sliced by site.
+#
+# After deploy: PBI model work (user) -- import PBI.[_Treatment Plans], make Practitioner/
+# Patient/Treatment Plan relationships ACTIVE, leave fk_Date_* INACTIVE
+# (Open Courses is current-state, must ignore the date slicer), and re-point the 4 Clinical
+# measures onto the new fact (retiring the item-routing + REMOVEFILTERS hacks).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V019__fact_treatment_plans.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Table (DROP/CREATE) ---
+DEPLOY  Fabric\Gold.Fact_Treatment_Plans.Table.sql
+
+# --- Load procedure + presentation view ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+DEPLOY  Fabric\Gold.vw_Fact_Treatment_Plans.View.sql
+
+# --- Orchestrator + metadata (idempotent DELETE + INSERT) ---
+DEPLOY  Fabric\Audit.usp_Load_All.sql
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+# --- Load the new fact (Dim_Treatment_Plans + shared dims already populated) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Regenerate PBI presentation views (adds PBI.[_Treatment Plans]) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;

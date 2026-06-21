@@ -14,7 +14,6 @@ CREATE TABLE [Silver].[Contracts](
 	[Name] [VARCHAR](255) NULL,
 	[NHS_Location_ID] [VARCHAR](50) NULL,
 	[NHS_Site_ID] [VARCHAR](50) NULL,
-	[Notes] [VARCHAR](max) NULL,
 	[PDS_Plus] [bit] NULL,
 	[Start_Date] [date] NULL,
 	[End_Date] [date] NULL,

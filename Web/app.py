@@ -1,20 +1,35 @@
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, g, has_request_context
 from flask_cors import CORS
 import msal
 import requests
 import pyodbc
 import struct
 import os
+import uuid
 import logging
 from dotenv import load_dotenv
 import jwt
 from jwt import PyJWKClient
 
 load_dotenv()
+
+
+class _RequestIdFilter(logging.Filter):
+    """Inject the current request's correlation id into every log record (or '-')."""
+    def filter(self, record):
+        try:
+            record.request_id = getattr(g, 'request_id', '-') if has_request_context() else '-'
+        except Exception:
+            record.request_id = '-'
+        return True
+
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    format='%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s',
 )
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_RequestIdFilter())
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 # Restrict CORS to the app's own origins (UI + API are same-origin, so this
@@ -25,6 +40,21 @@ _allowed_origins = [o.strip() for o in os.environ.get(
     'https://analytically.info,https://dev.analytically.info,http://localhost:5000,http://localhost:8000'
 ).split(',') if o.strip()]
 CORS(app, origins=_allowed_origins)
+
+
+@app.before_request
+def _assign_request_id():
+    # Honour an inbound correlation id if present, else mint one. Used in logs +
+    # echoed back in the response so a client error can be traced to server logs.
+    g.request_id = request.headers.get('X-Request-ID') or uuid.uuid4().hex[:12]
+
+
+@app.after_request
+def _attach_request_id(response):
+    rid = getattr(g, 'request_id', None)
+    if rid:
+        response.headers['X-Request-ID'] = rid
+    return response
 
 APP_ENV        = os.environ.get('APP_ENV', 'prod')
 TENANT_ID      = os.environ['TENANT_ID']
@@ -53,7 +83,7 @@ REPORTS = {
     'clinical':   os.environ.get('REPORT_ID_CLINICAL',  ''),
     'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
 }
-print("Reports loaded:", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
+app.logger.info("Reports loaded: %s", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
 
 # ── Azure AD token validation ─────────────────────────────────────────────────
@@ -93,21 +123,35 @@ def _server_error(e, context):
 
 # ── Service-principal helpers (PBI + Fabric) ──────────────────────────────────
 
+# Reused MSAL apps (lazy singletons): ConfidentialClientApplication keeps an
+# in-memory token cache, so acquire_token_for_client returns a cached token until
+# it nears expiry rather than calling AAD on every request. Built on first use,
+# not at import, to avoid an authority/network lookup at startup.
+_pbi_msal = None
+_fabric_msal = None
+
+
 def _pbi_token():
-    result = msal.ConfidentialClientApplication(
-        CLIENT_ID, authority=PBI_AUTHORITY, client_credential=CLIENT_SECRET,
-    ).acquire_token_for_client(scopes=PBI_SCOPE)
+    global _pbi_msal
+    if _pbi_msal is None:
+        _pbi_msal = msal.ConfidentialClientApplication(
+            CLIENT_ID, authority=PBI_AUTHORITY, client_credential=CLIENT_SECRET,
+        )
+    result = _pbi_msal.acquire_token_for_client(scopes=PBI_SCOPE)
     if 'access_token' not in result:
         raise RuntimeError(result.get('error_description', 'MSAL token acquisition failed'))
     return result['access_token']
 
 
 def _fabric_access_token():
-    result = msal.ConfidentialClientApplication(
-        AZURE_CLIENT_ID,
-        authority=f'https://login.microsoftonline.com/{TENANT_ID}',
-        client_credential=AZURE_CLIENT_SECRET,
-    ).acquire_token_for_client(scopes=['https://database.windows.net//.default'])
+    global _fabric_msal
+    if _fabric_msal is None:
+        _fabric_msal = msal.ConfidentialClientApplication(
+            AZURE_CLIENT_ID,
+            authority=f'https://login.microsoftonline.com/{TENANT_ID}',
+            client_credential=AZURE_CLIENT_SECRET,
+        )
+    result = _fabric_msal.acquire_token_for_client(scopes=['https://database.windows.net//.default'])
     if 'access_token' not in result:
         raise RuntimeError(result.get('error_description', 'Fabric token acquisition failed'))
     return result['access_token']
@@ -137,6 +181,14 @@ def auth_config():
     """Returns MSAL config needed by the frontend — no auth required."""
     return jsonify({'client_id': CLIENT_ID, 'tenant_id': TENANT_ID})
 
+
+@app.route('/health')
+def health():
+    """Liveness/readiness probe for Container Apps — unauthenticated, no external
+    deps. Reaching here means the process is up and required config loaded at
+    import (the app would have failed to boot otherwise)."""
+    return jsonify({'status': 'ok'}), 200
+
 # ── Protected routes ──────────────────────────────────────────────────────────
 
 @app.route('/api/embed-token')
@@ -154,7 +206,7 @@ def embed_token():
     # 1. The RLS role must be configured. If not, refuse -- do NOT fall back to an
     #    unfiltered token that would expose every tenant's data.
     if not REPORT_ROLES:
-        print("[embed-token] REFUSED: REPORT_ROLES is empty", flush=True)
+        app.logger.warning("embed-token REFUSED: REPORT_ROLES is empty")
         return jsonify({'error': 'Server RLS misconfiguration'}), 500
     # 2. The caller must be a provisioned application user mapped to >= 1 tenant.
     try:
@@ -189,7 +241,7 @@ def embed_token():
                 'datasets': [dataset_id],
             }],
         }
-        print(f"[embed-token] upn={upn!r} roles={REPORT_ROLES!r} report={report_name}", flush=True)
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s", upn, REPORT_ROLES, report_name)
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,

@@ -21,8 +21,6 @@ CREATE TABLE [Gold].[Fact_Appointments](
 	[Room_ID] [VARCHAR](50) NULL,
 	[State] [VARCHAR](50) NULL,
 	[Reason] [VARCHAR](100) NULL,
-	[Treatment_Description] [VARCHAR](max) NULL,
-	[Notes] [VARCHAR](max) NULL,
 	[Cancellation_Reason_ID] [VARCHAR](50) NULL,
 	[Arrived_At] [datetime2](3) NULL,
 	[In_Surgery_At] [datetime2](3) NULL,
