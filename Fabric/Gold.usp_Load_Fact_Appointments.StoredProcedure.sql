@@ -20,10 +20,11 @@
 --                            Appointment_Reason computed here; retired the separate
 --                            Silver.Appointment_Journey_Attributes table/proc/pipeline step.
 --    *10     22/06/2026  AIH Add Rebooked_Status: 'Rebooked'/'Not Rebooked' for cancelled appts
---                            (NULL otherwise) -- patient booked another appt (Created_At) after
---                            this one's Cancelled_At. Forward-looking attr (a later booking flips
---                            an earlier cancelled row); safe while load is full-source MERGE, as
---                            #src recomputes all rows + the hash gate updates changed earlier rows.
+--                            (NULL otherwise) -- patient booked another appt (Pending_At, the
+--                            Dentally booking timestamp; created_at is not in the API) after this
+--                            one's Cancelled_At. Forward-looking attr (a later booking flips an
+--                            earlier cancelled row); safe while load is full-source MERGE, as #src
+--                            recomputes all rows + the hash gate updates changed earlier rows.
 --                            NB: if Fact_Appointments ever moves to delta source extraction, the
 --                            delta must be widened to all appts of patients in the batch.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
@@ -123,15 +124,16 @@ BEGIN
         DROP TABLE IF EXISTS #first_attended;
         DROP TABLE IF EXISTS #referrals;
 
-        -- Rebooked: per patient, the latest date ANY appointment was booked (Created_At).
-        -- A cancelled appointment is "Rebooked" if the patient booked something after its
-        -- Cancelled_At (booking date vs cancellation date — NOT attend dates). MAX over all
-        -- the patient's appointments is safe: an appointment's own Created_At always precedes
-        -- its Cancelled_At, so it can never flag itself as a rebooking.
+        -- Rebooked: per patient, the latest date ANY appointment was booked (Pending_At --
+        -- Dentally's booking timestamp; created_at is not in the API). A cancelled appointment
+        -- is "Rebooked" if the patient booked something after its Cancelled_At (booking date vs
+        -- cancellation date -- NOT attend dates). MAX over all the patient's appointments is
+        -- safe: an appointment's own Pending_At always precedes its Cancelled_At, so it can
+        -- never flag itself as a rebooking.
         DROP TABLE IF EXISTS #last_booked;
         SELECT
             Tenant_ID, Patient_ID,
-            MAX(TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3))) AS Last_Booked_DT
+            MAX(TRY_CAST(NULLIF(TRIM(Pending_At),'') AS datetime2(3))) AS Last_Booked_DT
         INTO #last_booked
         FROM Silver.Appointments
         WHERE Appointment_ID IS NOT NULL AND Patient_ID IS NOT NULL
