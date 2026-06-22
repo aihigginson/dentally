@@ -1,0 +1,20 @@
+# =====================================================================
+# Release V024 -- Reclassify Daily_Targets + Effective_Targets as aggregates (GOLD_AGG)
+# =====================================================================
+# Same within-wave / "a run late" class as KPI_Snapshot (V023):
+#   Fact_Daily_Targets     reads Gold.Fact_Contracts
+#   Fact_Effective_Targets reads Gold.Fact_Targets
+# Both were GOLD_FACT with no dependency edge from their source fact -> could run a run late.
+# Both are terminal (nothing else in Gold reads them), so retag GOLD_AGG (codes
+# GOLD_AGG_DAILY_TARGETS / GOLD_AGG_EFFECTIVE_TARGETS): the existing Gold->Agg rule now orders
+# each after its source fact (Contracts / Targets). Acyclic; table names retained; load SPs
+# unchanged. Metadata only -- Process_Config retag + regenerated Process_Dependency + usp_Load_All
+# steps. NO data reload.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V024__reclassify_targets_aggs.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+DEPLOY  Fabric\Audit.usp_Load_All.sql

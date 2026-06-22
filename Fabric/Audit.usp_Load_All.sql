@@ -483,7 +483,7 @@ DECLARE @Msg        nvarchar(500);
 
     -- ── Derived fact tables (depend on Gold dims + facts above) ─────────────────
 
-    SET @Step = 'Fact_Daily_Targets';  SET @Start = GETDATE();
+    SET @Step = 'Agg_Daily_Targets';  SET @Start = GETDATE();   -- GOLD_AGG_DAILY_TARGETS (reclassified agg)
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
@@ -495,7 +495,7 @@ DECLARE @Msg        nvarchar(500);
  -- EXEC Gold.usp_Load_Fact_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
     IF @Mode ='TEST' PRINT @Step + ' completed in ' + CAST(DATEDIFF(ms,@Start,GETDATE()) AS VARCHAR) + 'ms';
 
-    SET @Step = 'Fact_Effective_Targets'; SET @Start = GETDATE();
+    SET @Step = 'Agg_Effective_Targets'; SET @Start = GETDATE();   -- GOLD_AGG_EFFECTIVE_TARGETS (reclassified agg)
     SET @Process_Code = 'GOLD_'+UPPER(@Step)
     EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
  -- EXEC Gold.usp_Load_Fact_Effective_Targets @Run_Inserts=@My_Inserts OUT, @Run_Updates=@My_Updates OUT, @Run_Deletes=@My_Deletes OUT
