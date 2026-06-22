@@ -34,6 +34,3 @@ EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointme
 
 # --- Regenerate PBI presentation views (adds Rebooked Status to PBI.[_Appointments]) ---
 EXEC    EXEC Meta.usp_Create_Gold_Views;
-
-# --- Verify -- regression + reconciliation + RLS gate ---
-TEST

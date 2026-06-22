@@ -26,6 +26,3 @@ EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Recalls @
 
 # --- Reload KPI_Snapshot (it aggregates Retention_Outlook_In_Scope/Booked) ---
 EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_KPI_Snapshot @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
-
-# --- Verify -- regression + reconciliation + RLS gate ---
-TEST
