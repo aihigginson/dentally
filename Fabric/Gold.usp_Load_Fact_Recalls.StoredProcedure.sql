@@ -17,6 +17,10 @@
 --    *06     20/05/2026  AIH Is_Booked: patient-level lookup against Silver.Appointments
 --                            (any future non-cancelled appt); drop Is_Patient_Booked and
 --                            Appointment_ID-based join; drop enrichment cols
+--    *09     22/06/2026  AIH Retention Outlook scope = DUE within [-24m, +30d]: remove the
+--                            "first reminder sent" branch from Is_In_Scope + Retention_Outlook_In_Scope
+--                            (reminders precede the due date so it pulled in recalls due beyond the
+--                            window); forward edge +1 month -> +30 days
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
@@ -49,7 +53,7 @@ BEGIN
 
         DECLARE @Today     DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @ScopeFrom DATE = DATEADD(MONTH, -24, @Today);
-        DECLARE @ScopeTo   DATE = DATEADD(MONTH,   1, @Today);
+        DECLARE @ScopeTo   DATE = DATEADD(DAY,    30, @Today);
 
         -- Patient's soonest upcoming non-cancelled/DNA appointment
         -- Start_Time is stored as ISO 8601 with tz offset (e.g. "2026-07-01T09:00:00.000+00:00")
@@ -95,10 +99,10 @@ BEGIN
                  THEN DATEDIFF(DAY, r.Due_Date, @Today)
             END                                                             AS Days_Overdue,
             -- ── Retention Outlook pre-computed flags ──────────────────────────
-            -- Is_In_Scope: recall falls within the Retention Outlook window.
-            -- Matches the DAX window: first reminder sent OR due in [-24m, +1m].
+            -- Is_In_Scope: recall is DUE within the Retention Outlook window [-24m, +30d].
+            -- (The old "first reminder sent" branch was removed: reminders go out ahead of
+            --  the due date, which pulled in recalls due beyond the window e.g. end of next month.)
             CAST(CASE
-                WHEN NULLIF(TRIM(r.First_Reminder_Sent_At),'') IS NOT NULL    THEN 1
                 WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo                THEN 1
                 ELSE 0
             END AS BIT)                                                     AS Is_In_Scope,
@@ -117,8 +121,8 @@ BEGIN
                 ELSE 0
             END AS BIT)                                                     AS Is_Booked,
             -- Retention Outlook pre-computed flags (aggregated by KPI Snapshot SP per patient then per site)
+            -- In scope = DUE within [-24m, +30d]; mirrors Is_In_Scope above (reminder-sent branch removed).
             CAST(CASE
-                WHEN NULLIF(TRIM(r.First_Reminder_Sent_At),'') IS NOT NULL    THEN 1
                 WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo                THEN 1
                 ELSE 0
             END AS INT)                                                     AS Retention_Outlook_In_Scope,
