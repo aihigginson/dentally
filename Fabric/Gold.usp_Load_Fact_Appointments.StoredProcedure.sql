@@ -19,6 +19,13 @@
 --    *09     15/06/2026  AIH Fold the journey derivation in (#journey preamble) -- Booking +
 --                            Appointment_Reason computed here; retired the separate
 --                            Silver.Appointment_Journey_Attributes table/proc/pipeline step.
+--    *10     22/06/2026  AIH Add Rebooked_Status: 'Rebooked'/'Not Rebooked' for cancelled appts
+--                            (NULL otherwise) -- patient booked another appt (Created_At) after
+--                            this one's Cancelled_At. Forward-looking attr (a later booking flips
+--                            an earlier cancelled row); safe while load is full-source MERGE, as
+--                            #src recomputes all rows + the hash gate updates changed earlier rows.
+--                            NB: if Fact_Appointments ever moves to delta source extraction, the
+--                            delta must be widened to all appts of patients in the batch.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -116,6 +123,20 @@ BEGIN
         DROP TABLE IF EXISTS #first_attended;
         DROP TABLE IF EXISTS #referrals;
 
+        -- Rebooked: per patient, the latest date ANY appointment was booked (Created_At).
+        -- A cancelled appointment is "Rebooked" if the patient booked something after its
+        -- Cancelled_At (booking date vs cancellation date — NOT attend dates). MAX over all
+        -- the patient's appointments is safe: an appointment's own Created_At always precedes
+        -- its Cancelled_At, so it can never flag itself as a rebooking.
+        DROP TABLE IF EXISTS #last_booked;
+        SELECT
+            Tenant_ID, Patient_ID,
+            MAX(TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3))) AS Last_Booked_DT
+        INTO #last_booked
+        FROM Silver.Appointments
+        WHERE Appointment_ID IS NOT NULL AND Patient_ID IS NOT NULL
+        GROUP BY Tenant_ID, Patient_ID;
+
         SELECT
             a.Tenant_ID                                                 AS Tenant_ID,
             CAST(a.Appointment_ID AS INT)                               AS bk_Appointment_ID,
@@ -167,7 +188,14 @@ BEGIN
             END                                                         AS In_Surgery_Mins,
 
             ja.Booking                                                  AS Booking,
-            ja.Appointment_Reason                                       AS Appointment_Reason
+            ja.Appointment_Reason                                       AS Appointment_Reason,
+            -- Rebooked_Status: only meaningful for cancelled appointments (NULL otherwise).
+            CASE
+                WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NULL THEN NULL
+                WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
+                                                                                       THEN 'Rebooked'
+                ELSE 'Not Rebooked'
+            END                                                         AS Rebooked_Status
         INTO #src
         FROM Silver.Appointments a
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
@@ -180,6 +208,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date       = CAST(a.Created_At AS DATE)
         LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
         LEFT JOIN #journey ja                   ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
+        LEFT JOIN #last_booked lb               ON lb.Patient_ID       = a.Patient_ID     AND lb.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -221,6 +250,7 @@ BEGIN
             In_Surgery_Mins         = src.In_Surgery_Mins,
             Booking                 = src.Booking,
             Appointment_Reason      = src.Appointment_Reason,
+            Rebooked_Status         = src.Rebooked_Status,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Appointments tgt
         INNER JOIN #src src ON tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -255,7 +285,8 @@ BEGIN
            ISNULL(CAST(tgt.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Appointment_Reason] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Rebooked_Status] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
@@ -288,7 +319,8 @@ BEGIN
            ISNULL(CAST(src.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Booking] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Appointment_Reason] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Rebooked_Status] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -303,7 +335,7 @@ BEGIN
             Start_Time, Finish_Time, Pending_At,
             Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived,
             Duration_Mins, Waiting_Mins, In_Surgery_Mins,
-            Booking, Appointment_Reason,
+            Booking, Appointment_Reason, Rebooked_Status,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -316,7 +348,7 @@ BEGIN
             src.Start_Time, src.Finish_Time, src.Pending_At,
             src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived,
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
-            src.Booking, src.Appointment_Reason,
+            src.Booking, src.Appointment_Reason, src.Rebooked_Status,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments tgt WHERE tgt.bk_Appointment_ID = src.bk_Appointment_ID AND tgt.Tenant_ID = src.Tenant_ID);
@@ -324,6 +356,7 @@ BEGIN
 
         DROP TABLE #src;
         DROP TABLE IF EXISTS #journey;
+        DROP TABLE IF EXISTS #last_booked;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

@@ -40,6 +40,7 @@ CREATE TABLE [Gold].[Fact_Appointments](
 	[In_Surgery_Mins]    [int]          NULL,
 	[Booking]            [varchar](50)  NULL,
 	[Appointment_Reason] [varchar](50)  NULL,
+	[Rebooked_Status]    [varchar](20)  NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

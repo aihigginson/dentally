@@ -1,0 +1,39 @@
+# =====================================================================
+# Release V025 -- Fact_Appointments.Rebooked_Status
+# =====================================================================
+# Adds a precomputed Rebooked_Status column to Gold.Fact_Appointments:
+#   'Rebooked'      -- a CANCELLED appointment whose patient booked another
+#                      appointment AFTER this one's Cancelled_At
+#                      (booking date vs cancellation date -- NOT attend dates)
+#   'Not Rebooked'  -- a cancelled appointment with no later booking
+#   NULL            -- appointment was not cancelled (column not applicable)
+#
+# Derivation: per-patient MAX(Created_At) precompute (#last_booked); a cancelled
+# row is Rebooked when that max booking date exceeds its Cancelled_At. The column
+# is folded into the existing full-source MERGE (UPDATE set, BOTH sides of the
+# hash gate, INSERT), so a later booking that flips an earlier cancelled row is
+# picked up automatically on the next run -- no bespoke backfill.
+#
+# Forward-looking note: this is a forward-dependent attribute on an otherwise
+# delta-pure fact. Safe while the load is full-source; if Fact_Appointments ever
+# moves to delta source extraction, widen the delta to all appts of the patients
+# in the batch (see SP header *10).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V025__appointment_rebooked_status.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Table (DROP/CREATE -- adds Rebooked_Status; reloaded below) ---
+DEPLOY  Fabric\Gold.Fact_Appointments.Table.sql
+
+# --- Load procedure with the Rebooked_Status derivation ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+
+# --- Repopulate the fact (table was recreated empty) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Regenerate PBI presentation views (adds Rebooked Status to PBI.[_Appointments]) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# --- Verify -- regression + reconciliation + RLS gate ---
+TEST
