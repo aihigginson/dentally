@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V023 -- Reclassify KPI_Snapshot as an aggregate (GOLD_AGG)
+# =====================================================================
+# Fixes a within-wave / "a run late" ordering gap: Gold.usp_Load_Fact_KPI_Snapshot READS
+# Gold.Fact_Recalls (pre-computed Retention_Outlook flags) + Fact_Invoices / Fact_Invoice_Items /
+# Fact_Treatment_Plan_Items, but as a GOLD_FACT it had NO dependency edge from those facts -- so it
+# could run in the same wave and read last run's data.
+#
+# KPI_Snapshot is really a snapshot/aggregate, so retag it GOLD_AGG (Process_Code
+# GOLD_AGG_KPI_SNAPSHOT, category GOLD_AGG). The EXISTING Gold->Agg dependency rule now orders it
+# after every Gold fact/dim it reads (incl. Fact_Recalls). Acyclic (aggregates are terminal); no
+# generic Fact->Fact rule needed; its Gold-fact reads are now legitimate agg reads (no Silver
+# repointing). Table name Gold.Fact_KPI_Snapshot and the load SP are unchanged.
+#
+# Metadata only -- NO data reload (the SP/table are identical; only ETL ordering metadata changes):
+#   Process_Config (KPI row retagged), regenerated Process_Dependency, usp_Load_All (step -> AGG code).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V023__reclassify_kpi_snapshot_agg.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+DEPLOY  Fabric\Audit.usp_Load_All.sql

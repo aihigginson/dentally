@@ -1,0 +1,28 @@
+# =====================================================================
+# Release V026 -- Retention Outlook scope = recalls DUE within [-24m, +30d]
+# =====================================================================
+# Tightens the Retention Outlook in-scope definition in Gold.usp_Load_Fact_Recalls:
+#   - REMOVES the "first reminder sent" branch from Is_In_Scope and
+#     Retention_Outlook_In_Scope. Reminders go out AHEAD of the due date, so that
+#     branch pulled in recalls due beyond the window (e.g. end of next month).
+#   - Forward edge changed from +1 month to +30 days (explicit rolling 30 days).
+# In scope is now purely: recall Due_Date within [-24 months, +30 days] of today.
+# The 24-month back-scope (overdue tail) is unchanged.
+#
+# No schema change (flag VALUES change, not columns or row count) -> no PBI view
+# regen needed. KPI_Snapshot aggregates Retention_Outlook_In_Scope, so it is
+# reloaded after Fact_Recalls. No regression metric reads the in-scope/retention
+# value (recall metrics are row counts + FK-nulls), so no re-baseline.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V026__retention_outlook_window.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Recalls load with the tightened in-scope window ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+
+# --- Reload Fact_Recalls (recomputes the in-scope flags) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Recalls @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Reload KPI_Snapshot (it aggregates Retention_Outlook_In_Scope/Booked) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_KPI_Snapshot @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;

@@ -1,0 +1,12 @@
+# =====================================================================
+# Release V022 -- Audit.usp_Run_Downstream utility
+# =====================================================================
+# DEV convenience: after changing one job, rebuild it + everything downstream (transitive)
+# in dependency order. Sibling of usp_Rerun_Failed_Jobs but seeded from @Process_Code instead
+# of the failure log. Per-tenant Bronze jobs run for every active tenant; Silver/Gold run once.
+# @Preview=1 returns the ordered plan without executing.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V022__util_run_downstream.manifest
+# =====================================================================
+
+DEPLOY  Fabric\Audit.usp_Run_Downstream.StoredProcedure.sql

@@ -1179,6 +1179,16 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
         return (f"{start_min//60:02d}:{start_min%60:02d}:00",
                 f"{end_min//60:02d}:{end_min%60:02d}:00")
 
+    def _booked_on(start_d, seq):
+        # Booking date -> pending_at (Dentally's booking timestamp; created_at is NOT
+        # in the API). A 7-41 day lead before the appointment, clamped to today (a
+        # future appointment cannot have been booked in the future). Lead is derived
+        # from seq (apt_id), so it adds NO rng draw -> the random stream stays
+        # byte-identical (no re-baseline). Only applied to non-API-booked appointments
+        # so it can't disturb the BBYL signal (pending_at == prev appt date).
+        bd = start_d - timedelta(days=7 + (seq % 35))
+        return _iso(min(bd, TODAY))
+
     for pat in patients:
         pid = pat["dentist_id"]
         pp_id = pat["payment_plan_id"]
@@ -1261,6 +1271,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "appointment_cancellation_reason_id": cancel_id,
                 "online_booking": False,
                 "booked_via_api": False,
+                "pending_at": _booked_on(d, apt_id),
                 "arrived_at": _iso(d, start_t) if state == "completed" else None,
                 "completed_at": _iso(d, end_t) if state == "completed" else None,
                 "cancelled_at": _iso(d) if state == "cancelled" else None,
@@ -1312,7 +1323,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": tx_online,
                                 "booked_via_api": tx_bbyl or tx_online,
-                                "pending_at": _iso(tx_last_date) if tx_bbyl else None,
+                                "pending_at": _iso(tx_last_date) if tx_bbyl else (None if tx_online else _booked_on(td, apt_id)),
                                 "arrived_at": _iso(td, ts_t) if tx_state == "completed" else None,
                                 "completed_at": _iso(td, te_t) if tx_state == "completed" else None,
                                 "cancelled_at": None,
@@ -1359,7 +1370,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "appointment_cancellation_reason_id": None,
                                 "online_booking": hyg_online,
                                 "booked_via_api": hyg_bbyl or hyg_online,
-                                "pending_at": _iso(d) if hyg_bbyl else None,
+                                "pending_at": _iso(d) if hyg_bbyl else (None if hyg_online else _booked_on(hd, apt_id)),
                                 "arrived_at": _iso(hd, hs_t) if hyg_state == "completed" else None,
                                 "completed_at": _iso(hd, he_t) if hyg_state == "completed" else None,
                                 "cancelled_at": None,
@@ -1402,7 +1413,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                     "appointment_cancellation_reason_id": None,
                     "online_booking":         rc_online,
                     "booked_via_api":         rc_bbyl or rc_online,
-                    "pending_at":             _iso(booked_on) if rc_bbyl else None,
+                    "pending_at":             _iso(booked_on) if rc_bbyl else (None if rc_online else _booked_on(fd, apt_id)),
                     "arrived_at":             None,
                     "completed_at":           None,
                     "cancelled_at":           None,
