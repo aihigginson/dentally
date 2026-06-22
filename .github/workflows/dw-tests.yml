@@ -1,6 +1,8 @@
 name: DW Tests
 
-# Runs three gates against the live tenant using the Test Runner service principal:
+# Gates (any non-zero exit -> job fails -> deploy blocked):
+#   0. Scripts/Check_Process_Dependencies.ps1 -- STATIC: a Gold load that reads another
+#      base fact must have an ordering edge (i.e. be GOLD_AGG). No warehouse/secrets.
 #   1. Scripts/Run_Tests.ps1          -- DW regression + integrity (SQL via SqlClient)
 #   2. Scripts/Check_RLS_Coverage.ps1  -- model-layer RLS leak guard (XMLA via ADOMD)
 #   3. Scripts/Check_RLS_Isolation.ps1 -- behavioral RLS isolation (XMLA EffectiveUserName)
@@ -39,6 +41,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Process dependency completeness guard (static; no warehouse)
+        shell: powershell
+        run: .\Scripts\Check_Process_Dependencies.ps1
 
       - name: Run DW regression + integrity tests
         shell: powershell
