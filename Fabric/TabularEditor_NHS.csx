@@ -182,12 +182,22 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
+// Target lookup: '_Targets' is related to 'List Date' via [fk Date], and the annual
+// rows carry fk Date = -1, so the page's Period (FY) slicer empties the table through
+// that relationship. REMOVEFILTERS the date/site/practitioner so it can't, and KEEP RLS
+// for the tenant (don't depend on SELECTEDVALUE('List Practice Sites'[Tenant ID]),
+// which is blank when the sites dim isn't RLS-filtered). Value is stored as a whole
+// percent (95) -> /100.
 add("NHS UDA Completion Rate Target",
-    @"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-RETURN COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100",
+    @"DIVIDE(
+    CALCULATE(
+        MAX('_Targets'[Target Value]),
+        REMOVEFILTERS('List Date'),
+        REMOVEFILTERS('List Practice Sites'),
+        REMOVEFILTERS('List Practitioners'),
+        '_Targets'[Metric]           = ""nhs_uda_completion_rate"",
+        '_Targets'[fk Practice Site] = -1),
+    100)",
     "#,##0.0%");
 
 add("NHS UDA Completion Rate vs Target",
@@ -387,23 +397,27 @@ RETURN SWITCH(TRUE(),
                        ""#c0392b"")",
     "");
 
+// NHS UDA delivery is NOT higher-is-better: 95% is the target, the NHS does not
+// penalise 95%+, and OVER-delivery (>100%) is unpaid work you don't want. So this is
+// a band: under target = clawback risk (red), target..100% = ideal (green), over
+// 100% = overshoot/unpaid (amber). Target 95% + band (Variance) 5pp -> green zone
+// is 95%-100%.
 add("NHS UDA Completion Rate BG",
-    @"VAR actual   = [NHS UDA Completion Rate]
-VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR target   = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Target Value]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Target Value])) / 100
-VAR band     = COALESCE(
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = sel_site && sel_site <> -1), '_Targets'[Variance]),
-    MAXX(FILTER('_Targets', '_Targets'[Tenant ID] = sel_tenant && '_Targets'[Metric] = ""nhs_uda_completion_rate"" && '_Targets'[fk Practice Site] = -1), '_Targets'[Variance]))
-VAR diff_pp  = (actual - target) * 100
+    @"VAR rate    = [NHS UDA Completion Rate]
+VAR target  = [NHS UDA Completion Rate Target]
+VAR bandPP  = CALCULATE(
+    MAX('_Targets'[Variance]),
+    REMOVEFILTERS('List Date'),
+    REMOVEFILTERS('List Practice Sites'),
+    REMOVEFILTERS('List Practitioners'),
+    '_Targets'[Metric]           = ""nhs_uda_completion_rate"",
+    '_Targets'[fk Practice Site] = -1)
+VAR upper   = target + DIVIDE(bandPP, 100)
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),       ""#FFFFFF"",
-    diff_pp >= band,   ""#1a7f3c"",
-    diff_pp >= 0,          ""#6abf7b"",
-    diff_pp >= -band,  ""#f4a261"",
-                           ""#c0392b"")",
+    ISBLANK(target),  ""#FFFFFF"",
+    rate < target,    ""#c0392b"",
+    rate <= upper,    ""#1a7f3c"",
+                      ""#f4a261"")",
     "");
 
 Info("NHS KPI measures created.");
