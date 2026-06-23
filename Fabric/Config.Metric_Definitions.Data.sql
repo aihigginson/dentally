@@ -44,7 +44,7 @@ USING (VALUES
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time'),
  -- NHS
-    ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'above', 'rate')
+    ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'within', 'rate')
 ) AS src (
     [Metric_Key], [Display_Name], [Section], [Format_Type], [Description],
     [Supports_Site], [Supports_Practitioner], [Is_Active], [Display_Order], [Range_Type], [Target_Type]

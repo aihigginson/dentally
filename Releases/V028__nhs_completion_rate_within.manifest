@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V028 -- reclassify nhs_uda_completion_rate as a 'within' metric
+# =====================================================================
+# NHS UDA delivery is NOT higher-is-better. 95% is the target, the NHS does not
+# penalise 95%+, and OVER-delivery (>100%) is unpaid work. The metric was wrongly
+# defined Range_Type='above' (higher better); it should be 'within' (deviation from
+# target band, like exam_ratio). Re-seeds Config.Metric_Definitions (idempotent
+# MERGE/DELETE+INSERT). Metadata only -- no reload, no re-baseline. The card colouring
+# (NHS UDA Completion Rate BG) is handled in TabularEditor_NHS.csx (within band).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V028__nhs_completion_rate_within.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql

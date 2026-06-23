@@ -397,27 +397,27 @@ RETURN SWITCH(TRUE(),
                        ""#c0392b"")",
     "");
 
-// NHS UDA delivery is NOT higher-is-better: 95% is the target, the NHS does not
-// penalise 95%+, and OVER-delivery (>100%) is unpaid work you don't want. So this is
-// a band: under target = clawback risk (red), target..100% = ideal (green), over
-// 100% = overshoot/unpaid (amber). Target 95% + band (Variance) 5pp -> green zone
-// is 95%-100%.
+// NHS UDA delivery is a 'within' metric (Config.Metric_Definitions Range_Type='within'),
+// NOT higher-is-better: 95% is the target, the NHS doesn't penalise 95%+, and you don't
+// want to overshoot (>100% is unpaid work). So colour by DEVIATION from target in either
+// direction (same as exam_ratio's bgWithinPp), with the band = '_Targets'[Variance] (pp).
 add("NHS UDA Completion Rate BG",
-    @"VAR rate    = [NHS UDA Completion Rate]
-VAR target  = [NHS UDA Completion Rate Target]
-VAR bandPP  = CALCULATE(
+    @"VAR actual = [NHS UDA Completion Rate]
+VAR target = [NHS UDA Completion Rate Target]
+VAR band   = CALCULATE(
     MAX('_Targets'[Variance]),
     REMOVEFILTERS('List Date'),
     REMOVEFILTERS('List Practice Sites'),
     REMOVEFILTERS('List Practitioners'),
     '_Targets'[Metric]           = ""nhs_uda_completion_rate"",
     '_Targets'[fk Practice Site] = -1)
-VAR upper   = target + DIVIDE(bandPP, 100)
+VAR dev    = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
-    ISBLANK(target),  ""#FFFFFF"",
-    rate < target,    ""#c0392b"",
-    rate <= upper,    ""#1a7f3c"",
-                      ""#f4a261"")",
+    ISBLANK(target), ""#FFFFFF"",
+    dev <= band,     ""#1a7f3c"",
+    dev <= band * 2, ""#6abf7b"",
+    dev <= band * 3, ""#f4a261"",
+                     ""#c0392b"")",
     "");
 
 Info("NHS KPI measures created.");
