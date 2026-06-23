@@ -1,0 +1,45 @@
+# =====================================================================
+# Release V027 -- ship the two-level Gold.Fact_NHS_Contract_Week (*02)
+# =====================================================================
+# The *02 enhancement (authored 2026-06-12) split each contract-week row into
+# two levels and added columns fk_Practitioner / fk_Practice_Site / Annual_UDA_Target:
+#   fk_Practitioner = -1  -> contract obligation (from Dim_NHS_Contracts.UDA_Target)
+#   fk_Practitioner =  N   -> per-practitioner allocation (from Silver.Practitioner_
+#                             Contract_Targets, deployed in V020)
+# That table + load SP were NEVER deployed: the warehouse still holds the OLD 10-column
+# single-level pair (verified -- deployed table has no fk_Practitioner; deployed load SP
+# has no Level-2 insert). V020 shipped the Level-2 SOURCE but not this consumer, so the
+# per-practitioner targets were never materialised.
+#
+# Consequence in PBI: the NHS contract-tracking measures filter the contract level via
+# '_NHS Contract Week'[fk Practitioner] = -1, which errored ("column cannot be found")
+# because the imported view had no such column.
+#
+# This release deploys the two-level table + load SP, repopulates (full DROP/CREATE
+# rebuild), and regenerates the PBI views so PBI.[_NHS Contract Week] gains
+# fk Practitioner / fk Practice Site / Annual UDA Target.
+#
+# Process_Config (GOLD_FACT_NHS_CONTRACT_WEEK) + the dependency edge
+# SILVER_PRACTITIONER_CONTRACT_TARGETS -> GOLD_FACT_NHS_CONTRACT_WEEK are already
+# registered (no metadata reseed needed). No regression re-baseline: no tested metric
+# reads this fact.
+#
+# After deploy: PBI model work (user) -- re-import / refresh-schema PBI.[_NHS Contract
+# Week] so the new columns appear, keep the [fk Date Week Start] -> List Date[pk Date]
+# relationship + RLS [Tenant ID], then run TabularEditor_NHS.csx.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V027__two_level_nhs_contract_week.manifest
+#      (set $env:FABRIC_SERVER for prod)
+# =====================================================================
+
+# --- Table (DROP/CREATE -> new 13-column two-level schema) ---
+DEPLOY  Fabric\Gold.Fact_NHS_Contract_Week.Table.sql
+
+# --- Load procedure (two-level: contract obligation + practitioner allocation) ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_NHS_Contract_Week.StoredProcedure.sql
+
+# --- Populate (Dim_NHS_Contracts + Silver.Practitioner_Contract_Targets already loaded) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Regenerate PBI presentation views (adds fk Practitioner / fk Practice Site cols) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;

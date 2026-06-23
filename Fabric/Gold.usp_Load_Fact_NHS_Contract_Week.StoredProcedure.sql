@@ -10,6 +10,10 @@
 --                              fk_Practitioner = -1  (contract obligation from NHS contract)
 --                              fk_Practitioner = N   (individual allocation from practitioner contract_targets)
 --                            These are independent figures; the gap between them is intentional.
+--    *03     23/06/2026  AIH Fix week fan-out: Financial_Week (Sun-Sat) straddles two
+--                            Monday Week_Commencing_Dates, so the #wk SELECT DISTINCT
+--                            emitted 2 rows/week and DOUBLED every target. Collapse to one
+--                            Monday per financial week (GROUP BY + MAX(Week_Commencing_Date)).
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_NHS_Contract_Week]    Script Date: 12/06/2026 ******/
@@ -77,13 +81,19 @@ BEGIN
             d.Financial_Year,
             d.Financial_Week;
 
-        -- pk_Date for the week-commencing Monday of each financial year/week
-        SELECT DISTINCT
+        -- pk_Date for the week-commencing Monday of each financial year/week.
+        -- Dim_Date.Financial_Week is Sun-Sat but Week_Commencing_Date is Monday-based,
+        -- so a single financial week straddles TWO Monday weeks. SELECT DISTINCT would
+        -- therefore emit 2 rows per (FY, FW) and fan the contract's weekly pro-rata
+        -- across both -> the target doubled. Collapse to ONE Monday per financial week
+        -- (MAX = the Monday under which the bulk Mon-Sat of the week falls).
+        SELECT
             Financial_Year,
             Financial_Week,
-            DATEDIFF(DAY, '19991231', Week_Commencing_Date) AS fk_Date_Week_Start
+            DATEDIFF(DAY, '19991231', MAX(Week_Commencing_Date)) AS fk_Date_Week_Start
         INTO #wk
-        FROM Gold.Dim_Date;
+        FROM Gold.Dim_Date
+        GROUP BY Financial_Year, Financial_Week;
 
         -- Full rebuild
         DELETE FROM Gold.Fact_NHS_Contract_Week;
