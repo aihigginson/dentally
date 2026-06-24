@@ -325,28 +325,42 @@ RETURN SWITCH(TRUE(),
 // Put a single Financial Year slicer on the page; both series accumulate
 // week-by-week within whatever FY is selected (default current FY).
 
+// Cap at "now": blank any week AFTER today so the YTD line ends at today rather than
+// flat-lining to year-end. Past FYs are unaffected (every week is before today).
 add("NHS UDA Delivered Cumulative",
-    @"VAR _fy = MAX('List Date'[Financial Year])
-VAR _fw = MAX('List Date'[Financial Week])
+    @"VAR _today  = TODAY()
+VAR _curFy  = IF(MONTH(_today) >= 4, YEAR(_today), YEAR(_today) - 1)
+VAR _curWk  = MAXX(FILTER(ALL('List Date'), 'List Date'[Full Date] = _today), 'List Date'[Financial Week])
+VAR _fy     = MAX('List Date'[Financial Year])
+VAR _fw     = MAX('List Date'[Financial Week])
+VAR _future = _fy > _curFy || (_fy = _curFy && _fw > _curWk)
 RETURN
+IF(_future, BLANK(),
 CALCULATE(
     SUMX('_NHS Claims', COALESCE('_NHS Claims'[Awarded UDA], '_NHS Claims'[Expected UDA])),
     REMOVEFILTERS('List Date'),
     FILTER(ALL('List Date'),
-        'List Date'[Financial Year] = _fy && 'List Date'[Financial Week] <= _fw))",
+        'List Date'[Financial Year] = _fy && 'List Date'[Financial Week] <= _fw)))",
     "#,##0");
 
+// Cap at "now" the same way as the delivered series, so the two YTD lines terminate
+// together at today. Past FYs show the full year; future weeks of the live FY are blank.
 add("NHS UDA Target Cumulative",
-    @"VAR _fy      = MAX('List Date'[Financial Year])
+    @"VAR _today   = TODAY()
+VAR _curFy   = IF(MONTH(_today) >= 4, YEAR(_today), YEAR(_today) - 1)
+VAR _curWk   = MAXX(FILTER(ALL('List Date'), 'List Date'[Full Date] = _today), 'List Date'[Financial Week])
+VAR _fy      = MAX('List Date'[Financial Year])
 VAR _fw      = MAX('List Date'[Financial Week])
+VAR _future  = _fy > _curFy || (_fy = _curFy && _fw > _curWk)
 VAR _selPrac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN
+IF(_future, BLANK(),
 CALCULATE(
     SUM('_NHS Contract Week'[Pro Rata UDA Target]),
     REMOVEFILTERS('List Date'),
     '_NHS Contract Week'[Financial Year]   = _fy,
     '_NHS Contract Week'[Financial Week]  <= _fw,
-    '_NHS Contract Week'[fk Practitioner]  = _selPrac)",
+    '_NHS Contract Week'[fk Practitioner]  = _selPrac))",
     "#,##0");
 
 // ── BG colour measures ───────────────────────────────────────────────────────

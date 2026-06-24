@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V029 -- fix NHS contract-week week-1 cross-FY orphan
+# =====================================================================
+# Gold.usp_Load_Fact_NHS_Contract_Week (*04) anchored each financial week to
+# MAX(Week_Commencing_Date) -- the Monday of the week. For FW1 of a financial year
+# that Monday lands in the PREVIOUS FY (FY2025 FW1 -> Mon 2025-03-31, which Dim_Date
+# classes as FY2024; FY2026 FW1 -> 2026-03-30 = FY2025). Resolving the contract week
+# through fk_Date_Week_Start under a Financial_Year filter then dropped week 1 from the
+# FY chart -- the cumulative YTD target topped out ~88 UDA short of the annual contract
+# (e.g. prod FY2025-26 showed 5,672 vs the true 5,760), and the gap differed per year
+# (24-25 happened to reconcile because its week-1 Monday, 2024-04-01, is genuinely FY2024).
+#
+# Fix: anchor to MAX(Full_Date) -- the last actual day INSIDE the financial week -- so the
+# key always resolves to the matching Financial_Year. Still one row per (FY, FW), so the
+# V027 fan-out fix is preserved. Full DROP/CREATE rebuild of the fact.
+#
+# No schema change, no regression re-baseline (no tested metric reads this fact). The
+# cumulative-cap-at-today change in TabularEditor_NHS.csx is model-side (user re-runs the csx).
+#
+# After deploy: refresh the PBI semantic model so '_NHS Contract Week' picks up the
+# corrected anchor dates; the YTD cumulative target then reaches the annual contract total.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V029__nhs_contract_week1_anchor.manifest
+#      (set $env:FABRIC_SERVER for prod, or via the Deploy Warehouse Action target=prod)
+# =====================================================================
+
+# --- Load procedure (*04 anchor fix) ---
+DEPLOY  Fabric\Gold.usp_Load_Fact_NHS_Contract_Week.StoredProcedure.sql
+
+# --- Repopulate (full DROP/CREATE rebuild with corrected week anchors) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;

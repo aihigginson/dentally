@@ -14,6 +14,11 @@
 --                            Monday Week_Commencing_Dates, so the #wk SELECT DISTINCT
 --                            emitted 2 rows/week and DOUBLED every target. Collapse to one
 --                            Monday per financial week (GROUP BY + MAX(Week_Commencing_Date)).
+--    *04     24/06/2026  AIH Fix week-1 cross-FY orphan: MAX(Week_Commencing_Date) returns
+--                            the Monday, which for FW1 lands in the PREVIOUS FY (FY2025 FW1
+--                            -> 2025-03-31 = FY2024). The contract week then dropped off the
+--                            FY chart, leaving the cumulative ~88 UDA short of the annual.
+--                            Anchor to MAX(Full_Date) (a day inside the financial week).
 --  To Run           :  DECLARE @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_NHS_Contract_Week]    Script Date: 12/06/2026 ******/
@@ -81,16 +86,19 @@ BEGIN
             d.Financial_Year,
             d.Financial_Week;
 
-        -- pk_Date for the week-commencing Monday of each financial year/week.
-        -- Dim_Date.Financial_Week is Sun-Sat but Week_Commencing_Date is Monday-based,
-        -- so a single financial week straddles TWO Monday weeks. SELECT DISTINCT would
-        -- therefore emit 2 rows per (FY, FW) and fan the contract's weekly pro-rata
-        -- across both -> the target doubled. Collapse to ONE Monday per financial week
-        -- (MAX = the Monday under which the bulk Mon-Sat of the week falls).
+        -- pk_Date anchor for each financial year/week. Must be a DAY THAT LIVES INSIDE
+        -- the financial week, so it resolves back to the SAME Financial_Year. The old
+        -- MAX(Week_Commencing_Date) returned the Monday of the week, and for FW1 of a
+        -- financial year that Monday falls in the PREVIOUS FY (e.g. FY2025 FW1 -> Mon
+        -- 2025-03-31, which Dim_Date classes as FY2024). Resolving the contract week
+        -- through that key under a FY filter then orphaned week 1 from the chart (the
+        -- cumulative topped out ~88 UDA short of the annual). Anchoring to MAX(Full_Date)
+        -- -- the last actual day of the financial week -- keeps the key inside the FY and
+        -- still collapses to ONE row per (FY, FW) so the V027 fan-out fix is preserved.
         SELECT
             Financial_Year,
             Financial_Week,
-            DATEDIFF(DAY, '19991231', MAX(Week_Commencing_Date)) AS fk_Date_Week_Start
+            DATEDIFF(DAY, '19991231', MAX(Full_Date)) AS fk_Date_Week_Start
         INTO #wk
         FROM Gold.Dim_Date
         GROUP BY Financial_Year, Financial_Week;
