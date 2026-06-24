@@ -31,7 +31,13 @@ add("NHS UOAs",
 // only); selecting a practitioner in a year with no individual target shows blank.
 add("NHS UDA Contracted",       @"[NHS UDA Annual Target]",       "#,##0");
 add("NHS UDA Completed",        @"[NHS UDA Delivered]",           "#,##0");
-add("NHS UDA Completion Rate",  @"[NHS UDA % of Annual Target]",  "#,##0.0%");
+// Judge delivery against where we SHOULD be by now ([Target To Date]), NOT the full
+// annual target. Against the annual figure the LIVE year reads ~16% mid-way and the 95%
+// band paints it red all year. [Target To Date] = the full annual once the FY is over, so
+// COMPLETED years are unchanged (rate = true completion %); the LIVE year reads as PACE
+// (~100% = on track) and the within-band colour judges it correctly. Raw year-to-date
+// progress is still available as [NHS UDA % of Annual Target] if you want to show it too.
+add("NHS UDA Completion Rate",  @"DIVIDE([NHS UDA Delivered], [NHS UDA Target To Date])",  "#,##0.0%");
 
 // ── PLAN-completion family (CLINICAL, optional -- from Fact_Treatment_Plans) ──
 // SEPARATE from the contract: UDA scheduled vs completed on treatment plans, FY-scoped
