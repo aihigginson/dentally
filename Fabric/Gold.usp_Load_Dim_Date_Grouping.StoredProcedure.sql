@@ -62,7 +62,7 @@ BEGIN
           FROM Gold.Dim_Date d
           JOIN Gold.Dim_Date p ON d.Financial_Year = p.Financial_Year - 1
                                AND d.Financial_Day_Of_Year = p.Financial_Day_Of_Year
-         WHERE d.Financial_Year_Name = 'FY 2026-27'
+         WHERE d.Financial_Year_Name = 'FY 2026-27' AND d.Full_Date <= SYSDATETIME()
         UNION ALL
         SELECT 'Last 12 Months', d.pk_Date, p.pk_Date
           FROM Gold.Dim_Date d
