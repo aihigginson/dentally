@@ -58,7 +58,7 @@ P1 becomes available.)
 
 ## 7. Hosting & data residency
 
-Microsoft **Azure** (Container Apps) and Microsoft **Fabric/OneLake**, **UK South**
+Microsoft **Azure** (Container Apps) and Microsoft **Fabric/OneLake**, **UK**
 (UK data residency). Customer/patient data is stored in the UK; certain Microsoft
 platform-level operations (Entra ID, support, telemetry) may process limited data outside
 the UK under Microsoft's safeguards, and **any international transfer is subject to an
