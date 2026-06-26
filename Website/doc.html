@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document — Analytically</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <style>
+        :root {
+            --navy: #1A527A; --teal-bright: #5EC4C0; --border: #E4E8EE;
+            --text: #1F2937; --text-2: #6B7280; --bg-subtle: #F8FAFC;
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font); color: var(--text); background: #fff; }
+        .site-header {
+            background: var(--navy); color: white; height: 56px; display: flex; align-items: center;
+            padding: 0 24px; gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+            position: sticky; top: 0; z-index: 10;
+        }
+        .brand { font-size: 20px; font-weight: 700; text-decoration: none; color: white; }
+        .brand span { color: var(--teal-bright); }
+        .nav-spacer { flex: 1; }
+        .back { color: #CFE0EC; text-decoration: none; font-size: 14px; font-weight: 600; }
+        .back:hover { color: white; }
+
+        .doc { max-width: 780px; margin: 0 auto; padding: 40px 24px 80px; line-height: 1.65; }
+        .doc h1 { font-size: 28px; margin: 0 0 16px; letter-spacing: -0.4px; }
+        .doc h2 { font-size: 21px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+        .doc h3 { font-size: 17px; margin: 24px 0 8px; }
+        .doc p { margin: 12px 0; }
+        .doc ul, .doc ol { margin: 12px 0 12px 24px; }
+        .doc li { margin: 5px 0; }
+        .doc a { color: var(--navy); }
+        .doc strong { color: #111827; }
+        .doc hr { border: 0; border-top: 1px solid var(--border); margin: 28px 0; }
+        .doc code { background: var(--bg-subtle); padding: 2px 6px; border-radius: 4px; font-size: 0.92em; }
+        .doc table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+        .doc th, .doc td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+        .doc th { background: var(--bg-subtle); font-weight: 600; }
+        .doc em { color: var(--text-2); }
+        .status { color: var(--text-2); padding: 60px 24px; text-align: center; }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/">Analytic<span>ally</span></a>
+        <span class="nav-spacer"></span>
+        <a class="back" href="/documents.html">&larr; All documents</a>
+    </header>
+
+    <article class="doc" id="content">
+        <div class="status" id="status">Loading…</div>
+    </article>
+
+    <script src="/marked.min.js"></script>
+    <script>
+        // Allowlist: the ?doc= value must be one of these exact keys. This stops the
+        // parameter being used to fetch arbitrary paths.
+        const DOCS = {
+            'SECURITY_OVERVIEW':      'Security Overview',
+            'SUB_PROCESSOR_REGISTER': 'Sub-processor Register',
+        };
+
+        const params = new URLSearchParams(location.search);
+        const key = params.get('doc');
+        const statusEl = document.getElementById('status');
+        const contentEl = document.getElementById('content');
+
+        async function render() {
+            if (!key || !(key in DOCS)) {
+                statusEl.textContent = 'Document not found.';
+                return;
+            }
+            document.title = DOCS[key] + ' — Analytically';
+            try {
+                const res = await fetch('/docs/' + key + '.md', { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const md = await res.text();
+                contentEl.innerHTML = marked.parse(md);
+            } catch (e) {
+                statusEl.textContent = 'Could not load this document. Please try again later.';
+            }
+        }
+        render();
+    </script>
+</body>
+</html>
