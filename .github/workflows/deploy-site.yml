@@ -41,6 +41,15 @@ jobs:
         with:
           submodules: false
 
+      # Assemble the published docs from their CANONICAL copies in the repo root,
+      # so the Trust page can never drift from the source documents. Keep this list
+      # in sync with the allowlist in Website/doc.html.
+      - name: Assemble docs from canonical sources
+        run: |
+          mkdir -p Website/docs
+          cp SECURITY_OVERVIEW.md      Website/docs/SECURITY_OVERVIEW.md
+          cp SUB_PROCESSOR_REGISTER.md Website/docs/SUB_PROCESSOR_REGISTER.md
+
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
