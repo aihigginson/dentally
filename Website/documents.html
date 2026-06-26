@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust &amp; Documents — Analytically</title>
+    <meta name="description" content="Security and data-protection documentation for Analytically.">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <style>
+        :root {
+            --navy: #1A527A; --navy-dark: #163f5e; --teal-bright: #5EC4C0;
+            --bg-page: #FFFFFF; --bg-subtle: #F8FAFC; --border: #E4E8EE;
+            --text: #1F2937; --text-2: #6B7280;
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font); color: var(--text);
+            background: linear-gradient(160deg, #F8FAFC 0%, #EBF3F9 100%);
+            min-height: 100vh; display: flex; flex-direction: column;
+        }
+        .site-header {
+            background: var(--navy); color: white; height: 56px;
+            display: flex; align-items: center; padding: 0 24px; gap: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        .brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; text-decoration: none; color: white; }
+        .brand span { color: var(--teal-bright); }
+        .nav-spacer { flex: 1; }
+        .nav-link { color: #CFE0EC; text-decoration: none; font-size: 14px; font-weight: 600; }
+        .nav-link:hover { color: white; }
+
+        main { flex: 1; display: flex; justify-content: center; padding: 48px 24px; }
+        .wrap { max-width: 720px; width: 100%; }
+        h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+        .lede { font-size: 15px; color: var(--text-2); line-height: 1.6; margin-bottom: 32px; }
+
+        .doc-list { display: flex; flex-direction: column; gap: 14px; }
+        .doc-card {
+            display: flex; align-items: center; gap: 18px;
+            background: white; border: 1px solid var(--border); border-radius: 12px;
+            padding: 22px 24px; text-decoration: none; color: inherit;
+            box-shadow: 0 2px 12px rgba(26,82,122,0.05); transition: box-shadow 0.12s, transform 0.12s;
+        }
+        .doc-card:hover { box-shadow: 0 6px 22px rgba(26,82,122,0.12); transform: translateY(-1px); }
+        .doc-icon {
+            flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px;
+            background: #EBF3F9; color: var(--navy);
+            display: flex; align-items: center; justify-content: center; font-weight: 700;
+        }
+        .doc-meta { flex: 1; }
+        .doc-title { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
+        .doc-desc { font-size: 13.5px; color: var(--text-2); line-height: 1.5; }
+        .doc-arrow { color: var(--navy); font-weight: 700; font-size: 18px; }
+
+        .note { font-size: 12.5px; color: var(--text-2); margin-top: 28px; line-height: 1.6; }
+        footer { text-align: center; padding: 24px; font-size: 12px; color: var(--text-2); line-height: 1.6; }
+
+        @media (max-width: 520px) { main { padding: 32px 16px; } .doc-card { padding: 18px; } }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/">Analytic<span>ally</span></a>
+        <span class="nav-spacer"></span>
+        <a class="nav-link" href="https://app.analytically.info">Sign in &rarr;</a>
+    </header>
+
+    <main>
+        <div class="wrap">
+            <h1>Trust &amp; documents</h1>
+            <p class="lede">
+                How Analytically protects practice and patient data. These summaries cover
+                our security posture and the third parties we rely on to deliver the service.
+            </p>
+
+            <div class="doc-list">
+                <a class="doc-card" href="/doc.html?doc=SECURITY_OVERVIEW">
+                    <div class="doc-icon">SO</div>
+                    <div class="doc-meta">
+                        <div class="doc-title">Security Overview</div>
+                        <div class="doc-desc">How we host, encrypt, isolate and retain your data — a plain-English summary.</div>
+                    </div>
+                    <div class="doc-arrow">&rarr;</div>
+                </a>
+
+                <a class="doc-card" href="/doc.html?doc=SUB_PROCESSOR_REGISTER">
+                    <div class="doc-icon">SP</div>
+                    <div class="doc-meta">
+                        <div class="doc-title">Sub-processor Register</div>
+                        <div class="doc-desc">The third parties that process data on our behalf, and what each one handles.</div>
+                    </div>
+                    <div class="doc-arrow">&rarr;</div>
+                </a>
+            </div>
+
+            <p class="note">
+                Our full Data Processing Agreement (DPA) and Data Protection Impact Assessment
+                (DPIA) are available to customers on request — email
+                <a href="mailto:security@analytically.info">security@analytically.info</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer>
+        Analytically is a trading name of Human Solutions Too (company no.&nbsp;16242443).
+    </footer>
+</body>
+</html>
