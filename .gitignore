@@ -13,3 +13,7 @@ __pycache__/
 # Throwaway debugging screenshots dropped in the repo root
 Screenshot *.png
 /_wt_*/
+
+# Published docs are assembled from the canonical root copies at deploy time
+# (deploy-site.yml), never committed — keeps the Trust page in sync with source.
+Website/docs/
