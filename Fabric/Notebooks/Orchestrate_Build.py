@@ -313,3 +313,15 @@ print("=" * 60)
 
 if failed:
     raise RuntimeError(f"Overnight build failed: {len(real_failures)} failed, {len(skipped)} skipped")
+
+
+# -----------------------------------------------------------------------------
+# CELL 13 - Release the Spark session immediately on a clean build, so the run
+#           doesn't sit idle until the session timeout after completing (the
+#           "hangs around"). On failure CELL 12 raises above, so this runs only
+#           on success. notebookutils is the current Fabric API; on older
+#           runtimes use mssparkutils.session.stop() instead.
+# -----------------------------------------------------------------------------
+
+print("Build done -- stopping the Spark session to release compute now.")
+notebookutils.session.stop()

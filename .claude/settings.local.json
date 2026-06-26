@@ -45,7 +45,21 @@
       "Bash(grep -n 'DW_Created_At\\\\|DW_Updated_At' C:/Users/aihig/onedrive/dentally/code/Fabric/__TRACKED_VAR__.Table.sql)",
       "Bash(grep -n 'INSERT INTO Gold.*pk_\\\\|SELECT -1' C:/Users/aihig/onedrive/dentally/code/Fabric/__TRACKED_VAR__.StoredProcedure.sql)",
       "Bash(grep -n 'INTO #src\\\\|AS [A-Za-z]' C:/Users/aihig/onedrive/dentally/code/Fabric/__TRACKED_VAR__.StoredProcedure.sql)",
-      "Bash(grep '^\\\\-\\\\-    \\\\*' C:/Users/aihig/onedrive/dentally/code/Fabric/__TRACKED_VAR__.StoredProcedure.sql)"
+      "Bash(grep '^\\\\-\\\\-    \\\\*' C:/Users/aihig/onedrive/dentally/code/Fabric/__TRACKED_VAR__.StoredProcedure.sql)",
+      "Bash(pdftotext \"C:\\\\Users\\\\aihig\\\\OneDrive\\\\Dentally\\\\Code\\\\PBI\\\\dulux_trade_tarkett_p22_healthcare_colour_schemes_-_occd.pdf\" -)",
+      "Bash(pdftotext -layout \"C:\\\\Users\\\\aihig\\\\OneDrive\\\\Dentally\\\\Code\\\\PBI\\\\dulux_trade_tarkett_p22_healthcare_colour_schemes_-_occd.pdf\" -)",
+      "Read(//tmp/**)",
+      "Bash(awk '/^\\(Pure Contemporary|Tranquil Peace|Soft \\\\& Soothing|Fresh \\\\& Lively|Clean \\\\& Balanced|Fluid Focus|Subtle Shades|Thoughtful Calm|Enriching Nature|Bright \\\\& Uplifting\\)/{p=1} p && /^[A-Z][A-Z]/{if\\(prev\\)exit} {print; prev=p}')",
+      "Bash(git rm *)",
+      "Bash(az account *)",
+      "Bash(echo \"---EXIT:$?---\")",
+      "Bash(ls Fabric/*Bank_Holiday* Fabric/*Waiting*)",
+      "Bash(grep -niE \"notes\" Fabric/Bronze.Bank_Holidays.Table.sql Fabric/Bronze.Waiting_Lists.Table.sql Fabric/Silver.Waiting_List_Entries.Table.sql Fabric/*Bank_Holiday*Data.sql)",
+      "Bash(grep -rliE \"Silver.Waiting_List_Entries|Bank_Holidays\" Fabric/*.StoredProcedure.sql)",
+      "PowerShell(& \"C:\\\\Users\\\\aihig\\\\onedrive\\\\dentally\\\\code\\\\Scripts\\\\Deploy.ps1\" -Manifest \"C:\\\\Users\\\\aihig\\\\onedrive\\\\dentally\\\\code\\\\Releases\\\\V012__remove_free_text.manifest\" 2>&1 | Select-Object -Last 45)",
+      "Bash(gh run *)",
+      "PowerShell(& \"C:\\\\Users\\\\aihig\\\\onedrive\\\\dentally\\\\code\\\\Scripts\\\\Generate_Process_Dependencies.ps1\")",
+      "Bash(az provider *)"
     ]
   }
 }
