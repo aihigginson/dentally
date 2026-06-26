@@ -9,3 +9,7 @@ Scripts/fabric_creds.local.ps1
 # Python test caches
 .pytest_cache/
 __pycache__/
+
+# Throwaway debugging screenshots dropped in the repo root
+Screenshot *.png
+/_wt_*/

@@ -5,7 +5,7 @@
 processes on behalf of customer practices (the **Controllers**). It is the canonical
 list referenced by the DPIA (§13) and the customer DPA.
 
-Customer/patient data is hosted within **Microsoft Azure / Microsoft Fabric, UK South**
+Customer/patient data is hosted within **Microsoft Azure / Microsoft Fabric, in the UK**
 (UK data residency). Microsoft platform-level operations (e.g. Entra ID authentication,
 support, telemetry) may involve limited processing outside the UK under Microsoft's own
 transfer safeguards; **any international transfer of personal data is subject to an
@@ -17,8 +17,8 @@ appropriate UK GDPR transfer mechanism.**
 
 | # | Sub-processor | Service / role | Purpose | Personal data processed | Location | Basis |
 |---|---|---|---|---|---|---|
-| 1 | **Microsoft** | Microsoft Fabric / OneLake | Data warehouse, semantic model, embedded report hosting | **Yes** — patient identity (active), contact details, marketing consent, operational/financial/treatment analytics | UK South | Microsoft Products & Services DPA |
-| 2 | **Microsoft** | Azure (Container Apps + resource group) | Application & API hosting | **Yes** — tenant-scoped data served/rendered in transit to authenticated users | UK South | Microsoft Products & Services DPA |
+| 1 | **Microsoft** | Microsoft Fabric / OneLake | Data warehouse, semantic model, embedded report hosting | **Yes** — patient identity (active), contact details, marketing consent, operational/financial/treatment analytics | UK | Microsoft Products & Services DPA |
+| 2 | **Microsoft** | Azure (Container Apps + resource group) | Application & API hosting | **Yes** — tenant-scoped data served/rendered in transit to authenticated users | UK | Microsoft Products & Services DPA |
 | 3 | **Microsoft** | Entra ID | Authentication & identity / access management | **Yes** — staff/user account identifiers & sign-in metadata; **not** patient data | UK / EU (Microsoft identity platform) | Microsoft Products & Services DPA |
 | 4 | **GitHub** (a Microsoft company) | GitHub + GitHub Actions | Source control & CI/CD deployment automation | **No patient data** — application code, configuration & deployment pipelines only (prod deploys via OIDC) | — | GitHub DPA |
 

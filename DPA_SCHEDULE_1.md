@@ -23,7 +23,7 @@ dimensional analytics model; presenting aggregated dashboards and patient-level
 operational lists (e.g. overdue recalls, outstanding balances) to the Controller's
 authorised users, including contact details to enable the Controller to contact its
 own patients. The Processor does **not** use the data for any other purpose, and does
-**not** sell, share or use it for cross-customer benchmarking, advertising, or model
+**not** sell, share or use it for advertising or model
 training.
 
 ## 4. Types of personal data processed
@@ -72,7 +72,7 @@ erasure (on termination / retention rules).
 ## 8. Sub-processors
 
 Maintained canonically in **`SUB_PROCESSOR_REGISTER.md`**:
-- **Microsoft** — Azure (hosting, UK South), Microsoft Fabric / Power BI (data
+- **Microsoft** — Azure (hosting, UK), Microsoft Fabric / Power BI (data
   warehouse + embedded analytics), and Entra ID (authentication).
 - **GitHub** (a Microsoft company) — source control & CI/CD deployment automation;
   processes no patient data.
@@ -82,7 +82,7 @@ the Processor and remain the Controller's responsibility.
 
 ## 9. Technical and organisational measures
 
-See the Security Overview and DPIA. Summary: UK-South residency; encryption in transit
+See the Security Overview and DPIA. Summary: UK residency; encryption in transit
 and at rest; per-tenant row-level security with automated isolation tests; MFA on all
 production-data access; separated dev/prod with synthetic dev data; least-privilege,
 time-limited, logged production access; data minimisation (no special-category or
@@ -90,8 +90,7 @@ free-text clinical data); defined retention and deletion.
 
 ## 10. International transfers
 
-The Controller's customer/patient data is hosted within the United Kingdom (Azure UK
-South). Microsoft platform-level operations (e.g. Entra ID authentication, support,
+The Controller's customer/patient data is hosted within the United Kingdom. Microsoft platform-level operations (e.g. Entra ID authentication, support,
 telemetry) may involve limited processing outside the UK under Microsoft's own transfer
 safeguards. Any international transfer of personal data is subject to an appropriate UK
 GDPR transfer mechanism.

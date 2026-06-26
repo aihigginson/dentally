@@ -33,7 +33,7 @@ inactive patients' identifying data is obfuscated.
 
 ## Hosting and data residency
 
-- Hosted on **Microsoft Azure** and **Microsoft Fabric** in the **UK South** region
+- Hosted on **Microsoft Azure** and **Microsoft Fabric** in the **UK**
   (data residency: United Kingdom).
 - Sub-processor: **Microsoft** (Azure, Fabric/Power BI). Authentication via **Microsoft
   Entra ID**.
