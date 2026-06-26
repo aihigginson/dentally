@@ -1,0 +1,39 @@
+# =====================================================================
+# Release V031 -- metric actuals slice (Tier-1 cumulative)
+# =====================================================================
+# First slice of the materialised metric-actuals layer that will feed target
+# generation (rollover / from-actuals) and, later, the target-vs-actual cards.
+#
+#   Gold.Fact_Metric_Actuals          -- per (Tenant, Site, Practitioner, Metric, FY) actual
+#   Gold.usp_Load_Fact_Metric_Actuals -- Tier-1 cumulative: total/nhs/private revenue +
+#                                        new_patients, at global/site/practitioner grain.
+#                                        Sources MIRROR the live DAX measures.
+#   (net_patient_growth + Tier-2/3 metrics: later releases.)
+#
+# Orchestration: registered as GOLD_AGG_METRIC_ACTUALS in Process_Config; the
+# dependency generator gained a Level-6 (Agg->Agg) rule so the job is ordered
+# after the daily aggregate + Fact_Invoice_Items (Process_Dependency regenerated).
+# NOT wired into usp_Load_All (orchestration is DAG-driven via Orchestrate_Build).
+#
+# Reconcile gate: Test.Metric_Definition + Comparison_Definition add 4 checks
+# asserting the materialised actuals == the source each DAX measure sums (diff 0
+# on T11). The live measures stay in place as the oracle.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V031__metric_actuals_slice.manifest
+# =====================================================================
+
+# --- Schema + load proc ---
+DEPLOY  Fabric\Gold.Fact_Metric_Actuals.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+# --- Metadata re-seeds (idempotent DELETE+INSERT) ---
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+DEPLOY  Fabric\Test.Metric_Definition.Data.sql
+DEPLOY  Fabric\Test.Comparison_Definition.Data.sql
+
+# --- Populate (full rebuild, FY grain) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Reconcile gate (materialised actuals == DAX-measure source) ---
+TEST
