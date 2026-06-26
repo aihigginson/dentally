@@ -15,6 +15,10 @@ on:
       - 'Website/**'
       - '.github/workflows/deploy-site.yml'
   pull_request:
+    # Previews are for feature -> dev PRs (where you iterate). The dev -> main
+    # publish PR has nothing new to preview and the SWA errors trying to build
+    # one ("No matching static site build found"), so restrict to base = dev.
+    branches: [dev]
     types: [opened, synchronize, reopened, closed]
     paths:
       - 'Website/**'
