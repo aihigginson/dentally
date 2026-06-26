@@ -1,0 +1,27 @@
+name: Deploy Site
+
+# Marketing / holding site -> Azure Static Web App (swa-analytically), served on
+# the apex analytically.info. Plain static HTML, no build step.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Website/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: "Website"
+          output_location: ""
+          skip_app_build: true
