@@ -17,7 +17,7 @@ Dev and prod are **separate Fabric workspaces + warehouses** (same capacity).
 | | Dev | Prod |
 |---|---|---|
 | Web app (Azure Container App) | `ca-analytically-dev` | `ca-analytically-prod` |
-| URL | https://dev.analytically.info | https://analytically.info |
+| URL | https://dev.analytically.info | https://app.analytically.info |
 | Image tag deployed | `:<git-sha>` (also builds `:dev`) | `:<git-sha>` (also builds `:latest`) |
 | Fabric workspace | `22e235e2-7a32-4451-b573-8d5eb8532a23` | `2490d322-e8cc-4e9e-a3dc-964ce6fe444f` |
 | Warehouse SQL endpoint | `…-4i26eirspjiujnltrvplquzkem.datawarehouse.fabric.microsoft.com` | `…-eljzajgm5cpe5i64szgon7sej4.datawarehouse.fabric.microsoft.com` |
@@ -96,7 +96,7 @@ $env:FABRIC_DB     = 'WH_Dentally'
 ## 5. Diagnostics
 
 - **Warehouse active requests** (read-only, as the SP): `SELECT session_id,status,command,start_time,total_elapsed_time/1000 elapsed_sec FROM sys.dm_exec_requests WHERE status NOT IN ('background') ORDER BY total_elapsed_time DESC`. **Long-running `SELECT`s with `program_name='QueryInsights'` / `wait_type='XE_LIVE_TARGET_TVF'` are benign** Fabric telemetry, not a blockage.
-- **Web health:** `curl https://<env>.analytically.info/health` → `{"status":"ok"}`.
+- **Web health:** `curl https://app.analytically.info/health` (prod) / `https://dev.analytically.info/health` (dev) → `{"status":"ok"}`. The apex `analytically.info` serves the marketing site (Azure Static Web App), not the app.
 - **Read-only warehouse spot-checks:** connect with the Test Runner SP (client-credentials token, `.NET SqlClient`, `Encrypt=True`) — see the pattern in `Scripts/Deploy.ps1`.
 - **CI runs:** GitHub Actions — `deploy-dev.yml`, `deploy-prod.yml`, `dw-tests.yml`, `deploy-warehouse.yml`.
 

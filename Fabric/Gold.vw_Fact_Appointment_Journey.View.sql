@@ -72,15 +72,15 @@ SELECT
         CASE WHEN mn.Appointment_Reason = 'Emergency' THEN 'Exam' ELSE mn.Appointment_Reason END
         ) AS [Next Appointment],
 
-    -- Current State: Seen Again (next was completed) / Treatment (BBYL|Booked) for a
+    -- Current State: Seen Again (next was completed) / BBYL or Booked Later for a
     -- future booking / else recall or lapsed. Uses the any-type pointer so a patient
     -- with another booking isn't mislabelled "Will Not See Again".
     CASE
         WHEN e.Mode_Next IS NOT NULL AND mn.Is_Completed = 1               THEN 'Seen Again'
-        WHEN e.Mode_Next IS NOT NULL AND mn.Booking IN ('BBYL', 'Online')  THEN 'Treatment BBYL'
-        WHEN e.Mode_Next IS NOT NULL                                       THEN 'Treatment Booked'
+        WHEN e.Mode_Next IS NOT NULL AND mn.Booking IN ('BBYL', 'Online')  THEN 'BBYL'
+        WHEN e.Mode_Next IS NOT NULL                                       THEN 'Booked Later'
         WHEN e.fk_Appointment_Next IS NOT NULL AND an.Is_Completed = 1     THEN 'Seen Again'
-        WHEN e.fk_Appointment_Next IS NOT NULL                             THEN 'Treatment Booked'
+        WHEN e.fk_Appointment_Next IS NOT NULL                             THEN 'Booked Later'
         WHEN p.Active = 0                                                  THEN 'Will Not See Again'
         ELSE 'In Recall Process'
     END AS [Current State]
@@ -92,3 +92,4 @@ LEFT JOIN Gold.Fact_Appointment_Journey an
 LEFT JOIN Gold.Dim_Patients p
     ON p.Tenant_ID = e.Tenant_ID AND p.pk_Patient = e.fk_Patient;
 GO
+

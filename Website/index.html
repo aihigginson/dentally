@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytically — Dental practice analytics</title>
+    <meta name="description" content="Analytically turns your Dentally practice data into clear, secure dashboards and operational lists.">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <style>
+        :root {
+            --navy:        #1A527A;
+            --navy-dark:   #163f5e;
+            --teal-bright: #5EC4C0;
+            --bg-page:     #FFFFFF;
+            --bg-subtle:   #F8FAFC;
+            --border:      #E4E8EE;
+            --text:        #1F2937;
+            --text-2:      #6B7280;
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font); color: var(--text);
+            background: linear-gradient(160deg, #F8FAFC 0%, #EBF3F9 100%);
+            min-height: 100vh; display: flex; flex-direction: column;
+        }
+
+        /* Header */
+        .site-header {
+            background: var(--navy); color: white; height: 56px;
+            display: flex; align-items: center; padding: 0 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        .brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
+        .brand span { color: var(--teal-bright); }
+
+        /* Main */
+        main {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 40px 24px;
+        }
+        .card {
+            background: white; border: 1px solid var(--border); border-radius: 16px;
+            box-shadow: 0 8px 40px rgba(26,82,122,0.10);
+            max-width: 560px; width: 100%; padding: 56px 48px; text-align: center;
+        }
+        .logo { width: 132px; height: 132px; object-fit: contain; margin-bottom: 24px; }
+        h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 14px; }
+        h1 .accent { color: var(--navy); }
+        .lede { font-size: 16px; color: var(--text-2); line-height: 1.65; margin-bottom: 36px; }
+
+        .cta {
+            display: inline-block; background: var(--navy); color: white;
+            text-decoration: none; font-size: 15px; font-weight: 600;
+            padding: 14px 36px; border-radius: 10px; transition: background 0.12s;
+        }
+        .cta:hover { background: var(--navy-dark); }
+
+        .divider {
+            border: 0; border-top: 1px solid var(--border);
+            margin: 40px 0 28px;
+        }
+        .contact-label {
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--text-2); margin-bottom: 16px;
+        }
+        .contacts {
+            display: flex; flex-direction: column; gap: 10px;
+            font-size: 15px; align-items: center;
+        }
+        .contacts a { color: var(--navy); text-decoration: none; font-weight: 600; }
+        .contacts a:hover { text-decoration: underline; }
+        .contacts .row { color: var(--text-2); }
+
+        /* Footer */
+        footer {
+            text-align: center; padding: 24px; font-size: 12px; color: var(--text-2);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 520px) {
+            .card { padding: 40px 24px; }
+            h1 { font-size: 23px; }
+            .logo { width: 104px; height: 104px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <div class="brand">Analytic<span>ally</span></div>
+    </header>
+
+    <main>
+        <div class="card">
+            <img class="logo" src="/logo-icon.png" alt="Analytically logo">
+            <h1>Analytics for <span class="accent">dental practices</span></h1>
+            <p class="lede">
+                Analytically turns your Dentally practice data into clear, secure
+                dashboards and operational lists — so you can see performance at a
+                glance and act on what matters.
+            </p>
+
+            <a class="cta" href="https://app.analytically.info">Sign in to the app &rarr;</a>
+
+            <hr class="divider">
+
+            <div class="contact-label">Get in touch</div>
+            <div class="contacts">
+                <a href="mailto:sales@analytically.info">sales@analytically.info</a>
+                <span class="row">Security: <a href="mailto:security@analytically.info">security@analytically.info</a></span>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Analytically is a trading name of Human Solutions Too (company no.&nbsp;16242443).<br>
+        &copy; <span id="year">2026</span> Human Solutions Too. All rights reserved.
+    </footer>
+
+    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

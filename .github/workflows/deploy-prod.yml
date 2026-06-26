@@ -50,9 +50,17 @@ jobs:
             --revision-suffix r${{ github.run_number }}
 
       - name: Smoke test /health
+        # Hit the Container App's own default FQDN rather than a custom domain, so
+        # this gate is independent of any custom-domain / DNS cutover (the app
+        # serves on app.analytically.info; the marketing site owns the apex).
         run: |
+          FQDN=$(az containerapp show \
+            --name ca-analytically-prod \
+            --resource-group rg-analytically \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "probing https://$FQDN/health"
           for i in $(seq 1 6); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" https://analytically.info/health || true)
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://$FQDN/health || true)
             if [ "$code" = "200" ]; then echo "health OK ($code)"; exit 0; fi
             echo "attempt $i: got $code, retrying in 10s"; sleep 10
           done

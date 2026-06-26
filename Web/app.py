@@ -37,7 +37,7 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 # calls). Override with ALLOWED_ORIGINS (comma-separated) if needed.
 _allowed_origins = [o.strip() for o in os.environ.get(
     'ALLOWED_ORIGINS',
-    'https://analytically.info,https://dev.analytically.info,http://localhost:5000,http://localhost:8000'
+    'https://app.analytically.info,https://dev.analytically.info,http://localhost:5000,http://localhost:8000'
 ).split(',') if o.strip()]
 CORS(app, origins=_allowed_origins)
 

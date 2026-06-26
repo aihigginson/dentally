@@ -1,0 +1,47 @@
+# =====================================================================
+# Release V030 -- prod reason-map reseed + journey labels + date-grouping cap
+# =====================================================================
+# Three related fixes, bundled so prod's Deploy_Log finally records them:
+#
+# 1. Silver.Appointment_Reason_Map drift on PROD.
+#    Prod was bootstrapped from the V000 baseline snapshot (26-06-16) and never
+#    ran V001-V010. The V010 release added ('Recall Examination','Exam',1) to the
+#    map seed, but that edit never reached prod -- prod's map is exactly one row
+#    short (65 vs dev's 66). So 8,791 'Recall Examination' appointments fell
+#    through the COALESCE as raw text and surfaced as their own band in the
+#    Patient Journeys Alluvial (18,263 Next-Appointment occurrences) instead of
+#    collapsing into 'Exam'. Re-seeding the map (DELETE+INSERT, idempotent) +
+#    reloading the two appointment facts re-maps them. Dev was already correct.
+#
+# 2. Gold.vw_Fact_Appointment_Journey -- Current State labels renamed:
+#    'Treatment BBYL' -> 'BBYL', 'Treatment Booked' -> 'Booked Later'.
+#    (View definition only; live, no reload needed.)
+#
+# 3. Gold.usp_Load_Dim_Date_Grouping -- the 'Prior Year' (FY 2026-27) grouping now
+#    caps at Full_Date <= SYSDATETIME() so current-FY YoY comparisons don't run
+#    past today (matches the NHS cumulative cap-at-today behaviour).
+#
+# No schema change; no regression re-baseline (no tested metric reads these).
+#
+# After deploy: refresh the PBI semantic model so the Alluvial / date-grouping
+# visuals pick up the re-mapped reasons and the new labels.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V030__reason_map_journey_date_grouping.manifest
+#      (prod via the Deploy Warehouse Action, target=prod)
+# =====================================================================
+
+# --- 1. Re-seed the reason map (adds the missing Recall Examination -> Exam row) ---
+DEPLOY  Fabric\Silver.Appointment_Reason_Map.Data.sql
+
+# --- 2. Journey view (Current State label rename) ---
+DEPLOY  Fabric\Gold.vw_Fact_Appointment_Journey.View.sql
+
+# --- 3. Date-grouping proc (cap current-FY prior-year grouping at today) ---
+DEPLOY  Fabric\Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql
+
+# --- Re-derive: re-map Appointment_Reason, then rebuild the journey pointers ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Repopulate the date-grouping dimension with the capped logic ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
