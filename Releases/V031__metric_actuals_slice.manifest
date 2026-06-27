@@ -35,5 +35,8 @@ DEPLOY  Fabric\Test.Comparison_Definition.Data.sql
 # --- Populate (full rebuild, FY grain) ---
 EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 
+# --- Expose Fact_Metric_Actuals as the PBI view _Metric Actuals (for card A/B + switch) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
 # --- Reconcile gate (materialised actuals == DAX-measure source) ---
 TEST
