@@ -85,6 +85,9 @@ var rates = new[] {
     // only at the FULL date range; over a sub-period the daily version is the intended upgrade.
     new [] {"Treatment Acceptance Rate",      "acceptance_rate",                "#,##0.0%"},
     new [] {"Average Plan Value",             "avg_plan_value",                 "£#,##0"},
+    // Daily-flow num/denom across two sources (rows keyed on each source's own date).
+    new [] {"Revenue Per Clinical Hour",      "revenue_per_clinical_hour",      "£#,##0"},
+    new [] {"Discounts",                      "discounts",                      "0.0%"},
 };
 
 foreach (var m in metrics) {
@@ -97,4 +100,4 @@ foreach (var m in rates) {
     add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
 }
 
-Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 8 rates).");
+Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 10 rates).");
