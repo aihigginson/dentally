@@ -94,7 +94,7 @@ RETURN DIVIDE(n, d)").Replace("{key}", key);
 int done = 0, missing = 0;
 Action<string,string> apply = (name, dax) => {
     var m = t.Measures.FirstOrDefault(x => x.Name == name);
-    if (m == null) { Warn("measure not found, skipped: " + name); missing++; return; }
+    if (m == null) { Warning("measure not found, skipped: " + name); missing++; return; }
     m.Expression = dax; done++;
 };
 
