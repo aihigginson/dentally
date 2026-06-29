@@ -81,6 +81,10 @@ var rates = new[] {
     new [] {"Short Notice Cancellation Rate", "short_notice_cancellation_rate", "#,##0.0%"},
     new [] {"Exam Ratio",                     "exam_ratio",                     "#,##0.0%"},
     new [] {"Chair Utilisation",              "chair_utilisation",              "#,##0.0%"},
+    // Plan-grain rates (keyed on fk_Date_Created). Live cards are date-BLIND, so Delta is 0
+    // only at the FULL date range; over a sub-period the daily version is the intended upgrade.
+    new [] {"Treatment Acceptance Rate",      "acceptance_rate",                "#,##0.0%"},
+    new [] {"Average Plan Value",             "avg_plan_value",                 "£#,##0"},
 };
 
 foreach (var m in metrics) {
@@ -93,4 +97,4 @@ foreach (var m in rates) {
     add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
 }
 
-Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 6 rates).");
+Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 8 rates).");
