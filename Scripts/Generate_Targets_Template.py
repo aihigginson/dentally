@@ -41,6 +41,14 @@ def _norm_fy(pv):
         return f"FY {m.group(1)}-{m.group(2)}"
     return s
 
+
+def _prior_fy_pv(fy):
+    """'2025-26' -> 'FY 2024-25' (prior financial year as a Period_Value)."""
+    m = re.match(r"^(\d{4})-(\d{2})$", fy)
+    if not m:
+        return None
+    return f"FY {int(m.group(1)) - 1}-{int(m.group(2)) - 1:02d}"
+
 import pyodbc
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -82,6 +90,7 @@ HEADERS = [
     "Practice_Name", "Level",
     "Site_ID", "Site_Name", "Practitioner_ID", "Practitioner_Name",
     "Metric_Key", "Metric_Name", "Section", "Format_Type",
+    "Prior_Year_Target", "Prior_Year_Actual",
     "Target_Value", "Variance_Band",
 ]
 
@@ -91,6 +100,7 @@ COL_WIDTHS = {
     "Practitioner_ID": 16, "Practitioner_Name": 28,
     "Metric_Key": 32, "Metric_Name": 38,
     "Section": 12, "Format_Type": 12,
+    "Prior_Year_Target": 16, "Prior_Year_Actual": 16,
     "Target_Value": 14, "Variance_Band": 14,
 }
 
@@ -123,9 +133,16 @@ def instructions_text(practice_name, fy):
         ("   currency/count   →  relative %,   e.g. 10 means ±10%", False),
         ("   Leave blank and the card will be white (no colour banding).", False),
         ("", False),
-        ("5. Do not rename, move or delete columns.", False),
+        ("5. REFERENCE COLUMNS (read-only — shown for guidance, NOT loaded):", True),
+        ("   Prior_Year_Target  =  last year's target for this row.", False),
+        ("   Prior_Year_Actual  =  last year's actual (from the analytics warehouse).", False),
+        ("   Tip: generate with  --prefill rollover  (copies last year's target) or", False),
+        ("        --prefill actuals  (copies last year's actual) into Target_Value,", False),
+        ("        then adjust individual rows by hand.", False),
         ("", False),
-        ("6. Load with:  py Scripts/Load_Targets_From_Template.py --input <this file>", False),
+        ("6. Do not rename, move or delete columns.", False),
+        ("", False),
+        ("7. Load with:  py Scripts/Load_Targets_From_Template.py --input <this file>", False),
     ]
 
 
@@ -185,6 +202,13 @@ def main():
     p.add_argument("--auth",     default="default", choices=["default", "interactive"])
     p.add_argument("--fy",       required=True,
                    help="Financial year to generate, e.g. 2025-26")
+    p.add_argument("--prefill",  default="same",
+                   choices=["same", "rollover", "actuals", "blank"],
+                   help="Default for Target_Value: same=this FY's existing target (default); "
+                        "rollover=prior FY's target; actuals=prior FY's actual "
+                        "(Gold.Fact_Metric_Actuals); blank=leave empty. The Prior_Year_Target "
+                        "and Prior_Year_Actual reference columns are always shown so you can "
+                        "choose per metric in Excel.")
     args = p.parse_args()
 
     # Output directory — Targets/ at repo root (parent of Scripts/)
@@ -250,51 +274,66 @@ def main():
         (float(r.Target_Value), float(r.Variance) if r.Variance is not None else None)
         for r in cur.fetchall()
     }
+
+    # Prior-year ACTUALS from Gold.Fact_Metric_Actuals, mapped surrogate -> business
+    # keys. Wrapped: the table may not exist until release V031 is deployed.
+    actuals = {}
+    try:
+        cur.execute("""
+            SELECT
+                CASE WHEN a.fk_Practice_Site = -1 THEN NULL ELSE ps.Site_ID END        AS Site_ID,
+                CASE WHEN a.fk_Practitioner  = -1 THEN NULL ELSE pr.Practitioner_ID END AS Practitioner_ID,
+                a.Metric, a.Period_Value, a.Actual_Value
+            FROM Gold.Fact_Metric_Actuals a
+            LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = a.Tenant_ID AND ps.pk_Practice_Site = a.fk_Practice_Site
+            LEFT JOIN Gold.Dim_Practitioners pr ON pr.Tenant_ID = a.Tenant_ID AND pr.pk_Practitioner  = a.fk_Practitioner
+            WHERE a.Tenant_ID = ?
+        """, [tid])
+        actuals = {
+            (r.Site_ID, r.Practitioner_ID, r.Metric, _norm_fy(r.Period_Value)): float(r.Actual_Value)
+            for r in cur.fetchall() if r.Actual_Value is not None
+        }
+    except Exception as e:
+        print(f"  (Prior_Year_Actual unavailable -- Fact_Metric_Actuals not deployed? {e})")
+
     conn.close()
 
     site_name = {s.Site_ID: s.Site_Name for s in sites}
 
     # Generate one file per FY year
     for fy in years:
-        period_value = "FY " + fy   # filename '2025-26' → DB Period_Value 'FY 2025-26'
-        data_rows = []
+        period_value = "FY " + fy        # DB Period_Value 'FY 2025-26'
+        prior_pv     = _prior_fy_pv(fy)  # 'FY 2024-25' -- rollover / actuals reference FY
+        data_rows    = []
+
+        def build_row(level, site_id, site_nm, prac_id, prac_nm, m):
+            skey     = site_id or None   # '' (practice grain) -> None key
+            pkey     = prac_id or None
+            ev_same  = existing.get((skey, pkey, m.Metric_Key, period_value))
+            ev_prior = existing.get((skey, pkey, m.Metric_Key, prior_pv))
+            prior_actual = actuals.get((skey, pkey, m.Metric_Key, prior_pv))
+            prior_target = ev_prior[0] if ev_prior else None
+            # Default for the editable Target_Value (references shown regardless).
+            if   args.prefill == "rollover":
+                tv, vb = ev_prior if ev_prior else (None, None)
+            elif args.prefill == "actuals":
+                tv, vb = prior_actual, (ev_same[1] if ev_same else None)
+            elif args.prefill == "blank":
+                tv, vb = None, None
+            else:  # 'same'
+                tv, vb = ev_same if ev_same else (None, None)
+            return [practice_name, level, site_id, site_nm, prac_id, prac_nm,
+                    m.Metric_Key, m.Display_Name, m.Section, m.Format_Type,
+                    prior_target, prior_actual, tv, vb]
 
         for m in metrics:
-            mk = m.Metric_Key
-
-            # Practice-level row
-            ev = existing.get((None, None, mk, period_value))
-            data_rows.append([
-                practice_name, "Practice",
-                "", "", "", "",
-                mk, m.Display_Name, m.Section, m.Format_Type,
-                ev[0] if ev else None,
-                ev[1] if ev else None,
-            ])
-
-            # Site-level rows
+            data_rows.append(build_row("Practice", "", "", "", "", m))
             if m.Supports_Site:
                 for s in sites:
-                    ev = existing.get((s.Site_ID, None, mk, period_value))
-                    data_rows.append([
-                        practice_name, "Site",
-                        s.Site_ID, s.Site_Name, "", "",
-                        mk, m.Display_Name, m.Section, m.Format_Type,
-                        ev[0] if ev else None,
-                        ev[1] if ev else None,
-                    ])
-
-            # Practitioner-level rows — no site binding (parallel to Site grain, not nested)
+                    data_rows.append(build_row("Site", s.Site_ID, s.Site_Name, "", "", m))
             if m.Supports_Practitioner:
                 for pr in practitioners:
-                    ev = existing.get((None, pr.Practitioner_ID, mk, period_value))
-                    data_rows.append([
-                        practice_name, "Practitioner",
-                        "", "", pr.Practitioner_ID, pr.Full_Name,
-                        mk, m.Display_Name, m.Section, m.Format_Type,
-                        ev[0] if ev else None,
-                        ev[1] if ev else None,
-                    ])
+                    data_rows.append(build_row("Practitioner", "", "", pr.Practitioner_ID, pr.Full_Name, m))
 
         out_path = out_dir / f"T{tid}_{fy}.xlsx"
         write_workbook(out_path, data_rows, practice_name, fy)

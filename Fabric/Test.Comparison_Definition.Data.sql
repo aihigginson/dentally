@@ -52,6 +52,11 @@ VALUES
 -- Revenue split: Total Revenue must equal NHS + Private (i.e. every invoice
 -- item has a non-null NHS Charge). A non-zero result flags NULL NHS_Charge rows.
  ('CMP_REVENUE_SPLIT','GOLD_TOTAL_REVENUE_T11','GOLD_REVENUE_NHS_OR_PRIVATE_INV_T11',0,'Total Revenue = NHS + Private (no invoice items with NULL NHS Charge)',1)
+-- Metric Actuals oracle: materialised Fact_Metric_Actuals must equal the source each DAX measure sums.
+,('CMP_ACTUALS_TOTAL_REVENUE','ACTUALS_TOTAL_REVENUE_T11','GOLD_TOTAL_REVENUE_T11',0,'Materialised total_revenue = SUM(Invoice Items Total Price)',1)
+,('CMP_ACTUALS_NHS_REVENUE','ACTUALS_NHS_REVENUE_T11','GOLD_NHS_REVENUE_INV_T11',0,'Materialised nhs_revenue = invoice items with NHS Charge > 0',1)
+,('CMP_ACTUALS_PRIVATE_REVENUE','ACTUALS_PRIVATE_REVENUE_T11','GOLD_PRIVATE_REVENUE_INV_T11',0,'Materialised private_revenue = invoice items with NHS Charge = 0',1)
+,('CMP_ACTUALS_NEW_PATIENTS','ACTUALS_NEW_PATIENTS_T11','GOLD_AGG_NEW_PATIENTS_T11',0,'Materialised new_patients = distinct New_Patient in the daily aggregate',1)
 -- Cross-layer control total candidate: Bronze invoice header Amount vs Gold
 -- invoice-item Total Price. DISABLED -- header Amount and summed item Total
 -- Price may legitimately differ (NHS handling, rounding). Verify the real
