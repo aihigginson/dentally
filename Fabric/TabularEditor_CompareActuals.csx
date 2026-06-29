@@ -66,6 +66,31 @@ VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
     '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
+// Production "new" SNAPSHOT STOCK: latest snapshot date in the selected period, then the
+// stored Value at that date -- mirrors the live _KPI Snapshot snap_fk pattern. Respects
+// site + practitioner. (key) -> metric.
+Func<string,string> actNewSnap = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR snap_fk = CALCULATE( MAX('_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
+    '_Metric Actuals'[fk Date] = snap_fk,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+
+// Same, but practitioner-agnostic (force prac = -1) -- mirrors REMOVEFILTERS('List Practitioners').
+Func<string,string> actNewSnapNoP = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR snap_fk = CALCULATE( MAX('_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
+    '_Metric Actuals'[fk Date] = snap_fk,
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )").Replace("{key}", key);
+
 var metrics = new[] {
     new [] {"Total Revenue",   "total_revenue",   "£#,##0"},
     new [] {"NHS Revenue",     "nhs_revenue",     "£#,##0"},
@@ -100,4 +125,19 @@ foreach (var m in rates) {
     add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
 }
 
-Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 10 rates).");
+// Snapshot stocks (latest snapshot in the selected period). Delta is ~0 at the full date
+// range / no date slicer (where snap_fk = the overall latest weekly, what the live card shows).
+// Practitioner-agnostic stocks (live card REMOVEFILTERS practitioners):
+foreach (var m in new[] {
+    new [] {"Active Patients",  "active_patients",  "#,##0"},
+    new [] {"Lapsed Patients",  "lapsed_patients",  "#,##0"},
+    new [] {"Overdue Recalls",  "overdue_recalls",  "#,##0"},
+}) {
+    add(m[0] + " New",   actNewSnapNoP(m[1]), m[2]);
+    add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
+}
+// Respects practitioner:
+add("Outstanding Invoices New",   actNewSnap("outstanding_invoices"), "£#,##0");
+add("Outstanding Invoices Delta", "[Outstanding Invoices] - [Outstanding Invoices New]", "£#,##0");
+
+Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 10 rates + 4 snapshot stocks).");
