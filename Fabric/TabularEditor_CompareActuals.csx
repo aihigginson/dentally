@@ -91,6 +91,27 @@ RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )").Replace("{key}", key);
 
+// Production "new" CURRENT-STATE value: ONE stored row per grain, read date-blind
+// (REMOVEFILTERS the date dims) so it is period-independent -- mirrors the live cards that
+// REMOVEFILTERS('List Date'). Grain via sel_site/sel_prac.
+Func<string,string> actNewCurrent = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
+    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+
+// Current-state RATE: DIVIDE the one stored num/den row, also date-blind.
+Func<string,string> actNewCurrentRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)").Replace("{key}", key);
+
 var metrics = new[] {
     new [] {"Total Revenue",   "total_revenue",   "£#,##0"},
     new [] {"NHS Revenue",     "nhs_revenue",     "£#,##0"},
@@ -140,4 +161,26 @@ foreach (var m in new[] {
 add("Outstanding Invoices New",   actNewSnap("outstanding_invoices"), "£#,##0");
 add("Outstanding Invoices Delta", "[Outstanding Invoices] - [Outstanding Invoices New]", "£#,##0");
 
-Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 10 rates + 4 snapshot stocks).");
+// Current-state values (date-blind). Delta is ~0 wherever the metric is stored at the card's
+// grain; email/phone/retention are GLOBAL only this round (so they differ off-global).
+foreach (var m in new[] {
+    new [] {"Open Courses",                     "open_courses",               "#,##0"},
+    new [] {"Open Courses Value",               "open_courses_value",         "£#,##0"},
+    new [] {"Open Courses Without Appointment", "open_courses_without_appt",  "#,##0"},
+    new [] {"Days Until Next 30 Minute Free",   "days_until_30min_free",      "#,##0"},
+    new [] {"Days Until Next 1 Hour Free",      "days_until_1hr_free",        "#,##0"},
+}) {
+    add(m[0] + " New",   actNewCurrent(m[1]), m[2]);
+    add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
+}
+// Current-state rates (global only this round):
+foreach (var m in new[] {
+    new [] {"Email Details Rate",  "email_details_rate",  "#,##0.0%"},
+    new [] {"Phone Details Rate",  "phone_details_rate",  "#,##0.0%"},
+    new [] {"Retention Outlook",   "retention_outlook",   "#,##0.0%"},
+}) {
+    add(m[0] + " New",   actNewCurrentRate(m[1]), m[2]);
+    add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
+}
+
+Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 10 rates + 4 snapshot stocks + 8 current-state).");
