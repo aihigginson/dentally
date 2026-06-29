@@ -9,6 +9,7 @@ CREATE TABLE [Gold].[Fact_Effective_Targets] (
     [pk_Effective_Target]   BIGINT IDENTITY NOT NULL,
     [Tenant_ID]             INT           NOT NULL,
     [fk_Practice_Site]      BIGINT        NOT NULL,
+    [fk_Practitioner]       BIGINT        NOT NULL,
     [Metric]                VARCHAR(100)  NOT NULL,
     [Period_Type]           VARCHAR(20)   NOT NULL,
     [Period_Value]          VARCHAR(20)   NOT NULL,
