@@ -114,6 +114,7 @@ apply("Treatment Acceptance Rate",         dRate("acceptance_rate"));
 apply("Average Plan Value",                dRate("avg_plan_value"));
 apply("Revenue Per Clinical Hour",         dRate("revenue_per_clinical_hour"));
 apply("Discounts",                         dRate("discounts"));
+apply("Deposit Value",                     dRate("deposit_ratio"));
 // Snapshot stocks (latest in period; blank at practitioner for the patient stocks)
 apply("Active Patients",                   dSnap("active_patients"));
 apply("Lapsed Patients",                   dSnap("lapsed_patients"));

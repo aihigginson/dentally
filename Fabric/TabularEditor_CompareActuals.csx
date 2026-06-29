@@ -134,6 +134,7 @@ var rates = new[] {
     // Daily-flow num/denom across two sources (rows keyed on each source's own date).
     new [] {"Revenue Per Clinical Hour",      "revenue_per_clinical_hour",      "£#,##0"},
     new [] {"Discounts",                      "discounts",                      "0.0%"},
+    new [] {"Deposit Value",                  "deposit_ratio",                  "0.0%"},
 };
 
 foreach (var m in metrics) {
