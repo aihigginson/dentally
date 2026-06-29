@@ -1,14 +1,25 @@
 # =====================================================================
-# Release V031 -- metric actuals slice (Tier-1 cumulative)
+# Release V031 -- metric actuals (27 metrics, DAILY grain)
 # =====================================================================
-# First slice of the materialised metric-actuals layer that will feed target
-# generation (rollover / from-actuals) and, later, the target-vs-actual cards.
+# Materialised metric-actuals layer that simplifies the KPI-card DAX (cards read
+# a value / DIVIDE(num,den) / latest-lookup from the fact) and feeds target
+# generation (rollover / from-actuals).
 #
-#   Gold.Fact_Metric_Actuals          -- per (Tenant, Site, Practitioner, Metric, FY) actual
-#   Gold.usp_Load_Fact_Metric_Actuals -- Tier-1 cumulative: total/nhs/private revenue +
-#                                        new_patients, at global/site/practitioner grain.
-#                                        Sources MIRROR the live DAX measures.
-#   (net_patient_growth + Tier-2/3 metrics: later releases.)
+#   Gold.Fact_Metric_Actuals          -- one row per (Tenant, fk_Date, Site, Practitioner,
+#                                        Metric) with Numerator + Denominator. DAILY grain so
+#                                        the card measures aggregate over the date context and
+#                                        ANY period (FY/YTD/L3M/L12M/range) works -- no special
+#                                        cases. Sources MIRROR the live DAX measures.
+#   Gold.usp_Load_Fact_Metric_Actuals -- 27 metrics: 4 cumulative + 11 date-context rates
+#                                        (incl. acceptance/avg_plan/rev-per-clinical-hr/
+#                                        discounts/deposit) + 4 snapshot stocks + 8 current-
+#                                        state, at global/site/practitioner grain where the
+#                                        source supports it (else blank off-grain).
+#   (net_patient_growth, recall metrics, NHS UDA/UOA suite: later releases.)
+#
+# PBI switch-over (Desktop, after this deploy): run
+# Fabric\TabularEditor_ApplyMetricActuals.csx to retarget the card measures onto
+# '_Metric Actuals' and remove the New/Delta compare harness.
 #
 # Orchestration: registered as GOLD_AGG_METRIC_ACTUALS in Process_Config; the
 # dependency generator gained a Level-6 (Agg->Agg) rule so the job is ordered
