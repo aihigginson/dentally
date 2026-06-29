@@ -38,6 +38,19 @@ RETURN CALCULATE(
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
+// tEffAdd: like tEff but also filters fk Practitioner -- ADDITIVE metrics' targets follow the
+// actual's real grain (blank at a site/practitioner with no entered target). Ratios keep tEff.
+Func<string,string> tEffAdd = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac   = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""{key}"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site,
+    '_Effective Targets'[fk Practitioner]  = sel_prac)").Replace("{key}", key);
+
 // ── vs-Target builders ───────────────────────────────────────────────────────
 Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
@@ -61,7 +74,7 @@ RETURN IF(
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -74,7 +87,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
+VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
@@ -87,7 +100,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
@@ -169,8 +182,8 @@ add("Short Notice Cancellation Rate",
 
 kpi("Chair Utilisation",                "#,##0.0%", tEff100("chair_utilisation"),              vPp("Chair Utilisation"),                bgHigherPp("Chair Utilisation", "chair_utilisation"));
 kpi("DNA Rate",                         "#,##0.0%", tEff100("dna_rate"),                       vPp("DNA Rate"),                         bgLowerPp("DNA Rate", "dna_rate"));
-kpi("Days Until Next 30 Minute Free",   "#,##0",    tEff("days_until_30min_free"),             vPct("Days Until Next 30 Minute Free"),  bgLowerEff("Days Until Next 30 Minute Free", "days_until_30min_free"));
-kpi("Days Until Next 1 Hour Free",      "#,##0",    tEff("days_until_1hr_free"),               vPct("Days Until Next 1 Hour Free"),     bgLowerEff("Days Until Next 1 Hour Free", "days_until_1hr_free"));
+kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_free"),             vPct("Days Until Next 30 Minute Free"),  bgLowerEff("Days Until Next 30 Minute Free", "days_until_30min_free"));
+kpi("Days Until Next 1 Hour Free",      "#,##0",    tEffAdd("days_until_1hr_free"),               vPct("Days Until Next 1 Hour Free"),     bgLowerEff("Days Until Next 1 Hour Free", "days_until_1hr_free"));
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
