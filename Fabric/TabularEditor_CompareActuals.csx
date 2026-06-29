@@ -35,23 +35,37 @@ Action<string,string,string> add = (name, dax, fmt) => {
     if (fmt != "") m.FormatString = fmt;
 };
 
-// Production "new" actual: same grain logic as tDaily (sel_site / sel_prac) and
-// same FY key as the targets ([_Target FY Key]); tenant pushed via TREATAS off
-// the RLS-filtered List Practice Sites so '_Metric Actuals' needs no relationship.
-Func<string,string> actNew = key => (@"VAR fy_key   = [_Target FY Key]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+// Production "new" actual (DAILY-grain fact): SUM(Numerator) over the DATE CONTEXT,
+// pushed via TREATAS('List Date'[pk Date] -> '_Metric Actuals'[fk Date]) -- exactly
+// like tDaily. So ANY period works through the date filter (FY, YTD, Last 3M/12M/30d,
+// or a free date-range slicer) with no special-casing. Grain via sel_site/sel_prac;
+// tenant via TREATAS off the RLS-filtered List Practice Sites (no relationship needed).
+Func<string,string> actNew = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN
 CALCULATE(
-    MAX('_Metric Actuals'[Actual Value]),
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""{key}"",
-    '_Metric Actuals'[Period Value]     = fy_key,
     '_Metric Actuals'[fk Practice Site] = sel_site,
     '_Metric Actuals'[fk Practitioner]  = sel_prac
 )").Replace("{key}", key);
 
-// (existing measure name, "new" name, metric key, format)
+// Production "new" RATE: DIVIDE(SUM(Num), SUM(Den)) over the same date context --
+// rates roll up by summing num + denom over the selected days (never average ratios).
+Func<string,string> actNewRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)").Replace("{key}", key);
+
 var metrics = new[] {
     new [] {"Total Revenue",   "total_revenue",   "£#,##0"},
     new [] {"NHS Revenue",     "nhs_revenue",     "£#,##0"},
@@ -59,12 +73,24 @@ var metrics = new[] {
     new [] {"New Patients",    "new_patients",    "#,##0"},
 };
 
+// Tier-2 FY-period rates (num/denom in the fact)
+var rates = new[] {
+    new [] {"DNA Rate",                       "dna_rate",                       "#,##0.0%"},
+    new [] {"Book Before You Leave",          "book_before_you_leave",          "#,##0.0%"},
+    new [] {"Cancellation Frequency",         "cancellation_frequency",         "0.0%"},
+    new [] {"Short Notice Cancellation Rate", "short_notice_cancellation_rate", "#,##0.0%"},
+    new [] {"Exam Ratio",                     "exam_ratio",                     "#,##0.0%"},
+    new [] {"Chair Utilisation",              "chair_utilisation",              "#,##0.0%"},
+};
+
 foreach (var m in metrics) {
-    var existingName = m[0];
-    var key          = m[1];
-    var fmt          = m[2];
-    add(existingName + " New",   actNew(key), fmt);
-    add(existingName + " Delta", "[" + existingName + "] - [" + existingName + " New]", fmt);
+    add(m[0] + " New",   actNew(m[1]),     m[2]);
+    add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
 }
 
-Info("New actuals (compare) measures created in folder '" + g + "'.");
+foreach (var m in rates) {
+    add(m[0] + " New",   actNewRate(m[1]), m[2]);
+    add(m[0] + " Delta", "[" + m[0] + "] - [" + m[0] + " New]", m[2]);
+}
+
+Info("New actuals (compare) measures created in folder '" + g + "' (4 cumulative + 6 rates).");
