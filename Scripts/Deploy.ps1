@@ -223,10 +223,17 @@ try {
             }
 
             'TEST' {
-                Write-Host "$tag  running Run_Tests.ps1 gate ..." -ForegroundColor Cyan
-                & (Join-Path $PSScriptRoot 'Run_Tests.ps1')   # opens its own connection; ours stays open
-                if ($LASTEXITCODE -ne 0) { throw "Run_Tests gate failed (exit $LASTEXITCODE)" }
-                Write-Host "  OK" -ForegroundColor Green
+                # Run_Tests authenticates with the SP client secret (dev). Prod connects via a
+                # pre-acquired OIDC token (FABRIC_ACCESS_TOKEN) and has no SP secret, and prod is
+                # verified separately -- so skip the inline gate when a pre-acquired token is in use.
+                if ($PreToken) {
+                    Write-Host "$tag  skipped (pre-acquired token / prod; verified separately)" -ForegroundColor Yellow
+                } else {
+                    Write-Host "$tag  running Run_Tests.ps1 gate ..." -ForegroundColor Cyan
+                    & (Join-Path $PSScriptRoot 'Run_Tests.ps1')   # opens its own connection; ours stays open
+                    if ($LASTEXITCODE -ne 0) { throw "Run_Tests gate failed (exit $LASTEXITCODE)" }
+                    Write-Host "  OK" -ForegroundColor Green
+                }
             }
         }
     }
