@@ -22,6 +22,7 @@ appropriate UK GDPR transfer mechanism.**
 | 3 | **Microsoft** | Entra ID | Authentication & identity / access management | **Yes** — staff/user account identifiers & sign-in metadata; **not** patient data | UK / EU (Microsoft identity platform) | Microsoft Products & Services DPA |
 | 4 | **GitHub** (a Microsoft company) | GitHub + GitHub Actions | Source control & CI/CD deployment automation | **No patient data** — application code, configuration & deployment pipelines only (prod deploys via OIDC) | — | GitHub DPA |
 | 5 | **Web3Forms** | Public website enquiry form-to-email delivery | Routes enquiry submissions from the marketing site (`analytically.info`) to Analytically's inbox | **No patient/customer (Controller) data** — only prospect-submitted enquiry details (name, practice name, email, phone, message), i.e. Analytically's own marketing/prospect data | International | Web3Forms Terms & Privacy Policy |
+| 6 | **Google** | Google Analytics 4 — public website usage analytics | Aggregate measurement of how visitors use the marketing site (`analytically.info`) | **No patient/customer (Controller) data** — public-website usage only (cookie identifiers, pages viewed, approximate location); GA4 does not store full IP addresses | International (Google, under its transfer safeguards) | Google Ads Data Processing Terms |
 
 **Not a sub-processor:** the upstream **Dentally** practice-management system is the
 Controller's own clinical record and **source of data**, not a sub-processor of Analytically.
@@ -35,8 +36,10 @@ Likewise, **any customer-controlled integrations** the practice chooses to conne
 - New sub-processors (or material changes to an existing one's role) are added to this
   register **and the customer DPA**, and customers are **notified in advance** of the
   service going live with their data, with a reasonable opportunity to object.
-- **Web3Forms** (#5) handles public website enquiry-form delivery only and processes
-  **no Controller data**; it is listed here for completeness/transparency.
+- **Web3Forms** (#5) and **Google Analytics** (#6) relate to the public marketing
+  website only and process **no Controller data**; they are listed here for
+  completeness/transparency. The website's cookie use is described in the
+  [Cookie Policy](COOKIE_POLICY.md).
 - Other candidate future additions that would require an update here: error tracking
   (e.g. Sentry / Azure Application Insights), email/notification providers handling
   **customer data**, support tooling. **None currently in use.**

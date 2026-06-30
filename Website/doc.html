@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Cookie consent + Google Analytics (gtag loads only after the visitor accepts) -->
+    <script src="/consent.js" defer></script>
     <title>Document — Analytically</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -61,6 +63,7 @@
         const DOCS = {
             'SECURITY_OVERVIEW':      'Security Overview',
             'SUB_PROCESSOR_REGISTER': 'Sub-processor Register',
+            'COOKIE_POLICY':          'Cookie Policy',
         };
 
         const params = new URLSearchParams(location.search);
