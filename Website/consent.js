@@ -1,9 +1,10 @@
-/* Cookie consent + gated Google Analytics — Analytically marketing site.
+/* Cookie consent + Google Analytics (Consent Mode v2) — Analytically marketing site.
  *
- * PECR/UK GDPR opt-in: Google Analytics (gtag.js) is NOT loaded and NO cookies
- * are set until the visitor clicks "Accept". The choice is stored in
- * localStorage so the banner shows only once; users can change it any time via
- * a "Cookie settings" link (window.anlyCookieSettings).
+ * PECR/UK GDPR: the GA4 tag (gtag.js) loads on every page so the tag is present
+ * and detectable, but Google Consent Mode defaults to DENIED — so NO analytics
+ * cookies are set and the visitor is not identified until they click "Accept".
+ * Accepting flips analytics_storage to granted; the choice persists in
+ * localStorage and is changeable any time via window.anlyCookieSettings().
  */
 (function () {
     'use strict';
@@ -11,22 +12,36 @@
     var GA_ID = 'G-VZ89XSHWQZ';
     var KEY   = 'anly_cookie_consent';   // 'granted' | 'denied'
 
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { window.dataLayer.push(arguments); }
+    window.gtag = gtag;
+
     function read()  { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
     function store(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
 
-    // Load and initialise GA4 — only ever called after explicit consent.
-    function loadGA() {
-        if (window.__anlyGA) return;
-        window.__anlyGA = true;
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
-        document.head.appendChild(s);
-        window.dataLayer = window.dataLayer || [];
-        window.gtag = function () { window.dataLayer.push(arguments); };
-        window.gtag('js', new Date());
-        window.gtag('config', GA_ID);
+    // Consent Mode v2 — default everything to denied until the user decides. This
+    // MUST run before the GA config below so the first hit respects it.
+    gtag('consent', 'default', {
+        ad_storage:         'denied',
+        ad_user_data:       'denied',
+        ad_personalization: 'denied',
+        analytics_storage:  'denied',
+        wait_for_update:    500
+    });
+
+    // Returning visitor who already accepted — grant before any hit fires.
+    if (read() === 'granted') {
+        gtag('consent', 'update', { analytics_storage: 'granted' });
     }
+
+    // Load GA4 itself. It loads on every page (so it is detectable) but stays
+    // cookieless while analytics_storage is denied.
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
+    document.head.appendChild(s);
+    gtag('js', new Date());
+    gtag('config', GA_ID);
 
     var bannerEl = null;
     function removeBanner() {
@@ -36,8 +51,8 @@
 
     function decide(v) {
         store(v);
+        gtag('consent', 'update', { analytics_storage: v === 'granted' ? 'granted' : 'denied' });
         removeBanner();
-        if (v === 'granted') { loadGA(); }
     }
 
     function injectStyles() {
@@ -89,11 +104,9 @@
     // Footer "Cookie settings" link calls this to let users change their choice.
     window.anlyCookieSettings = function () { showBanner(); };
 
-    // On load: honour a stored choice; otherwise prompt for consent.
+    // Prompt only if no decision has been recorded yet.
     var choice = read();
-    if (choice === 'granted') {
-        loadGA();
-    } else if (choice !== 'denied') {
+    if (choice !== 'granted' && choice !== 'denied') {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', showBanner);
         } else {
