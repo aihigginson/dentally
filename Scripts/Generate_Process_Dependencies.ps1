@@ -222,6 +222,36 @@ foreach ($gfName in $goldSps.Keys) {
     }
 }
 
+# -- Level 6: Gold Agg SP writes Gold.X  &  another Gold Agg SP mentions Gold.X --
+# Orders an aggregate that reads ANOTHER aggregate's output (e.g.
+# Fact_Metric_Actuals reads Aggregate_Site_Patient_Practitioner_Daily) after it.
+# Self-edges are skipped; the agg layer is a DAG so this introduces no cycle.
+foreach ($gwName in $goldSps.Keys) {
+    if (-not $pcMap.ContainsKey($gwName)) { continue }
+    $gwCodes = @($pcMap[$gwName] | Where-Object { $_ -like 'GOLD_AGG_*' })
+    if ($gwCodes.Count -eq 0) { continue }
+
+    $gwWrites = Get-WriteTargets $goldSps[$gwName] 'Gold'
+    if ($gwWrites.Count -eq 0) { continue }
+
+    foreach ($grName in $goldSps.Keys) {
+        if ($grName -eq $gwName) { continue }
+        if (-not $pcMap.ContainsKey($grName)) { continue }
+        $grCodes = @($pcMap[$grName] | Where-Object { $_ -like 'GOLD_AGG_*' })
+        if ($grCodes.Count -eq 0) { continue }
+
+        $grMentions = Get-Mentions $goldSps[$grName] 'Gold'
+        $shared     = $gwWrites | Where-Object { $grMentions -contains $_ }
+        if ($shared.Count -eq 0) { continue }
+
+        foreach ($gwc in $gwCodes) {
+            foreach ($grc in $grCodes) {
+                $deps.Add("$gwc|$grc|6")
+            }
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # 5. Deduplicate and sort
 # ---------------------------------------------------------------------------
@@ -232,6 +262,7 @@ $l2 = @($unique | Where-Object { $_.EndsWith('|2') })
 $l3 = @($unique | Where-Object { $_.EndsWith('|3') })
 $l4 = @($unique | Where-Object { $_.EndsWith('|4') })
 $l5 = @($unique | Where-Object { $_.EndsWith('|5') })
+$l6 = @($unique | Where-Object { $_.EndsWith('|6') })
 
 Write-Host "Dependencies found:"
 Write-Host "  Bronze -> Silver   (1): $($l1.Count)"
@@ -239,6 +270,7 @@ Write-Host "  Silver -> Silver   (2): $($l2.Count)"
 Write-Host "  Silver -> Gold     (3): $($l3.Count)"
 Write-Host "  Gold Dim -> Fact   (4): $($l4.Count)"
 Write-Host "  Gold -> Agg        (5): $($l5.Count)"
+Write-Host "  Gold Agg -> Agg    (6): $($l6.Count)"
 Write-Host "  Total                 : $($unique.Count)"
 
 # ---------------------------------------------------------------------------
@@ -274,6 +306,7 @@ Add-Section $l2 'Silver -> Silver  (level 2)'
 Add-Section $l3 'Silver -> Gold    (level 3)'
 Add-Section $l4 'Gold Dim -> Fact  (level 4)'
 Add-Section $l5 'Gold -> Agg       (level 5)'
+Add-Section $l6 'Gold Agg -> Agg   (level 6)'
 
 [System.IO.File]::WriteAllLines($outFile, $lines, [System.Text.ASCIIEncoding]::new())
 

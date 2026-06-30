@@ -41,9 +41,23 @@ RETURN CALCULATE(
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
     '_Effective Targets'[Metric]      = ""{key}"",
     '_Effective Targets'[Period Value] = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site)").Replace("{key}", key);
+    '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)").Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
+
+// tEffAdd: like tEff but also filters fk Practitioner -- for ADDITIVE (count/currency) metrics
+// whose target must follow the actual's real grain (blank at a site/practitioner with no entered
+// target). Rate metrics keep tEff (site-only, with the practice fallback).
+Func<string,string> tEffAdd = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac   = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR fy_key     = [_Target FY Key]
+RETURN CALCULATE(
+    MAX('_Effective Targets'[Effective Target]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
+    '_Effective Targets'[Metric]           = ""{key}"",
+    '_Effective Targets'[Period Value]     = fy_key,
+    '_Effective Targets'[fk Practice Site] = sel_site,
+    '_Effective Targets'[fk Practitioner]  = sel_prac)").Replace("{key}", key);
 
 // ── vs-Target DAX builders ───────────────────────────────────────────────────
 Func<string,string> vPct = b => (@"VAR actual = [{b}]
@@ -80,7 +94,7 @@ Func<string,string,string> bgHigherRefF = (b, key) => (@"VAR actual   = [{b}]
 VAR target   = [{b} Target]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -93,8 +107,8 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherEffF = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = [{b} Target]
+VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -110,8 +124,8 @@ Func<string,string,bool,string> bgLowerEffF = (b, key, grey) => {
     return (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = [{b} Target]
+VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     {grey}ISBLANK(target), ""#FFFFFF"",
@@ -125,8 +139,8 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPpF = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = [{b} Target]
+VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -138,8 +152,8 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPpF = (b, key) => (@"VAR actual   = [{b}]
 VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR fy_key   = [_Target FY Key]
-VAR target   = CALCULATE(MAX('_Effective Targets'[Effective Target]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site) / 100
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site)
+VAR target   = [{b} Target]
+VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -254,7 +268,7 @@ add("Discounts",
 kpi("Total Revenue",             "£#,##0", tDaily("total_revenue"),            vPct("Total Revenue"),             bgHigherRefF("Total Revenue", "total_revenue"));
 kpi("NHS Revenue",               "£#,##0", tDaily("nhs_revenue"),              vPct("NHS Revenue"),               bgHigherRefF("NHS Revenue", "nhs_revenue"));
 kpi("Private Revenue",           "£#,##0", tDaily("private_revenue"),          vPct("Private Revenue"),           bgHigherRefF("Private Revenue", "private_revenue"));
-kpi("Outstanding Invoices",      "£#,##0", tEff("outstanding_invoices"),       vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
+kpi("Outstanding Invoices",      "£#,##0", tEffAdd("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tEff("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tEff("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));
 kpi("Revenue Per Dentist Hour",  "£#,##0", tEff("revenue_per_dentist_hour"),   vPct("Revenue Per Dentist Hour"),  bgHigherEffF("Revenue Per Dentist Hour", "revenue_per_dentist_hour"));

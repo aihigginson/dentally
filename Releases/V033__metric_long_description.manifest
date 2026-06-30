@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V033 -- plain-English metric definitions (in-product glossary)
+# =====================================================================
+# Adds Config.Metric_Definitions.Long_Description and populates a full plain-English
+# definition for every metric, so the web app (and, later, PBI) can surface a glossary
+# the end user can read when a metric is ambiguous.
+#
+#   Config.Metric_Definitions    -- gains Long_Description (guarded ALTER, V033 migration).
+#                                   Seed MERGE fills Long_Description for all metrics and
+#                                   realigns the deposit_ratio short text to its real calc.
+#
+# Web follow-up (deploy-dev/prod.yml on Web/** push): /api/definitions endpoint +
+# Definitions help panel grouped by section (Home = all sections).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V033__metric_long_description.manifest
+# =====================================================================
+
+MIGRATE  Migrations\V033__metric_definitions_long_description.sql
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

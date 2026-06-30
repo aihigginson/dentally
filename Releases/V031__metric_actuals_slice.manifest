@@ -1,0 +1,53 @@
+# =====================================================================
+# Release V031 -- metric actuals (27 metrics, DAILY grain)
+# =====================================================================
+# Materialised metric-actuals layer that simplifies the KPI-card DAX (cards read
+# a value / DIVIDE(num,den) / latest-lookup from the fact) and feeds target
+# generation (rollover / from-actuals).
+#
+#   Gold.Fact_Metric_Actuals          -- one row per (Tenant, fk_Date, Site, Practitioner,
+#                                        Metric) with Numerator + Denominator. DAILY grain so
+#                                        the card measures aggregate over the date context and
+#                                        ANY period (FY/YTD/L3M/L12M/range) works -- no special
+#                                        cases. Sources MIRROR the live DAX measures.
+#   Gold.usp_Load_Fact_Metric_Actuals -- 27 metrics: 4 cumulative + 11 date-context rates
+#                                        (incl. acceptance/avg_plan/rev-per-clinical-hr/
+#                                        discounts/deposit) + 4 snapshot stocks + 8 current-
+#                                        state, at global/site/practitioner grain where the
+#                                        source supports it (else blank off-grain).
+#   (net_patient_growth, recall metrics, NHS UDA/UOA suite: later releases.)
+#
+# PBI switch-over (Desktop, after this deploy): run
+# Fabric\TabularEditor_ApplyMetricActuals.csx to retarget the card measures onto
+# '_Metric Actuals' and remove the New/Delta compare harness.
+#
+# Orchestration: registered as GOLD_AGG_METRIC_ACTUALS in Process_Config; the
+# dependency generator gained a Level-6 (Agg->Agg) rule so the job is ordered
+# after the daily aggregate + Fact_Invoice_Items (Process_Dependency regenerated).
+# NOT wired into usp_Load_All (orchestration is DAG-driven via Orchestrate_Build).
+#
+# Reconcile gate: Test.Metric_Definition + Comparison_Definition add 4 checks
+# asserting the materialised actuals == the source each DAX measure sums (diff 0
+# on T11). The live measures stay in place as the oracle.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V031__metric_actuals_slice.manifest
+# =====================================================================
+
+# --- Schema + load proc ---
+DEPLOY  Fabric\Gold.Fact_Metric_Actuals.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+# --- Metadata re-seeds (idempotent DELETE+INSERT) ---
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+DEPLOY  Fabric\Test.Metric_Definition.Data.sql
+DEPLOY  Fabric\Test.Comparison_Definition.Data.sql
+
+# --- Populate (full rebuild, FY grain) ---
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- Expose Fact_Metric_Actuals as the PBI view _Metric Actuals (for card A/B + switch) ---
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+# --- Reconcile gate (materialised actuals == DAX-measure source) ---
+TEST

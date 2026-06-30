@@ -157,14 +157,17 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_AGG_SITE_PRACT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PATIENTS', 'GOLD_AGG_SITE_PATIENT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_DAILY_TARGETS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_EFFECTIVE_TARGETS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_SITE_PATIENT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTICE_SITES', 'GOLD_AGG_SITE_PRACT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_AGG_DAILY_TARGETS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_AGG_SITE_PRACT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_TREATMENT_PLANS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_APPOINTMENTS', 'GOLD_AGG_APPOINTMENT_JOURNEY', 'DATA', 5, 1);
@@ -173,12 +176,21 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_CONTRACTS', 'GOLD_AGG_DAILY_TARGETS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_INVOICE_ITEMS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_INVOICE_ITEMS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_INVOICE_ITEMS', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_INVOICES', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_INVOICES', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_PRACTITIONER_DIARIES', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_PRACTITIONER_DIARIES', 'GOLD_AGG_SITE_PRACT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_RECALLS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_RECALLS', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_RECALLS', 'GOLD_AGG_SITE_PATIENT', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TARGETS', 'GOLD_AGG_EFFECTIVE_TARGETS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_PLAN_ITEMS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_PLAN_ITEMS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_PLANS', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
+
+-- Gold Agg -> Agg   (level 6)
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_DAILY', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 6, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_KPI_SNAPSHOT', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 6, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_SITE_PRACT', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 6, 1);
 

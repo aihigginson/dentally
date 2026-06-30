@@ -10,7 +10,8 @@ CREATE TABLE [Config].[Metric_Definitions] (
     [Display_Name]            VARCHAR(200)   NOT NULL,
     [Section]                 VARCHAR(50)    NOT NULL,
     [Format_Type]             VARCHAR(20)    NOT NULL,
-    [Description]             VARCHAR(500)   NULL,
+    [Description]             VARCHAR(500)   NULL,   -- short, one-line (tooltip / card)
+    [Long_Description]        VARCHAR(1000)  NULL,   -- plain-English definition (glossary / help panel)
     [Supports_Site]           BIT            NOT NULL,
     [Supports_Practitioner]   BIT            NOT NULL,
     [Is_Active]               BIT            NOT NULL,

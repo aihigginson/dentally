@@ -290,6 +290,38 @@ def me():
         return _server_error(e, 'me')
 
 
+@app.route('/api/definitions')
+def definitions():
+    """Plain-English metric glossary for the in-product help panel.
+    Grouped client-side by Section; the Home tab shows every section."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, _, _ = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+
+        cur.execute(
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, "
+            "Description, Long_Description "
+            "FROM Config.Metric_Definitions WHERE Is_Active = 1 ORDER BY Display_Order"
+        )
+        metrics = [
+            {'key': r[0], 'display_name': r[1], 'section': r[2],
+             'format_type': r[3], 'description': r[4],
+             'long_description': r[5] or r[4]}
+            for r in cur.fetchall()
+        ]
+        conn.close()
+        return jsonify({'metrics': metrics})
+    except Exception as e:
+        return _server_error(e, 'definitions')
+
+
 @app.route('/api/filters')
 def filters():
     upn, err = _auth()

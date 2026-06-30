@@ -57,6 +57,7 @@ BEGIN
             [pk_Effective_Target]   BIGINT IDENTITY NOT NULL,
             [Tenant_ID]             INT           NOT NULL,
             [fk_Practice_Site]      BIGINT        NOT NULL,
+            [fk_Practitioner]       BIGINT        NOT NULL,
             [Metric]                VARCHAR(100)  NOT NULL,
             [Period_Type]           VARCHAR(20)   NOT NULL,
             [Period_Value]          VARCHAR(20)   NOT NULL,
@@ -65,43 +66,54 @@ BEGIN
         );
 
         INSERT INTO [Gold].[Fact_Effective_Targets] (
-            Tenant_ID, fk_Practice_Site, Metric, Period_Type, Period_Value,
+            Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Period_Type, Period_Value,
             Effective_Target, Effective_Variance
         )
-        -- Practice-level rows: pass through as-is (fk_Practice_Site = -1)
-        SELECT
-            Tenant_ID,
-            -1,
-            Metric,
-            Period_Type,
-            Period_Value,
-            Target_Value,
-            Variance
+        -- 1) Practice-level rows (all metrics): practice + no-practitioner target.
+        SELECT Tenant_ID, -1, -1, Metric, Period_Type, Period_Value, Target_Value, Variance
         FROM [Gold].[Fact_Targets]
-        WHERE fk_Practice_Site = -1
+        WHERE fk_Practice_Site = -1 AND fk_Practitioner = -1
 
         UNION ALL
 
-        -- Site-level rows: use site-specific target if one exists in Input.Targets,
-        -- otherwise inherit the practice-level value.
+        -- 2) RATIO metrics: expand practice target to every site (inherit if no site-specific).
         SELECT
-            dps.Tenant_ID,
-            dps.pk_Practice_Site,
-            p.Metric,
-            p.Period_Type,
-            p.Period_Value,
-            COALESCE(s.Target_Value, p.Target_Value),
-            COALESCE(s.Variance,     p.Variance)
-        FROM [Gold].[Dim_Practice_Sites]  dps
-        JOIN [Gold].[Fact_Targets]        p
-            ON  p.Tenant_ID        = dps.Tenant_ID
-            AND p.fk_Practice_Site = -1            -- practice-level row to expand
-        LEFT JOIN [Gold].[Fact_Targets]   s
-            ON  s.Tenant_ID        = dps.Tenant_ID
-            AND s.fk_Practice_Site = dps.pk_Practice_Site
-            AND s.Metric           = p.Metric
-            AND s.Period_Type      = p.Period_Type
-            AND s.Period_Value     = p.Period_Value;
+            dps.Tenant_ID, dps.pk_Practice_Site, -1, p.Metric, p.Period_Type, p.Period_Value,
+            COALESCE(s.Target_Value, p.Target_Value), COALESCE(s.Variance, p.Variance)
+        FROM [Gold].[Dim_Practice_Sites] dps
+        JOIN [Gold].[Fact_Targets] p
+            ON  p.Tenant_ID = dps.Tenant_ID AND p.fk_Practice_Site = -1 AND p.fk_Practitioner = -1
+        JOIN [Config].[Metric_Definitions] cmd
+            ON  cmd.Metric_Key = p.Metric
+            AND NOT (cmd.Format_Type IN ('currency','count') AND cmd.Target_Type <> 'rate')
+        LEFT JOIN [Gold].[Fact_Targets] s
+            ON  s.Tenant_ID = dps.Tenant_ID AND s.fk_Practice_Site = dps.pk_Practice_Site
+            AND s.fk_Practitioner = -1 AND s.Metric = p.Metric
+            AND s.Period_Type = p.Period_Type AND s.Period_Value = p.Period_Value
+
+        UNION ALL
+
+        -- 3) ADDITIVE + supports site: only the site-level targets actually entered (no fabrication).
+        SELECT ft.Tenant_ID, ft.fk_Practice_Site, -1, ft.Metric, ft.Period_Type, ft.Period_Value,
+               ft.Target_Value, ft.Variance
+        FROM [Gold].[Fact_Targets] ft
+        JOIN [Config].[Metric_Definitions] cmd
+            ON  cmd.Metric_Key = ft.Metric
+            AND cmd.Format_Type IN ('currency','count') AND cmd.Target_Type <> 'rate'
+            AND cmd.Supports_Site = 1
+        WHERE ft.fk_Practice_Site <> -1 AND ft.fk_Practitioner = -1
+
+        UNION ALL
+
+        -- 4) ADDITIVE + supports practitioner: the practitioner-level targets entered.
+        SELECT ft.Tenant_ID, ft.fk_Practice_Site, ft.fk_Practitioner, ft.Metric, ft.Period_Type,
+               ft.Period_Value, ft.Target_Value, ft.Variance
+        FROM [Gold].[Fact_Targets] ft
+        JOIN [Config].[Metric_Definitions] cmd
+            ON  cmd.Metric_Key = ft.Metric
+            AND cmd.Format_Type IN ('currency','count') AND cmd.Target_Type <> 'rate'
+            AND cmd.Supports_Practitioner = 1
+        WHERE ft.fk_Practitioner <> -1;
 
         SET @My_Inserts = @@ROWCOUNT;
 

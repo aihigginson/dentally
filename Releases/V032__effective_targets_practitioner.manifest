@@ -1,0 +1,32 @@
+# =====================================================================
+# Release V032 -- practitioner-aware effective targets (grain-correct target blanking)
+# =====================================================================
+# Targets should follow each metric's real grain: an absolute (additive) target blanks
+# where the actual can't be shown at that grain; a rate target still applies everywhere.
+#
+#   Config.Metric_Definitions    -- Supports_Site / Supports_Practitioner corrected to the
+#                                   real materialised grain of each metric.
+#   Gold.Fact_Effective_Targets  -- gains fk_Practitioner.
+#   usp_Load_Fact_Effective_Targets -- RATIO metrics keep the practice->all-sites fallback;
+#                                   ADDITIVE metrics (Format_Type in currency/count and
+#                                   Target_Type <> 'rate') get ONLY the site/practitioner
+#                                   targets actually entered (no fabrication), mirroring the
+#                                   daily-target path -- so they blank at an unsupported /
+#                                   un-entered grain instead of showing the practice number.
+#
+# PBI follow-up (Desktop, Part 3): a tEffAdd helper (filters site + practitioner) on the
+# additive cards' targets + practitioner-aware bg/variance; ratios keep tEff.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V032__effective_targets_practitioner.manifest
+# =====================================================================
+
+MIGRATE  Migrations\V032__effective_targets_add_practitioner.sql
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Effective_Targets.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Targets @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Effective_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

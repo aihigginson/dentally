@@ -7,7 +7,7 @@ This Data Processing Agreement ("**DPA**") forms part of the service agreement (
 "**Agreement**") between:
 
 - the **customer practice** ("**Controller**"), and
-- **Human Solutions Too** (company number **16242443**), trading as **Analytically** ("**Processor**"),
+- **Analytically Limited** (company number **16242443**) ("**Processor**"),
 
 and governs the Processor's processing of personal data on the Controller's behalf under
 **UK GDPR Article 28** and the Data Protection Act 2018.
@@ -143,7 +143,7 @@ international transfers).
 
 ---
 
-*All key terms now set: Processor = Human Solutions Too (company no. 16242443) t/a
-Analytically; security contact security@analytically.info; 30-day sub-processor notice;
+*All key terms now set: Processor = Analytically Limited (company no. 16242443);
+security contact security@analytically.info; 30-day sub-processor notice;
 breach notification targeting 48 hours; one remote audit/year; governing law England &
 Wales. Have a qualified adviser review before execution.*
