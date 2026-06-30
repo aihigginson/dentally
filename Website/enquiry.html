@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Cookie consent + Google Analytics (Consent Mode v2: tag loads but sets no cookies until the visitor accepts) -->
     <script src="/consent.js"></script>
+    <!-- First-touch marketing attribution capture (UTM / gclid / referrer) -->
+    <script src="/attribution.js"></script>
     <title>Enquire — Analytically</title>
     <meta name="description" content="Tell us about your dental practice and we'll be in touch about Analytically.">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -150,6 +152,19 @@
                     <!-- Honeypot: bots fill this, humans never see it -->
                     <input type="checkbox" name="botcheck" class="hp" tabindex="-1" autocomplete="off">
 
+                    <!-- Marketing attribution (the "stitch"): channel signals captured on
+                         landing by attribution.js + the GA client_id, submitted alongside
+                         the visitor's identity. Populated on load; empties are dropped. -->
+                    <input type="hidden" name="Source"          id="f-utm-source">
+                    <input type="hidden" name="Medium"          id="f-utm-medium">
+                    <input type="hidden" name="Campaign"        id="f-utm-campaign">
+                    <input type="hidden" name="Term"            id="f-utm-term">
+                    <input type="hidden" name="Content"         id="f-utm-content">
+                    <input type="hidden" name="Google click ID" id="f-gclid">
+                    <input type="hidden" name="Referrer"        id="f-referrer">
+                    <input type="hidden" name="Landing page"    id="f-landing">
+                    <input type="hidden" name="GA client ID"    id="f-ga-client">
+
                     <div class="field">
                         <label for="practice_name">Practice name <span class="req">*</span></label>
                         <input id="practice_name" name="Practice name" type="text" required autocomplete="organization">
@@ -242,6 +257,28 @@
     <script>
         document.getElementById('year').textContent = new Date().getFullYear();
 
+        // Populate the marketing-attribution hidden fields (the stitch): first-touch
+        // channel signals from attribution.js, plus the GA client_id when consented.
+        (function () {
+            var a = (window.anlyAttribution && window.anlyAttribution()) || {};
+            function set(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
+            set('f-utm-source',   a.utm_source);
+            set('f-utm-medium',   a.utm_medium);
+            set('f-utm-campaign', a.utm_campaign);
+            set('f-utm-term',     a.utm_term);
+            set('f-utm-content',  a.utm_content);
+            set('f-gclid',        a.gclid);
+            set('f-referrer',     a.referrer);
+            set('f-landing',      a.landing_page);
+            // GA client_id joins back to GA's BigQuery export (user_pseudo_id); it only
+            // exists once the visitor has accepted analytics cookies.
+            try {
+                if (window.gtag) {
+                    window.gtag('get', 'G-VZ89XSHWQZ', 'client_id', function (id) { set('f-ga-client', id || ''); });
+                }
+            } catch (e) {}
+        })();
+
         const form      = document.getElementById('enquiry-form');
         const statusEl  = document.getElementById('form-status');
         const submitBtn = document.getElementById('submit-btn');
@@ -258,6 +295,11 @@
             submitBtn.textContent = 'Sending...';
 
             try {
+                // Keep the email tidy — drop empty attribution fields (a direct visit
+                // has no channel data). Disabled inputs aren't included in FormData.
+                form.querySelectorAll('input[type=hidden][id^="f-"]').forEach(function (el) {
+                    if (!el.value) el.disabled = true;
+                });
                 const res  = await fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     body: new FormData(form),
