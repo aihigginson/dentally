@@ -60,6 +60,9 @@
             padding: 14px 36px; border-radius: 10px; transition: background 0.12s;
         }
         .cta:hover { background: var(--navy-dark); }
+        .cta-group { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .cta.secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+        .cta.secondary:hover { background: var(--bg-subtle); }
 
         .divider {
             border: 0; border-top: 1px solid var(--border);
@@ -94,6 +97,7 @@
     <header class="site-header">
         <div class="brand">Analytic<span>ally</span></div>
         <span class="nav-spacer"></span>
+        <a class="nav-link" href="/enquiry.html" style="margin-right:20px">Enquire</a>
         <a class="nav-link" href="/documents.html">Trust &amp; documents</a>
     </header>
 
@@ -107,7 +111,10 @@
                 glance and act on what matters.
             </p>
 
-            <a class="cta" href="https://app.analytically.info">Sign in to the app &rarr;</a>
+            <div class="cta-group">
+                <a class="cta" href="https://app.analytically.info">Sign in to the app &rarr;</a>
+                <a class="cta secondary" href="/enquiry.html">Tell us about your practice</a>
+            </div>
 
             <hr class="divider">
 

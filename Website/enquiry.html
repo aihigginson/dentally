@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enquire — Analytically</title>
+    <meta name="description" content="Tell us about your dental practice and we'll be in touch about Analytically.">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <style>
+        :root {
+            --navy:        #1A527A;
+            --navy-dark:   #163f5e;
+            --teal-bright: #5EC4C0;
+            --bg-page:     #FFFFFF;
+            --bg-subtle:   #F8FAFC;
+            --border:      #E4E8EE;
+            --text:        #1F2937;
+            --text-2:      #6B7280;
+            --good:        #15803D;
+            --bad:         #B42318;
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font); color: var(--text);
+            background: linear-gradient(160deg, #F8FAFC 0%, #EBF3F9 100%);
+            min-height: 100vh; display: flex; flex-direction: column;
+        }
+
+        /* Header */
+        .site-header {
+            background: var(--navy); color: white; height: 56px;
+            display: flex; align-items: center; padding: 0 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        .brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; text-decoration: none; color: white; }
+        .brand span { color: var(--teal-bright); }
+        .nav-spacer { flex: 1; }
+        .nav-link { color: #CFE0EC; text-decoration: none; font-size: 14px; font-weight: 600; }
+        .nav-link:hover { color: white; }
+
+        /* Main */
+        main {
+            flex: 1; display: flex; align-items: flex-start; justify-content: center;
+            padding: 40px 24px;
+        }
+        .card {
+            background: white; border: 1px solid var(--border); border-radius: 16px;
+            box-shadow: 0 8px 40px rgba(26,82,122,0.10);
+            max-width: 620px; width: 100%; padding: 44px 44px 40px;
+        }
+        h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 12px; }
+        h1 .accent { color: var(--navy); }
+        .lede { font-size: 15px; color: var(--text-2); line-height: 1.6; margin-bottom: 28px; }
+
+        /* Form */
+        form { display: flex; flex-direction: column; gap: 18px; }
+        .row2 { display: flex; gap: 18px; }
+        .row2 > .field { flex: 1; }
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 13px; font-weight: 600; color: var(--text); }
+        label .opt { font-weight: 400; color: var(--text-2); }
+        .req { color: var(--bad); }
+        input, select, textarea {
+            font-family: var(--font); font-size: 15px; color: var(--text);
+            padding: 11px 13px; border: 1px solid var(--border); border-radius: 9px;
+            background: var(--bg-subtle); transition: border-color .12s, box-shadow .12s;
+            width: 100%;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none; border-color: var(--navy); background: white;
+            box-shadow: 0 0 0 3px rgba(26,82,122,0.12);
+        }
+        textarea { resize: vertical; min-height: 92px; }
+        select { appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; }
+
+        .consent { flex-direction: row; align-items: flex-start; gap: 10px; }
+        .consent input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--navy); flex-shrink: 0; }
+        .consent label { font-weight: 400; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+        .consent a { color: var(--navy); font-weight: 600; }
+
+        /* Honeypot — hidden from humans, catches bots */
+        .hp { position: absolute; left: -9999px; top: -9999px; }
+
+        .submit {
+            background: var(--navy); color: white; border: none; cursor: pointer;
+            font-size: 15px; font-weight: 600; padding: 14px 28px; border-radius: 10px;
+            transition: background .12s; margin-top: 4px;
+        }
+        .submit:hover:not(:disabled) { background: var(--navy-dark); }
+        .submit:disabled { opacity: .6; cursor: default; }
+
+        .form-status { font-size: 14px; line-height: 1.5; min-height: 0; }
+        .form-status.err { color: var(--bad); }
+
+        /* Success state */
+        .success { display: none; text-align: center; padding: 16px 0 8px; }
+        .success .tick {
+            width: 56px; height: 56px; border-radius: 50%; background: #ECFDF3;
+            display: flex; align-items: center; justify-content: center; margin: 0 auto 18px;
+        }
+        .success h2 { font-size: 21px; margin-bottom: 10px; }
+        .success p { color: var(--text-2); font-size: 15px; line-height: 1.6; }
+        .success a { color: var(--navy); font-weight: 600; text-decoration: none; }
+
+        /* Footer */
+        footer {
+            text-align: center; padding: 24px; font-size: 12px; color: var(--text-2);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 560px) {
+            .card { padding: 32px 22px; }
+            h1 { font-size: 22px; }
+            .row2 { flex-direction: column; gap: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/">Analytic<span>ally</span></a>
+        <span class="nav-spacer"></span>
+        <a class="nav-link" href="/documents.html">Trust &amp; documents</a>
+    </header>
+
+    <main>
+        <div class="card">
+            <!-- ── Enquiry form ── -->
+            <div id="form-view">
+                <h1>Tell us about your <span class="accent">practice</span></h1>
+                <p class="lede">
+                    Analytically works with practices on Dentally. Share a few details and
+                    we'll be in touch to talk through how it could work for you. Fields
+                    marked <span class="req">*</span> are required.
+                </p>
+
+                <form id="enquiry-form" novalidate>
+                    <!-- Web3Forms access key (delivers submissions to the configured inbox).
+                         Public by design — it only permits POSTing this form to web3forms. -->
+                    <input type="hidden" name="access_key" value="23e628f3-a49a-4424-ab37-1ff11e1d1075">
+                    <input type="hidden" name="subject" value="New practice enquiry — Analytically">
+                    <input type="hidden" name="from_name" value="Analytically website">
+
+                    <!-- Honeypot: bots fill this, humans never see it -->
+                    <input type="checkbox" name="botcheck" class="hp" tabindex="-1" autocomplete="off">
+
+                    <div class="field">
+                        <label for="practice_name">Practice name <span class="req">*</span></label>
+                        <input id="practice_name" name="Practice name" type="text" required autocomplete="organization">
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label for="contact_name">Your name <span class="req">*</span></label>
+                            <input id="contact_name" name="Contact name" type="text" required autocomplete="name">
+                        </div>
+                        <div class="field">
+                            <label for="role">Your role <span class="opt">(optional)</span></label>
+                            <input id="role" name="Role" type="text" placeholder="e.g. Practice Manager" autocomplete="organization-title">
+                        </div>
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label for="email">Email <span class="req">*</span></label>
+                            <input id="email" name="Email" type="email" required autocomplete="email">
+                        </div>
+                        <div class="field">
+                            <label for="phone">Phone <span class="opt">(optional)</span></label>
+                            <input id="phone" name="Phone" type="tel" autocomplete="tel">
+                        </div>
+                    </div>
+
+                    <div class="row2">
+                        <div class="field">
+                            <label for="sites">Number of sites <span class="req">*</span></label>
+                            <select id="sites" name="Number of sites" required>
+                                <option value="" selected disabled>Please select</option>
+                                <option>1</option>
+                                <option>2–3</option>
+                                <option>4–10</option>
+                                <option>More than 10</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="dentally">Do you use Dentally? <span class="req">*</span></label>
+                            <select id="dentally" name="Uses Dentally" required>
+                                <option value="" selected disabled>Please select</option>
+                                <option>Yes</option>
+                                <option>Switching to it</option>
+                                <option>Not yet</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="message">Anything you'd like us to know? <span class="opt">(optional)</span></label>
+                        <textarea id="message" name="Message" placeholder="What are you hoping to get out of your practice data?"></textarea>
+                    </div>
+
+                    <div class="field consent">
+                        <input id="consent" type="checkbox" required>
+                        <label for="consent">
+                            I'm happy for Analytically to contact me about this enquiry. See how we
+                            handle data on our <a href="/documents.html">Trust &amp; documents</a> page.
+                        </label>
+                    </div>
+
+                    <button type="submit" class="submit" id="submit-btn">Send enquiry</button>
+                    <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
+                </form>
+            </div>
+
+            <!-- ── Success state ── -->
+            <div class="success" id="success-view">
+                <div class="tick">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#15803D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </div>
+                <h2>Thanks — we've got your enquiry</h2>
+                <p>
+                    We'll be in touch at the email you gave us, usually within a couple of
+                    working days. In the meantime you can <a href="/">return to the homepage</a>.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Analytically is operated by Analytically Limited (company no.&nbsp;16242443).<br>
+        &copy; <span id="year">2026</span> Analytically Limited. All rights reserved.
+    </footer>
+
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+
+        const form      = document.getElementById('enquiry-form');
+        const statusEl  = document.getElementById('form-status');
+        const submitBtn = document.getElementById('submit-btn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            statusEl.classList.remove('err');
+            statusEl.textContent = '';
+
+            // Native validation (required fields, email format, consent box)
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+
+            try {
+                const res  = await fetch('https://api.web3forms.com/submit', {
+                    method: 'POST',
+                    body: new FormData(form),
+                });
+                const json = await res.json();
+                if (json.success) {
+                    document.getElementById('form-view').style.display = 'none';
+                    document.getElementById('success-view').style.display = 'block';
+                    return;
+                }
+                throw new Error(json.message || 'Submission failed');
+            } catch (err) {
+                statusEl.classList.add('err');
+                statusEl.textContent = 'Sorry, something went wrong sending your enquiry. '
+                    + 'Please try again, or email us directly at sales@analytically.info.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send enquiry';
+            }
+        });
+    </script>
+</body>
+</html>
