@@ -41,9 +41,10 @@ dental practice or patient data, which is held in our secured application — se
 ## Your choices
 
 Analytics cookies are optional and are set **only if you accept them**. When you first
-visit, a banner asks for your consent — **no analytics cookies are set, and Google
-Analytics is not loaded, unless you choose "Accept"**. You can change your decision at
-any time using the **"Cookie settings"** link in the page footer.
+visit, a banner asks for your consent. Until you choose **"Accept"**, the Google
+Analytics tag runs in a consent-**denied** mode that sets **no cookies** and does not
+identify you; accepting enables full analytics. You can change your decision at any time
+using the **"Cookie settings"** link in the page footer.
 
 You can also:
 
