@@ -3,14 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VZ89XSHWQZ"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-VZ89XSHWQZ');
-    </script>
+    <!-- Cookie consent + Google Analytics (gtag loads only after the visitor accepts) -->
+    <script src="/consent.js" defer></script>
     <title>Trust &amp; Documents — Analytically</title>
     <meta name="description" content="Security and data-protection documentation for Analytically.">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -122,7 +116,10 @@
     </main>
 
     <footer>
-        Analytically is operated by Analytically Limited (company no.&nbsp;16242443).
+        Analytically is operated by Analytically Limited (company no.&nbsp;16242443).<br>
+        <a href="/doc.html?doc=COOKIE_POLICY" style="color:var(--navy);font-weight:600;text-decoration:none">Cookie policy</a>
+        &nbsp;&middot;&nbsp;
+        <a href="#" onclick="anlyCookieSettings();return false;" style="color:var(--navy);font-weight:600;text-decoration:none">Cookie settings</a>
     </footer>
 </body>
 </html>

@@ -40,13 +40,18 @@ dental practice or patient data, which is held in our secured application — se
 
 ## Your choices
 
-Analytics cookies are optional. You can:
+Analytics cookies are optional and are set **only if you accept them**. When you first
+visit, a banner asks for your consent — **no analytics cookies are set, and Google
+Analytics is not loaded, unless you choose "Accept"**. You can change your decision at
+any time using the **"Cookie settings"** link in the page footer.
+
+You can also:
 
 - **Adjust your browser settings** to block or delete cookies at any time.
 - Install Google's [Analytics Opt-out Browser Add-on](https://tools.google.com/dlpage/gaoptout).
 - Use your browser's private / incognito mode.
 
-Blocking these cookies will not affect your ability to use the website.
+Declining analytics cookies will not affect your ability to use the website.
 
 ## Contact
 
