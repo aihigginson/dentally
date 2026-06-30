@@ -563,6 +563,15 @@
         localStorage.removeItem('_anly_id_token_exp');
     }
 
+    // Full recovery from a wedged auth state: an interrupted MSAL redirect can leave
+    // localStorage so that handleRedirectPromise never settles, hanging the app on
+    // "Loading...". This origin only stores auth data, so clearing all of it is safe
+    // and forces a clean sign-in on the next load.
+    function _clearAuthStorage() {
+        try { localStorage.clear(); } catch (e) {}
+        _cachedIdToken = null; _cachedIdTokenExpiry = 0;
+    }
+
     // Mobile / iOS-family browsers must use the redirect + cached-token path: Safari ITP
     // blocks the hidden-iframe acquireTokenSilent the desktop path relies on. Detect iOS by
     // UA, and ALSO iPadOS 13+ which reports a Mac desktop UA (caught via touch points) and
@@ -587,8 +596,28 @@
             cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
         });
 
-        // Catch the result of a loginRedirect / acquireTokenRedirect return
-        const redirectResult = await msalInstance.handleRedirectPromise();
+        // Catch the result of a loginRedirect / acquireTokenRedirect return.
+        // Race against a timeout: a wedged cache (interrupted redirect) can make
+        // handleRedirectPromise hang forever, leaving the shell stuck on "Loading...".
+        // If it stalls or throws, clear auth storage and reload once (guarded against
+        // loops via sessionStorage) so the user gets a clean sign-in instead of a hang.
+        let redirectResult = null;
+        try {
+            redirectResult = await Promise.race([
+                msalInstance.handleRedirectPromise(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('msal-init-timeout')), 10000)),
+            ]);
+        } catch (e) {
+            _devLog('[initAuth] MSAL init stalled/failed:', e && e.message);
+            if (!sessionStorage.getItem('_anly_auth_recovered')) {
+                sessionStorage.setItem('_anly_auth_recovered', '1');
+                _clearAuthStorage();
+                window.location.reload();
+                return new Promise(() => {}); // halt here; the page is reloading
+            }
+            // Recovery already attempted this session — fall through to the sign-in button.
+        }
+        sessionStorage.removeItem('_anly_auth_recovered');
         if (redirectResult?.account) {
             msalAccount = redirectResult.account;
             _cacheIdToken(redirectResult);
