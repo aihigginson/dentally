@@ -1255,13 +1255,22 @@
     // re-embed silently drops the buttonClicked handler and cross-report
     // navigation buttons stop working.
     function attachReportHandlers(r, sectionKey) {
+        let initialFiltersReasserted = false;
         r.on('loaded', () => {
             attachReportToSubnav(sectionKey, r);
-            applyFilters();
+            applyFilters(r);
         });
         r.on('rendered', () => {
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+            // Re-assert filters once the report has actually rendered. The setFilters
+            // on 'loaded' can land before the report is ready (NHS dropped the date
+            // filter on first display); a single guarded re-apply here fixes it
+            // without looping, since this report is now rendered and won't re-fire.
+            if (!initialFiltersReasserted) {
+                initialFiltersReasserted = true;
+                applyFilters(r);
+            }
         });
         r.on('buttonClicked', event => {
             const title = event.detail && event.detail.title ? event.detail.title : '';
@@ -1395,7 +1404,12 @@
 
     document.getElementById('f-active-only').addEventListener('change', () => loadFilters(true));
 
-    function applyFilters() {
+    // applyFilters()        -> apply current filter state to every embedded report
+    // applyFilters(report)  -> apply to a single report only (used to re-assert on
+    //                          first render, which fixes a race where setFilters on
+    //                          'loaded' lands before the report is ready to honour it
+    //                          — symptom: NHS ignored the date filter until changed).
+    function applyFilters(report) {
         const filters = [];
         if (filterState.site !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
@@ -1409,7 +1423,8 @@
         if (filterState.period !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Date Grouping', column: 'Date Grouping' }, operator: 'In', values: [filterState.period], filterType: 1 });
         }
-        Object.values(embeddedReports).forEach(r => r.setFilters(filters).catch(() => {}));
+        const targets = report ? [report] : Object.values(embeddedReports);
+        targets.forEach(r => r.setFilters(filters).catch(() => {}));
     }
 
     // ── Page name helper ────────────────────────────────────────────────────
