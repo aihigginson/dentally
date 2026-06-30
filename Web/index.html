@@ -253,6 +253,23 @@
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
         iframe { border: none; }
 
+        /* ── Definitions help panel ── */
+        .defs-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.28); opacity: 0; visibility: hidden; transition: opacity .18s; z-index: 60; }
+        .defs-overlay.open { opacity: 1; visibility: visible; }
+        .defs-panel { position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 92vw; background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.18); transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
+        .defs-overlay.open .defs-panel { transform: translateX(0); }
+        .defs-head { background: var(--navy); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+        .defs-title { font-size: 15px; font-weight: 600; }
+        .defs-sub { font-size: 12px; opacity: 0.82; margin-top: 2px; }
+        .defs-close { background: none; border: none; color: white; font-size: 24px; line-height: 1; cursor: pointer; padding: 0 2px; }
+        .defs-body { overflow-y: auto; padding: 4px 0 28px; flex: 1; }
+        .defs-group { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); padding: 16px 18px 4px; }
+        .defs-item { padding: 9px 18px; border-bottom: 1px solid var(--border); }
+        .defs-item-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 7px; }
+        .defs-badge { font-size: 10px; font-weight: 600; color: var(--navy); background: #EBF3F9; border-radius: 4px; padding: 1px 6px; }
+        .defs-item-desc { font-size: 12px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+        .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
+
         /* ── Targets section ── */
         .targets-save-btn {
             background: var(--navy); color: white; border: none; border-radius: 6px;
@@ -378,6 +395,10 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Filters
     </button>
+    <button class="filter-toggle" id="defs-toggle" title="Plain-English metric definitions">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+        Definitions
+    </button>
     <div class="nav-report-controls" id="nav-report-controls">
         <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -463,6 +484,20 @@
     </section>
 
 </main>
+
+<!-- ════════════════ METRIC DEFINITIONS PANEL ════════════════ -->
+<div class="defs-overlay" id="defs-overlay">
+    <aside class="defs-panel" role="dialog" aria-label="Metric definitions">
+        <div class="defs-head">
+            <div>
+                <div class="defs-title">Metric Definitions</div>
+                <div class="defs-sub" id="defs-sub">All metrics</div>
+            </div>
+            <button class="defs-close" id="defs-close" title="Close" aria-label="Close">&times;</button>
+        </div>
+        <div class="defs-body" id="defs-body"><div class="defs-loading">Loading...</div></div>
+    </aside>
+</div>
 
 <script src="/msal-browser.min.js"></script>
 <script src="/powerbi.min.js"></script>
@@ -899,6 +934,83 @@
             }
         });
     }
+
+    // ── Metric definitions help panel ────────────────────────────────────────
+    // Web tab -> Config.Metric_Definitions sections. Home has no metrics of its
+    // own (it surfaces cards from every section) so it maps to ALL, not zero.
+    const DEFN_SECTIONS = {
+        home:       null,             // null = every section
+        revenue:    ['revenue'],
+        patient:    ['patients'],
+        scheduling: ['scheduling'],
+        clinical:   ['treatment'],
+        nhs:        ['nhs'],
+    };
+    const DEFN_GROUP_LABELS = {
+        revenue: 'Revenue', patients: 'Patient', treatment: 'Clinical',
+        scheduling: 'Schedule', nhs: 'NHS',
+    };
+    const DEFN_GROUP_ORDER = ['revenue', 'patients', 'treatment', 'scheduling', 'nhs'];
+    const DEFN_FMT_BADGE   = { currency: '£', percent: '%', count: '#' };
+    let _defsMetrics = null;
+
+    const defsOverlay = document.getElementById('defs-overlay');
+    const defsBody    = document.getElementById('defs-body');
+    const defsSub     = document.getElementById('defs-sub');
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function openDefinitions() {
+        defsOverlay.classList.add('open');
+        if (!_defsMetrics) {
+            try {
+                const res = await authFetch('/api/definitions');
+                if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+                _defsMetrics = (await res.json()).metrics || [];
+            } catch (e) {
+                defsBody.innerHTML = '<div class="defs-loading">Failed to load: ' + escHtml(e.message) + '</div>';
+                return;
+            }
+        }
+        renderDefinitions();
+    }
+
+    function renderDefinitions() {
+        if (!_defsMetrics) return;
+        const wanted  = DEFN_SECTIONS[activeSection];   // null = all
+        const showAll = !wanted;
+        defsSub.textContent = showAll ? 'All metrics'
+            : (DEFN_GROUP_LABELS[wanted[0]] || '') + ' metrics';
+
+        let html = '';
+        DEFN_GROUP_ORDER.forEach(sec => {
+            if (!showAll && wanted.indexOf(sec) === -1) return;
+            const rows = _defsMetrics.filter(m => m.section === sec);
+            if (!rows.length) return;
+            if (showAll) html += '<div class="defs-group">' + escHtml(DEFN_GROUP_LABELS[sec]) + '</div>';
+            rows.forEach(m => {
+                const badge = DEFN_FMT_BADGE[m.format_type] || '';
+                html += '<div class="defs-item">' +
+                    '<div class="defs-item-name">' + escHtml(m.display_name) +
+                    (badge ? '<span class="defs-badge">' + badge + '</span>' : '') + '</div>' +
+                    '<div class="defs-item-desc">' + escHtml(m.long_description) + '</div>' +
+                    '</div>';
+            });
+        });
+        defsBody.innerHTML = html || '<div class="defs-loading">No definitions for this section.</div>';
+    }
+
+    function closeDefinitions() { defsOverlay.classList.remove('open'); }
+
+    document.getElementById('defs-toggle').addEventListener('click', openDefinitions);
+    document.getElementById('defs-close').addEventListener('click', closeDefinitions);
+    defsOverlay.addEventListener('click', e => { if (e.target === defsOverlay) closeDefinitions(); });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && defsOverlay.classList.contains('open')) closeDefinitions();
+    });
 
     // ── Targets data entry ───────────────────────────────────────────────────
     let _targetsLoaded   = false;
