@@ -17,6 +17,7 @@ CREATE TABLE [Gold].[Dim_GL_Account](
 	[Account_Class] [varchar](50) NULL,
 	[PL_Group] [varchar](30) NULL,
 	[Is_PL] [bit] NULL,
+	[EBITDA_Item] [bit] NULL,
 	[Reporting_Code] [varchar](50) NULL,
 	[Reporting_Code_Name] [varchar](255) NULL,
 	[Status] [varchar](50) NULL,

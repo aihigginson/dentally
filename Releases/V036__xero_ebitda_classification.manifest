@@ -1,0 +1,28 @@
+# =====================================================================
+# Release V036 -- Xero EBITDA classification + Depreciation/Interest
+# =====================================================================
+# Splits PL_Group into Income / Cost of Sales / Operating Expenses / Depreciation /
+# Finance Costs, and adds an EBITDA_Item flag on Dim_GL_Account so EBITDA excludes
+# depreciation/amortisation (Type DEPRECIATN) and interest/finance. The seed now
+# posts Depreciation (500) + Loan Interest (510) accounts, giving a real
+# EBITDA -> Net bridge.
+#
+# Prereq: re-run `python API/seed_onelake.py --tenants 11` first (writes the new
+# stage_xero_* lines incl. depreciation + interest).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V036__xero_ebitda_classification.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Silver.Xero_Accounts.Table.sql
+DEPLOY   Fabric\Gold.Dim_GL_Account.Table.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Accounts.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_GL_Account.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Accounts @Tenant_ID=11,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Lines @Tenant_ID=11,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Accounts @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Finance_Lines @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_GL_Account @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Finance @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

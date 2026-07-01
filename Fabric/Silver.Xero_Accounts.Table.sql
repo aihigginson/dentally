@@ -13,8 +13,9 @@ CREATE TABLE [Silver].[Xero_Accounts](
 	[Name] [varchar](255) NULL,
 	[Account_Type] [varchar](50) NULL,
 	[Account_Class] [varchar](50) NULL,
-	[PL_Group] [varchar](30) NULL,          -- Income | Cost of Sales | Operating Expenses
+	[PL_Group] [varchar](30) NULL,          -- Income|Cost of Sales|Operating Expenses|Depreciation|Finance Costs
 	[Is_PL] [bit] NULL,
+	[EBITDA_Item] [bit] NULL,               -- 1 = in EBITDA (excludes depreciation/amortisation/interest/tax)
 	[Reporting_Code] [varchar](50) NULL,
 	[Reporting_Code_Name] [varchar](255) NULL,
 	[Status] [varchar](50) NULL,
