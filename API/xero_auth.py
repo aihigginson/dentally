@@ -85,13 +85,15 @@ def main():
     port = redirect.port or 80
 
     # 1. Build the authorize URL and open the browser.
+    # quote_via=quote encodes spaces as %20 (not +). Xero's authorize endpoint
+    # rejects '+' between scopes as one invalid scope string (invalid_scope).
     auth_url = AUTHORIZE_URL + "?" + urllib.parse.urlencode({
         "response_type": "code",
         "client_id":     creds.XERO_CLIENT_ID,
         "redirect_uri":  creds.XERO_REDIRECT_URI,
         "scope":         SCOPES,
         "state":         "analytically-slice",
-    })
+    }, quote_via=urllib.parse.quote)
     print("Opening browser for Xero consent... (authorise, then pick the Demo Company)")
     print("If it doesn't open, paste this URL:\n" + auth_url + "\n")
     webbrowser.open(auth_url)
