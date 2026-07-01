@@ -6,9 +6,10 @@ __pycache__/
 # Local service-principal credentials for Scripts/Run_Tests.ps1 (never commit)
 Scripts/fabric_creds.local.ps1
 
-# Local Xero OAuth credentials + token cache (never commit)
+# Local Xero OAuth credentials + token cache + raw data dumps (never commit)
 API/xero_creds.local.py
 API/xero_token.local.json
+API/xero_data/
 
 # Python test caches
 .pytest_cache/
