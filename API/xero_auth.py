@@ -38,15 +38,23 @@ AUTHORIZE_URL   = "https://login.xero.com/identity/connect/authorize"
 TOKEN_URL       = "https://identity.xero.com/connect/token"
 CONNECTIONS_URL = "https://api.xero.com/connections"
 
-# Profitability slice — minimal, universally-valid set:
-#   settings.read     = chart of accounts (Accounts)
-#   transactions.read = invoices / bills / bank transactions (revenue + costs)
-#   offline_access    = refresh token
-# (journals.read / reports.read were rejected as invalid_scope on this app — add
-#  back later once the exact accepted tokens are confirmed.)
+# Profitability slice — Xero's GRANULAR scopes (the old bundles like
+# accounting.transactions.read / accounting.journals.read don't exist):
+#   settings.read                = chart of accounts (Accounts)
+#   invoices.read                = ACCREC (revenue) + ACCPAY (bills/costs)
+#   banktransactions.read        = cash spend/receive
+#   manualjournals.read          = manual journals
+#   payments.read                = payments
+#   reports.profitandloss.read   = P&L report (reconciliation)
+#   offline_access               = refresh token
 SCOPES = (
     "openid profile email "
-    "accounting.transactions.read accounting.settings.read "
+    "accounting.settings.read "
+    "accounting.invoices.read "
+    "accounting.banktransactions.read "
+    "accounting.manualjournals.read "
+    "accounting.payments.read "
+    "accounting.reports.profitandloss.read "
     "offline_access"
 )
 
