@@ -10,7 +10,8 @@ Usage:
 Requirements (already installed):
     deltalake, pyarrow, pandas, azure-identity
 """
-import sys, json, os, argparse
+import sys, json, os, argparse, random
+from collections import defaultdict
 from datetime import datetime, timezone
 import pandas as pd
 import pyarrow as pa
@@ -70,6 +71,90 @@ def write_stage(records: list, table_name: str):
         storage_options = get_storage_options(),
     )
     print(" done.")
+
+
+# ── Xero finance (synthetic P&L for margin demos) ─────────────────────────────
+# Generates a Xero-shaped chart of accounts + monthly P&L transaction lines for a
+# tenant, scaled to its ACTUAL Dentally invoiced revenue, and written to the same
+# stage_xero_accounts / stage_xero_lines tables the Xero slice reads. Income tracks
+# the practice's real monthly revenue; costs are a realistic labour-heavy dental
+# structure giving ~15-20% net margin, so Gold.Fact_Finance yields a coherent,
+# self-contained margin report. (Line_Amount_Types='NoTax' so Net_Amount = Line_Amount.)
+def generate_xero_finance(tdef, data, load_ts):
+    tid  = tdef['tenant_id']
+    xtid = _u5(tid, 'xero_tenant')
+    rng  = random.Random(1000 + tid)
+
+    coa = [  # (code, name, type, class)
+        ('090', 'Business Bank Account',    'BANK',        'ASSET'),
+        ('200', 'Patient Income - NHS',     'SALES',       'REVENUE'),
+        ('201', 'Patient Income - Private', 'SALES',       'REVENUE'),
+        ('202', 'Plan Income',              'SALES',       'REVENUE'),
+        ('300', 'Laboratory Fees',          'DIRECTCOSTS', 'EXPENSE'),
+        ('310', 'Dental Materials',         'DIRECTCOSTS', 'EXPENSE'),
+        ('320', 'Associate Fees',           'DIRECTCOSTS', 'EXPENSE'),
+        ('400', 'Staff Salaries',           'OVERHEADS',   'EXPENSE'),
+        ('410', 'Rent',                     'OVERHEADS',   'EXPENSE'),
+        ('420', 'Business Rates',           'OVERHEADS',   'EXPENSE'),
+        ('430', 'Light, Power, Heating',    'OVERHEADS',   'EXPENSE'),
+        ('440', 'Equipment Lease',          'OVERHEADS',   'EXPENSE'),
+        ('450', 'Advertising & Marketing',  'OVERHEADS',   'EXPENSE'),
+        ('460', 'Insurance',                'OVERHEADS',   'EXPENSE'),
+        ('470', 'Software & IT',            'OVERHEADS',   'EXPENSE'),
+        ('480', 'Repairs & Maintenance',    'OVERHEADS',   'EXPENSE'),
+        ('490', 'Professional Fees',        'OVERHEADS',   'EXPENSE'),
+        ('495', 'General Expenses',         'OVERHEADS',   'EXPENSE'),
+    ]
+    name_by_code = {c: n for c, n, _, _ in coa}
+    accounts = [{
+        'Tenant_ID': str(tid), 'Xero_Tenant_ID': xtid,
+        'Account_ID': _u5(tid, 'xero_acct', code), 'Code': code, 'Name': name,
+        'Type': typ, 'Class': cls, 'Reporting_Code': None, 'Reporting_Code_Name': None,
+        'Status': 'ACTIVE', 'DW_Stage_Loaded_At': load_ts,
+    } for code, name, typ, cls in coa]
+
+    # Monthly Dentally revenue (YYYY-MM -> total invoiced)
+    rev_by_month = defaultdict(float)
+    for inv in data['invoices']:
+        d, amt = inv.get('dated_on'), float(inv.get('amount') or 0)
+        if d and amt > 0:
+            rev_by_month[str(d)[:7]] += amt
+    if not rev_by_month:
+        return accounts, []
+    avg_rev = sum(rev_by_month.values()) / len(rev_by_month)
+
+    inc = {'200': 0.55, '201': 0.35, '202': 0.10} if tdef.get('nhs') \
+          else {'200': 0.05, '201': 0.85, '202': 0.10}
+    var_cost = {'320': 0.34, '300': 0.07, '310': 0.05, '400': 0.17,
+                '430': 0.018, '450': 0.02, '480': 0.01, '495': 0.012}
+    fixed_amt = {c: round(avg_rev * f, 2) for c, f in
+                 {'410': 0.055, '420': 0.012, '440': 0.02, '460': 0.009,
+                  '470': 0.011, '490': 0.006}.items()}
+
+    lines = []
+    def add(month, code, doc_type, amount):
+        if not amount or amount <= 0:
+            return
+        doc_id = _u5(tid, 'xero_doc', code, month)
+        lines.append({
+            'Tenant_ID': str(tid), 'Xero_Tenant_ID': xtid, 'Source': 'INVOICE',
+            'Doc_ID': doc_id, 'Doc_Number': None, 'Doc_Type': doc_type, 'Doc_Status': 'AUTHORISED',
+            'Doc_Date': f'{month}-15', 'Contact_Name': None, 'Line_Amount_Types': 'NoTax',
+            'Line_Item_ID': _u5(doc_id, 'line'), 'Account_Code': code,
+            'Account_ID': _u5(tid, 'xero_acct', code), 'Description': name_by_code[code],
+            'Line_Amount': round(amount, 2), 'Tax_Amount': 0, 'Tracking': [],
+            'DW_Stage_Loaded_At': load_ts,
+        })
+
+    for month in sorted(rev_by_month):
+        rev = rev_by_month[month]
+        for code, frac in inc.items():
+            add(month, code, 'ACCREC', rev * frac)
+        for code, frac in var_cost.items():
+            add(month, code, 'ACCPAY', rev * frac * rng.uniform(0.92, 1.08))
+        for code, amt in fixed_amt.items():
+            add(month, code, 'ACCPAY', amt)
+    return accounts, lines
 
 
 # ── Tenant definitions (matches notebook) ─────────────────────────────────────
@@ -422,6 +507,7 @@ def main():
 
     # ── Phase 1: generate all tenant data and tag with tenant_id ─────────────
     combined = {stage_name: [] for _, stage_name, _ in TABLE_MAP}
+    xero_accounts_all, xero_lines_all = [], []
 
     for tid in tenant_ids:
         tdef = SEED_TENANTS[tid]
@@ -434,6 +520,10 @@ def main():
               f"invoices={len(data['invoices']):,}  "
               f"claims={len(data['nhs_claims']):,}")
 
+        xa, xl = generate_xero_finance(tdef, data, load_ts)
+        xero_accounts_all.extend(xa); xero_lines_all.extend(xl)
+        print(f"  xero: {len(xa)} accounts, {len(xl):,} P&L lines")
+
         for data_key, stage_name, wrap in TABLE_MAP:
             records = [data[data_key]] if wrap else data[data_key]
             for r in records:
@@ -445,6 +535,10 @@ def main():
     print('\nWriting to OneLake (full overwrite per table)...')
     for _, stage_name, _ in TABLE_MAP:
         write_stage(combined[stage_name], stage_name)
+
+    # Xero finance stage tables (PascalCase schema the Xero slice reads)
+    write_stage(xero_accounts_all, 'xero_accounts')
+    write_stage(xero_lines_all,    'xero_lines')
 
     print('\nAll tenants seeded. Run Audit.usp_Load_Bronze for tenants 11-14.')
 
