@@ -4,21 +4,22 @@
 --  Initial Date     :  2026-07-01
 --  History          :
 --    *01     2026-07-01  AIH  Initial release (Xero profitability slice)
+--    *02     2026-07-01  AIH  All-tenant @Mode signature (house Silver / orchestration);
+--                             full rebuild across all tenants.
 --  Notes            :  Ports API/xero_model.py (reconciled to Xero's P&L). Keeps only
 --                      P&L-affecting lines (join to Is_PL accounts, status
 --                      AUTHORISED/PAID/POSTED -> drops DRAFT/DELETED/VOIDED). Net_Amount
 --                      strips tax on tax-inclusive lines. PL_Amount is the signed P&L
 --                      contribution: inflow (ACCREC/RECEIVE, +) vs outflow (ACCPAY/SPEND)
---                      relative to account class -- a refund received onto an expense
---                      account reduces it. Snapshot source -> full refresh per tenant.
---  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Finance_Lines @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
+--                      relative to account class. Full rebuild (snapshot source).
+--  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Finance_Lines @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Silver].[usp_Load_Xero_Finance_Lines]
 GO
 CREATE PROCEDURE [Silver].[usp_Load_Xero_Finance_Lines]
 (
-      @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
+      @Mode         VARCHAR(100)     = 'TEST'
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
@@ -32,7 +33,7 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        DELETE FROM Silver.Xero_Finance_Lines WHERE Tenant_ID = @Tenant_ID;
+        DELETE FROM Silver.Xero_Finance_Lines;
         SET @My_Deletes = @@ROWCOUNT;
 
         WITH src AS (
@@ -55,8 +56,7 @@ BEGIN
             FROM Bronze.Xero_Lines AS l
             INNER JOIN Silver.Xero_Accounts AS a
                 ON a.Tenant_ID = l.Tenant_ID AND a.Code = l.Account_Code AND a.Is_PL = 1
-            WHERE l.Tenant_ID = @Tenant_ID
-              AND l.Doc_Status IN ('AUTHORISED', 'PAID', 'POSTED')
+            WHERE l.Doc_Status IN ('AUTHORISED', 'PAID', 'POSTED')
         )
         INSERT INTO Silver.Xero_Finance_Lines (Tenant_ID, Xero_Tenant_ID, Source, Doc_ID, Doc_Number, Doc_Type, Doc_Status, Doc_Date, Contact_Name, Account_ID, Account_Code, Account_Class, PL_Group, Description, Net_Amount, PL_Amount, Line_Item_ID, DW_Loaded_At)
         SELECT

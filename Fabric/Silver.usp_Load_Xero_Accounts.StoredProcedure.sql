@@ -4,16 +4,19 @@
 --  Initial Date     :  2026-07-01
 --  History          :
 --    *01     2026-07-01  AIH  Initial release (Xero profitability slice)
---  Notes            :  Types the Bronze chart of accounts and derives PL_Group /
---                      Is_PL from account Class + Type. Upsert on Tenant_ID+Account_ID.
---  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Accounts @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
+--    *02     2026-07-01  AIH  All-tenant @Mode signature (house Silver pattern /
+--                             orchestration); derives PL_Group / Is_PL.
+--  Notes            :  Types the Bronze chart of accounts (all tenants) and derives
+--                      PL_Group / Is_PL from account Class + Type. Upsert on
+--                      Tenant_ID + Account_ID.
+--  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Accounts @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Silver].[usp_Load_Xero_Accounts]
 GO
 CREATE PROCEDURE [Silver].[usp_Load_Xero_Accounts]
 (
-      @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
+      @Mode         VARCHAR(100)     = 'TEST'
+    , @Logging      SMALLINT         = 1
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
@@ -46,8 +49,7 @@ BEGIN
             , Reporting_Code_Name
             , Status
         INTO #src
-        FROM Bronze.Xero_Accounts
-        WHERE Tenant_ID = @Tenant_ID;
+        FROM Bronze.Xero_Accounts;
 
         UPDATE tgt SET
               tgt.Xero_Tenant_ID      = src.Xero_Tenant_ID
@@ -70,14 +72,6 @@ BEGIN
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Silver.Xero_Accounts tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Account_ID = src.Account_ID);
         SET @My_Inserts = @@ROWCOUNT;
-
-        IF @Full_Refresh = 1
-        BEGIN
-            DELETE tgt FROM Silver.Xero_Accounts AS tgt
-            WHERE tgt.Tenant_ID = @Tenant_ID
-              AND NOT EXISTS (SELECT 1 FROM #src WHERE Account_ID = tgt.Account_ID);
-            SET @My_Deletes = @@ROWCOUNT;
-        END
 
         DROP TABLE IF EXISTS #src;
 

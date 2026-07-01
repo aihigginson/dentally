@@ -1,0 +1,29 @@
+# =====================================================================
+# Release V035 -- Xero orchestration + load Tenant 11 finance (margin demo)
+# =====================================================================
+# - Converts the Xero Silver procs to the all-tenant @Mode signature (house Silver /
+#   orchestration pattern; Bronze stays per-tenant).
+# - Registers the 6 Xero load procs in Audit.Process_Config and the auto-generated
+#   Audit.Process_Dependency edges, so the nightly Orchestration Notebook runs them
+#   in dependency order (Bronze per tenant -> Silver -> Gold).
+# - Loads Tenant 11's seeded Xero finance through the stack (Fact_Finance gains T11).
+#
+# Prereq: python API/seed_onelake.py --tenants 11  (writes stage_xero_* for T11).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V035__xero_orchestration_and_tenant11.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Silver.usp_Load_Xero_Accounts.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Finance_Lines.StoredProcedure.sql
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Accounts @Tenant_ID=11,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Lines @Tenant_ID=11,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Accounts @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Finance_Lines @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_GL_Account @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Finance @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST
