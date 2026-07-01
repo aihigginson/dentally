@@ -104,6 +104,8 @@ def generate_xero_finance(tdef, data, load_ts):
         ('480', 'Repairs & Maintenance',    'OVERHEADS',   'EXPENSE'),
         ('490', 'Professional Fees',        'OVERHEADS',   'EXPENSE'),
         ('495', 'General Expenses',         'OVERHEADS',   'EXPENSE'),
+        ('500', 'Depreciation',             'DEPRECIATN',  'EXPENSE'),  # excluded from EBITDA (D&A)
+        ('510', 'Loan Interest',            'OVERHEADS',   'EXPENSE'),  # excluded from EBITDA (interest)
     ]
     name_by_code = {c: n for c, n, _, _ in coa}
     accounts = [{
@@ -129,7 +131,8 @@ def generate_xero_finance(tdef, data, load_ts):
                 '430': 0.018, '450': 0.02, '480': 0.01, '495': 0.012}
     fixed_amt = {c: round(avg_rev * f, 2) for c, f in
                  {'410': 0.055, '420': 0.012, '440': 0.02, '460': 0.009,
-                  '470': 0.011, '490': 0.006}.items()}
+                  '470': 0.011, '490': 0.006,
+                  '500': 0.03, '510': 0.015}.items()}  # depreciation + interest (below EBITDA)
 
     lines = []
     def add(month, code, doc_type, amount):

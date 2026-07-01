@@ -39,12 +39,22 @@ BEGIN
             , Account_Type
             , Account_Class
             , CASE
-                  WHEN Account_Class = 'REVENUE'                                    THEN 'Income'
-                  WHEN Account_Class = 'EXPENSE' AND Account_Type = 'DIRECTCOSTS'   THEN 'Cost of Sales'
-                  WHEN Account_Class = 'EXPENSE'                                    THEN 'Operating Expenses'
+                  WHEN Account_Class = 'REVENUE'                                                      THEN 'Income'
+                  WHEN Account_Class = 'EXPENSE' AND Account_Type = 'DEPRECIATN'                       THEN 'Depreciation'
+                  WHEN Account_Class = 'EXPENSE' AND (Name LIKE '%Interest%' OR Name LIKE '%Finance%') THEN 'Finance Costs'
+                  WHEN Account_Class = 'EXPENSE' AND Account_Type = 'DIRECTCOSTS'                      THEN 'Cost of Sales'
+                  WHEN Account_Class = 'EXPENSE'                                                       THEN 'Operating Expenses'
                   ELSE NULL
               END AS PL_Group
             , CASE WHEN Account_Class IN ('REVENUE', 'EXPENSE') THEN 1 ELSE 0 END AS Is_PL
+            -- EBITDA excludes depreciation/amortisation (Type DEPRECIATN) and interest/finance.
+            , CASE
+                  WHEN Account_Class = 'REVENUE'                                                      THEN 1
+                  WHEN Account_Class = 'EXPENSE' AND Account_Type = 'DEPRECIATN'                       THEN 0
+                  WHEN Account_Class = 'EXPENSE' AND (Name LIKE '%Interest%' OR Name LIKE '%Finance%') THEN 0
+                  WHEN Account_Class = 'EXPENSE'                                                       THEN 1
+                  ELSE 0
+              END AS EBITDA_Item
             , Reporting_Code
             , Reporting_Code_Name
             , Status
@@ -59,6 +69,7 @@ BEGIN
             , tgt.Account_Class       = src.Account_Class
             , tgt.PL_Group            = src.PL_Group
             , tgt.Is_PL               = src.Is_PL
+            , tgt.EBITDA_Item         = src.EBITDA_Item
             , tgt.Reporting_Code      = src.Reporting_Code
             , tgt.Reporting_Code_Name = src.Reporting_Code_Name
             , tgt.Status              = src.Status
@@ -67,8 +78,8 @@ BEGIN
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.Account_ID = src.Account_ID;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO Silver.Xero_Accounts (Tenant_ID, Xero_Tenant_ID, Account_ID, Code, Name, Account_Type, Account_Class, PL_Group, Is_PL, Reporting_Code, Reporting_Code_Name, Status, DW_Loaded_At, DW_Updated_At)
-        SELECT src.Tenant_ID, src.Xero_Tenant_ID, src.Account_ID, src.Code, src.Name, src.Account_Type, src.Account_Class, src.PL_Group, src.Is_PL, src.Reporting_Code, src.Reporting_Code_Name, src.Status, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Silver.Xero_Accounts (Tenant_ID, Xero_Tenant_ID, Account_ID, Code, Name, Account_Type, Account_Class, PL_Group, Is_PL, EBITDA_Item, Reporting_Code, Reporting_Code_Name, Status, DW_Loaded_At, DW_Updated_At)
+        SELECT src.Tenant_ID, src.Xero_Tenant_ID, src.Account_ID, src.Code, src.Name, src.Account_Type, src.Account_Class, src.PL_Group, src.Is_PL, src.EBITDA_Item, src.Reporting_Code, src.Reporting_Code_Name, src.Status, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Silver.Xero_Accounts tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Account_ID = src.Account_ID);
         SET @My_Inserts = @@ROWCOUNT;

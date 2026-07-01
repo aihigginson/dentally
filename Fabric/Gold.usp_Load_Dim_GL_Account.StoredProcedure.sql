@@ -28,7 +28,7 @@ BEGIN
     BEGIN TRY
 
         SELECT Tenant_ID, Account_ID, Code, Name, Account_Type, Account_Class,
-               PL_Group, Is_PL, Reporting_Code, Reporting_Code_Name, Status
+               PL_Group, Is_PL, EBITDA_Item, Reporting_Code, Reporting_Code_Name, Status
         INTO #src
         FROM Silver.Xero_Accounts;
 
@@ -39,6 +39,7 @@ BEGIN
             , tgt.Account_Class       = src.Account_Class
             , tgt.PL_Group            = src.PL_Group
             , tgt.Is_PL               = src.Is_PL
+            , tgt.EBITDA_Item         = src.EBITDA_Item
             , tgt.Reporting_Code      = src.Reporting_Code
             , tgt.Reporting_Code_Name = src.Reporting_Code_Name
             , tgt.Status              = src.Status
@@ -49,11 +50,11 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         DECLARE @base BIGINT = ISNULL((SELECT MAX(pk_GL_Account) FROM Gold.Dim_GL_Account WHERE pk_GL_Account > 0), 0);
-        INSERT INTO Gold.Dim_GL_Account (pk_GL_Account, Tenant_ID, bk_Account_ID, Account_Code, Account_Name, Account_Type, Account_Class, PL_Group, Is_PL, Reporting_Code, Reporting_Code_Name, Status, DW_Created_At, DW_Updated_At)
+        INSERT INTO Gold.Dim_GL_Account (pk_GL_Account, Tenant_ID, bk_Account_ID, Account_Code, Account_Name, Account_Type, Account_Class, PL_Group, Is_PL, EBITDA_Item, Reporting_Code, Reporting_Code_Name, Status, DW_Created_At, DW_Updated_At)
         SELECT
               @base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Account_ID)
             , src.Tenant_ID, src.Account_ID, src.Code, src.Name, src.Account_Type, src.Account_Class
-            , src.PL_Group, src.Is_PL, src.Reporting_Code, src.Reporting_Code_Name, src.Status
+            , src.PL_Group, src.Is_PL, src.EBITDA_Item, src.Reporting_Code, src.Reporting_Code_Name, src.Status
             , SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_GL_Account tgt WHERE tgt.bk_Account_ID = src.Account_ID AND tgt.Tenant_ID = src.Tenant_ID);
