@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V037 -- Security.Application_Users module access flags
+# =====================================================================
+# Adds per-module menu access booleans (Access_Home/Revenue/Patient/Schedule/
+# Clinical/NHS + the not-yet-built Day_Book/Finance/My_Data/Marketing) and
+# Practitioner_Full_Name to Security.Application_Users, so App menus can be gated
+# per user and sold as separate subscriptions. Existing menus default ON, new
+# modules OFF. MIGRATE (ALTER + seed) preserves the live rows -- the canonical
+# Table.sql/Data.sql are updated to match for future full rebuilds but are NOT
+# redeployed here (that would DROP/CREATE and wipe the live users).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V037__application_users_access_flags.manifest
+# =====================================================================
+
+MIGRATE  Migrations\V037__application_users_access_flags.sql
+
+TEST

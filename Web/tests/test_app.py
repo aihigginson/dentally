@@ -105,6 +105,7 @@ def test_embed_success_for_provisioned_user(client, appmod, monkeypatch):
     monkeypatch.setattr(appmod, '_auth', lambda: ('u@x.com', None))
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
     monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Alice', 7, [11], False))
+    monkeypatch.setattr(appmod, '_get_user_access', lambda cur, upn: ({'revenue': True}, None))
     monkeypatch.setattr(appmod, '_pbi_token', lambda: 'pbi-token')
 
     class FakeResp:
@@ -125,6 +126,35 @@ def test_embed_success_for_provisioned_user(client, appmod, monkeypatch):
     j = r.get_json()
     assert j['token'] == 'embed-token'
     assert j['embedUrl'] == 'https://embed'
+
+
+def test_embed_forbids_when_module_not_enabled(client, appmod, monkeypatch):
+    # Provisioned tenant user, but the requested module isn't in their subscription.
+    monkeypatch.setattr(appmod, '_auth', lambda: ('u@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Alice', 7, [11], False))
+    monkeypatch.setattr(appmod, '_get_user_access', lambda cur, upn: ({'revenue': False}, None))
+    assert client.get('/api/embed-token?report=revenue').status_code == 403
+
+
+# ── _get_user_access(): flags -> {section: bool}, practitioner ────────────────
+
+def test_get_user_access_flags(appmod):
+    # 10 access columns (order matches _ACCESS_COLUMNS) + Practitioner_Full_Name.
+    row = (1, 0, 1, None, 1, 1, 0, 0, 0, 0, 'Dr Alice')
+    access, pract = appmod._get_user_access(FakeCursor(one_row=row), 'alice@x.com')
+    assert access['home'] is True
+    assert access['revenue'] is False
+    assert access['scheduling'] is False   # NULL -> False (fail-closed)
+    assert access['nhs'] is True
+    assert access['marketing'] is False
+    assert pract == 'Dr Alice'
+
+
+def test_get_user_access_no_row(appmod):
+    access, pract = appmod._get_user_access(FakeCursor(one_row=None), 'nobody@x.com')
+    assert all(v is False for v in access.values())
+    assert pract is None
 
 
 # ── Protected routes forbid unprovisioned users ───────────────────────────────
