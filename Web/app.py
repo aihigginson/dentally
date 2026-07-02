@@ -56,6 +56,39 @@ def _attach_request_id(response):
         response.headers['X-Request-ID'] = rid
     return response
 
+
+@app.after_request
+def _security_headers(response):
+    # Baseline hardening headers for the authenticated app. The app itself must
+    # never be framed (clickjacking a signed-in session); it embeds Power BI in an
+    # iframe, but that is us framing PBI, not the reverse, so DENY is safe here.
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    # Content-Security-Policy. The allowlist is scoped to exactly what the app loads:
+    #   - script/style: same-origin files + the inline <script>/<style> in index.html
+    #   - connect: our /api + AAD token endpoints + PBI REST hosts
+    #   - frame-src: the PBI report iframe, and AAD's hidden-iframe silent-token flow
+    #   - frame-ancestors 'none': mirrors X-Frame-Options DENY (nobody may frame us)
+    # Set CSP_MODE=report to ship it as report-only (observe violations without
+    # blocking); anything else / unset enforces it.
+    _csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self' https://login.microsoftonline.com https://*.powerbi.com https://api.powerbi.com; "
+        "frame-src https://app.powerbi.com https://*.powerbi.com https://login.microsoftonline.com; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    _csp_header = ('Content-Security-Policy-Report-Only'
+                  if os.environ.get('CSP_MODE', '').lower() == 'report'
+                  else 'Content-Security-Policy')
+    response.headers.setdefault(_csp_header, _csp)
+    return response
+
 APP_ENV        = os.environ.get('APP_ENV', 'prod')
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
