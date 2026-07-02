@@ -812,7 +812,12 @@
         if (firstTab) firstTab.classList.add('active');
         activateSection(firstKey);
 
-        if (window.innerWidth > 768) {
+        // Single-report users (e.g. a practitioner's "My Data" or front-desk "Day Book")
+        // get a clean, focused view: the one report auto-selected, menu bar hidden.
+        const singleReport = NAV_ORDER.filter(k => access[k]).length === 1;
+        if (singleReport) document.querySelector('.nav').style.display = 'none';
+
+        if (!singleReport && window.innerWidth > 768) {
             filterBar.classList.add('open');
             filterToggleBtn.classList.add('active');
         }
