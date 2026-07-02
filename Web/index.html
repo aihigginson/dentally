@@ -802,22 +802,28 @@
         //    on the first section they can actually see (not always Home). ──
         const access = data.access || {};
         userAccess = access;
+        practitionerName = data.practitioner_full_name || null;
         document.querySelectorAll('.nav-tab').forEach(tab => {
             const key = tab.dataset.section;
             if (key && !access[key]) tab.style.display = 'none';
         });
         const firstKey = NAV_ORDER.find(k => access[k]) || 'home';
+
+        // Single-report users (e.g. a practitioner's "My Data" or front-desk "Day Book")
+        // get a focused view: the report-picker tabs are hidden (the Filters/Definitions/
+        // Fullscreen controls stay, so My Data can still show its locked practitioner).
+        const singleReport = NAV_ORDER.filter(k => access[k]).length === 1;
+        myDataLock = singleReport && firstKey === 'my_data';
+        if (singleReport) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.style.display = 'none');
+        }
+
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         const firstTab = document.querySelector(`.nav-tab[data-section="${firstKey}"]`);
         if (firstTab) firstTab.classList.add('active');
         activateSection(firstKey);
 
-        // Single-report users (e.g. a practitioner's "My Data" or front-desk "Day Book")
-        // get a clean, focused view: the one report auto-selected, menu bar hidden.
-        const singleReport = NAV_ORDER.filter(k => access[k]).length === 1;
-        if (singleReport) document.querySelector('.nav').style.display = 'none';
-
-        if (!singleReport && window.innerWidth > 768) {
+        if (window.innerWidth > 768) {
             filterBar.classList.add('open');
             filterToggleBtn.classList.add('active');
         }
@@ -904,6 +910,8 @@
     // Per-module access map from /api/me ({section: bool}); gates both the visible
     // menu and the Home report's cross-report nav buttons.
     let userAccess = {};
+    let practitionerName = null;   // Practitioner_Full_Name from /api/me (My Data lock)
+    let myDataLock = false;        // true when the user's only report is My Data
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -943,6 +951,8 @@
             filterToggleBtn.style.visibility = '';
             initSubnav(key);
             loadEmbedsInSection(key);
+            // My Data is always scoped to the user's own practitioner.
+            if (key === 'my_data') selectMyDataPractitioner();
         }
     }
 
@@ -1482,6 +1492,23 @@
         applyFilters();
     });
 
+    // My Data is always scoped to the user's own practitioner: force the practitioner
+    // filter to Practitioner_Full_Name and reflect it in the dropdown (adding the option
+    // if the tenant list doesn't already include it). Fires whenever My Data is selected.
+    function selectMyDataPractitioner() {
+        if (!practitionerName) return;
+        let opt = [...selPract.options].find(o => o.textContent === practitionerName);
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.value = 'me'; opt.textContent = practitionerName;
+            selPract.appendChild(opt);
+        }
+        selPract.value = opt.value;
+        filterState.pract = opt.value;
+        refreshBadge();
+        applyFilters();
+    }
+
     function loadFilters(sitesAlreadyLoaded) {
         const activeOnly = document.getElementById('f-active-only').checked ? '1' : '0';
         const role = filterState.role;
@@ -1495,6 +1522,17 @@
                         o.value = s.id; o.textContent = s.name;
                         selSite.appendChild(o);
                     });
+                }
+                if (myDataLock) {
+                    // Single-report "My Data": the practitioner list is just this user.
+                    while (selPract.options.length > 0) selPract.remove(0);
+                    const o = document.createElement('option');
+                    o.value = 'me'; o.textContent = practitionerName || 'Me';
+                    selPract.appendChild(o);
+                    selPract.value = 'me'; filterState.pract = 'me';
+                    refreshBadge();
+                    applyFilters();
+                    return;
                 }
                 selPract.options[0].textContent = ROLE_ALL_LABEL[role] || 'All practitioners';
                 while (selPract.options.length > 1) selPract.remove(1);
