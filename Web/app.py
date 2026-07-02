@@ -265,10 +265,16 @@ def embed_token():
         conn = _fabric_conn()
         cur  = conn.cursor()
         _, client_id, tids, _ = _get_user_info(cur, upn)
+        access, _ = _get_user_access(cur, upn)
         conn.close()
     except Exception:
         return jsonify({'error': 'Authorization check failed'}), 500
     if client_id is None or not tids:
+        return jsonify({'error': 'Forbidden'}), 403
+    # 3. Enforce the per-module subscription: refuse to mint a token for a report
+    #    the user isn't granted, so a hidden menu can't be bypassed via the API.
+    if not access.get(report_name, False):
+        app.logger.info("embed-token DENIED (module not enabled): upn=%r report=%s", upn, report_name)
         return jsonify({'error': 'Forbidden'}), 403
 
     try:
@@ -329,14 +335,17 @@ def me():
             )
             prow = cur.fetchone()
             practice_name = prow[0] if prow else None
+        access, practitioner_name = _get_user_access(cur, upn)
         conn.close()
         return jsonify({
-            'display_name':     display_name or upn,
-            'client_id':        client_id,
-            'tenant_ids':       tids,
-            'practice_name':    practice_name,
-            'maintain_targets': maintain_targets,
-            'env':              APP_ENV,
+            'display_name':         display_name or upn,
+            'client_id':            client_id,
+            'tenant_ids':           tids,
+            'practice_name':        practice_name,
+            'maintain_targets':     maintain_targets,
+            'access':               access,
+            'practitioner_full_name': practitioner_name,
+            'env':                  APP_ENV,
         })
     except Exception as e:
         return _server_error(e, 'me')
@@ -442,6 +451,39 @@ def _get_user_info(cur, upn):
     )
     tids = [r[0] for r in cur.fetchall()]
     return display_name, client_id, tids, maintain_targets
+
+
+# Section/report key -> Application_Users column. The App menu keys match the
+# /api/embed-token 'report' names, so this one map gates both the visible menu
+# (via /api/me) and token minting (via /api/embed-token).
+_ACCESS_COLUMNS = [
+    ('home',       'Access_Home'),
+    ('revenue',    'Access_Revenue'),
+    ('patient',    'Access_Patient'),
+    ('scheduling', 'Access_Schedule'),
+    ('clinical',   'Access_Clinical'),
+    ('nhs',        'Access_NHS'),
+    ('day_book',   'Access_Day_Book'),
+    ('finance',    'Access_Finance'),
+    ('my_data',    'Access_My_Data'),
+    ('marketing',  'Access_Marketing'),
+]
+
+
+def _get_user_access(cur, upn):
+    """Returns ({section_key: bool}, practitioner_full_name). A missing row or a
+    NULL flag is treated as False (fail-closed: unset = no access)."""
+    cols = ', '.join(c for _, c in _ACCESS_COLUMNS)
+    cur.execute(
+        f"SELECT {cols}, Practitioner_Full_Name "
+        "FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
+        upn,
+    )
+    row = cur.fetchone()
+    if not row:
+        return {k: False for k, _ in _ACCESS_COLUMNS}, None
+    access = {k: bool(row[i]) for i, (k, _) in enumerate(_ACCESS_COLUMNS)}
+    return access, row[len(_ACCESS_COLUMNS)]
 
 
 # ── Targets ───────────────────────────────────────────────────────────────────

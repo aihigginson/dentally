@@ -390,6 +390,10 @@
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
+    <div class="nav-tab"        data-section="day_book">Day Book</div>
+    <div class="nav-tab"        data-section="finance">Finance</div>
+    <div class="nav-tab"        data-section="my_data">My Data</div>
+    <div class="nav-tab"        data-section="marketing">Marketing</div>
 
     <button class="filter-toggle" id="filter-toggle">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -481,6 +485,22 @@
     <!-- ── NHS ── -->
     <section class="section" id="section-nhs">
         <div class="embed-slot embed-full" id="embed-nhs">Please Wait...</div>
+    </section>
+
+    <!-- ── New modules (reports not built yet; menus hidden unless the user's
+         Access_* flag is set). No SECTION_REPORT entry, so they show the placeholder
+         rather than attempting an embed. ── -->
+    <section class="section" id="section-day_book">
+        <div class="embed-slot embed-full" id="embed-day_book">Coming soon</div>
+    </section>
+    <section class="section" id="section-finance">
+        <div class="embed-slot embed-full" id="embed-finance">Coming soon</div>
+    </section>
+    <section class="section" id="section-my_data">
+        <div class="embed-slot embed-full" id="embed-my_data">Coming soon</div>
+    </section>
+    <section class="section" id="section-marketing">
+        <div class="embed-slot embed-full" id="embed-marketing">Coming soon</div>
     </section>
 
 </main>
@@ -778,19 +798,39 @@
 
         document.getElementById('auth-overlay').style.display = 'none';
 
+        // ── Per-module access: hide any menu the user isn't subscribed to, and land
+        //    on the first section they can actually see (not always Home). ──
+        const access = data.access || {};
+        userAccess = access;
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            const key = tab.dataset.section;
+            if (key && !access[key]) tab.style.display = 'none';
+        });
+        const firstKey = NAV_ORDER.find(k => access[k]) || 'home';
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        const firstTab = document.querySelector(`.nav-tab[data-section="${firstKey}"]`);
+        if (firstTab) firstTab.classList.add('active');
+        activateSection(firstKey);
+
         if (window.innerWidth > 768) {
             filterBar.classList.add('open');
             filterToggleBtn.classList.add('active');
         }
         loadFilters(false);
-        initSubnav('home');
-        loadEmbedsInSection('home');
+        // Preload the other accessible report sections in the background (desktop only).
+        // New modules have no SECTION_REPORT entry, so they're skipped here.
         if (!isMobile()) {
-            ['revenue', 'patient', 'scheduling', 'clinical', 'nhs'].forEach((key, i) => {
-                setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
-            });
+            NAV_ORDER
+                .filter(k => access[k] && k !== firstKey && SECTION_REPORT[k])
+                .forEach((key, i) => {
+                    setTimeout(() => { initSubnav(key); loadEmbedsInSection(key); }, (i + 1) * 1500);
+                });
         }
     }
+
+    // Menu order, used to pick the first accessible section and to preload the rest.
+    const NAV_ORDER = ['home', 'revenue', 'patient', 'scheduling', 'clinical', 'nhs',
+                       'day_book', 'finance', 'my_data', 'marketing'];
 
     async function startApp() {
         try {
@@ -856,6 +896,9 @@
 
     // ── State ────────────────────────────────────────────────────────────────
     let activeSection = 'home';
+    // Per-module access map from /api/me ({section: bool}); gates both the visible
+    // menu and the Home report's cross-report nav buttons.
+    let userAccess = {};
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -1345,6 +1388,9 @@
                              schedule:'scheduling', scheduling:'scheduling',
                              clinical:'clinical', nhs:'nhs' }[sectionRaw];
             if (!target) return;
+            // Respect per-module access: a user without the target module can't be
+            // navigated there by a Home-report button (which exists regardless of plan).
+            if (!userAccess[target]) return;
             const page = (SECTION_PAGES[target] || [])
                 .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
             if (!sectionSubnavData[target]) initSubnav(target);
