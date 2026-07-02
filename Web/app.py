@@ -80,7 +80,11 @@ def _security_headers(response):
         "img-src 'self' data:; "
         "font-src 'self'; "
         "connect-src 'self' https://login.microsoftonline.com https://*.powerbi.com https://api.powerbi.com; "
-        "frame-src https://app.powerbi.com https://*.powerbi.com https://login.microsoftonline.com; "
+        # 'self' is required for MSAL acquireTokenSilent: it uses a hidden iframe that
+        # redirects login.microsoftonline.com back to our OWN origin to return the token.
+        # Without 'self' that redirect is blocked and returning sessions hang at
+        # "Verifying access...". frame-ancestors 'none' still stops OTHERS framing us.
+        "frame-src 'self' https://app.powerbi.com https://*.powerbi.com https://login.microsoftonline.com; "
         "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
     _csp_header = ('Content-Security-Policy-Report-Only'

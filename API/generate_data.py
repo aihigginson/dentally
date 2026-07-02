@@ -2100,7 +2100,12 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
     # As in Dentally, a recall is deleted once the patient reattends for that type
     # after the due date, so those are skipped.
     tid = tdef["tenant_id"]
-    today = date.today()
+    # Use the fixed generation anchor (GENERATE_AS_OF), NOT the wall-clock date —
+    # every other generator anchors to TODAY, so reminder-sent state here must too.
+    # Reaching for date.today() made the recall reminder NULL-fk counts drift with
+    # real time (re-seeding on a later day shifted has_first/has_second), which
+    # broke the GOLD_FKNULL_RECALL_DATE_* regression baselines. See TODAY (top).
+    today = TODAY
     exam_tx_ids    = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
     hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
     recalls = []
