@@ -1443,29 +1443,6 @@
         const slot = document.getElementById('embed-' + sectionKey);
         if (!slot) return;
 
-        // ── TEMP fullscreen diagnostic (?fstest=1) ───────────────────────────────
-        // Put a plain, self-measuring box in the slot instead of Power BI, so we can
-        // see whether the CONTAINER fills the screen in fullscreen (=> it's purely a
-        // PBI reflow issue) or stays small (=> a CSS/container issue). Not PBI at all.
-        if (new URLSearchParams(location.search).get('fstest') === '1') {
-            slot.textContent = '';
-            const box = document.createElement('div');
-            box.style.cssText = 'width:100%;height:100%;background:#5EC4C0;color:#fff;'
-                + 'display:flex;align-items:center;justify-content:center;text-align:center;'
-                + 'white-space:pre;font:700 26px/1.5 system-ui,sans-serif;box-sizing:border-box;';
-            slot.appendChild(box);
-            const upd = () => { box.textContent = 'TEST BOX (not Power BI)\n'
-                + Math.round(box.clientWidth) + ' × ' + Math.round(box.clientHeight) + ' px'; };
-            upd();
-            new ResizeObserver(upd).observe(box);
-            // Stub so applyFilters / subnav don't error on this fake "report".
-            embeddedReports[sectionKey] = {
-                setFilters: () => Promise.resolve(), setPage: () => {},
-                on: () => {}, off: () => {}, getPages: () => Promise.resolve([]),
-            };
-            return;
-        }
-
         let config;
         try {
             config = await getEmbedConfig(reportName);
