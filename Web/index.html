@@ -114,6 +114,19 @@
         .header-org    { font-size: 13px; opacity: 0.8; }
         .header-user   { font-size: 12px; background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; }
 
+        /* Report controls relocated into the banner (navy bg): restyle for contrast. */
+        .header-right .filter-toggle { margin-left: 0; color: rgba(255,255,255,0.92); border-color: rgba(255,255,255,0.30); background: none; }
+        .header-right .filter-toggle:hover  { color: #fff; border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.12); }
+        .header-right .filter-toggle.active { color: #fff; border-color: #fff; background: rgba(255,255,255,0.16); }
+        .header-right .nav-report-controls  { margin-left: 0; padding-left: 0; }
+        .header-right .page-tile { width: 30px; height: 30px; background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.30); color: #fff; }
+        .header-right .page-tile:hover { border-color: #fff; background: rgba(255,255,255,0.2); color: #fff; }
+        @media (max-width: 768px) {
+            .header-right .ctrl-label { display: none; }        /* icon-only on mobile */
+            .header-right .filter-toggle { padding: 5px 8px; }
+            .header-right { gap: 8px; }
+        }
+
         /* ── Primary nav ── */
         .nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; flex-shrink: 0; }
         .nav-tab {
@@ -377,6 +390,21 @@
 <header class="header">
     <div class="header-brand"><span class="brand-1">Analytic</span><span class="brand-2">ally</span><span class="dev-badge">DEV</span></div>
     <div class="header-right">
+        <!-- Report controls live in the banner so the nav row can be reclaimed entirely
+             for single-report users. -->
+        <button class="filter-toggle" id="filter-toggle">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="ctrl-label">Filters</span>
+        </button>
+        <button class="filter-toggle" id="defs-toggle" title="Plain-English metric definitions">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+            <span class="ctrl-label">Definitions</span>
+        </button>
+        <div class="nav-report-controls" id="nav-report-controls">
+            <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+        </div>
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
     </div>
@@ -385,29 +413,15 @@
 <!-- ════════════════ PRIMARY NAVIGATION ════════════════ -->
 <nav class="nav">
     <div class="nav-tab active" data-section="home">Home</div>
+    <div class="nav-tab"        data-section="day_book">Day Book</div>
+    <div class="nav-tab"        data-section="finance">Finance</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
+    <div class="nav-tab"        data-section="marketing">Marketing</div>
     <div class="nav-tab"        data-section="patient">Patient</div>
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
     <div class="nav-tab"        data-section="nhs">NHS</div>
-    <div class="nav-tab"        data-section="day_book">Day Book</div>
-    <div class="nav-tab"        data-section="finance">Finance</div>
     <div class="nav-tab"        data-section="my_data">My Data</div>
-    <div class="nav-tab"        data-section="marketing">Marketing</div>
-
-    <button class="filter-toggle" id="filter-toggle">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        Filters
-    </button>
-    <button class="filter-toggle" id="defs-toggle" title="Plain-English metric definitions">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
-        Definitions
-    </button>
-    <div class="nav-report-controls" id="nav-report-controls">
-        <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-        </button>
-    </div>
 </nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
@@ -810,12 +824,13 @@
         const firstKey = NAV_ORDER.find(k => access[k]) || 'home';
 
         // Single-report users (e.g. a practitioner's "My Data" or front-desk "Day Book")
-        // get a focused view: the report-picker tabs are hidden (the Filters/Definitions/
-        // Fullscreen controls stay, so My Data can still show its locked practitioner).
+        // get a focused view: the whole nav row is reclaimed (the Filters/Definitions/
+        // Fullscreen controls live in the banner, so My Data can still show its practitioner).
         const singleReport = NAV_ORDER.filter(k => access[k]).length === 1;
         myDataLock = singleReport && firstKey === 'my_data';
         if (singleReport) {
-            document.querySelectorAll('.nav-tab').forEach(t => t.style.display = 'none');
+            // Controls now live in the banner, so the whole nav row can be reclaimed.
+            document.querySelector('.nav').style.display = 'none';
         }
 
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -840,8 +855,8 @@
     }
 
     // Menu order, used to pick the first accessible section and to preload the rest.
-    const NAV_ORDER = ['home', 'revenue', 'patient', 'scheduling', 'clinical', 'nhs',
-                       'day_book', 'finance', 'my_data', 'marketing'];
+    const NAV_ORDER = ['home', 'day_book', 'finance', 'revenue', 'marketing',
+                       'patient', 'scheduling', 'clinical', 'nhs', 'my_data'];
 
     async function startApp() {
         try {
