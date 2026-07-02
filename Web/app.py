@@ -149,7 +149,22 @@ def _auth():
         return upn, None
     except jwt.ExpiredSignatureError:
         return None, (jsonify({'error': 'Token expired'}), 401)
-    except Exception:
+    except Exception as e:
+        # TEMP diagnostic (remove after triage): _validate_id_token normally swallows
+        # the reason. Log the exact error class/message + the token's UNVERIFIED claims
+        # so we can see why a real token is being refused (aud mismatch? missing claim?).
+        try:
+            _unv = jwt.decode(header[7:], options={'verify_signature': False})
+            app.logger.warning(
+                "auth REJECTED %s: %s | aud=%r expected_aud=%r iss=%r exp=%r iat=%r nbf=%r "
+                "pref=%s email=%s upn=%s",
+                type(e).__name__, e, _unv.get('aud'), CLIENT_ID, _unv.get('iss'),
+                _unv.get('exp'), _unv.get('iat'), _unv.get('nbf'),
+                'preferred_username' in _unv, 'email' in _unv, 'upn' in _unv,
+            )
+        except Exception as _e2:
+            app.logger.warning("auth REJECTED %s: %s | unverified-decode failed: %s",
+                               type(e).__name__, e, _e2)
         return None, (jsonify({'error': 'Authentication required'}), 401)
 
 
