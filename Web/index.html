@@ -981,7 +981,14 @@
     });
 
     // ── Fullscreen ───────────────────────────────────────────────────────────
-    function toggleFullscreen() { document.body.classList.toggle('is-fullscreen'); }
+    function toggleFullscreen() {
+        document.body.classList.toggle('is-fullscreen');
+        // Power BI sizes reports off window-resize events, not CSS-driven container
+        // changes. Toggling the fullscreen class resizes .embed-full but PBI never
+        // hears about it, so the report keeps its old (small) height. Nudge it to
+        // reflow once the new layout has applied.
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+    }
     document.getElementById('fullscreen-close').addEventListener('click', toggleFullscreen);
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
