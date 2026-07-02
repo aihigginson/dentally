@@ -229,6 +229,10 @@
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
+        /* Power BI writes an inline pixel height on its iframe; in fullscreen the
+           container fills the screen but that inline height stays small, so force the
+           iframe to fill (inline styles lose to !important). */
+        body.is-fullscreen .embed-full iframe { width: 100% !important; height: 100% !important; }
         body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
@@ -981,14 +985,7 @@
     });
 
     // ── Fullscreen ───────────────────────────────────────────────────────────
-    function toggleFullscreen() {
-        document.body.classList.toggle('is-fullscreen');
-        // Power BI sizes reports off window-resize events, not CSS-driven container
-        // changes. Toggling the fullscreen class resizes .embed-full but PBI never
-        // hears about it, so the report keeps its old (small) height. Nudge it to
-        // reflow once the new layout has applied.
-        setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
-    }
+    function toggleFullscreen() { document.body.classList.toggle('is-fullscreen'); }
     document.getElementById('fullscreen-close').addEventListener('click', toggleFullscreen);
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
