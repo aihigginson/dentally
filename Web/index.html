@@ -673,13 +673,34 @@
             return null; // never reached — page navigates away
         }
         try {
-            const r = await msalInstance.acquireTokenSilent({ scopes: MSAL_SCOPES, account: msalAccount });
+            // Race the silent renewal against a timeout. A wedged MSAL cache (from an
+            // interrupted redirect) or third-party-cookie blocking of the silent iframe
+            // can make acquireTokenSilent never settle — hanging the app at
+            // "Verifying access...". The initAuth self-heal only guards
+            // handleRedirectPromise, not this step, so guard it here too.
+            const r = await Promise.race([
+                msalInstance.acquireTokenSilent({ scopes: MSAL_SCOPES, account: msalAccount }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('silent-token-timeout')), 10000)),
+            ]);
+            sessionStorage.removeItem('_anly_silent_recovered');
             return r.idToken;
         } catch (e) {
             if (e instanceof msal.InteractionRequiredAuthError) {
                 const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
                 msalAccount = r.account;
+                sessionStorage.removeItem('_anly_silent_recovered');
                 return r.idToken;
+            }
+            // Silent path stalled or failed unexpectedly (wedged localStorage from an
+            // interrupted redirect, or a blocked silent iframe). Clear auth storage and
+            // reload ONCE (guarded against loops) so the next load starts clean and the
+            // user gets an interactive sign-in, instead of hanging on "Verifying
+            // access..." forever.
+            if (!sessionStorage.getItem('_anly_silent_recovered')) {
+                sessionStorage.setItem('_anly_silent_recovered', '1');
+                _clearAuthStorage();
+                window.location.reload();
+                return new Promise(() => {}); // halt here; the page is reloading
             }
             throw e;
         }
