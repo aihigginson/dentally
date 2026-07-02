@@ -720,10 +720,15 @@
             return r.idToken;
         } catch (e) {
             if (e instanceof msal.InteractionRequiredAuthError) {
-                const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
-                msalAccount = r.account;
+                // Interactive renewal, but we're NOT in a user-gesture context here
+                // (verifyAndLaunch runs automatically on load). A popup would be
+                // silently killed by the browser's popup blocker -> the await never
+                // resolves -> the app hangs on "Verifying access...". Redirect instead:
+                // a full-page navigation can't be popup-blocked, and the return is
+                // caught by handleRedirectPromise in initAuth.
                 sessionStorage.removeItem('_anly_silent_recovered');
-                return r.idToken;
+                await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+                return null; // never reached — page navigates away
             }
             // Silent path stalled or failed unexpectedly (wedged localStorage from an
             // interrupted redirect, or a blocked silent iframe). Clear auth storage and
@@ -758,14 +763,11 @@
                     await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
                     return res; // never reached
                 }
-                const r = await msalInstance.acquireTokenPopup({ scopes: MSAL_SCOPES, account: msalAccount });
-                msalAccount = r.account;
-                const retry = await fetch(url, {
-                    ...options,
-                    headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${r.idToken}` },
-                });
-                if (retry.status === 403) { showContactPage(); throw new Error('Forbidden'); }
-                return retry;
+                // Backend rejected the token and interactive renewal is needed, but
+                // this runs outside a user gesture -> a popup would be blocked and hang.
+                // Redirect (can't be popup-blocked); handleRedirectPromise resumes on return.
+                await msalInstance.acquireTokenRedirect({ scopes: MSAL_SCOPES, account: msalAccount });
+                return res; // never reached — page navigates away
             } catch (inner) {
                 if (inner.message === 'Forbidden') throw inner;
             }
