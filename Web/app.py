@@ -56,6 +56,20 @@ def _attach_request_id(response):
         response.headers['X-Request-ID'] = rid
     return response
 
+
+@app.after_request
+def _security_headers(response):
+    # Baseline hardening headers for the authenticated app. The app itself must
+    # never be framed (clickjacking a signed-in session); it embeds Power BI in an
+    # iframe, but that is us framing PBI, not the reverse, so DENY is safe here.
+    # (A Content-Security-Policy is deliberately NOT set here — it needs a PBI/AAD
+    # frame-src + connect-src allowlist reviewed against a live embed first.)
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
 APP_ENV        = os.environ.get('APP_ENV', 'prod')
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']

@@ -59,6 +59,7 @@
     </article>
 
     <script src="/marked.min.js"></script>
+    <script src="/purify.min.js"></script>
     <script>
         // Allowlist: the ?doc= value must be one of these exact keys. This stops the
         // parameter being used to fetch arbitrary paths.
@@ -83,7 +84,11 @@
                 const res = await fetch('/docs/' + key + '.md', { cache: 'no-store' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const md = await res.text();
-                contentEl.innerHTML = marked.parse(md);
+                // marked (v12) does not sanitise; run its HTML through DOMPurify
+                // before it touches the DOM. Defence-in-depth: the docs are our own
+                // allowlisted files, but this stops any HTML they contain (or any
+                // future untrusted content) from executing.
+                contentEl.innerHTML = DOMPurify.sanitize(marked.parse(md));
             } catch (e) {
                 statusEl.textContent = 'Could not load this document. Please try again later.';
             }
