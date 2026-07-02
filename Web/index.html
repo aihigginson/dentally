@@ -228,7 +228,7 @@
         body.is-fullscreen .nav,
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
-        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
+        body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; height: 100vh !important; margin: 0 !important; z-index: 200; }
         body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
@@ -981,30 +981,7 @@
     });
 
     // ── Fullscreen ───────────────────────────────────────────────────────────
-    function toggleFullscreen() {
-        document.body.classList.toggle('is-fullscreen');
-        // The fullscreen container resizes correctly (verified with a plain box), but
-        // Power BI no longer re-fits the report into the resized iframe. Re-embed the
-        // active report at the new size once the layout has applied — same path the
-        // mobile/desktop breakpoint change uses.
-        requestAnimationFrame(() => reembedActiveSection());
-    }
-
-    function reembedActiveSection() {
-        const sectionKey  = activeSection;
-        const reportName  = SECTION_REPORT[sectionKey];
-        if (!reportName) return;
-        const cached = tokenCache[reportName];
-        if (!cached) return;                       // not a real report (e.g. fstest box)
-        const slot = document.getElementById('embed-' + sectionKey);
-        if (!slot) return;
-        const cfg = _buildConfig(cached);
-        window.powerbi.reset(slot);
-        const r = window.powerbi.embed(slot, cfg);
-        embeddedReports[sectionKey] = r;
-        attachEmbedOverlay(slot, r);
-        attachReportHandlers(r, sectionKey);
-    }
+    function toggleFullscreen() { document.body.classList.toggle('is-fullscreen'); }
     document.getElementById('fullscreen-close').addEventListener('click', toggleFullscreen);
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && document.body.classList.contains('is-fullscreen')) toggleFullscreen();
