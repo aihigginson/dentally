@@ -801,6 +801,7 @@
         // ── Per-module access: hide any menu the user isn't subscribed to, and land
         //    on the first section they can actually see (not always Home). ──
         const access = data.access || {};
+        userAccess = access;
         document.querySelectorAll('.nav-tab').forEach(tab => {
             const key = tab.dataset.section;
             if (key && !access[key]) tab.style.display = 'none';
@@ -895,6 +896,9 @@
 
     // ── State ────────────────────────────────────────────────────────────────
     let activeSection = 'home';
+    // Per-module access map from /api/me ({section: bool}); gates both the visible
+    // menu and the Home report's cross-report nav buttons.
+    let userAccess = {};
 
     // ── Primary tab navigation ───────────────────────────────────────────────
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -1384,6 +1388,9 @@
                              schedule:'scheduling', scheduling:'scheduling',
                              clinical:'clinical', nhs:'nhs' }[sectionRaw];
             if (!target) return;
+            // Respect per-module access: a user without the target module can't be
+            // navigated there by a Home-report button (which exists regardless of plan).
+            if (!userAccess[target]) return;
             const page = (SECTION_PAGES[target] || [])
                 .find(p => p.displayName.toLowerCase() === pageDisplay.toLowerCase());
             if (!sectionSubnavData[target]) initSubnav(target);
