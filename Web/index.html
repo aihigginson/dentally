@@ -229,11 +229,6 @@
         body.is-fullscreen .filter-bar { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; margin: 0 !important; z-index: 200; }
-        /* Power BI writes an inline pixel height on its iframe (and its wrapper div);
-           in fullscreen the container fills the screen but those inline heights stay
-           small, so force the whole chain to fill (inline styles lose to !important). */
-        body.is-fullscreen .embed-full > *,
-        body.is-fullscreen .embed-full iframe { width: 100% !important; height: 100% !important; }
         body.is-fullscreen .fullscreen-close { display: flex; }
 
         /* ── Embed slot ── */
