@@ -6,6 +6,8 @@
 --    *01     2026-07-01  AIH  Initial release (Xero profitability slice)
 --    *02     2026-07-01  AIH  All-tenant @Mode signature (house Silver / orchestration);
 --                             full rebuild across all tenants.
+--    *03     2026-07-03  AIH  Resolve Site_ID (tracking->site map, else org default) for
+--                             multi-site orgs, replacing the hardcoded fk_Practice_Site.
 --  Notes            :  Ports API/xero_model.py (reconciled to Xero's P&L). Keeps only
 --                      P&L-affecting lines (join to Is_PL accounts, status
 --                      AUTHORISED/PAID/POSTED -> drops DRAFT/DELETED/VOIDED). Net_Amount
@@ -52,13 +54,21 @@ BEGIN
                        WHEN 'ACCPAY'       THEN -1
                        WHEN 'SPEND'        THEN -1
                        WHEN 'ACCRECCREDIT' THEN -1
-                       ELSE 0 END AS Direction
+                       ELSE 0 END AS Direction,
+                  -- Site: a mapped tracking option (either category) wins; else the org default.
+                  COALESCE(m1.Site_ID, m2.Site_ID, o.Default_Site_ID) AS Site_ID
             FROM Bronze.Xero_Lines AS l
             INNER JOIN Silver.Xero_Accounts AS a
                 ON a.Tenant_ID = l.Tenant_ID AND a.Code = l.Account_Code AND a.Is_PL = 1
+            LEFT JOIN Silver.Xero_Orgs AS o
+                ON o.Tenant_ID = l.Tenant_ID
+            LEFT JOIN Config.Xero_Site_Map AS m1
+                ON m1.Tenant_ID = l.Tenant_ID AND m1.Category_Name = l.Tracking_Cat_1 AND m1.Option_Name = l.Tracking_Opt_1
+            LEFT JOIN Config.Xero_Site_Map AS m2
+                ON m2.Tenant_ID = l.Tenant_ID AND m2.Category_Name = l.Tracking_Cat_2 AND m2.Option_Name = l.Tracking_Opt_2
             WHERE l.Doc_Status IN ('AUTHORISED', 'PAID', 'POSTED')
         )
-        INSERT INTO Silver.Xero_Finance_Lines (Tenant_ID, Xero_Tenant_ID, Source, Doc_ID, Doc_Number, Doc_Type, Doc_Status, Doc_Date, Contact_Name, Account_ID, Account_Code, Account_Class, PL_Group, Description, Net_Amount, PL_Amount, Line_Item_ID, DW_Loaded_At)
+        INSERT INTO Silver.Xero_Finance_Lines (Tenant_ID, Xero_Tenant_ID, Source, Doc_ID, Doc_Number, Doc_Type, Doc_Status, Doc_Date, Contact_Name, Account_ID, Account_Code, Account_Class, PL_Group, Description, Net_Amount, PL_Amount, Line_Item_ID, Site_ID, DW_Loaded_At)
         SELECT
               Tenant_ID, Xero_Tenant_ID, Source, Doc_ID, Doc_Number, Doc_Type, Doc_Status,
               TRY_CAST(Doc_Date AS DATE), Contact_Name, Account_ID, Account_Code, Account_Class, PL_Group, Description,
@@ -68,7 +78,7 @@ BEGIN
                        THEN CASE WHEN Account_Class = 'REVENUE' THEN -Line_Amount ELSE Line_Amount END
                   ELSE Net_Amount * CASE WHEN Account_Class = 'REVENUE' THEN Direction ELSE -Direction END
               END AS PL_Amount,
-              Line_Item_ID, SYSUTCDATETIME()
+              Line_Item_ID, Site_ID, SYSUTCDATETIME()
         FROM src;
         SET @My_Inserts = @@ROWCOUNT;
 

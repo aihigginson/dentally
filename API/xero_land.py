@@ -90,6 +90,19 @@ def write_stage(records, name):
     print(" done.")
 
 
+def _tracking_pairs(tracking):
+    """Flatten a line's Tracking list into up to two (Category, Option) columns so the
+    warehouse can map option->site with plain equality joins (Fabric has no OPENJSON).
+    Practices split by site with a single location category; two covers the rare case."""
+    pairs = [(t.get("Name"), t.get("Option")) for t in (tracking or [])]
+    cols = {}
+    for i in range(2):
+        cat, opt = pairs[i] if i < len(pairs) else (None, None)
+        cols[f"Tracking_Cat_{i+1}"] = cat
+        cols[f"Tracking_Opt_{i+1}"] = opt
+    return cols
+
+
 def flatten_lineitems(items, source, id_key, num_key, tenant, xtid):
     rows = []
     for it in items:
@@ -110,6 +123,7 @@ def flatten_lineitems(items, source, id_key, num_key, tenant, xtid):
                 "Line_Amount":  ln.get("LineAmount"),
                 "Tax_Amount":   ln.get("TaxAmount"),
                 "Tracking":     ln.get("Tracking"),
+                **_tracking_pairs(ln.get("Tracking")),
             })
     return rows
 
@@ -133,6 +147,7 @@ def flatten_manual_journals(items, tenant, xtid):
                 "Line_Amount":  jl.get("LineAmount"),
                 "Tax_Amount":   None,
                 "Tracking":     jl.get("Tracking"),
+                **_tracking_pairs(jl.get("Tracking")),
             })
     return rows
 

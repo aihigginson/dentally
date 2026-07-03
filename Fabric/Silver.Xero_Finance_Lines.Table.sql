@@ -27,6 +27,7 @@ CREATE TABLE [Silver].[Xero_Finance_Lines](
 	[Net_Amount] [decimal](18, 4) NULL,     -- ex-tax line amount
 	[PL_Amount] [decimal](18, 4) NULL,      -- signed P&L contribution
 	[Line_Item_ID] [varchar](100) NULL,
+	[Site_ID] [varchar](50) NULL,           -- resolved: tracking->site map, else org default
 	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO
