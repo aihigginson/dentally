@@ -38,10 +38,13 @@ AUTHORIZE_URL   = "https://login.xero.com/identity/connect/authorize"
 TOKEN_URL       = "https://identity.xero.com/connect/token"
 CONNECTIONS_URL = "https://api.xero.com/connections"
 
-# Profitability slice — Xero's GRANULAR scopes (the old bundles like
-# accounting.transactions.read / accounting.journals.read don't exist):
-#   settings.read                = chart of accounts (Accounts)
-#   invoices.read                = ACCREC (revenue) + ACCPAY (bills/costs)
+# Profitability slice — Xero's GRANULAR document scopes. We deliberately do NOT use
+# accounting.journals.read (the general-ledger endpoint): it DOES exist, but is gated
+# behind certification / a premium tier and is not grantable on connections created
+# from 29 Apr 2026 — i.e. a new client next week couldn't consent to it. The document
+# endpoints below reconcile to the P&L and any connection can grant them.
+#   settings.read                = chart of accounts (Accounts) + tracking categories
+#   invoices.read                = ACCREC (revenue) + ACCPAY (bills/costs) + credit notes
 #   banktransactions.read        = cash spend/receive
 #   manualjournals.read          = manual journals
 #   payments.read                = payments

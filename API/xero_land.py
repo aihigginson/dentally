@@ -1,15 +1,21 @@
 """
-xero_land.py  --  Land the Xero profitability-slice data into OneLake as Delta stage
-tables, the Bronze source for the Fabric build. Flattens the nested Xero entities
-into flat rows and writes:
+xero_land.py  --  Land the extracted Xero data into OneLake as Delta stage tables,
+the Bronze source for the Fabric build.
 
-    stage_xero_accounts  -- chart of accounts (all classes)
+Iterates every per-org folder written by xero_extract.py (API/xero_data/<org>/),
+reads each _meta.json for the Dentally Tenant_ID + default site, flattens the nested
+Xero entities into flat rows, and writes the full multi-org snapshot to:
+
+    stage_xero_accounts  -- chart of accounts (all classes), per org
     stage_xero_lines     -- one row per P&L transaction line (invoices, credit notes,
                             bank transactions, manual journals), RAW: no filtering,
                             no signing -- Silver applies window/status/direction/ex-tax.
+                            Each line keeps its Tracking JSON for site resolution.
+    stage_xero_tracking  -- tracking categories + options per org (site-split source)
+    stage_xero_orgs      -- one row per org: Tenant_ID, Xero org id/name, default site
 
-Mirrors API/seed_onelake.py's OneLake write (delta-rs + InteractiveBrowserCredential).
-Run after xero_extract.py.
+Snapshot: each run OVERWRITES the stage with the full current picture across all orgs
+(Bronze MERGEs from it). Mirrors API/seed_onelake.py's OneLake write.
 
 Usage:  python API/xero_land.py
 Requires: deltalake, pyarrow, pandas, azure-identity (already installed).
@@ -32,10 +38,6 @@ WORKSPACE_GUID = "22e235e2-7a32-4451-b573-8d5eb8532a23"
 LAKEHOUSE_GUID = "e6cc2011-bd96-4164-8f21-ceb340e25449"
 ONELAKE_HOST   = "onelake.dfs.fabric.microsoft.com"
 
-# Placeholder tenant for the Demo Company (NOT a real Dentally tenant) -- the slice
-# proves the plumbing; real orgs map to real sites in the multi-tenant phase.
-DEMO_TENANT_ID = 99
-
 _cred = InteractiveBrowserCredential()
 
 
@@ -49,8 +51,11 @@ def table_path(name):
             f"/{LAKEHOUSE_GUID}/Tables/dbo/stage_{name}")
 
 
-def load(name):
-    with open(os.path.join(DATA_DIR, name + ".json")) as f:
+def load(org_dir, name):
+    path = os.path.join(DATA_DIR, org_dir, name + ".json")
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
         return json.load(f)
 
 
@@ -132,30 +137,66 @@ def flatten_manual_journals(items, tenant, xtid):
     return rows
 
 
+def flatten_tracking(cats, tenant, xtid):
+    rows = []
+    for c in cats:
+        for opt in c.get("Options", []):
+            rows.append({
+                "Tenant_ID": tenant, "Xero_Tenant_ID": xtid,
+                "Tracking_Category_ID": c.get("TrackingCategoryID"),
+                "Category_Name": c.get("Name"), "Category_Status": c.get("Status"),
+                "Tracking_Option_ID": opt.get("TrackingOptionID"),
+                "Option_Name": opt.get("Name"), "Option_Status": opt.get("Status"),
+            })
+    return rows
+
+
+def org_dirs():
+    """Every folder written by the extractor that has a _meta.json."""
+    if not os.path.isdir(DATA_DIR):
+        return []
+    return [d for d in sorted(os.listdir(DATA_DIR))
+            if os.path.exists(os.path.join(DATA_DIR, d, "_meta.json"))]
+
+
 def main():
-    saved = json.load(open(os.path.join(HERE, "xero_token.local.json")))
-    demo  = next((t for t in saved["tenants"]
-                  if "demo company" in (t.get("tenantName", "") or "").lower()),
-                 saved["tenants"][0])
-    tenant, xtid = DEMO_TENANT_ID, demo["tenantId"]
-    print(f"Landing '{demo['tenantName']}' as Tenant_ID={tenant}\n")
+    dirs = org_dirs()
+    if not dirs:
+        raise SystemExit(f"No extracted orgs in {DATA_DIR}. Run python API/xero_extract.py first.")
 
-    accounts = [{
-        "Tenant_ID": tenant, "Xero_Tenant_ID": xtid,
-        "Account_ID": a.get("AccountID"), "Code": a.get("Code"), "Name": a.get("Name"),
-        "Type": a.get("Type"), "Class": a.get("Class"),
-        "Reporting_Code": a.get("ReportingCode"), "Reporting_Code_Name": a.get("ReportingCodeName"),
-        "Status": a.get("Status"),
-    } for a in load("accounts")]
+    accounts, lines, tracking, orgs = [], [], [], []
+    for d in dirs:
+        meta = load(d, "_meta")
+        tenant, xtid = meta["tenant_id"], meta["xero_tenant_id"]
+        print(f"Org '{meta.get('tenant_name')}'  ->  Tenant_ID {tenant}")
 
-    lines  = flatten_lineitems(load("invoices_page1"),         "INVOICE",    "InvoiceID",         "InvoiceNumber",    tenant, xtid)
-    lines += flatten_lineitems(load("creditnotes_page1"),      "CREDITNOTE", "CreditNoteID",      "CreditNoteNumber", tenant, xtid)
-    lines += flatten_lineitems(load("banktransactions_page1"), "BANK",       "BankTransactionID", "Reference",        tenant, xtid)
-    lines += flatten_manual_journals(load("manualjournals_page1"), tenant, xtid)
+        orgs.append({
+            "Tenant_ID": tenant, "Xero_Tenant_ID": xtid,
+            "Tenant_Name": meta.get("tenant_name"),
+            "Default_Site_ID": meta.get("default_site_id"),
+        })
 
+        accounts += [{
+            "Tenant_ID": tenant, "Xero_Tenant_ID": xtid,
+            "Account_ID": a.get("AccountID"), "Code": a.get("Code"), "Name": a.get("Name"),
+            "Type": a.get("Type"), "Class": a.get("Class"),
+            "Reporting_Code": a.get("ReportingCode"), "Reporting_Code_Name": a.get("ReportingCodeName"),
+            "Status": a.get("Status"),
+        } for a in load(d, "accounts")]
+
+        lines += flatten_lineitems(load(d, "invoices"),         "INVOICE",    "InvoiceID",         "InvoiceNumber",    tenant, xtid)
+        lines += flatten_lineitems(load(d, "creditnotes"),      "CREDITNOTE", "CreditNoteID",      "CreditNoteNumber", tenant, xtid)
+        lines += flatten_lineitems(load(d, "banktransactions"), "BANK",       "BankTransactionID", "Reference",        tenant, xtid)
+        lines += flatten_manual_journals(load(d, "manualjournals"), tenant, xtid)
+
+        tracking += flatten_tracking(load(d, "tracking_categories"), tenant, xtid)
+
+    print()
+    write_stage(orgs,     "xero_orgs")
     write_stage(accounts, "xero_accounts")
     write_stage(lines,    "xero_lines")
-    print("\nDone. Bronze can now read Stage views over stage_xero_accounts / stage_xero_lines.")
+    write_stage(tracking, "xero_tracking")
+    print("\nDone. Bronze can now read the Stage views over the stage_xero_* tables.")
 
 
 if __name__ == "__main__":
