@@ -129,10 +129,15 @@ def main():
 
     # 3. Transaction samples (page 1 each)
     for path, key in [("/Invoices", "Invoices"),
+                      ("/CreditNotes", "CreditNotes"),
                       ("/BankTransactions", "BankTransactions"),
                       ("/ManualJournals", "ManualJournals"),
                       ("/Payments", "Payments")]:
-        rows = xget(path, access, tid, {"page": 1}).get(key, [])
+        try:
+            rows = xget(path, access, tid, {"page": 1}).get(key, [])
+        except requests.HTTPError as e:
+            print(f"{key}: HTTP {e.response.status_code} (scope?) - skipped")
+            continue
         save_json(key.lower() + "_page1", rows)
         more = "  (>=100 - more pages exist)" if len(rows) >= 100 else ""
         print(f"{key}: {len(rows)} on page 1{more}")
