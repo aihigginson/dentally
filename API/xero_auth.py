@@ -153,10 +153,14 @@ def main():
                for c in conns.json()]
 
     # Deposit this consent into the token store as one connection. The store backend
-    # (local file vs Key Vault) is chosen by XERO_TOKEN_STORE -- onboard the PRODUCTION
-    # pipeline with `set XERO_TOKEN_STORE=keyvault` so the token lands where the Fabric
-    # notebook reads it; leave it unset for local dev. --key names the connection
-    # (default: the primary org's tenantId), so re-consenting the same org updates it.
+    # (local file vs Key Vault) is chosen by XERO_TOKEN_STORE; --env dev|prod picks which
+    # environment's Key Vault secret (xero-tokens-<env>) it lands in, so dev (Demo) and
+    # prod (real clients) stay isolated. Onboard a client with:
+    #   set XERO_TOKEN_STORE=keyvault & python API/xero_auth.py --env prod --key <client>
+    # --key names the connection (default: the primary org's tenantId) so re-consenting
+    # the same org updates it in place.
+    if _arg("--env"):
+        os.environ["XERO_ENV"] = _arg("--env")
     conn_key = _arg("--key") or (tenants[0]["tenantId"] if tenants else "default")
     blob = {"tokens": tokens, "tenants": tenants}
     store.save_connection(conn_key, blob)

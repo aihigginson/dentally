@@ -6,7 +6,7 @@ The recurring pull runs **in Fabric** (the `Ingest_Xero` notebook, inside the ni
 
 Architecture (source-of-truth: [[project_xero_integration]] memory):
 ```
-xero_auth.py (one-time consent)  ->  Key Vault secret: xero-tokens
+xero_auth.py (one-time consent)  ->  Key Vault secret: xero-tokens-<env>
                                             |
 Orchestrate_Build (nightly, Fabric)        v
   CELL 7b: Ingest_Xero  --reads KV-->  Xero API  -->  stage_xero_* (Delta)
@@ -28,13 +28,17 @@ Document-based (NOT the gated `accounting.journals.read`) — reconciles to Xero
 | Pipeline run identity | `admin@analytically.info` (oid `aafa257e-...`) -- dev **and** prod `Orchestrate_Build` run as this; already has get/list/set on the vault. |
 | Notebook -> KV auth | `notebookutils.credentials.getToken("keyvault")` -- **confirmed works** on this Fabric. |
 
-Key Vault secrets:
+Key Vault secrets (tokens + org map are **per-environment** so dev(Demo) and prod(clients)
+never mix -- both pipelines run as the same identity, so isolation is by secret name):
 | Secret | Purpose | Status |
 |---|---|---|
-| `xero-client-id` | Xero app client id | seeded |
-| `xero-client-secret` | Xero app secret | **you add** (step 1) |
-| `xero-org-map` | `{"<xeroTenantId>": {"tenant_id": N, "default_site_id": "S"}}` | seeded `{}` |
-| `xero-tokens` | `{"<connKey>": {"tokens": {...}, "tenants": [...]}}` -- per-consent | seeded `{}`, filled by onboarding |
+| `xero-client-id` | Xero app client id (shared) | seeded |
+| `xero-client-secret` | Xero app secret (shared) | seeded |
+| `xero-org-map-<env>` | `{"<xeroTenantId>": {"tenant_id": N, "default_site_id": "S"}}` | dev/prod seeded `{}` |
+| `xero-tokens-<env>` | `{"<connKey>": {"tokens": {...}, "tenants": [...]}}` -- per-consent | `-dev` has Demo; `-prod` `{}` |
+
+The notebook / scripts pick the env: `Ingest_Xero`/`Orchestrate_Build` param `xero_env`
+(dev default; prod sets `"prod"`), and `xero_auth.py --env dev|prod` for onboarding.
 
 ---
 
@@ -54,18 +58,19 @@ Key Vault secrets:
 
 ## Onboard a practice (per client)
 
-1. **Consent** -- run locally, targeting the vault so the token lands where the notebook reads it:
+1. **Consent** -- run locally, targeting the vault + environment so the token lands where the
+   right notebook reads it (a real client is `--env prod`; the Demo lives in `--env dev`):
    ```
-   pip install azure-keyvault-secrets          # first time only
+   pip install azure-keyvault-secrets                       # first time only
    set XERO_TOKEN_STORE=keyvault
-   python API/xero_auth.py --key <clientName>  # opens browser; practice clicks Allow, picks their org
+   python API/xero_auth.py --env prod --key <clientName>    # opens browser; practice clicks Allow, picks their org
    ```
-   Prints the connected org(s) + their Xero `tenantId` GUID(s).
-2. **Map the org(s) to a Dentally tenant + site.** Read the current map, add the GUID, write it back:
+   Prints the connected org(s) + their Xero `tenantId` GUID(s). Writes to `xero-tokens-prod`.
+2. **Map the org(s) to a Dentally tenant + site** in the matching `xero-org-map-<env>`:
    ```
-   az keyvault secret show --vault-name kv-analytically --name xero-org-map --query value -o tsv
+   az keyvault secret show --vault-name kv-analytically --name xero-org-map-prod --query value -o tsv
    # add "<xeroTenantId>": {"tenant_id": <N>, "default_site_id": "<SiteID>"} then:
-   az keyvault secret set --vault-name kv-analytically --name xero-org-map --value '<full JSON>'
+   az keyvault secret set --vault-name kv-analytically --name xero-org-map-prod --value '<full JSON>'
    ```
    (Xero's Demo Company auto-maps to Tenant_ID 99 with no entry.)
 3. **Multi-site orgs (optional):** if one Xero org covers several sites split by a tracking
@@ -90,9 +95,9 @@ Key Vault secrets:
 - **`kv_set` 401 / audience error** = the `getToken` audience is wrong for this Fabric; change
   the one line in `Ingest_Xero` `kv_set`/`kv_get` (try `"vault"` or `"https://vault.azure.net"`)
   and regenerate via `build_Ingest_Xero.py`.
-- **"Skip unmapped org"** = that Xero `tenantId` isn't in `xero-org-map`; add it (step 2).
+- **"Skip unmapped org"** = that Xero `tenantId` isn't in `xero-org-map-<env>`; add it (step 2).
 - **`fk_Practice_Site = -1` in Fact_Finance** = no site resolved; set the org's `default_site_id`
-  in `xero-org-map`, or add `Config.Xero_Site_Map` rows.
+  in `xero-org-map-<env>`, or add `Config.Xero_Site_Map` rows.
 - **Reconciliation:** summed `Fact_Finance` P&L should match Xero's own P&L report
   (validated to the penny on the Demo Company).
 

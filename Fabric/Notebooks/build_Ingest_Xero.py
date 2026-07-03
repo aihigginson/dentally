@@ -14,8 +14,9 @@ import os
 CELLS = [
     # 0 -- parameters (Fabric overrides at pipeline runtime) -------------------
     (r'''# Parameters -- Fabric overrides these at pipeline runtime.
-keyvault_url = "https://REPLACE-ME.vault.azure.net/"
-only_org     = ""   # optional Xero tenantId to restrict to; blank = every mapped org
+keyvault_url = "https://kv-analytically.vault.azure.net/"
+xero_env     = "dev"   # which env's tokens to read: xero-tokens-<env> (dev|prod). PROD passes "prod".
+only_org     = ""      # optional Xero tenantId to restrict to; blank = every mapped org
 ''', True),
 
     # 1 -- imports -------------------------------------------------------------
@@ -32,11 +33,11 @@ import notebookutils
 
     # 2 -- Key Vault I/O -------------------------------------------------------
     (r'''# --- Key Vault I/O -----------------------------------------------------------
-# Secrets used:
-#   xero-client-id, xero-client-secret : the Xero app credentials
-#   xero-org-map : JSON {"<xeroTenantId>": {"tenant_id": N, "default_site_id": "S"}}
-#   xero-tokens  : JSON {"<connKey>": {"tokens": {...}, "tenants": [...]}} -- one
-#                  entry per OAuth consent; refresh tokens rotate and are written back.
+# Secrets used (tokens + org map are per-env: dev(Demo) and prod(clients) are isolated):
+#   xero-client-id, xero-client-secret : the Xero app credentials (shared)
+#   xero-org-map-<env> : JSON {"<xeroTenantId>": {"tenant_id": N, "default_site_id": "S"}}
+#   xero-tokens-<env>  : JSON {"<connKey>": {"tokens": {...}, "tenants": [...]}} -- one
+#                        entry per OAuth consent; refresh tokens rotate and are written back.
 # The run identity (pipeline/workspace) needs secrets get + set on the vault.
 
 def kv_get(name):
@@ -58,8 +59,8 @@ def kv_set(name, value):
     # 3 -- config --------------------------------------------------------------
     (r'''XERO_CLIENT_ID     = kv_get("xero-client-id")
 XERO_CLIENT_SECRET = kv_get("xero-client-secret")
-ORG_MAP = json.loads(kv_get("xero-org-map"))
-TOKENS  = json.loads(kv_get("xero-tokens"))
+ORG_MAP = json.loads(kv_get("xero-org-map-" + xero_env))
+TOKENS  = json.loads(kv_get("xero-tokens-" + xero_env))   # env-isolated: dev(Demo) vs prod(clients)
 
 TOKEN_URL = "https://identity.xero.com/connect/token"
 API_BASE  = "https://api.xero.com/api.xro/2.0"
@@ -225,7 +226,7 @@ def write_stage(records, table_name, tenant):
 access_by_conn = {}
 for conn_key, blob in TOKENS.items():
     access_by_conn[conn_key] = refresh(blob)
-kv_set("xero-tokens", json.dumps(TOKENS))
+kv_set("xero-tokens-" + xero_env, json.dumps(TOKENS))
 print("Refreshed", len(TOKENS), "connection(s); tokens persisted.")
 
 # Phase 2: extract + land per mapped org.
