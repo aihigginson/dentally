@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request, g, has_request_context
+from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
 from flask_cors import CORS
 import msal
 import requests
@@ -7,6 +7,12 @@ import struct
 import os
 import uuid
 import logging
+import base64
+import hmac
+import hashlib
+import json
+import time
+from urllib.parse import urlencode, quote
 from dotenv import load_dotenv
 import jwt
 from jwt import PyJWKClient
@@ -414,6 +420,220 @@ def filters():
         # Preserve the 200 + empty-lists client contract; log detail server-side.
         app.logger.exception("filters failed: %s", e)
         return jsonify({'sites': [], 'practitioners': []})
+
+
+# ── Connect Xero (self-serve OAuth onboarding) ───────────────────────────────
+# A tenant admin connects their practice's Xero from inside the app: the browser is
+# redirected to Xero's consent (their own browser, Xero's domain), and the callback
+# writes the token to Key Vault + auto-maps the org to THIS tenant (derived from the
+# signed-in user), so there is no manual token/GUID handling. Isolated per env via
+# xero-tokens-<env> / xero-org-map-<env>. See XERO_ONBOARDING.md / project memory.
+
+XERO_ENV          = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
+XERO_KEYVAULT_URL = os.environ.get('XERO_KEYVAULT_URL', 'https://kv-analytically.vault.azure.net/')
+XERO_AUTHORIZE    = 'https://login.xero.com/identity/connect/authorize'
+XERO_TOKEN_URL    = 'https://identity.xero.com/connect/token'
+XERO_CONNECTIONS  = 'https://api.xero.com/connections'
+# Standard granular document scopes (NOT the gated accounting.journals.read).
+XERO_SCOPES = (
+    'openid profile email accounting.settings.read accounting.invoices.read '
+    'accounting.banktransactions.read accounting.manualjournals.read '
+    'accounting.payments.read accounting.reports.profitandloss.read offline_access'
+)
+
+_kv_client_singleton = None
+_xero_app_creds = {}
+
+
+def _kv():
+    global _kv_client_singleton
+    if _kv_client_singleton is None:
+        from azure.identity import DefaultAzureCredential
+        from azure.keyvault.secrets import SecretClient
+        _kv_client_singleton = SecretClient(
+            vault_url=XERO_KEYVAULT_URL, credential=DefaultAzureCredential())
+    return _kv_client_singleton
+
+
+def _kv_get(name, default=None):
+    try:
+        return _kv().get_secret(name).value
+    except Exception:
+        return default
+
+
+def _kv_set(name, value):
+    _kv().set_secret(name, value)
+
+
+def _xero_client():
+    """Xero app id/secret from Key Vault (shared across envs), cached in-process."""
+    if not _xero_app_creds:
+        _xero_app_creds['id']     = _kv_get('xero-client-id')
+        _xero_app_creds['secret'] = _kv_get('xero-client-secret')
+    return _xero_app_creds['id'], _xero_app_creds['secret']
+
+
+def _state_key():
+    # HMAC key for the OAuth `state` (CSRF + carries the tenant). Reuse the app SP
+    # secret (high-entropy, already present) unless XERO_STATE_SECRET is set.
+    return (os.environ.get('XERO_STATE_SECRET') or CLIENT_SECRET).encode()
+
+
+def _sign_state(payload):
+    raw = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
+    sig = hmac.new(_state_key(), raw.encode(), hashlib.sha256).hexdigest()
+    return raw + '.' + sig
+
+
+def _verify_state(state, max_age=900):
+    try:
+        raw, sig = state.rsplit('.', 1)
+        expected = hmac.new(_state_key(), raw.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(raw))
+        if time.time() - payload.get('ts', 0) > max_age:
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+def _xero_redirect_uri():
+    # Must EXACTLY match a redirect URI registered on the Xero app.
+    return f'https://{request.host}/api/xero/callback'
+
+
+def _primary_site_id(tenant_id):
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT TOP 1 Site_ID FROM Gold.Dim_Practice_Sites "
+            "WHERE Tenant_ID = ? AND Site_Active = 1 ORDER BY Site_Name", tenant_id)
+        row = cur.fetchone()
+        conn.close()
+        return str(row[0]) if row else None
+    except Exception:
+        return None
+
+
+@app.route('/api/xero/status')
+def xero_status():
+    """Is this tenant's Xero connected, and may this user connect it?"""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        tenant_id = tids[0] if tids else None
+        org_map = json.loads(_kv_get(f'xero-org-map-{XERO_ENV}', '{}') or '{}')
+        orgs = [v for v in org_map.values() if v.get('tenant_id') == tenant_id]
+        return jsonify({'connected': len(orgs) > 0,
+                        'org_count': len(orgs),
+                        'can_connect': bool(maintain)})
+    except Exception as e:
+        return _server_error(e, 'xero-status')
+
+
+@app.route('/api/xero/connect')
+def xero_connect():
+    """Start the OAuth flow: return the Xero authorize URL (the UI then navigates to it).
+    Admin-only; the signed state carries this user's tenant so the callback can auto-map."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can connect Xero'}), 403
+        if not tids:
+            return jsonify({'error': 'No tenant for this user'}), 400
+        cid, _secret = _xero_client()
+        if not cid:
+            return jsonify({'error': 'Xero app not configured'}), 500
+        state = _sign_state({'tenant_id': tids[0], 'upn': upn,
+                             'ts': time.time(), 'nonce': uuid.uuid4().hex})
+        params = urlencode({
+            'response_type': 'code',
+            'client_id':     cid,
+            'redirect_uri':  _xero_redirect_uri(),
+            'scope':         XERO_SCOPES,
+            'state':         state,
+        }, quote_via=quote)
+        return jsonify({'authorize_url': XERO_AUTHORIZE + '?' + params})
+    except Exception as e:
+        return _server_error(e, 'xero-connect')
+
+
+@app.route('/api/xero/callback')
+def xero_callback():
+    """Xero redirects here after consent (browser navigation, no bearer token -- the
+    signed state carries the tenant). Exchange the code, discover the org, and persist
+    the token + org->tenant map to Key Vault (this env)."""
+    if request.args.get('error'):
+        app.logger.warning("xero callback error: %s", request.args.get('error'))
+        return redirect('/?xero=error')
+    code  = request.args.get('code')
+    state = _verify_state(request.args.get('state', ''))
+    if not code or not state:
+        return redirect('/?xero=error')
+    tenant_id = state['tenant_id']
+    try:
+        cid, csecret = _xero_client()
+        basic = 'Basic ' + base64.b64encode(f'{cid}:{csecret}'.encode()).decode()
+        tr = requests.post(XERO_TOKEN_URL, headers={
+            'Authorization': basic,
+            'Content-Type':  'application/x-www-form-urlencoded',
+        }, data={
+            'grant_type':   'authorization_code',
+            'code':         code,
+            'redirect_uri': _xero_redirect_uri(),
+        }, timeout=30)
+        tr.raise_for_status()
+        tokens = tr.json()
+
+        cr = requests.get(XERO_CONNECTIONS, headers={
+            'Authorization': 'Bearer ' + tokens['access_token'],
+            'Content-Type':  'application/json',
+        }, timeout=30)
+        cr.raise_for_status()
+        tenants = [{'tenantId': c['tenantId'], 'tenantName': c.get('tenantName')}
+                   for c in cr.json()]
+        if not tenants:
+            return redirect('/?xero=error')
+
+        # Persist token (keyed per Dentally tenant so re-connecting updates in place).
+        tok_secret = f'xero-tokens-{XERO_ENV}'
+        all_tokens = json.loads(_kv_get(tok_secret, '{}') or '{}')
+        all_tokens[f't{tenant_id}'] = {'tokens': tokens, 'tenants': tenants}
+        _kv_set(tok_secret, json.dumps(all_tokens))
+
+        # Auto-map every connected org -> this tenant + its primary site.
+        default_site = _primary_site_id(tenant_id)
+        map_secret = f'xero-org-map-{XERO_ENV}'
+        org_map = json.loads(_kv_get(map_secret, '{}') or '{}')
+        for t in tenants:
+            org_map[t['tenantId']] = {'tenant_id': tenant_id, 'default_site_id': default_site}
+        _kv_set(map_secret, json.dumps(org_map))
+
+        app.logger.info("xero connected: tenant=%s orgs=%s", tenant_id,
+                        [t['tenantName'] for t in tenants])
+        return redirect('/?xero=connected')
+    except Exception as e:
+        app.logger.exception("xero callback failed: %s", e)
+        return redirect('/?xero=error')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
