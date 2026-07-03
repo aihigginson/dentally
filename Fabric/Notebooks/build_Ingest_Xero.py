@@ -14,7 +14,7 @@ import os
 CELLS = [
     # 0 -- parameters (Fabric overrides at pipeline runtime) -------------------
     (r'''# Parameters -- Fabric overrides these at pipeline runtime.
-keyvault_url = "https://REPLACE-ME.vault.azure.net/"
+keyvault_url = "https://kv-analytically.vault.azure.net/"
 only_org     = ""   # optional Xero tenantId to restrict to; blank = every mapped org
 ''', True),
 
