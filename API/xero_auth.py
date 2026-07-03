@@ -23,6 +23,18 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
+import xero_store as store
+
+
+def _arg(flag):
+    """Return the value after a CLI flag, e.g. `--key foo` -> 'foo' (or None)."""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return None
+
+
 # The creds file has a dotted name (xero_creds.local.py) so it can't be a normal
 # import — load it from its path.
 _creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xero_creds.local.py")
@@ -140,14 +152,22 @@ def main():
     tenants = [{"tenantId": c["tenantId"], "tenantName": c.get("tenantName")}
                for c in conns.json()]
 
-    with open(TOKEN_FILE, "w") as f:
-        json.dump({"tokens": tokens, "tenants": tenants}, f, indent=2)
+    # Deposit this consent into the token store as one connection. The store backend
+    # (local file vs Key Vault) is chosen by XERO_TOKEN_STORE -- onboard the PRODUCTION
+    # pipeline with `set XERO_TOKEN_STORE=keyvault` so the token lands where the Fabric
+    # notebook reads it; leave it unset for local dev. --key names the connection
+    # (default: the primary org's tenantId), so re-consenting the same org updates it.
+    conn_key = _arg("--key") or (tenants[0]["tenantId"] if tenants else "default")
+    blob = {"tokens": tokens, "tenants": tenants}
+    store.save_connection(conn_key, blob)
 
-    print("\nSaved tokens + tenants to", TOKEN_FILE)
+    where = ("Key Vault secret 'xero-tokens' (" + store._vault_url() + ")"
+             if store._backend() == "keyvault" else store.TOKEN_FILE)
+    print(f"\nSaved connection '{conn_key}' to {where}")
     print("Connected organisations:")
     for t in tenants:
         print(f"  - {t['tenantName']}  ({t['tenantId']})")
-    print("\nNext: run the extractor to pull Journals / Accounts / Tracking.")
+    print("\nNext: the extractor / Fabric notebook can now pull Accounts / Tracking / lines.")
 
 
 if __name__ == "__main__":
