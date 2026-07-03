@@ -23,6 +23,18 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
+import xero_store as store
+
+
+def _arg(flag):
+    """Return the value after a CLI flag, e.g. `--key foo` -> 'foo' (or None)."""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return None
+
+
 # The creds file has a dotted name (xero_creds.local.py) so it can't be a normal
 # import — load it from its path.
 _creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xero_creds.local.py")
@@ -38,10 +50,13 @@ AUTHORIZE_URL   = "https://login.xero.com/identity/connect/authorize"
 TOKEN_URL       = "https://identity.xero.com/connect/token"
 CONNECTIONS_URL = "https://api.xero.com/connections"
 
-# Profitability slice — Xero's GRANULAR scopes (the old bundles like
-# accounting.transactions.read / accounting.journals.read don't exist):
-#   settings.read                = chart of accounts (Accounts)
-#   invoices.read                = ACCREC (revenue) + ACCPAY (bills/costs)
+# Profitability slice — Xero's GRANULAR document scopes. We deliberately do NOT use
+# accounting.journals.read (the general-ledger endpoint): it DOES exist, but is gated
+# behind certification / a premium tier and is not grantable on connections created
+# from 29 Apr 2026 — i.e. a new client next week couldn't consent to it. The document
+# endpoints below reconcile to the P&L and any connection can grant them.
+#   settings.read                = chart of accounts (Accounts) + tracking categories
+#   invoices.read                = ACCREC (revenue) + ACCPAY (bills/costs) + credit notes
 #   banktransactions.read        = cash spend/receive
 #   manualjournals.read          = manual journals
 #   payments.read                = payments
@@ -137,14 +152,22 @@ def main():
     tenants = [{"tenantId": c["tenantId"], "tenantName": c.get("tenantName")}
                for c in conns.json()]
 
-    with open(TOKEN_FILE, "w") as f:
-        json.dump({"tokens": tokens, "tenants": tenants}, f, indent=2)
+    # Deposit this consent into the token store as one connection. The store backend
+    # (local file vs Key Vault) is chosen by XERO_TOKEN_STORE -- onboard the PRODUCTION
+    # pipeline with `set XERO_TOKEN_STORE=keyvault` so the token lands where the Fabric
+    # notebook reads it; leave it unset for local dev. --key names the connection
+    # (default: the primary org's tenantId), so re-consenting the same org updates it.
+    conn_key = _arg("--key") or (tenants[0]["tenantId"] if tenants else "default")
+    blob = {"tokens": tokens, "tenants": tenants}
+    store.save_connection(conn_key, blob)
 
-    print("\nSaved tokens + tenants to", TOKEN_FILE)
+    where = ("Key Vault secret 'xero-tokens' (" + store._vault_url() + ")"
+             if store._backend() == "keyvault" else store.TOKEN_FILE)
+    print(f"\nSaved connection '{conn_key}' to {where}")
     print("Connected organisations:")
     for t in tenants:
         print(f"  - {t['tenantName']}  ({t['tenantId']})")
-    print("\nNext: run the extractor to pull Journals / Accounts / Tracking.")
+    print("\nNext: the extractor / Fabric notebook can now pull Accounts / Tracking / lines.")
 
 
 if __name__ == "__main__":

@@ -4,9 +4,11 @@
 --  Initial Date     :  2026-07-01
 --  History          :
 --    *01     2026-07-01  AIH  Initial release (Xero profitability slice)
+--    *02     2026-07-03  AIH  Resolve fk_Practice_Site from Silver Site_ID via
+--                             Dim_Practice_Sites (was hardcoded -1).
 --  Notes            :  Full rebuild from Silver.Xero_Finance_Lines. Resolves fk_* via
---                      LEFT JOIN + ISNULL(...,-1). Demo has no tracking/site, so
---                      fk_Practice_Site = -1 for now (real orgs resolve from Tracking).
+--                      LEFT JOIN + ISNULL(...,-1). Site_ID is set in Silver from the
+--                      tracking->site map (Config.Xero_Site_Map) or the org default.
 --  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Finance @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Gold].[usp_Load_Fact_Finance]
@@ -34,16 +36,18 @@ BEGIN
         INSERT INTO Gold.Fact_Finance (Tenant_ID, fk_GL_Account, fk_Date, fk_Practice_Site, Source, Doc_Type, Doc_Number, PL_Group, Account_Class, Net_Amount, PL_Amount, DW_Created_At)
         SELECT
               l.Tenant_ID
-            , ISNULL(d.pk_GL_Account, -1)  AS fk_GL_Account
-            , ISNULL(dd.pk_Date, -1)       AS fk_Date
-            , -1                           AS fk_Practice_Site   -- Demo has no tracking->site
+            , ISNULL(d.pk_GL_Account, -1)     AS fk_GL_Account
+            , ISNULL(dd.pk_Date, -1)          AS fk_Date
+            , ISNULL(ps.pk_Practice_Site, -1) AS fk_Practice_Site
             , l.Source, l.Doc_Type, l.Doc_Number, l.PL_Group, l.Account_Class
             , l.Net_Amount, l.PL_Amount, SYSUTCDATETIME()
         FROM Silver.Xero_Finance_Lines AS l
         LEFT JOIN Gold.Dim_GL_Account AS d
             ON d.bk_Account_ID = l.Account_ID AND d.Tenant_ID = l.Tenant_ID
         LEFT JOIN Gold.Dim_Date AS dd
-            ON dd.Full_Date = l.Doc_Date;
+            ON dd.Full_Date = l.Doc_Date
+        LEFT JOIN Gold.Dim_Practice_Sites AS ps
+            ON ps.Tenant_ID = l.Tenant_ID AND ps.Site_ID = l.Site_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
     END TRY

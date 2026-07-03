@@ -280,3 +280,23 @@ BEGIN CATCH
     PRINT 'WARN: Stage.Xero_Lines skipped -- run API/xero_land.py first';
 END CATCH;
 GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Xero_Orgs]', 'V') IS NOT NULL DROP VIEW [Stage].[Xero_Orgs];
+    EXEC('CREATE VIEW [Stage].[Xero_Orgs] AS SELECT * FROM LH_Dentally.dbo.stage_xero_orgs');
+    PRINT 'Created Stage.Xero_Orgs';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Xero_Orgs skipped -- run API/xero_land.py first';
+END CATCH;
+GO
+
+BEGIN TRY
+    IF OBJECT_ID('[Stage].[Xero_Tracking]', 'V') IS NOT NULL DROP VIEW [Stage].[Xero_Tracking];
+    EXEC('CREATE VIEW [Stage].[Xero_Tracking] AS SELECT * FROM LH_Dentally.dbo.stage_xero_tracking');
+    PRINT 'Created Stage.Xero_Tracking';
+END TRY
+BEGIN CATCH
+    PRINT 'WARN: Stage.Xero_Tracking skipped -- run API/xero_land.py first';
+END CATCH;
+GO

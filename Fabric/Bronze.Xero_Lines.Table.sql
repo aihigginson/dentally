@@ -23,6 +23,10 @@ CREATE TABLE [Bronze].[Xero_Lines](
 	[Line_Amount] [decimal](18, 4) NULL,
 	[Tax_Amount] [decimal](18, 4) NULL,
 	[Tracking] [varchar](500) NULL,
+	[Tracking_Cat_1] [varchar](255) NULL,
+	[Tracking_Opt_1] [varchar](255) NULL,
+	[Tracking_Cat_2] [varchar](255) NULL,
+	[Tracking_Opt_2] [varchar](255) NULL,
 	[DW_Loaded_At] [datetime2](3) NULL
 )
 GO

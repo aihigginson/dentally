@@ -40,6 +40,13 @@ training.
 - Financial data: amounts invoiced, paid, outstanding
 - Acquisition source; assigned dentist/hygienist; site
 
+**Practice accounting data (where the Controller connects its Xero, optional):**
+- Practice-level chart of accounts, transaction lines and P&L (cost/margin), at
+  site × period × account grain — **not** patient-level
+- Any supplier/contact names appearing on those transactions (personal data of the
+  practice's suppliers; and of patients only if the practice invoices patients by name
+  through Xero). Xero is connected read-only as a **source system** (like Dentally).
+
 **Practice staff (e.g. practitioners) — limited:**
 - Name, professional identifiers, role/site, performance-related aggregates
 

@@ -1,0 +1,59 @@
+# =====================================================================
+# Release V038 -- Xero site resolution (tracking -> Practice Site) + hardening
+# =====================================================================
+# Replaces the hardcoded Fact_Finance fk_Practice_Site = -1 with real resolution:
+# each line's Site_ID = a mapped tracking (Category, Option) -> Site, else the org
+# default site. Adds the org registry + tracking reference tables and the per-tenant
+# site map, and registers the new load procs in the orchestration.
+#
+#   Stage.Views                 -- + Stage.Xero_Orgs / Stage.Xero_Tracking
+#   Config.Xero_Site_Map        -- per-tenant (Category, Option) -> Site_ID (empty)
+#   Bronze/Silver .Xero_Orgs    -- org -> Tenant_ID + default site
+#   Bronze/Silver .Xero_Tracking-- tracking categories + options (reference)
+#   Bronze.Xero_Lines           -- + Tracking_Cat/Opt_1..2 columns
+#   Silver.Xero_Finance_Lines   -- + Site_ID (resolved)
+#   Gold.usp_Load_Fact_Finance  -- fk_Practice_Site from Site_ID via Dim_Practice_Sites
+#   Audit.Process_Config/_Dependency -- + BRONZE/SILVER _XERO_ORGS/_TRACKING
+#
+# PREREQ: run `python API/xero_extract.py && python API/xero_land.py` FIRST so the
+# OneLake stage_xero_* Delta tables exist WITH the new columns (Fabric validates
+# Stage/Bronze column refs at CREATE time). Then loads Tenant 99 (Demo) through the
+# stack and regenerates the PBI views.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V038__xero_site_resolution.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Stage.Views.sql
+
+DEPLOY   Fabric\Config.Xero_Site_Map.Table.sql
+DEPLOY   Fabric\Bronze.Xero_Orgs.Table.sql
+DEPLOY   Fabric\Bronze.Xero_Tracking.Table.sql
+DEPLOY   Fabric\Bronze.Xero_Lines.Table.sql
+DEPLOY   Fabric\Silver.Xero_Orgs.Table.sql
+DEPLOY   Fabric\Silver.Xero_Tracking.Table.sql
+DEPLOY   Fabric\Silver.Xero_Finance_Lines.Table.sql
+
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Orgs.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Tracking.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Orgs.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Tracking.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Finance_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Finance.StoredProcedure.sql
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Orgs @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Tracking @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Accounts @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Xero_Lines @Tenant_ID=99,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Orgs @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Tracking @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Accounts @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Xero_Finance_Lines @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_GL_Account @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Finance @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
