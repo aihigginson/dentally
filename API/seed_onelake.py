@@ -115,6 +115,24 @@ def generate_xero_finance(tdef, data, load_ts):
         'Status': 'ACTIVE', 'DW_Stage_Loaded_At': load_ts,
     } for code, name, typ, cls in coa]
 
+    # Org registry row (org -> Tenant_ID + default site) and a single "Site" tracking
+    # category, so the V038 Xero stage schema is complete (single-site synthetic tenant:
+    # lines carry no tracking, so Fact_Finance resolves site via this org default).
+    site = (data.get('sites') or [{}])[0]
+    org = {
+        'Tenant_ID': str(tid), 'Xero_Tenant_ID': xtid,
+        'Tenant_Name': tdef['practice']['name'],
+        'Default_Site_ID': site.get('id'), 'DW_Stage_Loaded_At': load_ts,
+    }
+    tracking = [{
+        'Tenant_ID': str(tid), 'Xero_Tenant_ID': xtid,
+        'Tracking_Category_ID': _u5(tid, 'xero_trackcat', 'site'),
+        'Category_Name': 'Site', 'Category_Status': 'ACTIVE',
+        'Tracking_Option_ID': _u5(tid, 'xero_trackopt', 'site'),
+        'Option_Name': site.get('name'), 'Option_Status': 'ACTIVE',
+        'DW_Stage_Loaded_At': load_ts,
+    }]
+
     # Monthly Dentally revenue (YYYY-MM -> total invoiced)
     rev_by_month = defaultdict(float)
     for inv in data['invoices']:
@@ -122,7 +140,7 @@ def generate_xero_finance(tdef, data, load_ts):
         if d and amt > 0:
             rev_by_month[str(d)[:7]] += amt
     if not rev_by_month:
-        return accounts, []
+        return accounts, [], org, tracking
     avg_rev = sum(rev_by_month.values()) / len(rev_by_month)
 
     inc = {'200': 0.55, '201': 0.35, '202': 0.10} if tdef.get('nhs') \
@@ -146,6 +164,8 @@ def generate_xero_finance(tdef, data, load_ts):
             'Line_Item_ID': _u5(doc_id, 'line'), 'Account_Code': code,
             'Account_ID': _u5(tid, 'xero_acct', code), 'Description': name_by_code[code],
             'Line_Amount': round(amount, 2), 'Tax_Amount': 0, 'Tracking': [],
+            'Tracking_Cat_1': None, 'Tracking_Opt_1': None,
+            'Tracking_Cat_2': None, 'Tracking_Opt_2': None,
             'DW_Stage_Loaded_At': load_ts,
         })
 
@@ -157,7 +177,7 @@ def generate_xero_finance(tdef, data, load_ts):
             add(month, code, 'ACCPAY', rev * frac * rng.uniform(0.92, 1.08))
         for code, amt in fixed_amt.items():
             add(month, code, 'ACCPAY', amt)
-    return accounts, lines
+    return accounts, lines, org, tracking
 
 
 # ── Tenant definitions (matches notebook) ─────────────────────────────────────
@@ -511,6 +531,7 @@ def main():
     # ── Phase 1: generate all tenant data and tag with tenant_id ─────────────
     combined = {stage_name: [] for _, stage_name, _ in TABLE_MAP}
     xero_accounts_all, xero_lines_all = [], []
+    xero_orgs_all, xero_tracking_all  = [], []
 
     for tid in tenant_ids:
         tdef = SEED_TENANTS[tid]
@@ -523,8 +544,9 @@ def main():
               f"invoices={len(data['invoices']):,}  "
               f"claims={len(data['nhs_claims']):,}")
 
-        xa, xl = generate_xero_finance(tdef, data, load_ts)
+        xa, xl, xo, xt = generate_xero_finance(tdef, data, load_ts)
         xero_accounts_all.extend(xa); xero_lines_all.extend(xl)
+        xero_orgs_all.append(xo); xero_tracking_all.extend(xt)
         print(f"  xero: {len(xa)} accounts, {len(xl):,} P&L lines")
 
         for data_key, stage_name, wrap in TABLE_MAP:
@@ -542,6 +564,8 @@ def main():
     # Xero finance stage tables (PascalCase schema the Xero slice reads)
     write_stage(xero_accounts_all, 'xero_accounts')
     write_stage(xero_lines_all,    'xero_lines')
+    write_stage(xero_orgs_all,     'xero_orgs')
+    write_stage(xero_tracking_all, 'xero_tracking')
 
     print('\nAll tenants seeded. Run Audit.usp_Load_Bronze for tenants 11-14.')
 
