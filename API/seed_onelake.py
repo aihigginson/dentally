@@ -24,9 +24,15 @@ from generate_data import generate_tenant, _u5, _pp, _sundry, _wl, _acq, _cr, _c
 # ── OneLake config ────────────────────────────────────────────────────────────
 # Workspace GUID: visible in Fabric URL (e.g. /groups/{GUID}/)
 # Lakehouse GUID: open LH_Dentally in Fabric → copy from URL (/lakehouses/{GUID}/)
-WORKSPACE_GUID = "22e235e2-7a32-4451-b573-8d5eb8532a23"
+WORKSPACE_GUID = "22e235e2-7a32-4451-b573-8d5eb8532a23"   # default (dev); overridden by --env
 LAKEHOUSE_GUID = "e6cc2011-bd96-4164-8f21-ceb340e25449"
 ONELAKE_HOST   = "onelake.dfs.fabric.microsoft.com"
+
+# Target OneLake by environment (--env). One script for both -- no divergent prod copy.
+ENV_GUIDS = {
+    "dev":  ("22e235e2-7a32-4451-b573-8d5eb8532a23", "e6cc2011-bd96-4164-8f21-ceb340e25449"),
+    "prod": ("2490d322-e8cc-4e9e-a3dc-964ce6fe444f", "868da63e-6570-461c-aa46-eade0ce99f91"),
+}
 
 def table_path(table_name: str) -> str:
     return (
@@ -472,8 +478,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tenants', default='11,12',
                         help='Comma-separated tenant IDs to seed (default: 11,12)')
+    parser.add_argument('--env', choices=['dev', 'prod'], default='dev',
+                        help='Target OneLake environment (default: dev)')
     args = parser.parse_args()
     tenant_ids = [int(t.strip()) for t in args.tenants.split(',')]
+
+    global WORKSPACE_GUID, LAKEHOUSE_GUID
+    WORKSPACE_GUID, LAKEHOUSE_GUID = ENV_GUIDS[args.env]
+    print(f"Target OneLake: {args.env}  (lakehouse {LAKEHOUSE_GUID})")
 
     if LAKEHOUSE_GUID == "REPLACE_WITH_LAKEHOUSE_GUID":
         print("ERROR: Set LAKEHOUSE_GUID at the top of this script before running.")

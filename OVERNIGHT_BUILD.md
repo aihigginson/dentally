@@ -32,7 +32,7 @@ in §2 is retained as the alternative wiring if you ever prefer a pure-pipeline 
 Each stage runs only if the previous succeeded (Fabric "on success" dependency).
 
 **Demo vs real data (important):** today prod tenant 11 (and dev T11–T14) are loaded into
-**Stage** by the Python seeders (`API/seed_onelake_prod.py` / `API/seed_onelake.py`), run
+**Stage** by the Python seeder (`API/seed_onelake.py --env dev|prod`), run
 out-of-band — there is **no live Dentally API extract** yet. So until the real API extract is
 wired, **Stage stage [1] is a placeholder** and the nightly job effectively runs [2]→[3]→[4]
 against the already-seeded Stage. Keep activity [1] in the pipeline but disabled/empty for now;
