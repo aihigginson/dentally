@@ -466,6 +466,16 @@ def _kv_set(name, value):
     _kv().set_secret(name, value)
 
 
+def _kv_json(name):
+    """Read a JSON secret, tolerating a leading UTF-8 BOM / whitespace (secrets set via
+    some tooling get a BOM the SDK returns raw). Empty/missing -> {}."""
+    v = (_kv_get(name) or '').lstrip('﻿').strip()
+    try:
+        return json.loads(v) if v else {}
+    except Exception:
+        return {}
+
+
 def _xero_client():
     """Xero app id/secret from Key Vault (shared across envs), cached in-process."""
     if not _xero_app_creds:
@@ -533,7 +543,7 @@ def xero_status():
         if client_id is None:
             return jsonify({'error': 'Forbidden'}), 403
         tenant_id = tids[0] if tids else None
-        org_map = json.loads(_kv_get(f'xero-org-map-{XERO_ENV}', '{}') or '{}')
+        org_map = _kv_json(f'xero-org-map-{XERO_ENV}')
         orgs = [v for v in org_map.values() if v.get('tenant_id') == tenant_id]
         return jsonify({'connected': len(orgs) > 0,
                         'org_count': len(orgs),
@@ -616,14 +626,14 @@ def xero_callback():
 
         # Persist token (keyed per Dentally tenant so re-connecting updates in place).
         tok_secret = f'xero-tokens-{XERO_ENV}'
-        all_tokens = json.loads(_kv_get(tok_secret, '{}') or '{}')
+        all_tokens = _kv_json(tok_secret)
         all_tokens[f't{tenant_id}'] = {'tokens': tokens, 'tenants': tenants}
         _kv_set(tok_secret, json.dumps(all_tokens))
 
         # Auto-map every connected org -> this tenant + its primary site.
         default_site = _primary_site_id(tenant_id)
         map_secret = f'xero-org-map-{XERO_ENV}'
-        org_map = json.loads(_kv_get(map_secret, '{}') or '{}')
+        org_map = _kv_json(map_secret)
         for t in tenants:
             org_map[t['tenantId']] = {'tenant_id': tenant_id, 'default_site_id': default_site}
         _kv_set(map_secret, json.dumps(org_map))
