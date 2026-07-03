@@ -400,6 +400,10 @@
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
             <span class="ctrl-label">Definitions</span>
         </button>
+        <button class="filter-toggle" id="settings-toggle" title="Practice settings" style="display:none">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="ctrl-label">Settings</span>
+        </button>
         <div class="nav-report-controls" id="nav-report-controls">
             <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -532,6 +536,27 @@
             <button class="defs-close" id="defs-close" title="Close" aria-label="Close">&times;</button>
         </div>
         <div class="defs-body" id="defs-body"><div class="defs-loading">Loading...</div></div>
+    </aside>
+</div>
+
+<!-- ════════════════ SETTINGS PANEL (practice admin) ════════════════ -->
+<div class="defs-overlay" id="settings-overlay">
+    <aside class="defs-panel" role="dialog" aria-label="Practice settings">
+        <div class="defs-head">
+            <div>
+                <div class="defs-title">Settings</div>
+                <div class="defs-sub">Practice admin</div>
+            </div>
+            <button class="defs-close" id="settings-close" title="Close" aria-label="Close">&times;</button>
+        </div>
+        <div class="defs-body">
+            <div class="defs-group">Xero &mdash; accounting integration</div>
+            <div class="defs-item">
+                <div class="defs-item-name">Connection <span class="defs-badge" id="xero-status-badge" style="display:none"></span></div>
+                <div class="defs-item-desc" id="xero-status-desc">Checking&hellip;</div>
+                <button id="xero-connect-btn" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#13b5ea;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Xero</button>
+            </div>
+        </div>
     </aside>
 </div>
 
@@ -813,6 +838,11 @@
         if (u && data.display_name)  u.textContent = data.display_name;
         if (o && data.practice_name) o.textContent = data.practice_name;
         if (data.env === 'dev') document.body.classList.add('dev-mode');
+        // Practice admins get the Settings gear (Connect Xero lives there).
+        if (data.maintain_targets) {
+            const st = document.getElementById('settings-toggle');
+            if (st) st.style.display = '';
+        }
 
         document.getElementById('auth-overlay').style.display = 'none';
 
@@ -1147,6 +1177,82 @@
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && defsOverlay.classList.contains('open')) closeDefinitions();
     });
+
+    // ── Settings + Connect Xero (practice admin) ─────────────────────────────
+    const settingsOverlay = document.getElementById('settings-overlay');
+
+    function _xeroToast(msg, ok) {
+        const t = document.createElement('div');
+        t.textContent = msg;
+        t.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;'
+            + 'padding:10px 18px;border-radius:6px;font-size:13px;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.25);'
+            + 'background:' + (ok ? '#1a7f4b' : '#b3261e');
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 5000);
+    }
+
+    async function loadXeroStatus() {
+        const badge = document.getElementById('xero-status-badge');
+        const desc  = document.getElementById('xero-status-desc');
+        const btn   = document.getElementById('xero-connect-btn');
+        desc.textContent = 'Checking…'; badge.style.display = 'none'; btn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/xero/status');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const s = await res.json();
+            if (s.connected) {
+                badge.textContent = 'Connected'; badge.style.display = '';
+                desc.textContent = "This practice's Xero is connected — costs and margin refresh in the nightly build.";
+                if (s.can_connect) { btn.textContent = 'Reconnect Xero'; btn.style.display = ''; }
+            } else {
+                desc.textContent = s.can_connect
+                    ? "Connect your practice's Xero to bring cost and margin alongside your revenue."
+                    : 'Xero is not connected. Ask a practice admin to connect it.';
+                if (s.can_connect) { btn.textContent = 'Connect Xero'; btn.style.display = ''; }
+            }
+        } catch (e) {
+            desc.textContent = 'Could not check the Xero connection.';
+        }
+    }
+
+    async function connectXero() {
+        const btn = document.getElementById('xero-connect-btn');
+        const label = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Redirecting to Xero…';
+        try {
+            const res = await authFetch('/api/xero/connect');
+            const j = await res.json();
+            if (!res.ok || !j.authorize_url) throw new Error(j.error || 'connect failed');
+            window.location.href = j.authorize_url;   // full-page redirect to Xero consent
+        } catch (e) {
+            btn.disabled = false; btn.textContent = label;
+            _xeroToast('Could not start the Xero connection: ' + e.message, false);
+        }
+    }
+
+    function openSettings() { settingsOverlay.classList.add('open'); loadXeroStatus(); }
+    function closeSettings() { settingsOverlay.classList.remove('open'); }
+
+    document.getElementById('settings-toggle').addEventListener('click', openSettings);
+    document.getElementById('settings-close').addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
+    document.getElementById('xero-connect-btn').addEventListener('click', connectXero);
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && settingsOverlay.classList.contains('open')) closeSettings();
+    });
+
+    // Toast the outcome when Xero redirects back to /?xero=connected|error, then tidy the URL.
+    (function () {
+        const p = new URLSearchParams(window.location.search);
+        const x = p.get('xero');
+        if (x) {
+            _xeroToast(x === 'connected' ? 'Xero connected successfully.'
+                                         : 'Xero connection failed or was cancelled.', x === 'connected');
+            p.delete('xero');
+            const q = p.toString();
+            history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''));
+        }
+    })();
 
     // ── Targets data entry ───────────────────────────────────────────────────
     let _targetsLoaded   = false;
