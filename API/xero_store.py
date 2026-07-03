@@ -33,8 +33,18 @@ import os
 
 HERE       = os.path.dirname(os.path.abspath(__file__))
 TOKEN_FILE = os.path.join(HERE, "xero_token.local.json")
-KV_SECRET  = "xero-tokens"
 DEFAULT_VAULT_URL = "https://kv-analytically.vault.azure.net/"
+
+
+def _env():
+    """Environment suffix for Key Vault secrets (dev|prod), so dev and prod hold
+    SEPARATE token sets in the shared vault -- running dev's ingest never pulls prod's
+    real-client tokens and vice versa. Set XERO_ENV; defaults to dev."""
+    return os.environ.get("XERO_ENV", "dev").lower()
+
+
+def _kv_secret():
+    return "xero-tokens-" + _env()
 
 
 # ── creds + org map ───────────────────────────────────────────────────────────
@@ -88,7 +98,7 @@ def load_all():
     """Return the whole {connKey: {tokens, tenants}} dict (empty if nothing stored)."""
     if _backend() == "keyvault":
         try:
-            raw = _kv_client().get_secret(KV_SECRET).value
+            raw = _kv_client().get_secret(_kv_secret()).value
         except Exception:
             return {}
         return json.loads(raw) if raw else {}
@@ -105,7 +115,7 @@ def load_all():
 def save_all(conns):
     """Persist the whole connections dict."""
     if _backend() == "keyvault":
-        _kv_client().set_secret(KV_SECRET, json.dumps(conns))
+        _kv_client().set_secret(_kv_secret(), json.dumps(conns))
         return
     with open(TOKEN_FILE, "w") as f:
         json.dump(conns, f, indent=2)
