@@ -1,6 +1,6 @@
 # Sub-Processor Register — Analytically
 
-**Last reviewed: 2026-06-30.** This register lists the third parties Analytically (the
+**Last reviewed: 2026-07-03.** This register lists the third parties Analytically (the
 **Processor**) uses to deliver the service, and what (if any) personal data each one
 processes on behalf of customer practices (the **Controllers**). It is the canonical
 list referenced by the DPIA (§13) and the customer DPA.
@@ -17,7 +17,7 @@ appropriate UK GDPR transfer mechanism.**
 
 | # | Sub-processor | Service / role | Purpose | Personal data processed | Location | Basis |
 |---|---|---|---|---|---|---|
-| 1 | **Microsoft** | Microsoft Fabric / OneLake | Data warehouse, semantic model, embedded report hosting | **Yes** — patient identity (active), contact details, marketing consent, operational/financial/treatment analytics | UK | Microsoft Products & Services DPA |
+| 1 | **Microsoft** | Microsoft Fabric / OneLake | Data warehouse, semantic model, embedded report hosting | **Yes** — patient identity (active), contact details, marketing consent, operational/treatment analytics, and **financial/accounting analytics sourced from the practice's Xero** (incl. any supplier/contact names on transactions) | UK | Microsoft Products & Services DPA |
 | 2 | **Microsoft** | Azure (Container Apps + resource group) | Application & API hosting | **Yes** — tenant-scoped data served/rendered in transit to authenticated users | UK | Microsoft Products & Services DPA |
 | 3 | **Microsoft** | Entra ID | Authentication & identity / access management | **Yes** — staff/user account identifiers & sign-in metadata; **not** patient data | UK / EU (Microsoft identity platform) | Microsoft Products & Services DPA |
 | 4 | **GitHub** (a Microsoft company) | GitHub + GitHub Actions | Source control & CI/CD deployment automation | **No patient data** — application code, configuration & deployment pipelines only (prod deploys via OIDC) | — | GitHub DPA |
@@ -26,8 +26,13 @@ appropriate UK GDPR transfer mechanism.**
 
 **Not a sub-processor:** the upstream **Dentally** practice-management system is the
 Controller's own clinical record and **source of data**, not a sub-processor of Analytically.
-Likewise, **any customer-controlled integrations** the practice chooses to connect are
+The practice's **Xero** accounting system is treated the same way: it is the Controller's
+own financial record and a **source of data** that the practice chooses to connect —
+Analytically only **reads** from it (read-only OAuth) to bring costs/margin alongside
+Dentally revenue, and does not engage Xero to process data on Analytically's behalf.
+More generally, **any customer-controlled integrations** the practice chooses to connect are
 **not** sub-processors of Analytically and remain under the Controller's responsibility.
+(The financial data ingested from Xero is held within the warehouse under sub-processor #1.)
 
 ---
 

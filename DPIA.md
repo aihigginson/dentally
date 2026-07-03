@@ -50,13 +50,15 @@ Based on the Gold warehouse schema (`Dim_Patients`, fact tables). "Collected" = 
 
 **Financial data:** treatment revenue — Yes; outstanding balances — Yes (`Total_Invoiced` − `Total_Paid`, invoices); payment history — Yes.
 
+**Accounting data (Xero, optional):** where a practice connects its **Xero** accounting system, the Processor ingests **practice-level financial/accounting data** — chart of accounts, transaction lines (invoices, credit notes, bank transactions, manual journals) and the P&L — to show cost and margin alongside revenue. This is aggregate practice finance at **site × period × account** grain, **not** patient-level. Any **supplier/contact names** appearing on those transactions may be personal data of the practice's suppliers (and, only if a practice invoices patients by name through Xero, of patients). No special-category data is involved. Xero is the Controller's own accounting record and a **source system** (like Dentally), connected read-only at the practice's choice — not a sub-processor (see `SUB_PROCESSOR_REGISTER.md`).
+
 ---
 
 ## 3. Data flow
 
 **3.1 Import frequency:** **Daily overnight synchronisation** via a scheduled Fabric data pipeline. Not real-time; operational lists (e.g. recalls, balances) reflect the previous night's snapshot.
 
-**3.2 Automated:** Yes — Fabric pipeline ingests from the Dentally API (Bronze) → Silver → Gold; no manual data entry.
+**3.2 Automated:** Yes — Fabric pipeline ingests from the Dentally API (Bronze) → Silver → Gold; no manual data entry. Where connected, the practice's **Xero** accounting data is ingested through the same Bronze → Silver → Gold path (read-only OAuth), as an additional source.
 
 **3.3 Practice authorises the API connection:** Yes — each tenant is configured with its own Dentally API credentials (`Audit.Tenants`); ingestion only runs with credentials the practice provides. **[CONFIRM the contractual/consent mechanism + data-processor agreement with each practice.]**
 
@@ -182,9 +184,9 @@ The platform relies on the following third-party services. Customers (controller
 
 | Service | Purpose | Personal data processed |
 |---|---|---|
-| **Microsoft Fabric / OneLake** | Data warehouse, semantic model and report hosting | **Yes** — patient identity (active patients), contact details, marketing consent, and operational/financial/treatment analytics |
+| **Microsoft Fabric / OneLake** | Data warehouse, semantic model and report hosting | **Yes** — patient identity (active patients), contact details, marketing consent, operational/treatment analytics, and financial/accounting analytics sourced from the practice's Xero (§2) |
 | **Microsoft Azure** (Container Apps, resource group; UK) | Application + API hosting | **Yes** — tenant-scoped data rendered/served in transit to authenticated users |
 | **Microsoft Entra ID** | Authentication and identity / access management | **Yes** — user (staff) account identifiers and sign-in metadata; **not** patient data |
 | **GitHub** (incl. GitHub Actions) | Source control and CI/CD deployment automation | **No patient data** — application code, configuration and deployment pipelines only (production deploys authenticate via OIDC, §4.3) |
 
-**Notes:** Microsoft Fabric, Azure and Entra ID are all Microsoft sub-processors under the Microsoft Products and Services DPA. GitHub (a Microsoft company) processes no patient data — only the codebase and deployment automation. The upstream **Dentally** system is the practice's own clinical record / source of data, not a sub-processor of Analytically. **[CONFIRM if any further services are added (e.g. error tracking such as Sentry/App Insights, email/notification providers) — each must be added here and to the customer DPA before going live.]**
+**Notes:** Microsoft Fabric, Azure and Entra ID are all Microsoft sub-processors under the Microsoft Products and Services DPA. GitHub (a Microsoft company) processes no patient data — only the codebase and deployment automation. The upstream **Dentally** system is the practice's own clinical record / source of data, not a sub-processor of Analytically; the practice's **Xero** accounting system is treated the same way (Controller's own financial record, connected read-only — not a sub-processor). **[CONFIRM if any further services are added (e.g. error tracking such as Sentry/App Insights, email/notification providers) — each must be added here and to the customer DPA before going live.]**
