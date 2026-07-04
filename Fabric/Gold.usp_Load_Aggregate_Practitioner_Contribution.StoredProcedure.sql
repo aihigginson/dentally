@@ -69,15 +69,22 @@ BEGIN
             p.fk_Date,
             p.Production,
             pp.Associate_Pct,
-            CAST(p.Production * ISNULL(pp.Associate_Pct, 0) / 100.0 AS DECIMAL(18,2))       AS Associate_Pay,
-            CAST(p.Production * (1 - ISNULL(pp.Associate_Pct, 0) / 100.0) AS DECIMAL(18,2)) AS Contribution,
+            CAST(p.Production * ISNULL(pp.Associate_Pct, 0) / 100.0 AS DECIMAL(18,2)) AS Associate_Pay,
+            -- Contribution = Production - Pay (by construction) so Pay+Contribution always
+            -- reconciles to Production exactly, with no independent-rounding drift.
+            p.Production - CAST(p.Production * ISNULL(pp.Associate_Pct, 0) / 100.0 AS DECIMAL(18,2)) AS Contribution,
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #prod p
         LEFT JOIN Gold.Dim_Practitioners dp
             ON dp.pk_Practitioner = p.fk_Practitioner AND dp.Tenant_ID = p.Tenant_ID
-        LEFT JOIN Input.Practitioner_Pay pp
-            ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = dp.Practitioner_ID;
+        -- Dedupe pay to ONE row per practitioner so a stray duplicate in the input can
+        -- never fan out / double-count production (the app upserts, so normally 1 row).
+        LEFT JOIN (
+            SELECT Tenant_ID, Practitioner_ID, MAX(Associate_Pct) AS Associate_Pct
+            FROM Input.Practitioner_Pay
+            GROUP BY Tenant_ID, Practitioner_ID
+        ) pp ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = dp.Practitioner_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #prod;
