@@ -807,6 +807,106 @@ def save_targets():
         return _server_error(e, 'save_targets')
 
 
+# ── Associate pay (per-practitioner %) — admin Settings screen ────────────────
+
+@app.route('/api/practitioner-pay', methods=['GET'])
+def get_practitioner_pay():
+    """Active fee-earners for the tenant(s) + their current associate % (or null)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close()
+            return jsonify({'error': 'Only a practice admin can view associate pay'}), 403
+        practitioners = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct "
+                f"FROM Gold.Dim_Practitioners p "
+                f"LEFT JOIN Input.Practitioner_Pay pp "
+                f"  ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = p.Practitioner_ID "
+                f"WHERE p.Tenant_ID IN ({ph}) AND p.Active = 1 AND p.pk_Practitioner > 0 "
+                f"ORDER BY p.Full_Name",
+                tids,
+            )
+            practitioners = [
+                {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'role': r[3],
+                 'associate_pct': float(r[4]) if r[4] is not None else None}
+                for r in cur.fetchall()
+            ]
+        conn.close()
+        return jsonify({'practitioners': practitioners})
+    except Exception as e:
+        return _server_error(e, 'get_practitioner_pay')
+
+
+@app.route('/api/practitioner-pay', methods=['POST'])
+def save_practitioner_pay():
+    """Upsert each practitioner's associate %. A blank/null clears it (DELETE only)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close()
+            return jsonify({'error': 'Only a practice admin can set associate pay'}), 403
+
+        rows    = request.get_json(force=True) or []
+        allowed = set(tids)
+        # (tenant_id, practitioner_id, pct-or-None), only for the caller's tenant(s).
+        valid = []
+        for r in rows:
+            try:
+                tid = int(r['tenant_id']); pid = int(r['practitioner_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if tid not in allowed:
+                continue
+            pct = r.get('associate_pct')
+            if pct in (None, ''):
+                valid.append((tid, pid, None))
+            else:
+                try:
+                    pctf = float(pct)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= pctf <= 100:
+                    valid.append((tid, pid, pctf))
+
+        if valid:
+            cur.fast_executemany = True
+            cur.executemany(
+                "DELETE FROM Input.Practitioner_Pay WHERE Tenant_ID = ? AND Practitioner_ID = ?",
+                [(t, p) for t, p, _ in valid],
+            )
+            inserts = [(t, p, v) for t, p, v in valid if v is not None]
+            if inserts:
+                cur.executemany(
+                    "INSERT INTO Input.Practitioner_Pay "
+                    "(Tenant_ID, Practitioner_ID, Associate_Pct, DW_Created_At, DW_Updated_At) "
+                    "VALUES (?, ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    inserts,
+                )
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_practitioner_pay')
+
+
 if __name__ == '__main__':
     _debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=_debug)

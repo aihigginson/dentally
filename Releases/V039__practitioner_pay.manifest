@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V039 -- Input.Practitioner_Pay (associate % capture)
+# =====================================================================
+# Adds the Input.Practitioner_Pay table that the app's admin Settings screen writes
+# each fee-earner's associate pay % into (foundation for practitioner contribution /
+# P&L). Idempotent CREATE (MIGRATE, tracked once-only) so re-deploys never wipe the
+# admin-entered values -- the canonical Table.sql is for reference / full rebuilds only.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V039__practitioner_pay.manifest
+# =====================================================================
+
+MIGRATE  Migrations\V039__practitioner_pay.sql
+
+TEST
