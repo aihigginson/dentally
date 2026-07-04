@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V040 -- Gold.Aggregate_Practitioner_Contribution
+# =====================================================================
+# Production / associate-pay / contribution per practitioner (x site x invoice-date),
+# consuming Input.Practitioner_Pay (V039). GOLD_AGG registered in Process_Config +
+# the regenerated Process_Dependency so the nightly build rebuilds it after
+# Fact_Invoice_Items. Meta.usp_Create_Gold_Views exposes PBI.[Aggregate Practitioner
+# Contribution] for the semantic model.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V040__practitioner_contribution.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Aggregate_Practitioner_Contribution.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practitioner_Contribution.StoredProcedure.sql
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Practitioner_Contribution @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
