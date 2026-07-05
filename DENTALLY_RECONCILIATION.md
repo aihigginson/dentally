@@ -57,11 +57,14 @@ Resolved:
 | patient_stats | `patient_stats` | 27,745 | rollups: first/last/next appt+exam+S&P dates, `total_invoiced`, `total_paid`, `nhs_exemption_code` |
 | treatment_appointments | `treatment_appointments` | 548,512 | links treatment_plan_id ↔ appointment_id (which treatments in which appt) |
 
-Still unresolved (targeted re-probe queued):
-- **fees** — requires `treatment_id` OR `payment_plan_id` (pulled per-treatment/plan, not bulk).
-- **rooms** — empty unfiltered; retry with `site_id`.
-- **recalls** — 500 unfiltered; retry with `patient_id`.
-- **practitioner_diary_entries/_breaks** — 404; trying `available_hours`/`availabilities`/… (the diary/availability endpoint name).
+Resolved (2nd probe):
+- **fees** — `fees?treatment_id=<id>` → 5 price/duration tiers (`price_one..five`, multi-visit) per (treatment × payment_plan). **Pulled per-treatment** (iterate the ~333 treatments), not bulk.
+- **recalls** — plain `recalls` → 22,484 (the earlier 500 was transient). Reminder/workflow fields → Fact_Recalls.
+- **rooms** — `total=0` even with `site_id`: this practice has **no rooms/surgeries configured** in Dentally. Dim_Rooms just empty for them (not a bug).
+
+**Practitioner diary — `rota_practitioner_diaries` (found in docs):** `GET /v1/rota_practitioner_diaries?after=&before=&practitioner_id=&site_id=` (requires the **Rota feature** enabled for the practice; generated up to 4yr forward). One row per practitioner-per-day: `day`, `start_time`, `end_time`, `unavailable` (bool), `practitioner_id`, and **`breaks[]` EMBEDDED** (id, name, start_time, end_time). = the mock's `practitioner_diary_entries` (the day rota) + `practitioner_diary_breaks` (**flatten the embedded `breaks[]`**, not a separate endpoint). Needs `after`/`before` like appointments. (Forward free-slot lookup, if ever needed, = `/appointments/availability`.) Confirm the practice has Rota enabled (else empty).
+
+## SURVEY COMPLETE — every warehouse entity accounted for. Next: build the real Stage_Ingest.
 
 ## Ingestion build notes
 - **Extractor pagination FIX (before any `--full`):** `patients`/`treatment_plan_items`/

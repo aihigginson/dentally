@@ -28,10 +28,14 @@ ENV    = os.environ.get("DENTALLY_ENV", "dev")
 
 # Small reference sets -> always pulled in full. Big transactional sets -> sampled unless --full.
 REFERENCE     = ["sites", "users", "practitioners", "treatments", "treatment_categories",
-                 "payment_plans", "contracts"]
+                 "payment_plans", "contracts", "sundries", "acquisition_sources",
+                 "appointment_cancellation_reasons", "rooms"]
 TRANSACTIONAL = ["patients", "invoices", "invoice_items", "treatment_plans",
-                 "treatment_plan_items", "payments"]
-APPT_WINDOW   = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
+                 "treatment_plan_items", "payments", "nhs_claims", "patient_referrals",
+                 "patient_stats", "treatment_appointments", "recalls"]
+WINDOWED      = ["appointments", "rota_practitioner_diaries"]   # require after/before
+WINDOW        = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
+# fees: pulled per-treatment (fees?treatment_id=) -- iterated separately below.
 
 
 def kv_tokens():
@@ -119,14 +123,24 @@ def main():
             stamp(rows, tid); save(outdir, ep, rows)
             print(f"  {ep}: {len(rows)}")
 
-        appts = fetch_all(base, headers, "appointments", APPT_WINDOW, max_pages=cap)
-        stamp(appts, tid); save(outdir, "appointments", appts)
-        print(f"  appointments: {len(appts)}")
+        for ep in WINDOWED:
+            rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)   # needs after/before
+            stamp(rows, tid); save(outdir, ep, rows)
+            print(f"  {ep}: {len(rows)}")
 
         for ep in TRANSACTIONAL:
             rows = fetch_all(base, headers, ep, max_pages=cap)
             stamp(rows, tid); save(outdir, ep, rows)
             print(f"  {ep}: {len(rows)}")
+
+        # fees: one call per treatment (fees?treatment_id=). Full -> all treatments; sample -> a few.
+        treatments = json.load(open(os.path.join(outdir, "treatments.json")))
+        tsub = treatments if args.full else treatments[:10]
+        fees = []
+        for t in tsub:
+            fees.extend(fetch_all(base, headers, "fees", {"treatment_id": t["id"]}))
+        stamp(fees, tid); save(outdir, "fees", fees)
+        print(f"  fees: {len(fees)} (over {len(tsub)} treatments)")
 
     print(f"\nDone. Raw per-tenant JSON in {DATA}")
 
