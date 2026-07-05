@@ -45,11 +45,23 @@ must handle. This drives the real `Stage_Ingest` build + any Bronze/Silver schem
 | treatment_plan_items | 1,321,047 | `price`,`practitioner_id`,`teeth[]`,`custom_fields[]`; drop `notes` |
 | payments | 47,594 | **flatten `explanations[]`** → allocations; amounts strings |
 
-## Still to survey (warehouse ingests ~31 entities; mock had ~27)
-Not in the 15 above — confirm real endpoints/shapes before full ingestion:
-`rooms`, `sundries`, `fees`, `recalls`, `nhs_claims`, `patient_referrals`, `patient_stats`,
-`acquisition_sources`, `cancellation_reasons`, `practitioner_diary_entries`/`_breaks`,
-`treatment_appointments`. (Some may be nested or named differently.)
+## Remaining entities (probed 2026-07-05)
+Resolved:
+| Entity | Endpoint | total | notes |
+|---|---|---|---|
+| sundries | `sundries` | 37 | id/name/nickname/price/site_id |
+| nhs_claims | `nhs_claims` | 12,922 | awarded/expected_uda, dentist/patient_charge, claim_status, contract_id, ortho → Fact_NHS_Claims |
+| acquisition_sources | `acquisition_sources` | 148 | active/name/notes/show_in_portal |
+| cancellation_reasons | **`appointment_cancellation_reasons`** | 15 | reason/reason_type/archived (NOT `cancellation_reasons`) |
+| patient_referrals | `patient_referrals` | 611 | `referrable_type`/`referrable_attributes` (nested), status, reference |
+| patient_stats | `patient_stats` | 27,745 | rollups: first/last/next appt+exam+S&P dates, `total_invoiced`, `total_paid`, `nhs_exemption_code` |
+| treatment_appointments | `treatment_appointments` | 548,512 | links treatment_plan_id ↔ appointment_id (which treatments in which appt) |
+
+Still unresolved (targeted re-probe queued):
+- **fees** — requires `treatment_id` OR `payment_plan_id` (pulled per-treatment/plan, not bulk).
+- **rooms** — empty unfiltered; retry with `site_id`.
+- **recalls** — 500 unfiltered; retry with `patient_id`.
+- **practitioner_diary_entries/_breaks** — 404; trying `available_hours`/`availabilities`/… (the diary/availability endpoint name).
 
 ## Ingestion build notes
 - **Extractor pagination FIX (before any `--full`):** `patients`/`treatment_plan_items`/
