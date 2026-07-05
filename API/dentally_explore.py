@@ -31,10 +31,12 @@ HEADERS = {"Authorization": "Bearer " + creds.DENTALLY_TOKEN, "Accept": "applica
 # Curated: reference first (identity/structure), then a 1-page sample of the
 # transactional entities that matter for practitioner production + the lab hunt.
 ENDPOINTS = [
-    "practices", "sites", "users", "practitioners", "treatments",
+    "practice", "sites", "users", "practitioners", "treatments",
     "patients", "appointments", "invoices", "invoice_items",
     "treatment_plans", "treatment_plan_items", "payments",
 ]
+
+HUNT_PAGES = 25   # pages (x100) of treatment_plan_items to scan for populated custom_fields
 
 
 def save(name, obj):
@@ -69,14 +71,40 @@ def main():
               f"fields={fields}" + (f"  [rate-remaining {rl}]" if rl else ""))
         save(ep, rows)
 
-    # Deep-dump one treatment-plan-item in full: this is where lab fees / custom fields
-    # would hide (they aren't in the standard schema).
-    r = get("/treatment_plan_items", {"page": 1, "per_page": 5})
-    if r.status_code == 200:
+    # ── Lab-fee hunt: scan treatment_plan_items for POPULATED custom_fields, and note
+    #    any 'lab' mention in notes/nomenclature (the two places a lab fee could live). ──
+    print(f"\n=== Lab hunt: scanning up to {HUNT_PAGES} pages of treatment_plan_items ===")
+    scanned = with_custom = with_lab_note = 0
+    examples, lab_note_examples = [], []
+    for page in range(1, HUNT_PAGES + 1):
+        r = get("/treatment_plan_items", {"page": page, "per_page": 100})
+        if r.status_code != 200:
+            print(f"  page {page}: HTTP {r.status_code}"); break
         rows = next((v for k, v in r.json().items() if k != "meta"), [])
-        if rows:
-            print("\n=== FULL first treatment_plan_item (hunt for lab fee / custom fields) ===")
-            print(json.dumps(rows[0], indent=2)[:2500])
+        if not rows:
+            break
+        for it in rows:
+            scanned += 1
+            cf = it.get("custom_fields")
+            if cf:
+                with_custom += 1
+                if len(examples) < 3:
+                    examples.append({"id": it.get("id"), "practitioner_id": it.get("practitioner_id"),
+                                     "price": it.get("price"), "custom_fields": cf})
+            blob = ((it.get("notes") or "") + " " + (it.get("nomenclature") or "")).lower()
+            if "lab" in blob:
+                with_lab_note += 1
+                if len(lab_note_examples) < 3:
+                    lab_note_examples.append({"id": it.get("id"), "price": it.get("price"),
+                                              "notes": it.get("notes"), "nomenclature": it.get("nomenclature")})
+    print(f"  scanned {scanned} items: {with_custom} with populated custom_fields, "
+          f"{with_lab_note} mentioning 'lab' in notes/nomenclature")
+    if examples:
+        print("  --- items WITH custom_fields ---")
+        print(json.dumps(examples, indent=2)[:2000])
+    if lab_note_examples:
+        print("  --- items mentioning 'lab' ---")
+        print(json.dumps(lab_note_examples, indent=2)[:1500])
 
     print(f"\nRaw samples saved to {DATA}")
 
