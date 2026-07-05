@@ -36,7 +36,9 @@ ENDPOINTS = [
     "treatment_plans", "treatment_plan_items", "payments",
 ]
 
-HUNT_PAGES = 25   # pages (x100) of treatment_plan_items to scan for populated custom_fields
+HUNT_PAGES = 60   # pages (x100) of treatment_plan_items to scan for NON-NULL custom_fields
+# Candidate endpoints that would NAME the custom-field GUIDs (probed; 404 = not that name).
+DEF_PROBES = ["custom_field_definitions", "custom_fields", "practice/custom_fields"]
 
 
 def save(name, obj):
@@ -73,11 +75,21 @@ def main():
               f"fields={fields}" + (f"  [rate-remaining {rl}]" if rl else ""))
         save(ep, rows)
 
-    # ── Lab-fee hunt: scan treatment_plan_items for POPULATED custom_fields, and note
-    #    any 'lab' mention in notes/nomenclature (the two places a lab fee could live). ──
-    print(f"\n=== Lab hunt: scanning up to {HUNT_PAGES} pages of treatment_plan_items ===")
-    scanned = with_custom = with_lab_note = 0
-    examples, lab_note_examples = [], []
+    # ── Name the custom-field GUIDs, if an endpoint exposes the definitions ──────
+    print("\n=== Custom-field definition probes ===")
+    for p in DEF_PROBES:
+        r = get("/" + p, {"per_page": 50})
+        if r.status_code == 200:
+            d = r.json()
+            rows = next((v for k, v in d.items() if k != "meta"), d)
+            print(f"  {p}: OK -> {json.dumps(rows)[:600]}")
+        else:
+            print(f"  {p}: HTTP {r.status_code}")
+
+    # ── Lab-fee hunt: find treatment_plan_items with a NON-NULL custom_field value ─
+    print(f"\n=== Lab hunt: scanning up to {HUNT_PAGES} pages for NON-NULL custom values ===")
+    scanned = with_value = with_lab_note = 0
+    examples = []
     for page in range(1, HUNT_PAGES + 1):
         r = get("/treatment_plan_items", {"page": page, "per_page": 100})
         if r.status_code != 200:
@@ -87,26 +99,20 @@ def main():
             break
         for it in rows:
             scanned += 1
-            cf = it.get("custom_fields")
-            if cf:
-                with_custom += 1
-                if len(examples) < 3:
-                    examples.append({"id": it.get("id"), "practitioner_id": it.get("practitioner_id"),
-                                     "price": it.get("price"), "custom_fields": cf})
-            blob = ((it.get("notes") or "") + " " + (it.get("nomenclature") or "")).lower()
-            if "lab" in blob:
+            non_null = [f for f in (it.get("custom_fields") or []) if f.get("value") not in (None, "")]
+            if non_null:
+                with_value += 1
+                if len(examples) < 6:
+                    examples.append({"id": it.get("id"), "price": it.get("price"),
+                                     "nom": it.get("nomenclature"), "custom_fields": non_null})
+            if "lab" in ((it.get("notes") or "") + " " + (it.get("nomenclature") or "")).lower():
                 with_lab_note += 1
-                if len(lab_note_examples) < 3:
-                    lab_note_examples.append({"id": it.get("id"), "price": it.get("price"),
-                                              "notes": it.get("notes"), "nomenclature": it.get("nomenclature")})
-    print(f"  scanned {scanned} items: {with_custom} with populated custom_fields, "
-          f"{with_lab_note} mentioning 'lab' in notes/nomenclature")
+    print(f"  scanned {scanned}: {with_value} with a NON-NULL custom value, {with_lab_note} 'lab' notes")
     if examples:
-        print("  --- items WITH custom_fields ---")
-        print(json.dumps(examples, indent=2)[:2000])
-    if lab_note_examples:
-        print("  --- items mentioning 'lab' ---")
-        print(json.dumps(lab_note_examples, indent=2)[:1500])
+        print("  --- items with NON-NULL custom values (does any look like a lab fee?) ---")
+        print(json.dumps(examples, indent=2)[:2500])
+    else:
+        print("  -> NO treatment_plan_item in the scan has a populated custom-field value.")
 
     print(f"\nRaw samples saved to {DATA}")
 
