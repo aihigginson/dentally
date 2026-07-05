@@ -26,17 +26,10 @@ WINDOW  = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
 # Each group = candidate endpoint names to try in order (first that works wins).
 CANDIDATES = [
     ["rooms"],
-    ["sundries"],
     ["fees"],
-    ["recalls"],
-    ["nhs_claims", "nhs_claim_forms"],
-    ["practitioner_diary_entries", "practitioner_diaries", "diaries"],
-    ["practitioner_diary_breaks", "diary_breaks", "practitioner_breaks"],
-    ["acquisition_sources"],
-    ["appointment_cancellation_reasons", "cancellation_reasons"],
-    ["patient_referrals", "referrals"],
-    ["patient_stats"],
-    ["treatment_appointments"],
+    ["recalls", "patient_recalls"],
+    ["available_hours", "availabilities", "working_hours", "practitioner_diary_entries", "diary"],
+    ["practitioner_diary_breaks", "diary_breaks", "breaks"],
 ]
 
 
@@ -60,27 +53,59 @@ def save(name, rows):
         json.dump(rows, f, indent=2)
 
 
-print(f"Base: {BASE}\n")
+def sample_id(name, key="id"):
+    try:
+        rows = json.load(open(os.path.join(DATA, name + ".json")))
+        return rows[0].get(key) if rows else None
+    except Exception:
+        return None
+
+
+# Real ids from the earlier dump, for endpoints that require a filter.
+site_id = sample_id("sites")
+tid     = sample_id("treatments")
+ppid    = sample_id("payment_plans")
+pid     = sample_id("patients")
+# Extra param-sets to try (in order) per entity when plain returns 0/400/500.
+RETRY = {
+    "fees":            [{"treatment_id": tid}, {"payment_plan_id": ppid}],
+    "rooms":           [{"site_id": site_id}],
+    "recalls":         [{"patient_id": pid}],
+    "patient_recalls": [{"patient_id": pid}],
+}
+
+print(f"Base: {BASE}   (site={site_id}, treatment={tid}, payment_plan={ppid}, patient={pid})\n")
 for group in CANDIDATES:
     done = False
     for name in group:
-        r = probe(name)
+        try:
+            r = probe(name)
+        except Exception as e:
+            print(f"{name:30} ERROR {e}"); done = True; break
         if r.status_code == 404:
             continue
-        if r.status_code != 200:
-            print(f"{name:30} HTTP {r.status_code}  {(r.text or '')[:100]}")
-            done = True; break
-        rows, total = rows_of(r)
-        if not rows and (total in (0, "0", None)):
-            r2 = probe(name, WINDOW)                      # maybe needs a date window
-            rows, total = rows_of(r2)
-            tag = " (needs after/before)" if rows else " -> 0 (empty or other filter)"
+        # Build the list of param-sets to attempt for this endpoint.
+        attempts = [{}, WINDOW] + RETRY.get(name, [])
+        got_rows, got_total, note = [], None, ""
+        for i, params in enumerate(attempts):
+            try:
+                rr = r if i == 0 else probe(name, params)
+            except Exception as e:
+                continue
+            if rr.status_code == 200:
+                rows, total = rows_of(rr)
+                if rows:
+                    got_rows, got_total = rows, total
+                    note = f" (params={params})" if params else ""
+                    break
+                got_total = total
+            elif rr.status_code == 400:
+                note = f" -> 400 {(rr.text or '')[:140]}"
+        if got_rows:
+            print(f"{name:30} OK  total={str(got_total):<8}{note}  fields={sorted(got_rows[0].keys())}")
+            save(name, got_rows)
         else:
-            tag = ""
-        fields = sorted(rows[0].keys()) if rows else []
-        print(f"{name:30} OK  total={str(total):<8}{tag}  fields={fields}")
-        if rows:
-            save(name, rows)
+            print(f"{name:30} OK  total={str(got_total):<8} (no rows){note}")
         done = True; break
     if not done:
         print(f"{'/'.join(group):30} -> all candidates 404 (not that name)")
