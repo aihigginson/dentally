@@ -23,5 +23,7 @@ VALUES
   (11, 11, 'Demonstration Practice',     NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Bristol, 3 sites, NHS + ortho, 15,000 patients'),
   (12, 12, 'Elara Dental',               NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Edinburgh, 1 site, private, 7,500 patients'),
   (13, 13, 'NorthCity Dental',           NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Leeds, 2 sites, NHS + private, 7,500 patients'),
-  (14, 14, 'Eastside Dental',            NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Nottingham, 1 site, NHS + private, 5,000 patients');
+  (14, 14, 'Eastside Dental',            NULL, NULL, NULL, NULL, 1, 0, NULL, 'Seeded test data — Nottingham, 1 site, NHS + private, 5,000 patients'),
+-- REAL Dentally practices (tenant 100+ - loaded via Ingest_Dentally from api.dentally.co; Bearer token in Key Vault dentally-tokens-<env>, NOT API_Key)
+  (100, 100, 'Maple Dental', 'https://api.dentally.co/v1', NULL, NULL, NULL, 1, 1, NULL, 'REAL - first live practice. Token in Key Vault dentally-tokens-dev. Ingested via Ingest_Dentally in Orchestrate_Build.');
 GO
