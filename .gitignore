@@ -11,6 +11,10 @@ API/xero_creds.local.py
 API/xero_token.local.json
 API/xero_data/
 
+# Local Dentally token + raw discovery dumps (never commit)
+API/dentally_creds.local.py
+API/dentally_data/
+
 # Python test caches
 .pytest_cache/
 __pycache__/
