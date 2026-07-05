@@ -37,9 +37,10 @@ ENDPOINTS = [
 def endpoint_params(ep, page=1, per_page=5):
     p = {"page": page, "per_page": per_page}
     if ep == "appointments":
-        # Dentally requires a start/finish window on the appointments index.
-        p["filter[start_time]"]  = "2022-01-01T00:00:00Z"
-        p["filter[finish_time]"] = "2027-01-01T00:00:00Z"
+        # Dentally's appointments index needs a window -- via after/before (NOT
+        # filter[start_time], NOT plain start_time; those silently return 0).
+        p["after"]  = "2022-01-01T00:00:00Z"
+        p["before"] = "2027-01-01T00:00:00Z"
     return p
 
 
