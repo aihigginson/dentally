@@ -59,10 +59,12 @@ def main():
             print(f"{ep:22} HTTP {r.status_code}  {body}")
             continue
         data = r.json()
-        # Dentally wraps the list under the entity key, plus a 'meta' block.
+        # Dentally wraps the list under the entity key, plus a 'meta' block. Singular
+        # endpoints (e.g. /practice) return a single object rather than a list.
         keys = [k for k in data if k != "meta"]
         entity = keys[0] if keys else None
-        rows = data.get(entity, []) if entity else []
+        _val = data.get(entity) if entity else None
+        rows = [_val] if isinstance(_val, dict) else (_val if isinstance(_val, list) else [])
         meta = data.get("meta", {})
         total = meta.get("total_count", meta.get("total", "?"))
         fields = sorted(rows[0].keys()) if rows else []
