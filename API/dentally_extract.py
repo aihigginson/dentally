@@ -22,6 +22,7 @@ import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "dentally_data")
+PER_PAGE = 100
 KV_URL = os.environ.get("DENTALLY_KEYVAULT_URL", "https://kv-analytically.vault.azure.net/")
 ENV    = os.environ.get("DENTALLY_ENV", "dev")
 
@@ -60,17 +61,18 @@ def req(base, headers, path, params):
 
 
 def fetch_all(base, headers, ep, params=None, max_pages=None):
-    """Walk Dentally's page/per_page pagination (meta.total_pages). max_pages caps a sample."""
+    """Walk Dentally's page/per_page pagination. Terminates on a SHORT page (fewer than
+    per_page rows = last page) -- NOT meta.total_pages, which some endpoints (patients/
+    treatment_plan_items/payments) omit, so it defaulted to 1 and stopped after page 1.
+    max_pages caps a sample."""
     out, page = [], 1
     while True:
-        r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=100))
-        body = r.json()
-        rows = next((v for k, v in body.items() if k != "meta"), [])
+        r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=PER_PAGE))
+        rows = next((v for k, v in r.json().items() if k != "meta"), [])
         if isinstance(rows, dict):
             rows = [rows]
         out.extend(rows)
-        total_pages = (body.get("meta") or {}).get("total_pages", 1)
-        if not rows or page >= total_pages or (max_pages and page >= max_pages):
+        if len(rows) < PER_PAGE or (max_pages and page >= max_pages):
             return out
         page += 1
 
