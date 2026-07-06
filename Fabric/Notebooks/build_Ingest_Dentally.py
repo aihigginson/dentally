@@ -28,9 +28,10 @@ only_tenant   = ""       # optional Tenant_ID to restrict to; blank = every mapp
 full_refresh  = True     # True = full pull; False = incremental via updated_after
 updated_after = ""       # ISO8601 incremental start; blank + not full = last 24h
 sample_pages  = 0        # >0 caps pages/entity for a quick smoke test; 0 = no cap
-per_page      = 100      # rows per API page. Try 250 to ~halve the calls; if Dentally rejects
-                         # it you'll see SKIPs everywhere -- set back to 100. (Termination
-                         # auto-detects the server's real page size, so a silent cap is safe.)
+only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY these (skip the
+                         # ones already landed after a partial run); [] = every entity
+per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
+                         # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
 ''', True),
 
     # 1 -- imports -------------------------------------------------------------
@@ -66,8 +67,10 @@ print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental f
 ''', False),
 
     # 3 -- config --------------------------------------------------------------
-    (r'''RATE_FLOOR = 3      # when RateLimit-Remaining hits this, sleep to the window reset
-MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (guards a bad/epoch reset header)
+    # Confirmed limit: x-ratelimit-limit=3600/hour, x-ratelimit-reset = unix epoch on the hour
+    # (top of each clock hour). Draining to 0 gets a 403 temp-block, so we stop at RATE_FLOOR.
+    (r'''RATE_FLOOR = 5      # when x-ratelimit-remaining hits this, sleep to the window reset
+MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (reset is an epoch on the hour)
 MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
 # Appointments + rota require an after/before window (plain params, NOT filter[...]).
 WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
@@ -267,6 +270,8 @@ REGISTRY = [
     print("\nTenant", tid, "(" + cfg.get("name", "") + ") @", base)
 
     for ep, stage_name, kind, fn in REGISTRY:
+        if only_entities and ep not in only_entities and stage_name not in only_entities:
+            continue
         try:  # one bad/absent endpoint must not abort the whole practice's ingest
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
