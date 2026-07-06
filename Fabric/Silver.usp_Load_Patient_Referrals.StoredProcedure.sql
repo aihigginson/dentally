@@ -49,16 +49,16 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID                                                                       AS [Tenant_ID],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)                           AS [Patient_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)                           AS [Patient_ID],
                 LEFT(Site_ID, 50)                                                               AS [Site_ID],
-                TRY_CAST(ROUND(CAST(User_ID AS float), 0) AS int)                              AS [User_ID],
+                TRY_CAST(ROUND(TRY_CAST(User_ID AS float), 0) AS int)                              AS [User_ID],
                 LEFT(Reference, 50)                                                             AS [Reference],
                 LEFT(Status, 50)                                                                AS [Status],
                 LEFT(Referrable_Type, 100)                                                      AS [Referrable_Type],
                 LEFT(Services_Appointment_ID, 50)                                               AS [Services_Appointment_ID],
                 CAST(Additional_Information AS VARCHAR(MAX))                                    AS [Additional_Information],
                 CASE WHEN LOWER(TRIM(Consented_By_Patient)) IN ('1','true') THEN 1 ELSE 0 END  AS [Consented_By_Patient],
-                TRY_CAST(ROUND(CAST(Referred_Practitioner_ID AS float), 0) AS int)             AS [Referred_Practitioner_ID],
+                TRY_CAST(ROUND(TRY_CAST(Referred_Practitioner_ID AS float), 0) AS int)             AS [Referred_Practitioner_ID],
                 LEFT(Referred_Site_ID, 50)                                                      AS [Referred_Site_ID],
                 TRY_CAST(LEFT(NULLIF(TRIM(Created_At), ''), 23) AS datetime2(3))               AS [Created_At],
                 ID                                                                              AS [Patient_Referral_ID]

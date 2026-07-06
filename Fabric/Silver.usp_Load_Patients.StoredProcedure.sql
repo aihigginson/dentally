@@ -77,8 +77,8 @@ BEGIN
         FROM (
             SELECT
                     Tenant_ID  AS [Tenant_ID],
-                    TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)    AS Patient_ID,
-                    TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)    AS Account_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)    AS Patient_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Account_ID AS float), 0) AS int)    AS Account_ID,
                     LEFT(Site_ID, 50)                                        AS Site_ID,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Active,
@@ -102,21 +102,21 @@ BEGIN
                     -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
                     CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
-                    TRY_CAST(ROUND(CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
-                    TRY_CAST(ROUND(CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,
                     Payment_Plan_ID                                          AS Payment_Plan_ID,
                     LEFT(Acquisition_Source_ID, 50)                          AS Acquisition_Source_ID,
                     TRY_CAST(Dentist_Recall_Date AS date)                    AS Dentist_Recall_Date,
-                    TRY_CAST(ROUND(CAST(Dentist_Recall_Interval AS float),0) AS int)
+                    TRY_CAST(ROUND(TRY_CAST(Dentist_Recall_Interval AS float),0) AS int)
                                                                              AS Dentist_Recall_Interval,
                     TRY_CAST(Hygienist_Recall_Date AS date)                  AS Hygienist_Recall_Date,
-                    TRY_CAST(ROUND(CAST(Hygienist_Recall_Interval AS float),0) AS int)
+                    TRY_CAST(ROUND(TRY_CAST(Hygienist_Recall_Interval AS float),0) AS int)
                                                                              AS Hygienist_Recall_Interval,
                     LEFT(Recall_Method, 20)                                  AS Recall_Method,
                     LEFT(Created_At,    50)                                  AS Created_At,
                     LEFT(Updated_At,    50)                                  AS Updated_At
                 FROM Bronze.Patients
-                WHERE TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
+                WHERE TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

@@ -41,13 +41,13 @@ BEGIN
 
         SELECT
             t.Tenant_ID                                     AS Tenant_ID,
-            CAST(t.Id AS INT)                               AS Treatment_ID,
-            CAST(t.Code AS INT)                             AS Treatment_Code,
+            TRY_CAST(t.Id AS INT)                           AS Treatment_ID,
+            LEFT(NULLIF(TRIM(t.Code),''), 50)               AS Treatment_Code,  -- real codes are alphanumeric (DOMI, 1005a) - keep as string
             NULLIF(TRIM(t.Nomenclature),'')                 AS Nomenclature,
             NULLIF(TRIM(t.Region),'')                       AS Region,
-            CAST(t.UDA_Band AS INT)                         AS UDA_Band,
-            CAST(t.NHS_Treatment_Cat AS INT)                AS NHS_Treatment_Cat,
-            CAST(t.Treatment_Category_ID AS INT)            AS Treatment_Category_ID,
+            TRY_CAST(t.UDA_Band AS INT)                     AS UDA_Band,
+            TRY_CAST(t.NHS_Treatment_Cat AS INT)            AS NHS_Treatment_Cat,
+            TRY_CAST(t.Treatment_Category_ID AS INT)        AS Treatment_Category_ID,
             NULLIF(TRIM(tc.Name),'')                        AS Treatment_Category_Name,
             COALESCE(NULLIF(TRIM(m.Standard_Treatment_Category),''), LEFT(NULLIF(TRIM(tc.Name),''), 100)) AS Standard_Treatment_Category,
             TRY_CAST(NULLIF(TRIM(t.Created_At),'') AS datetime2(3)) AS Created_Date,
@@ -57,7 +57,7 @@ BEGIN
         FROM Silver.Treatments t
         LEFT JOIN Silver.Treatment_Categories tc ON tc.Id = t.Treatment_Category_ID AND tc.Tenant_ID = t.Tenant_ID
         LEFT JOIN Input.Treatment_Category_Map m  ON m.Tenant_ID = t.Tenant_ID AND m.Source_Treatment_Category = NULLIF(TRIM(tc.Name),'')
-        WHERE t.Id IS NOT NULL;
+        WHERE TRY_CAST(t.Id AS INT) IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt

@@ -61,14 +61,14 @@ BEGIN
                 CASE WHEN TRY_CAST(Payment_Plan_Active AS decimal(18,4)) = 1
              THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END  AS [Payment_Plan_Active],
                 LEFT(Payment_Plan_Colour, 20)  AS [Payment_Plan_Colour],
-                TRY_CAST(ROUND(CAST(Dentist_Recall_Interval AS float), 0) AS int)  AS [Dentist_Recall_Interval],
-                TRY_CAST(ROUND(CAST(Emergency_Duration AS float), 0) AS int)  AS [Emergency_Duration],
-                TRY_CAST(ROUND(CAST(Exam_Duration AS float), 0) AS int)  AS [Exam_Duration],
-                TRY_CAST(ROUND(CAST(Exam_Scale_And_Polish_Duration AS float), 0) AS int)  AS [Exam_Scale_And_Polish_Duration],
-                TRY_CAST(ROUND(CAST(Hygienist_Recall_Interval AS float), 0) AS int)  AS [Hygienist_Recall_Interval],
+                TRY_CAST(ROUND(TRY_CAST(Dentist_Recall_Interval AS float), 0) AS int)  AS [Dentist_Recall_Interval],
+                TRY_CAST(ROUND(TRY_CAST(Emergency_Duration AS float), 0) AS int)  AS [Emergency_Duration],
+                TRY_CAST(ROUND(TRY_CAST(Exam_Duration AS float), 0) AS int)  AS [Exam_Duration],
+                TRY_CAST(ROUND(TRY_CAST(Exam_Scale_And_Polish_Duration AS float), 0) AS int)  AS [Exam_Scale_And_Polish_Duration],
+                TRY_CAST(ROUND(TRY_CAST(Hygienist_Recall_Interval AS float), 0) AS int)  AS [Hygienist_Recall_Interval],
                 Payment_Plan_Name  AS [Payment_Plan_Name],
                 Payment_Plan_Patient_Friendly_Name  AS [Payment_Plan_Patient_Friendly_Name],
-                TRY_CAST(ROUND(CAST(Scale_And_Polish_Duration AS float), 0) AS int)  AS [Scale_And_Polish_Duration],
+                TRY_CAST(ROUND(TRY_CAST(Scale_And_Polish_Duration AS float), 0) AS int)  AS [Scale_And_Polish_Duration],
                 TRY_CAST(Payment_Plan_Created_At AS datetime2(3))  AS [Payment_Plan_Created_At]
             FROM Bronze.Payment_Plans
         ) AS staged;

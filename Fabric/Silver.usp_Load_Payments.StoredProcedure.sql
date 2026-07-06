@@ -60,16 +60,17 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int)  AS [Payment_ID],
-                TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)  AS [Account_ID],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
+                TRY_CAST(ROUND(TRY_CAST(Payment_ID AS float), 0) AS int)  AS [Payment_ID],
+                TRY_CAST(ROUND(TRY_CAST(Account_ID AS float), 0) AS int)  AS [Account_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
                 Practitioner_ID  AS [Practitioner_ID],
                 Payment_Plan_ID  AS [Payment_Plan_ID],
                 LEFT(Site_ID, 50)  AS [Site_ID],
                 User_ID  AS [User_ID],
-                -- Bronze Reference is decimal; convert to string
-        LEFT(CAST(TRY_CAST(ROUND(CAST(Reference AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Reference],
-                LEFT(CAST(TRY_CAST(ROUND(CAST(Transaction_Number AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Transaction_Number],
+                -- Reference/Transaction_Number: strip the trailing .0 when numeric (mock),
+                -- else keep the raw string (real Dentally uses Stripe charge ids e.g. ch_...).
+        LEFT(COALESCE(CAST(TRY_CAST(ROUND(TRY_CAST(Reference AS float),0) AS bigint) AS VARCHAR(50)), Reference), 50)  AS [Reference],
+                LEFT(COALESCE(CAST(TRY_CAST(ROUND(TRY_CAST(Transaction_Number AS float),0) AS bigint) AS VARCHAR(50)), Transaction_Number), 50)  AS [Transaction_Number],
                 Amount  AS [Amount],
                 Amount_Unexplained  AS [Amount_Unexplained],
                 LEFT(Method, 100)  AS [Method],
@@ -78,7 +79,7 @@ BEGIN
                 LEFT(Status, 50)  AS [Status],
                 TRY_CAST(Dated_On AS date)  AS [Dated_On]
             FROM Bronze.Payments
-            WHERE TRY_CAST(ROUND(CAST(Payment_ID AS float), 0) AS int) IS NOT NULL
+            WHERE TRY_CAST(ROUND(TRY_CAST(Payment_ID AS float), 0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

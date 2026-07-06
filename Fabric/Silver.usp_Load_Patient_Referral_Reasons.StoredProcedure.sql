@@ -44,11 +44,11 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 -- Bronze Patient_Referral_ID is decimal(18,4); Silver is int
-                TRY_CAST(ROUND(CAST(Patient_Referral_ID AS float), 0) AS int)  AS [Patient_Referral_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_Referral_ID AS float), 0) AS int)  AS [Patient_Referral_ID],
                 LEFT(Referral_Reason_ID, 50)  AS [Referral_Reason_ID],
                 LEFT(Name, 255)  AS [Name]
             FROM Bronze.Patient_Referral_Reasons
-            WHERE TRY_CAST(ROUND(CAST(Patient_Referral_ID AS float), 0) AS int) IS NOT NULL
+            WHERE TRY_CAST(ROUND(TRY_CAST(Patient_Referral_ID AS float), 0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

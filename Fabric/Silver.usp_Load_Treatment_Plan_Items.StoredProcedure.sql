@@ -82,9 +82,9 @@ BEGIN
         TRY_CAST(Treatment_Plan_ID AS int)  AS [Treatment_Plan_ID],
                 Payment_Plan_ID  AS [Payment_Plan_ID],
                 -- Bronze Treatment_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Treatment_ID AS float),0) AS int)  AS [Treatment_ID],
+        TRY_CAST(ROUND(TRY_CAST(Treatment_ID AS float),0) AS int)  AS [Treatment_ID],
                 -- Bronze Patient_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Patient_ID AS float),0) AS int)  AS [Patient_ID],
+        TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float),0) AS int)  AS [Patient_ID],
                 Practitioner_ID  AS [Practitioner_ID],
                 CAST(NULL AS uniqueidentifier)  AS [Fee_ID],
                 -- Fee_ID not in Bronze
@@ -105,16 +105,16 @@ BEGIN
                 LEFT(Invoice_ID, 255)  AS [Invoice_ID],
                 LEFT(Treatment_Appointment_ID, 255)  AS [Treatment_Appointment_ID],
                 -- Bronze Referrer_ID is decimal(18,4); Silver is VARCHAR(255)
-        LEFT(CAST(TRY_CAST(ROUND(CAST(Referrer_ID AS float),0) AS bigint) AS VARCHAR(255)), 255)  AS [Referrer_ID],
+        LEFT(CAST(TRY_CAST(ROUND(TRY_CAST(Referrer_ID AS float),0) AS bigint) AS VARCHAR(255)), 255)  AS [Referrer_ID],
                 LEFT(Nomenclature,         255)  AS [Nomenclature],
                 LEFT(NHS_Treatment_Cat,    255)  AS [NHS_Treatment_Cat],
                 LEFT(UDA_Band,             255)  AS [UDA_Band],
-                TRY_CAST(ROUND(CAST(Position AS float),0) AS int)  AS [Position],
-                TRY_CAST(ROUND(CAST(Base_Chart AS float),0) AS int)  AS [Base_Chart],
+                TRY_CAST(ROUND(TRY_CAST(Position AS float),0) AS int)  AS [Position],
+                TRY_CAST(ROUND(TRY_CAST(Base_Chart AS float),0) AS int)  AS [Base_Chart],
                 CASE WHEN LOWER(TRIM(Completed))       IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
                 CASE WHEN LOWER(TRIM(Charged))         IN ('true','1') THEN 1 ELSE 0 END  AS [Charged],
                 CASE WHEN LOWER(TRIM(Appear_On_Invoice)) IN ('true','1') THEN 1 ELSE 0 END  AS [Appear_On_Invoice],
-                TRY_CAST(ROUND(CAST(Duration AS float),0) AS int)  AS [Duration],
+                TRY_CAST(ROUND(TRY_CAST(Duration AS float),0) AS int)  AS [Duration],
                 LEFT(Completed_At, 50)  AS [Completed_At],
                 LEFT(Created_At,   50)  AS [Created_At],
                 LEFT(Updated_At,   50)  AS [Updated_At]

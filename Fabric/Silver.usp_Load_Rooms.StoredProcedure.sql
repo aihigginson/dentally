@@ -55,7 +55,7 @@ BEGIN
                 LEFT(Site_ID, 50)  AS [Site_ID],
                 LEFT(Name, 255)  AS [Name],
                 LEFT(Colour, 100)  AS [Colour],
-                TRY_CAST(ROUND(CAST(Calendar_Position AS float), 0) AS int)  AS [Calendar_Position],
+                TRY_CAST(ROUND(TRY_CAST(Calendar_Position AS float), 0) AS int)  AS [Calendar_Position],
                 LEFT(Created_At, 50)  AS [Created_At],
                 LEFT(Updated_At, 50)  AS [Updated_At],
                 LEFT(Practice_ID, 50)  AS [Practice_ID]

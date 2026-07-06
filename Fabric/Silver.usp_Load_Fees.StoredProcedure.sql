@@ -50,7 +50,7 @@ BEGIN
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(Fee_ID, 255)                      AS [Fee_ID],
                 -- Bronze Treatment_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Treatment_ID AS float), 0) AS int)  AS [Treatment_ID],
+        TRY_CAST(ROUND(TRY_CAST(Treatment_ID AS float), 0) AS int)  AS [Treatment_ID],
                 Payment_Plan_ID  AS [Payment_Plan_ID],
                 TRY_CAST(Price_One       AS decimal(18,4))  AS [Price]
             FROM Bronze.Fees
