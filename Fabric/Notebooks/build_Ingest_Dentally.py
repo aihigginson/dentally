@@ -28,6 +28,9 @@ only_tenant   = ""       # optional Tenant_ID to restrict to; blank = every mapp
 full_refresh  = True     # True = full pull; False = incremental via updated_after
 updated_after = ""       # ISO8601 incremental start; blank + not full = last 24h
 sample_pages  = 0        # >0 caps pages/entity for a quick smoke test; 0 = no cap
+per_page      = 100      # rows per API page. Try 250 to ~halve the calls; if Dentally rejects
+                         # it you'll see SKIPs everywhere -- set back to 100. (Termination
+                         # auto-detects the server's real page size, so a silent cap is safe.)
 ''', True),
 
     # 1 -- imports -------------------------------------------------------------
@@ -63,41 +66,64 @@ print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental f
 ''', False),
 
     # 3 -- config --------------------------------------------------------------
-    (r'''PER_PAGE = 100
-MAX_429  = 6
+    (r'''RATE_FLOOR = 3      # when RateLimit-Remaining hits this, sleep to the window reset
+MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (guards a bad/epoch reset header)
+MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
 # Appointments + rota require an after/before window (plain params, NOT filter[...]).
 WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
 ''', False),
 
-    # 4 -- API helpers (from API/dentally_extract.py) --------------------------
-    (r'''def req(base, headers, path, params):
-    # GET with 429 backoff + a pause when the rate budget (RateLimit-Remaining ~3600) runs low.
-    for _ in range(MAX_429):
-        r = requests.get(base + path, headers=headers, params=params, timeout=60)
+    # 4 -- API helpers (rate-aware: sleep to the window reset, never skip on 429) ----
+    (r'''def _wait_seconds(resp, default):
+    # Seconds to wait, from Retry-After or RateLimit-Reset. Handles delta-seconds OR a unix
+    # epoch, and clamps to [1, MAX_WAIT] so a malformed header can't sleep for ever.
+    for h in ("Retry-After", "RateLimit-Reset", "X-RateLimit-Reset", "RateLimit-Reset-After"):
+        v = resp.headers.get(h)
+        if v and str(v).isdigit():
+            n = int(v)
+            if n > 100000:                       # looks like a unix epoch -> convert to delta
+                n = n - int(time.time())
+            return max(1, min(n + 1, MAX_WAIT))
+    return default
+
+def req(base, headers, path, params):
+    # Survive Dentally's ~3600/hr budget: on 429 wait to the reset and retry (won't skip data);
+    # when the remaining budget hits RATE_FLOOR, sleep to the window reset (not a fixed dribble).
+    attempt = 0
+    while True:
+        attempt += 1
+        r = requests.get(base + path, headers=headers, params=params, timeout=90)
         if r.status_code == 429:
-            wait = int(r.headers.get("Retry-After", 30)) + 1
-            print("      429 rate-limited; sleeping", wait, "s")
+            wait = _wait_seconds(r, 30)
+            print("      429 rate-limited (try " + str(attempt) + "); sleeping " + str(wait) + "s")
             time.sleep(wait)
+            if attempt >= MAX_429:
+                raise RuntimeError("Rate-limited " + str(MAX_429) + "x on " + path)
             continue
         r.raise_for_status()
         rem = r.headers.get("RateLimit-Remaining") or r.headers.get("X-RateLimit-Remaining")
-        if rem and rem.isdigit() and int(rem) < 50:
-            print("      rate budget low (" + rem + "); pausing 20s")
-            time.sleep(20)
+        if rem is not None and str(rem).isdigit() and int(rem) <= RATE_FLOOR:
+            wait = _wait_seconds(r, 60)
+            print("      budget low (" + str(rem) + "); sleeping " + str(wait) + "s to window reset")
+            time.sleep(wait)
         return r
-    raise RuntimeError("Rate-limited repeatedly on " + path)
 
 def fetch_all(base, headers, ep, params=None, max_pages=None):
-    # Walk page/per_page pagination. Terminate on a SHORT page -- NOT meta.total_pages,
-    # which some endpoints (patients/treatment_plan_items/payments) omit (defaults to 1).
-    out, page = [], 1
+    # Page until a short/empty page. size = the server's ACTUAL page-1 count, so a per_page the
+    # API silently caps below what we asked can't trigger an early stop. Logs every 10 pages.
+    out, page, size = [], 1, None
     while True:
-        r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=PER_PAGE))
+        r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=per_page))
         rows = next((v for k, v in r.json().items() if k != "meta"), [])
         if isinstance(rows, dict):
             rows = [rows]
+        n = len(rows)
+        if size is None:
+            size = n
         out.extend(rows)
-        if len(rows) < PER_PAGE or (max_pages and page >= max_pages):
+        if page % 10 == 0:
+            print("      " + ep + " page " + str(page) + " (" + str(len(out)) + " rows so far)")
+        if n == 0 or (size and n < size) or (max_pages and page >= max_pages):
             return out
         page += 1
 
