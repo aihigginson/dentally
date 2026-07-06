@@ -88,28 +88,57 @@ Run it. Expected: CELL 7c prints `Ingest_Dentally (all mapped practices)` then e
 and refreshes the model. **Send me the output** -- especially any FAILED Bronze job (that's
 where the 3 known stage gaps below will surface, and I'll fix them).
 
-## Full load
+## Initial full load (run `Ingest_Dentally` STANDALONE, not via Orchestrate)
 
-Once the smoke test is clean: set `dentally_sample_pages = 0` (full pull) and run again.
-NOTE: the full pull is ~1.9M records + 113k appointments -- the `notebook.run` timeout is
-3600s and may be tight; if it times out we raise it or switch that tenant to incremental
-(`full_refresh = False`, which pulls via `updated_after` from `Last_Loaded_At`).
+The first pull is big (~1.9M records) and Dentally's rate limit makes it a **multi-hour,
+overnight job**. Do NOT run it through `Orchestrate_Build` -- CELL 7c calls it via
+`notebook.run(..., 3600, ...)`, a hard 1-hour timeout it will blow past. Instead:
+
+1. Open `Ingest_Dentally` directly (LH_Dentally attached as default), set `sample_pages = 0`,
+   `only_tenant = "100"`, and run it. A directly-run notebook has no child-timeout; its
+   Spark session can run for hours.
+2. When it finishes, run `Orchestrate_Build` with `run_dentally_ingest = False`,
+   `tenants_override = [100]` -- it just builds Bronze->Gold from the landed stage.
+3. Nightly after that = incremental: `full_refresh = False` pulls only changes via
+   `updated_after` from `Last_Loaded_At` -- small and fast, safe inside Orchestrate's timeout.
+
+### Dentally rate limit (confirmed against the live API)
+- **3,600 requests / clock-hour** (`x-ratelimit-limit: 3600`), reset = unix epoch on the
+  top of each hour. That's **1 request/second** -- the initial backfill is bound by this.
+- **Draining the budget to 0 gets a `403` temp-block** (not 429). The notebook now sleeps to
+  the hourly reset when the budget nears zero (`RATE_FLOOR`), so it **can't hit 0** -- it will
+  visibly pause between hourly windows. That is correct, not a hang.
+- **`per_page` max is 100** -- asking for more silently drops to 25 (more calls). Leave at 100.
+- The whole 1.9M pull is ~23-25k calls => ~7 hourly windows. **Ask Dentally to raise the rate
+  limit for the initial migration** -- that's the single biggest lever (collapses it to ~1h).
+
+### Resume a partial run (`only_entities` -- also sets the ORDER)
+If a run stops part-way, the entities already printed are safely in `stage_*` (tenant-scoped).
+Re-pull ONLY the rest -- and in the order you list -- with `only_entities`:
+```
+only_entities = ["treatment_plan_items","treatment_plans","recalls","nhs_claims",
+                 "patient_stats","treatment_appointments","patient_referrals","fees"]
+```
+(Put the ones you care about most FIRST -- e.g. `treatment_plan_items` -- so you reach them
+before the long tail. `[]` = every entity in registry order.)
 
 ---
 
-## Known gaps to resolve on the first real Bronze run
+## Known data-shape fixes (surfaced on the first real build)
 
-The mock also fed three stage tables the real API doesn't map cleanly. If the matching
-Bronze load FAILS on a missing stage table, that's expected -- report it and I'll fix:
-| stage table | issue | fix |
-|---|---|---|
-| `stage_accounts` | no confirmed real `/accounts` endpoint | derive from `patient.account_id`, or make the Bronze load tolerant |
-| `stage_waiting_lists` | endpoint not surveyed | probe `/waiting_lists`; or skip if the practice doesn't use them |
-| `stage_payment_allocations` | real nests allocations in `payment.explanations[]` | point the Bronze load at `stage_payment_explanations`, or split the fields |
-
-Also on first real data: `invoice_items.nhs_charge` is a **boolean** (is-NHS flag) but
-`Gold.Fact_Invoice_Items.NHS_Charge` is `decimal(12,2)` -- a Silver/Gold mapping fix
-(make it a flag, or drop) once we see it flow.
+- **Silver/Gold numeric casts (FIXED, V041):** real Dentally puts non-numeric strings in
+  fields the mock kept numeric -- `payment.transaction_number` = Stripe ids (`ch_...`) broke a
+  hard `float` cast (8114); alphanumeric treatment `code` (`DOMI`) broke an `int` cast (245).
+  Swept to `TRY_CAST` across 18 Silver procs + fixed `Dim_Treatments`. Deploy V041.
+- **`accounts` + `waiting_lists`:** these DO exist as Dentally endpoints and are now in the
+  ingest registry (earlier "no endpoint" note was wrong).
+- **`stage_payment_allocations` (open):** real Dentally nests allocations in
+  `payment.explanations[]` (landed as `stage_payment_explanations`). Confirm whether a
+  standalone `/payment_allocations` endpoint also exists, or point that Bronze load at the
+  explanations.
+- **`invoice_items.nhs_charge` (open, data-correctness not a blocker):** it's a **boolean**
+  (is-NHS flag) but `Gold.Fact_Invoice_Items.NHS_Charge` is `decimal(12,2)`. `TRY_CAST` makes
+  it NULL rather than error -- fix the mapping (make it a flag, or drop) once we see it flow.
 
 ---
 

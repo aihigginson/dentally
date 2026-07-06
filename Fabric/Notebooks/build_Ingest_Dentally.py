@@ -269,9 +269,17 @@ REGISTRY = [
     headers = {"Authorization": "Bearer " + cfg["token"], "Accept": "application/json"}
     print("\nTenant", tid, "(" + cfg.get("name", "") + ") @", base)
 
-    for ep, stage_name, kind, fn in REGISTRY:
-        if only_entities and ep not in only_entities and stage_name not in only_entities:
-            continue
+    # only_entities RESUMES + sets ORDER: if given, run exactly those in the order listed
+    # (else every entity in registry order). Match by endpoint or stage-table name.
+    if only_entities:
+        by_key = {}
+        for e in REGISTRY:
+            by_key[e[0]] = e; by_key[e[1]] = e
+        run_list = [by_key[k] for k in only_entities if k in by_key]
+    else:
+        run_list = list(REGISTRY)
+
+    for ep, stage_name, kind, fn in run_list:
         try:  # one bad/absent endpoint must not abort the whole practice's ingest
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
@@ -295,16 +303,17 @@ REGISTRY = [
 
     # fees: one call per treatment (fees?treatment_id=) -- 5 price/duration tiers each.
     # In sample mode cap to a few treatments (the sweep is otherwise full even when sampling).
-    try:
-        treatments = fetch_all(base, headers, "treatments")
-        if cap:
-            treatments = treatments[:10]
-        fees = []
-        for t in treatments:
-            fees.extend(fetch_all(base, headers, "fees", {"treatment_id": t["id"]}))
-        write_stage(fees, "fees", tid)
-    except Exception as e:
-        print("  SKIP fees: " + str(e)[:200])
+    if (not only_entities) or ("fees" in only_entities):
+        try:
+            treatments = fetch_all(base, headers, "treatments")
+            if cap:
+                treatments = treatments[:10]
+            fees = []
+            for t in treatments:
+                fees.extend(fetch_all(base, headers, "fees", {"treatment_id": t["id"]}))
+            write_stage(fees, "fees", tid)
+        except Exception as e:
+            print("  SKIP fees: " + str(e)[:200])
 
 print("\nStage load complete. Bronze/Silver/Gold Dentally loads run next in the pipeline.")
 ''', False),
