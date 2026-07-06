@@ -209,9 +209,11 @@ REGISTRY = [
     ("appointment_cancellation_reasons", "cancellation_reasons",  "ref", passthrough),
     ("sundries",                         "sundries",              "ref", passthrough),
     ("contracts",                        "contracts",             "ref", passthrough),
+    ("waiting_lists",                    "waiting_lists",         "ref", passthrough),
     ("appointments",                     "appointments",          "win", t_appointment),
     ("rota_practitioner_diaries",        "practitioner_diary_entries", "win", t_rota),
     ("patients",                         "patients",              "txn", t_patient),
+    ("accounts",                         "accounts",              "txn", passthrough),
     ("invoices",                         "invoices",              "txn", passthrough),
     ("invoice_items",                    "invoice_items",         "txn", passthrough),
     ("payments",                         "payments",              "txn", t_payment),
@@ -223,11 +225,11 @@ REGISTRY = [
     ("treatment_appointments",           "treatment_appointments","txn", passthrough),
     ("patient_referrals",                "patient_referrals",     "txn", passthrough),
 ]
-# NOTE (reconciliation gaps to confirm on first real Bronze run): the mock also fed
-# stage_accounts, stage_waiting_lists and stage_payment_allocations. Real Dentally has no
-# confirmed /accounts or /waiting_lists endpoint, and nests allocations inside
-# payment.explanations[]. If the corresponding Bronze loads error on a missing stage table,
-# either (a) point them at the nested source, or (b) make those Bronze loads tolerant.
+# NOTE: stage_payment_allocations is the remaining gap -- real Dentally nests allocations
+# inside payment.explanations[] (landed as stage_payment_explanations); confirm whether a
+# standalone /payment_allocations endpoint also exists or the Bronze load should read the
+# explanations. Each pull below is wrapped tolerant, so an endpoint that 404s for a given
+# practice (e.g. an unused feature) logs SKIP and the rest still land.
 ''', False),
 
     # 8 -- main: pull -> transform -> land ------------------------------------
@@ -239,30 +241,39 @@ REGISTRY = [
     print("\nTenant", tid, "(" + cfg.get("name", "") + ") @", base)
 
     for ep, stage_name, kind, fn in REGISTRY:
-        if kind == "one":
-            raw_rows = [fetch_one(base, headers, ep)]
-        elif kind == "win":
-            raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
-        elif kind == "txn":
-            raw_rows = fetch_all(base, headers, ep, inc, max_pages=cap)
-        else:  # ref -- always full
-            raw_rows = fetch_all(base, headers, ep)
-        main, children = [], {}
-        for r in raw_rows:
-            m, ch = fn(r)
-            main.append(m)
-            for cname, crows in ch.items():
-                children.setdefault(cname, []).extend(crows)
-        write_stage(main, stage_name, tid)
-        for cname, crows in children.items():
-            write_stage(crows, cname, tid)
+        try:  # one bad/absent endpoint must not abort the whole practice's ingest
+            if kind == "one":
+                raw_rows = [fetch_one(base, headers, ep)]
+            elif kind == "win":
+                raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
+            elif kind == "txn":
+                raw_rows = fetch_all(base, headers, ep, inc, max_pages=cap)
+            else:  # ref -- always full
+                raw_rows = fetch_all(base, headers, ep)
+            main, children = [], {}
+            for r in raw_rows:
+                m, ch = fn(r)
+                main.append(m)
+                for cname, crows in ch.items():
+                    children.setdefault(cname, []).extend(crows)
+            write_stage(main, stage_name, tid)
+            for cname, crows in children.items():
+                write_stage(crows, cname, tid)
+        except Exception as e:
+            print("  SKIP " + ep + ": " + str(e)[:200])
 
     # fees: one call per treatment (fees?treatment_id=) -- 5 price/duration tiers each.
-    treatments = fetch_all(base, headers, "treatments")
-    fees = []
-    for t in treatments:
-        fees.extend(fetch_all(base, headers, "fees", {"treatment_id": t["id"]}))
-    write_stage(fees, "fees", tid)
+    # In sample mode cap to a few treatments (the sweep is otherwise full even when sampling).
+    try:
+        treatments = fetch_all(base, headers, "treatments")
+        if cap:
+            treatments = treatments[:10]
+        fees = []
+        for t in treatments:
+            fees.extend(fetch_all(base, headers, "fees", {"treatment_id": t["id"]}))
+        write_stage(fees, "fees", tid)
+    except Exception as e:
+        print("  SKIP fees: " + str(e)[:200])
 
 print("\nStage load complete. Bronze/Silver/Gold Dentally loads run next in the pipeline.")
 ''', False),
