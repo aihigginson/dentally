@@ -129,6 +129,14 @@ before the long tail. `[]` = every entity in registry order.)
 The initial pull is expensive, so we pull ONCE (in dev) and copy the raw stage layer to prod
 rather than re-hitting Dentally. Uses `Fabric/Notebooks/Promote_Tenant_Stage.ipynb`.
 
+> **CRITICAL ORDER -- copy stage BEFORE any incremental.** `write_stage` overwrites the whole
+> tenant partition (`replaceWhere tenant_id`), so an incremental leaves stage holding ONLY the
+> delta -- which would then be all that gets copied. Sequence: full load -> **copy stage** ->
+> build prod -> only THEN run incrementals (and run them in PROD, where Bronze persists them).
+> Belt-and-braces: run dev `Orchestrate_Build` (`run_dentally_ingest=False`) once after the
+> full load to persist the full set into dev Bronze before copying. Ensure any SCHEDULED dev
+> build has `run_dentally_ingest=False` so it can't fire an incremental and clobber stage.
+
 1. **Import `Promote_Tenant_Stage`** into the **prod** workspace; attach prod **`LH_Dentally`**
    as default (re-pin after every import).
 2. **Copy the stage (run in PROD):** params `mode="copy"`, `tenant_id=100`,
