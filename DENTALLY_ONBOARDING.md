@@ -124,6 +124,32 @@ before the long tail. `[]` = every entity in registry order.)
 
 ---
 
+## Promote a practice DEV -> PROD (option B: copy stage, no re-pull)
+
+The initial pull is expensive, so we pull ONCE (in dev) and copy the raw stage layer to prod
+rather than re-hitting Dentally. Uses `Fabric/Notebooks/Promote_Tenant_Stage.ipynb`.
+
+1. **Import `Promote_Tenant_Stage`** into the **prod** workspace; attach prod **`LH_Dentally`**
+   as default (re-pin after every import).
+2. **Copy the stage (run in PROD):** params `mode="copy"`, `tenant_id=100`,
+   `source_workspace="<dev workspace name or GUID>"`. Reads dev's `stage_*` over OneLake and
+   writes tenant 100's rows into prod stage (tenant-scoped `replaceWhere`).
+3. **Register the tenant in prod** `Audit.Tenants` (same INSERT as the dev step above).
+4. **Build prod from the copied stage:** run prod `Orchestrate_Build` with
+   `run_dentally_ingest=False`, `tenants_override=[100]` -> Bronze->Gold + model refresh.
+   Verify the prod reports.
+5. **Ongoing incrementals:** load the token into `dentally-tokens-prod`, then set prod nightly
+   `run_dentally_ingest=True`, `full_refresh=False` -> prod pulls only changes (cheap) from now on.
+
+### Then purge dev (real data must not linger in dev)
+6. **Purge dev stage (run in DEV):** `Promote_Tenant_Stage` `mode="purge"`, `tenant_id=100`,
+   `confirm_purge=True` -> deletes tenant 100 from every dev `stage_*` Delta table.
+7. **Purge dev warehouse:** `EXEC Audit.usp_Delete_All_Tenant @Tenant_ID=100, @Dry_Run=1` to
+   preview, then `@Dry_Run=0` -> clears Bronze/Silver/Gold + the Audit.Tenants row. (This SP
+   does NOT touch stage -- step 6 covers that.)
+
+---
+
 ## Known data-shape fixes (surfaced on the first real build)
 
 - **Silver/Gold numeric casts (FIXED, V041):** real Dentally puts non-numeric strings in
