@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V045 -- Preferred_Phone falls back to any available number
+# =====================================================================
+# Dentally's preferred_phone_number code is only set when a patient has a CHOICE of numbers
+# (~19% of Maple patients); the rest were resolving to NULL despite having a phone. Amend the
+# Silver resolution to honour the coded choice when present, else COALESCE to mobile then home
+# -> Preferred_Phone is populated for any active patient with a phone. SP-only (Preferred_Phone
+# is already VARCHAR(50) from V043); no table rebuild.
+#
+# AFTER deploy: reload patients Silver->Gold (Orchestrate_Build) so existing rows recompute
+# (the hash gate updates them). Validate: SELECT COUNT(Preferred_Phone), COUNT(*) FROM
+# Gold.Dim_Patients WHERE Tenant_ID=100 AND (Mobile_Phone IS NOT NULL OR Home_Phone IS NOT NULL)
+# -- the two counts should now match.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V045__preferred_phone_fallback.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
