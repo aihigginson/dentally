@@ -401,14 +401,20 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
-        role_clause  = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
-        pract_params = list(tids) + ([role_filter] if role_filter != 'all' else [])
+        active_clause = "AND Active = 1 " if active_only else ""
+        # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
+        excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
+        role_clause   = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        pract_params  = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
-            f"SELECT Practitioner_ID, Full_Name "
+            f"SELECT MIN(Practitioner_ID) AS Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
             f"WHERE  Tenant_ID IN ({placeholders}) "
             f"AND    pk_Practitioner > 0 "
+            f"{active_clause}"
+            f"{excl_clause}"
             f"{role_clause}"
+            f"GROUP BY Full_Name "     # dedup by name (same person can have >1 record)
             f"ORDER BY Full_Name",
             pract_params,
         )
