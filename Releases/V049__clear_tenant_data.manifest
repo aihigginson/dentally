@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V049 -- Audit.usp_Clear_Tenant_Data (+ usp_Delete_All_Tenant refactor)
+# =====================================================================
+# Onboarding/delta architecture, piece 1 (see .claude/plans/onboarding-delta-build-architecture.md).
+# Orchestrate_Onboarding step 1 is "clear tenant data" -- a DATA-ONLY clear that preserves the
+# tenant's identity + config (so a clean re-onboard doesn't wipe registration / RLS / targets).
+#
+# usp_Clear_Tenant_Data: deletes medallion rows only (Bronze/Silver/Gold WHERE Tenant_ID=@X);
+#   preserves Audit/Config/Input/Security/Meta/Migrate/Test + any global no-Tenant_ID table
+#   (Appointment_Reason_Map, Dim_Date). Does NOT reset Gold.Load_Watermark (global, on DW_Updated_At)
+#   -- the clear+rebuild re-INSERTs Silver at now > watermark so the watermark facts re-pick-up this
+#   tenant naturally; resetting the shared watermark would force every OTHER tenant to full-rescan.
+# usp_Delete_All_Tenant: refactored to = usp_Clear_Tenant_Data + the non-medallion identity/config
+#   deletes (one data-row list, two callers, no drift).
+#
+# Deploy order matters: clear first (Delete_All EXECs it). Fabric uses deferred name resolution so a
+# CREATE wouldn't fail, but keep the order clean.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V049__clear_tenant_data.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Audit.usp_Clear_Tenant_Data.StoredProcedure.sql
+DEPLOY   Fabric\Audit.usp_Delete_All_Tenant.StoredProcedure.sql
+
+TEST
