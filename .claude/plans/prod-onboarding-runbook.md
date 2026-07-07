@@ -83,6 +83,11 @@ inserts; only Bronze always reports counts).
       chain populated (V046 — Chair Utilisation / Rev-per-Clinical-Hour not blank).
 - [ ] Model refresh succeeds (the `_Treatment Plans[fk Treatment Plan]` dup that broke refresh in
       dev was the patient_stats cascade — should be clean here).
+- [ ] **Re-refresh gotcha (SQL-endpoint lag):** the build's post-load refresh can read a
+      not-yet-synced SQL endpoint and publish BLANK measures even though Gold is fully populated.
+      If any card is blank, **query the warehouse first** — if the numbers are there, it's endpoint
+      timing, not data: just **Refresh now** again once it's settled. Don't chase DAX/loads.
+      See `reference_sql_endpoint_refresh_lag`.
 
 ---
 

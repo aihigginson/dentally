@@ -38,6 +38,10 @@ workspace_name         = None          # None = the notebook's current workspace
 full_refresh           = False         # nightly = incremental (Bronze @Full_Refresh = 0)
 run_stage_ingest       = False         # True = run Stage_Ingest (API->Stage) per tenant first; off while Stage is seeded out-of-band
 refresh_semantic_model = True
+refresh_settle_seconds = 180           # wait after the loads before refreshing the model: the SQL
+                                       # endpoint lags the warehouse commit, so a refresh fired too
+                                       # soon reads a not-yet-synced endpoint and publishes BLANK
+                                       # measures (Gold is fine). ~3 min lets the endpoint catch up.
 max_parallel           = 1             # V1: 1 = sequential within a wave. Future: >1 to fan out independent jobs.
 tenants_override       = []            # e.g. [11, 12] to run a subset (testing/targeted); [] = all active tenants
 
@@ -288,6 +292,11 @@ print(f"\nParent run {parent_uuid}: {final_status}")
 
 if refresh_semantic_model and not failed:
     import sempy.fabric as fabric
+    # SQL-endpoint sync lag: the endpoint the model reads trails the warehouse commit, so refreshing
+    # immediately after the loads can publish a BLANK model (measures empty though Gold is populated).
+    # Wait for the endpoint to catch up before refreshing. See reference_sql_endpoint_refresh_lag.
+    print(f"Settling {refresh_settle_seconds}s for the SQL endpoint before refresh ...")
+    time.sleep(refresh_settle_seconds)
     print(f"Refreshing semantic model '{semantic_model}' ...")
     # Triggers an enhanced refresh. NOTE: confirm your sempy version blocks until done;
     # if not, poll fabric.list_refresh_requests(...) until the latest request completes,
