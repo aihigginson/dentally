@@ -17,8 +17,6 @@ CREATE TABLE [Silver].[Treatment_Appointments](
 	[Status] [VARCHAR](50) NULL,
 	[Position] [int] NULL,
 	[Bookable] [int] NULL,
-	[Completed] [int] NULL,
-	[Completed_At] [VARCHAR](50) NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL,
 	[_Row_Hash] [varbinary](32) NULL,
