@@ -341,6 +341,19 @@ REGISTRY = [
             if ep == "patients":
                 all_patient_ids = [r.get("id") for r in raw_rows
                                    if isinstance(r, dict) and r.get("id") is not None]
+            # Dentally's bulk pagination is unstable and serves some rows TWICE (patient_stats
+            # worst; also treatment_plan_items, recalls). Dedup within-entity by id -- keep first;
+            # harmless when there are none. (The equal number of SKIPPED rows can't be recovered
+            # here; run Check_Stage_Duplicates.sql after a pull to confirm clean.)
+            if raw_rows and isinstance(raw_rows[0], dict) and "id" in raw_rows[0]:
+                _seen, _dd = set(), []
+                for r in raw_rows:
+                    rid = r.get("id")
+                    if rid is None or rid not in _seen:
+                        _seen.add(rid); _dd.append(r)
+                if len(_dd) != len(raw_rows):
+                    print("      " + ep + ": deduped " + str(len(raw_rows) - len(_dd)) + " pagination twin(s)")
+                raw_rows = _dd
             main, children = [], {}
             for r in raw_rows:
                 m, ch = fn(r)
