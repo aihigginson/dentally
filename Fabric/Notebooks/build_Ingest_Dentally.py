@@ -32,6 +32,12 @@ only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY 
                          # ones already landed after a partial run); [] = every entity
 per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
                          # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
+history_floor = "2024-04-01T00:00:00Z"  # updated_after floor applied ONLY to the huge historical
+                         # tables (treatment_plans / treatment_plan_items); "" = full history.
+                         # Those two span many years (items ~1.32M full vs ~107k from 2024-04) so
+                         # flooring keeps the pull inside a single rate window (no sleep-to-reset,
+                         # which is the fragile path). 'updated_after' is the confirmed filter and
+                         # matches on UPDATED date, not created.
 ''', True),
 
     # 1 -- imports -------------------------------------------------------------
@@ -74,6 +80,9 @@ MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (reset is an epoch on t
 MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
 # Appointments + rota require an after/before window (plain params, NOT filter[...]).
 WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
+# These two big historical tables get an updated_after floor (history_floor param) so they fit in
+# one rate window; every other entity keeps full history. Confirmed filter param: updated_after.
+HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items"}
 ''', False),
 
     # 4 -- API helpers (rate-aware: sleep to the window reset, never skip on 429) ----
@@ -152,12 +161,25 @@ def _drop(r, keys):
     return {k: v for k, v in r.items() if k not in keys}
 
 def t_practitioner(r):
+    # The practitioner has NO name of its own -- name/email/role live in the nested `user`
+    # object (real Dentally). Flatten with the SAME `user_`-prefixed names Bronze expects
+    # (the mock delivered them that way). Keep contract_targets (Bronze reads it as a string);
+    # keep top-level site_id; drop only the nested user/site objects + specialisms.
     u = r.get("user") or {}
-    out = _drop(r, {"user", "site", "specialisms", "contract_targets"})
-    out.update({"user_id": u.get("id"), "first_name": u.get("first_name"),
-                "middle_name": u.get("middle_name"), "last_name": u.get("last_name"),
-                "email": u.get("email"), "role": u.get("role"),
-                "permission_level": u.get("permission_level")})
+    out = _drop(r, {"user", "site", "specialisms"})
+    out.update({"user_id": u.get("id"),
+                "user_first_name": u.get("first_name"),
+                "user_middle_name": u.get("middle_name"),
+                "user_last_name": u.get("last_name"),
+                "user_title": u.get("title"),
+                "user_role": u.get("role"),
+                "user_email": u.get("email"),
+                "user_mobile_phone": u.get("mobile_phone"),
+                "user_image_url": u.get("image_url"),
+                "user_created_at": u.get("created_at"),
+                "user_updated_at": u.get("updated_at"),
+                "user_last_login": u.get("last_login"),
+                "user_permission_level": u.get("permission_level")})
     return out, {}
 
 def t_patient(r):
@@ -168,7 +190,8 @@ def t_payment(r):
     return _drop(r, {"explanations"}), {"payment_explanations": exps}
 
 def t_rota(r):
-    brks = [dict(b, rota_id=r.get("id"), practitioner_id=r.get("practitioner_id"),
+    # Bronze.Practitioner_Diary_Breaks keys the parent as practitioner_diary_id (not rota_id).
+    brks = [dict(b, practitioner_diary_id=r.get("id"), practitioner_id=r.get("practitioner_id"),
                  day=r.get("day")) for b in (r.get("breaks") or [])]
     return _drop(r, {"breaks"}), {"practitioner_diary_breaks": brks}
 
@@ -181,6 +204,29 @@ def t_tp_item(r):
 
 def t_appointment(r):
     return _drop(r, {"notes", "metadata"}), {}
+
+# opening_hours is a nested {DayName: {open, close}} object. Flatten to the flat per-day
+# columns Bronze reads: practice -> oh_<abbr>_open/close (Mon-Sun); sites -> <day>_open/close
+# (Mon-Fri). Days the practice/site isn't open (e.g. weekends) are simply absent -> NULL.
+_HOURS_DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_HOURS_ABBR = {"Monday": "mon", "Tuesday": "tues", "Wednesday": "wed", "Thursday": "thur",
+               "Friday": "fri", "Saturday": "sat", "Sunday": "sun"}
+
+def _flatten_hours(r, prefix, days):
+    oh = r.get("opening_hours") or {}
+    out = _drop(r, {"opening_hours"})
+    for day in days:
+        slot = oh.get(day) or {}
+        key = _HOURS_ABBR[day] if prefix == "oh_" else day.lower()
+        out[prefix + key + "_open"] = slot.get("open")
+        out[prefix + key + "_close"] = slot.get("close")
+    return out
+
+def t_practice(r):
+    return _flatten_hours(r, "oh_", _HOURS_DOW), {}         # oh_mon_open .. oh_sun_close
+
+def t_site(r):
+    return _flatten_hours(r, "", _HOURS_DOW[:5]), {}        # monday_open .. friday_close
 
 def passthrough(r):
     return r, {}
@@ -227,8 +273,8 @@ def write_stage(records, table_name, tenant_id):
 # cancellation_reasons; rota_practitioner_diaries->practitioner_diary_entries (+ embedded
 # breaks->practitioner_diary_breaks); payment.explanations[]->payment_explanations.
 REGISTRY = [
-    ("practice",                         "practice",              "one", passthrough),
-    ("sites",                            "sites",                 "ref", passthrough),
+    ("practice",                         "practice",              "one", t_practice),
+    ("sites",                            "sites",                 "ref", t_site),
     ("users",                            "users",                 "ref", passthrough),
     ("practitioners",                    "practitioners",         "ref", t_practitioner),
     ("payment_plans",                    "payment_plans",         "ref", passthrough),
@@ -286,7 +332,10 @@ REGISTRY = [
             elif kind == "win":
                 raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
             elif kind == "txn":
-                raw_rows = fetch_all(base, headers, ep, inc, max_pages=cap)
+                p = dict(inc)
+                if history_floor and ep in HISTORY_FLOOR_ENTITIES:
+                    p["updated_after"] = history_floor   # floor the huge historical tables
+                raw_rows = fetch_all(base, headers, ep, p, max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             main, children = [], {}

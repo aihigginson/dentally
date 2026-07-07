@@ -1043,12 +1043,14 @@ def gen_patients(tdef, rng):
 
         use_email = rng.random() > 0.1
         use_sms   = rng.random() > 0.15
-        # Keep this rng.choice EXACTLY as-is (same list): the shared per-tenant rng
-        # threads every downstream entity, so changing the draw would shift all
-        # subsequent data. Work phone is not stored (V011), so fold 'work' -> 'mobile'
-        # AFTER the draw (deterministic, consumes no randomness).
-        preferred_phone = rng.choice(["mobile","mobile","mobile","home","work"])
-        preferred_phone = "mobile" if preferred_phone == "work" else preferred_phone
+        # preferred_phone_number: real Dentally emits an integer CODE (1=Home, 2=Work, 3=Mobile);
+        # Silver resolves it to the actual number. Keep this single rng.choice with a 5-element
+        # list (same randomness draw as before) -- the shared per-tenant rng threads every
+        # downstream entity, so changing the number of draws would shift all subsequent data.
+        # Work phone is not stored (V011), so fold 2 (work) -> 3 (mobile) AFTER the draw
+        # (deterministic, consumes no randomness) -- mirrors the old work->mobile fold.
+        preferred_phone_number = rng.choice([3, 3, 3, 1, 2])
+        preferred_phone_number = 3 if preferred_phone_number == 2 else preferred_phone_number
 
         # preferred_name: ~15% chance
         preferred_name = first if rng.random() < 0.15 else None
@@ -1094,7 +1096,7 @@ def gen_patients(tdef, rng):
             "home_phone": f"0{rng.randint(1000,9999)} {rng.randint(100000,999999)}" if rng.random() < 0.20 else None,
             "use_email": use_email,
             "use_sms": use_sms,
-            "preferred_phone": preferred_phone,
+            "preferred_phone_number": preferred_phone_number,
             "site_id": site_id,
             "dentist_id": dentist["id"],
             "hygienist_id": hygienist_id,

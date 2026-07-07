@@ -8,6 +8,9 @@
 --    *02     01/05/2026  AIH Wrap non-date FK lookups with ISNULL(..., -1) for unknown dimension row
 --    *03     13/05/2026  AIH Add Booking, This_Visit, Next_Visit, Future_Appointment from Silver.Appointment_Journey_Attrs
 --    *04     14/05/2026  AIH Fix fk_Practice_Site join to use a.Site_ID instead of a.Room_ID
+--    *11     07/07/2026  AIH fk_Practice_Site now resolves from a.Practitioner_Site_ID (real Dentally
+--                            site GUID; Silver Site_ID renamed to Room_Site_ID). Room-site available in
+--                            Silver to switch to later. Was resolving via the (empty) room path -> sentinel.
 --    *05     20/05/2026  AIH Column naming convention fixes (ID/_ID, API)
 --    *06     21/05/2026  AIH Add fk_Cancellation_Reason surrogate key via Dim_Cancellation_Reasons
 --    *07     31/05/2026  AIH Join to Silver.Appointment_Journey_Attributes (renamed from Attrs);
@@ -203,7 +206,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_ID AS INT) AND dpr.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_ID AS INT) AND dpp.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Site_ID),'') AND dps.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Practitioner_Site_ID),'') AND dps.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_ID AS INT) AND du.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)

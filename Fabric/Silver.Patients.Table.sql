@@ -28,7 +28,7 @@ CREATE TABLE [Silver].[Patients](
 	[Home_Phone] [VARCHAR](50) NULL,
 	[Use_Email] [bit] NULL,
 	[Use_SMS] [bit] NULL,
-	[Preferred_Phone] [VARCHAR](20) NULL,
+	[Preferred_Phone] [VARCHAR](50) NULL,
 	[Marketing_Opt_In] [bit] NULL,
 	[Dentist_Practitioner_ID] [int] NULL,
 	[Hygienist_Practitioner_ID] [int] NULL,

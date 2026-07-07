@@ -15,6 +15,8 @@
 --                            placeholder 'Inactive Patient', contact NULLed; PII held for active patients only
 --    *08     19/06/2026  AIH V015: add contact-preference fields (Use_Email, Use_SMS, Preferred_Phone);
 --                            held for active patients only (NULL for inactive, per V013)
+--    *09     07/07/2026  AIH Preferred_Phone now holds the ACTUAL number: resolve Bronze's Dentally code
+--                            (1=Home/2=Work/3=Mobile) -> Home/Mobile (code 2 Work -> NULL, not stored). Widened 20->50.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -98,7 +100,15 @@ BEGIN
                          THEN CASE WHEN LOWER(TRIM(Use_Email)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_Email,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CASE WHEN LOWER(TRIM(Use_SMS)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_SMS,
-                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Phone, 20) END AS Preferred_Phone,
+                    -- Preferred_Phone: real Dentally gives a CODE (1=Home,2=Work,3=Mobile); resolve it
+                    -- to the actual number. Work numbers aren't stored (V011) so code 2 -> NULL. Active
+                    -- patients only (V013), using the same phone values obfuscated above.
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
+                         THEN CASE TRY_CAST(Preferred_Phone AS INT)
+                                   WHEN 1 THEN LEFT(Home_Phone,   50)
+                                   WHEN 3 THEN LEFT(Mobile_Phone, 50)
+                                   ELSE NULL END
+                    END AS Preferred_Phone,
                     -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
                     CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
