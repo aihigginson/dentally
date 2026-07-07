@@ -42,7 +42,10 @@
 param(
     [Parameter(Mandatory = $true)][string] $Manifest,
     [switch] $WhatIf,
-    [switch] $Log
+    [switch] $Log,
+    [switch] $SkipTests    # skip the TEST regression gate (e.g. wide-sweeping schema changes on
+                           # synthetic data that is itself about to be regenerated -- the gate only
+                           # checks small fixes didn't disturb the build, which doesn't apply then)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -226,7 +229,10 @@ try {
                 # Run_Tests authenticates with the SP client secret (dev). Prod connects via a
                 # pre-acquired OIDC token (FABRIC_ACCESS_TOKEN) and has no SP secret, and prod is
                 # verified separately -- so skip the inline gate when a pre-acquired token is in use.
-                if ($PreToken) {
+                if ($SkipTests) {
+                    Write-Host "$tag  skipped (-SkipTests)" -ForegroundColor Yellow
+                }
+                elseif ($PreToken) {
                     Write-Host "$tag  skipped (pre-acquired token / prod; verified separately)" -ForegroundColor Yellow
                 } else {
                     Write-Host "$tag  running Run_Tests.ps1 gate ..." -ForegroundColor Cyan
