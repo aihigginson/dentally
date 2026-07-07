@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V048 -- practitioner diary fact = DAYS WORKED ONLY
+# =====================================================================
+# Dentally writes one rota_practitioner_diaries row per practitioner per CALENDAR day. Non-working
+# days have NULL start/finish times (confirmed: Dentally's non-working-day marker); holiday/blocked
+# days are flagged unavailable=1 (see V047). Carrying all of those into Fact_Practitioner_Diaries
+# gave one-row-per-calendar-day with a mass of zero-hour rows -- bloat, and any measure dividing
+# total working minutes by the diary row-count was dragged DOWN by the zero rows (a "weird numbers"
+# cause on the working-hours / utilisation cards).
+#
+# Fix (SP-only, Gold): Fact_Practitioner_Diaries now keeps only actually-worked sessions --
+# Available=1 (needs V047 to be correct) AND real start+finish times. The fact becomes
+# one-row-per-worked-day. Silver.Practitioner_Diary still holds EVERY row, so this is reversible and
+# nothing is lost (holiday/non-working reporting can be rebuilt from Silver if ever wanted). The
+# load's own DELETE-not-in-source step removes the previously-carried non-working rows on next run.
+#
+# DEPLOY WITH V047 (order: V047 Bronze then V048 Gold) -- V048's Available filter relies on V047
+# making Silver.Available correct. After both, re-run Orchestrate_Build (build-only, T100); the
+# daily aggregate + Fact_Metric_Actuals rebuild so working-hours / chair-utilisation correct.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V048__diary_days_worked_only.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql
+
+TEST
