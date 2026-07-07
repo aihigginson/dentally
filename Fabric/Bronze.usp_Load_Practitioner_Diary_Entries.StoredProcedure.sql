@@ -6,6 +6,10 @@
 --    *01     29/04/2026  AIH Initial Release
 --    *02     16/05/2026  AIH Add Audit ETL logging (ETL_Start_Run / ETL_Finish_Run)
 --    *03     20/05/2026  AIH Fix Stage field names: date (not day); default Unavailable=0 (field not in API)
+--    *04     07/07/2026  AIH Day = COALESCE(day, date): REAL Dentally rota field is `day` (mock used
+--                            `date`). Reading only `date` left Day NULL for real -> Fact_Practitioner_Diaries
+--                            Day_Date/fk_Date_Day NULL -> Worked_Hours NULL -> Chair Util / Rev-per-Clinical-Hour
+--                            / Days-Until-Free all blank. COALESCE handles real (day) + mock (date).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Practitioner_Diary_Entries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Practitioner_Diary_Entries]
@@ -31,7 +35,7 @@ BEGIN
               TRY_CAST(tenant_id     AS INT)   AS Tenant_ID
             , LEFT(id,                 255)    AS ID
             , TRY_CAST(practitioner_id AS INT) AS Practitioner_ID
-            , LEFT(date,               255)    AS Day
+            , LEFT(COALESCE([day], [date]), 255) AS Day
             , LEFT(start_time,         255)    AS Start_Time
             , LEFT(end_time,           255)    AS End_Time
             , CAST(0.0 AS DECIMAL(18,4))       AS Unavailable

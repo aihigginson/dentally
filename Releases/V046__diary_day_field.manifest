@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V046 -- practitioner diary `day` field (working hours were blank)
+# =====================================================================
+# Real Dentally rota_practitioner_diaries carries the date in `day`; the mock used `date`.
+# Bronze read only `date`, so for real tenants Day came through NULL -> Silver.Practitioner_Diary.Day
+# NULL -> Fact_Practitioner_Diaries.Day_Date / fk_Date_Day NULL -> the daily aggregate couldn't
+# attribute Available_Clinical_Mins to a day -> Worked_Hours NULL -> Chair Utilisation,
+# Revenue Per Clinical Hour, and Days-Until-Next-Free all blank.
+#
+# Fix (SP-only): Bronze reads COALESCE([day],[date]) -- real uses `day`, mock uses `date`; stage
+# carries both columns (mergeSchema) so no view/validation change. Available_Clinical_Mins was
+# already computed correctly; only the day attribution was missing.
+#
+# AFTER deploy: re-run Orchestrate_Build (build-only, T100). No truncate needed -- the diary chain
+# updates via the hash gate (Day NULL->date changes the hash), and the daily aggregate +
+# Fact_Metric_Actuals full-rebuild each run, so Worked_Hours repopulates and the working-hours
+# cards light up. TODO (generator realism): generate_data.py should emit `day` not `date` for
+# diary entries so synthetic tenants match (COALESCE covers it meanwhile).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V046__diary_day_field.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Practitioner_Diary_Entries.StoredProcedure.sql
+
+TEST
