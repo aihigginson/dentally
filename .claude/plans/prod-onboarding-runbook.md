@@ -56,7 +56,13 @@ dates for different customers, so this is a per-customer decision, not a constan
 2. **Row-count sanity** — spot-check the big entities' stage counts against Dentally
    `meta.total_count` for the same floor/window (catches a silent pure-gap pull with no dups).
    Especially `treatment_plan_items` and `treatment_appointments` — the two that stress pagination.
-3. Only proceed once stage looks right. Stage is the cheap-to-inspect, expensive-to-re-pull layer.
+3. **Windowed-pull banner** — scan the `Ingest_Dentally` output for
+   `WINDOW(S) UNRESOLVED`. The tpi/treatment_plans pull is date-windowed to beat the deep-offset
+   413; a window that stays 413 at the 1h floor means a bulk-update/migration re-stamped more rows
+   into one timestamp-span than the wall allows (date can't split identical timestamps). Those rows
+   are NOT landed. If it fires: raise `history_floor` past that span (usual answer — it's the 2020
+   migration for a customer whose floor is too low), or pull that span separately by id.
+4. Only proceed once stage looks right. Stage is the cheap-to-inspect, expensive-to-re-pull layer.
 
 ---
 
