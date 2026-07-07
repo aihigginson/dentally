@@ -38,6 +38,12 @@ history_floor = "2024-04-01T00:00:00Z"  # updated_after floor applied ONLY to th
                          # flooring keeps the pull inside a single rate window (no sleep-to-reset,
                          # which is the fragile path). 'updated_after' is the confirmed filter and
                          # matches on UPDATED date, not created.
+window_days   = 30       # ONBOARDING window size (days) for the floored historical tables. Dentally
+                         # 413s on DEEP offset pagination (the scan-cost limit DRIFTS with load --
+                         # seen ~50k one run, ~106k another), so we pull these in updated_at windows
+                         # that each paginate from page 1 (shallow offsets). A window that still 413s
+                         # is auto-halved. 30d is safe for a single practice; smaller = more windows
+                         # but each cheaper. Deltas ignore this (few recent rows, no deep pages).
 ''', True),
 
     # 1 -- imports -------------------------------------------------------------
@@ -142,6 +148,70 @@ def fetch_all(base, headers, ep, params=None, max_pages=None):
 def fetch_one(base, headers, ep):
     r = req(base, headers, "/" + ep, {})
     return next((v for k, v in r.json().items() if k != "meta"), {})
+
+# --- windowed fetch (onboarding of huge historical tables) -------------------
+# Dentally 413s ("Content Too Large") on DEEP offset pagination, and the threshold is a server
+# scan-COST budget that DRIFTS with load (a full pull reached offset ~106k one day, ~50k another --
+# it "worked once then failed"). It is NOT a fixed wall and NOT response-size (per_page 25 at the
+# same deep page is really just a smaller offset). Fix: tile the history into updated_at windows so
+# every window paginates from page 1 and offsets stay shallow/cheap. A window that STILL 413s (a
+# migration/bulk-update can re-timestamp thousands of old rows into one window) is retried once for
+# a transient spike, then HALVED and recursed. `updated_before` is confirmed honored.
+def _win_parse(s):
+    s = str(s).strip().replace("Z", "").replace("z", "")
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return datetime.strptime(s[:10], "%Y-%m-%d")
+
+def _win_fmt(d):
+    return d.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+def _is_413(e):
+    return isinstance(e, requests.HTTPError) and getattr(e.response, "status_code", None) == 413
+
+def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved):
+    params = {"updated_after": _win_fmt(lo), "updated_before": _win_fmt(hi)}
+    for attempt in (1, 2):                       # 2nd try absorbs a transient/load-spike 413
+        try:
+            return fetch_all(base, headers, ep, params, max_pages=cap)
+        except requests.HTTPError as e:
+            if not _is_413(e):
+                raise
+            if attempt == 1:
+                time.sleep(3)
+    if (hi - lo) <= min_span:
+        # More rows than the wall share a <=min_span timestamp span -- date windows can't split
+        # identical/near-identical timestamps (a bulk-update/migration re-stamps thousands at once).
+        # Do NOT drop it silently: record + shout so onboarding validation can't miss the gap.
+        print("      !! 413 UNRESOLVED " + _win_fmt(lo) + ".." + _win_fmt(hi)
+              + " -- too many rows updated in this span (migration cluster?); NOT landed")
+        unresolved.append((_win_fmt(lo), _win_fmt(hi)))
+        return []
+    mid = lo + (hi - lo) / 2
+    print("      413 on " + _win_fmt(lo) + ".." + _win_fmt(hi) + " -> halving")
+    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved)
+            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved))
+
+def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None):
+    # Tile [floor,end] into step_days windows; halve any that 413 down to min_hours. Returns rows +
+    # loudly flags any window that stays 413 at min_hours (bulk-update cluster -> raise history_floor
+    # past it, or pull that span by id). Deltas don't use this (few recent rows).
+    lo, end = _win_parse(floor), _win_parse(end)
+    step, min_span = timedelta(days=step_days), timedelta(hours=min_hours)
+    out, w, unresolved = [], 0, []
+    while lo < end:
+        hi = min(lo + step, end)
+        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved)
+        out.extend(rows); w += 1
+        print("      " + ep + " window " + _win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10]
+              + ": " + str(len(rows)) + " rows (" + str(len(out)) + " total across " + str(w) + " windows)")
+        lo = hi
+    if unresolved:
+        print("  !!!! " + ep + ": " + str(len(unresolved)) + " WINDOW(S) UNRESOLVED at min span -- a "
+              + "bulk-update/migration cluster the deep-offset 413 blocks. Rows in these spans are NOT "
+              + "landed; raise history_floor past them or pull by id. Spans: " + str(unresolved[:8]))
+    return out
 ''', False),
 
     # 5 -- transforms (validated by API/dentally_transform.py) -----------------
@@ -332,10 +402,13 @@ REGISTRY = [
             elif kind == "win":
                 raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
             elif kind == "txn":
-                p = dict(inc)
                 if history_floor and ep in HISTORY_FLOOR_ENTITIES:
-                    p["updated_after"] = history_floor   # floor the huge historical tables
-                raw_rows = fetch_all(base, headers, ep, p, max_pages=cap)
+                    # Huge historical table -> WINDOW the pull (Dentally 413s on deep offsets).
+                    # window_end fixed at run start so mid-pull updates fall to the next delta.
+                    raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
+                                              step_days=window_days, cap=cap)
+                else:
+                    raw_rows = fetch_all(base, headers, ep, dict(inc), max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             if ep == "patients":
