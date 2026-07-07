@@ -24,6 +24,11 @@
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V043__patient_preferred_phone_number.manifest
 # =====================================================================
 
+# Stage.Patients is SELECT * bound at CREATE time; recreate it FIRST so preferred_phone_number
+# (which landed in stage after the real T100 ingest / V015 view-recreate) is exposed, else the
+# Bronze SP fails "Invalid column name 'preferred_phone_number'".
+DEPLOY   Fabric\Stage.Views.sql
+
 DEPLOY   Fabric\Silver.Patients.Table.sql
 DEPLOY   Fabric\Gold.Dim_Patients.Table.sql
 

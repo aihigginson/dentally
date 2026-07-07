@@ -25,8 +25,11 @@
 # Deploy order matters (Fabric validates columns at CREATE time): TABLES before SPs.
 #
 # PRECONDITION: stage_appointments must expose practitioner_site_id (true after the real
-# T100 ingest). If the SQL endpoint cached an older schema, recreate Stage.Appointments
-# (Stage.Views.sql) first.
+# T100 ingest). The Stage.* views are SELECT * bound at CREATE time, so a view created
+# before the column landed is stale -> "Invalid column name 'practitioner_site_id'". This
+# manifest recreates Stage.Views.sql FIRST to re-resolve * against the current lakehouse
+# schema. (If it STILL fails, the column is genuinely absent from stage -> re-ingest
+# appointments with the current Ingest_Dentally, only_entities=["appointments"].)
 #
 # AFTER deploy: re-run Orchestrate_Build (Bronze->Silver->Gold) for affected tenants, then
 # validate: SELECT fk_Practice_Site, COUNT(*) FROM Gold.Fact_Appointments WHERE Tenant_ID=100
@@ -39,6 +42,8 @@
 #
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V042__site_attribution_appointments.manifest
 # =====================================================================
+
+DEPLOY   Fabric\Stage.Views.sql
 
 DEPLOY   Fabric\Bronze.Appointments.Table.sql
 DEPLOY   Fabric\Silver.Appointments.Table.sql
