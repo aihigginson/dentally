@@ -296,7 +296,6 @@ REGISTRY = [
     ("treatment_plan_items",             "treatment_plan_items",  "txn", t_tp_item),
     ("recalls",                          "recalls",               "txn", passthrough),
     ("nhs_claims",                       "nhs_claims",            "txn", passthrough),
-    ("patient_stats",                    "patient_stats",         "txn", passthrough),
     ("treatment_appointments",           "treatment_appointments","txn", passthrough),
     ("patient_referrals",                "patient_referrals",     "txn", passthrough),
 ]
@@ -325,6 +324,7 @@ REGISTRY = [
     else:
         run_list = list(REGISTRY)
 
+    all_patient_ids = []   # captured from the patients pull; used to gap-fill patient_stats
     for ep, stage_name, kind, fn in run_list:
         try:  # one bad/absent endpoint must not abort the whole practice's ingest
             if kind == "one":
@@ -338,6 +338,9 @@ REGISTRY = [
                 raw_rows = fetch_all(base, headers, ep, p, max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
+            if ep == "patients":
+                all_patient_ids = [r.get("id") for r in raw_rows
+                                   if isinstance(r, dict) and r.get("id") is not None]
             main, children = [], {}
             for r in raw_rows:
                 m, ch = fn(r)
@@ -363,6 +366,39 @@ REGISTRY = [
             write_stage(fees, "fees", tid)
         except Exception as e:
             print("  SKIP fees: " + str(e)[:200])
+
+    # patient_stats: Dentally's BULK /patient_stats pagination is broken -- its pages are not
+    # stably ordered, so it serves ~6% of records twice and SKIPS as many (confirmed: 27,747
+    # rows / 26,116 distinct / 1,631 dups == 1,631 missing). So: pull the bulk set, dedup by
+    # patient_id, then GAP-FILL the skipped patients via the reliable per-patient endpoint
+    # GET /patients/{id}/stats (returns exactly one correct record; 404 = genuinely no stats).
+    if (not only_entities) or ("patient_stats" in only_entities):
+        try:
+            if not all_patient_ids:   # resume run without patients -> fetch the id list first
+                all_patient_ids = [r.get("id") for r in fetch_all(base, headers, "patients", inc)
+                                   if isinstance(r, dict) and r.get("id") is not None]
+            seen = {}                 # patient_id -> stats row (first wins; dups are identical)
+            for r in fetch_all(base, headers, "patient_stats", inc, max_pages=cap):
+                pid = r.get("patient_id")
+                if pid is not None and pid not in seen:
+                    seen[pid] = r
+            missing = [pid for pid in all_patient_ids if pid not in seen]
+            if cap:                   # smoke test: don't gap-fill thousands
+                missing = missing[:10]
+            print("  patient_stats: bulk " + str(len(seen)) + " deduped; gap-filling "
+                  + str(len(missing)) + " skipped patients via /patients/{id}/stats")
+            for pid in missing:
+                try:
+                    rr = req(base, headers, "/patients/" + str(pid) + "/stats", {})
+                    obj = next((v for k, v in rr.json().items() if k != "meta"), None)
+                    if isinstance(obj, dict):
+                        obj.setdefault("patient_id", pid)
+                        seen[pid] = obj
+                except Exception:
+                    pass              # 404 -> patient genuinely has no stats
+            write_stage(list(seen.values()), "patient_stats", tid)
+        except Exception as e:
+            print("  SKIP patient_stats: " + str(e)[:200])
 
 print("\nStage load complete. Bronze/Silver/Gold Dentally loads run next in the pipeline.")
 ''', False),
