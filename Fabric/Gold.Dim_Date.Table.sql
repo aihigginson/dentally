@@ -33,6 +33,8 @@ CREATE TABLE [Gold].[Dim_Date](
 	[Relative_Month] [int] NOT NULL,
 	[Relative_Quarter] [int] NOT NULL,
 	[Relative_Year] [int] NOT NULL,
+	[Recency_Band] [varchar](20) NOT NULL,
+	[Recency_Band_Sort] [smallint] NOT NULL,
 	[Financial_Year] [smallint] NOT NULL,
 	[Financial_Year_Name] [char](10) NOT NULL,
 	[Financial_Quarter] [smallint] NOT NULL,

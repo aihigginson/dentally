@@ -90,6 +90,12 @@ BEGIN
         Relative_Quarter                INT             NOT NULL,
         Relative_Year                   INT             NOT NULL,
 
+        -- Recency band relative to today (age-band slicer). Labels DON'T sort alphabetically
+        -- ('Last 3 Months' starts 'L' -> sorts after the numeric ones), so pair with the numeric
+        -- Recency_Band_Sort and set it as the "Sort by column" in PBI.
+        Recency_Band                    VARCHAR(20)     NOT NULL,
+        Recency_Band_Sort               SMALLINT        NOT NULL,
+
         -- Financial Year (April-March)
         Financial_Year                  SMALLINT        NOT NULL,   -- Starting year, e.g. 2024 for FY2024/25
         Financial_Year_Name             CHAR(10)        NOT NULL,   -- 'FY 2024-25'
@@ -179,6 +185,7 @@ BEGIN
         Calendar_Quarter, Calendar_Quarter_Name,
         Calendar_Year, Calendar_Year_Month, Calendar_Year_Quarter,
         Relative_Day, Relative_Week, Relative_Month, Relative_Quarter, Relative_Year,
+        Recency_Band, Recency_Band_Sort,
         Financial_Year, Financial_Year_Name,
         Financial_Quarter, Financial_Quarter_Name,
         Financial_Month, Financial_Month_Name,
@@ -228,6 +235,24 @@ BEGIN
         DATEDIFF(MONTH,   @Today,             d),
         DATEDIFF(QUARTER, @Today,             d),
         DATEDIFF(YEAR,    @Today,             d),
+
+        -- Recency band (days into the past, 30d = 1 month -> 90 / 180 / 360). Future dates get
+        -- their own bucket so the column stays NOT NULL for a generic date dim; a past-only field
+        -- like Last_Activity_Date never lands there.
+        CASE
+            WHEN DATEDIFF(DAY, d, @Today) < 0   THEN 'Future'
+            WHEN DATEDIFF(DAY, d, @Today) <= 90  THEN 'Last 3 Months'
+            WHEN DATEDIFF(DAY, d, @Today) <= 180 THEN '3-6 Months'
+            WHEN DATEDIFF(DAY, d, @Today) <= 360 THEN '6-12 Months'
+            ELSE 'Over 12 Months'
+        END,
+        CASE
+            WHEN DATEDIFF(DAY, d, @Today) < 0   THEN 0
+            WHEN DATEDIFF(DAY, d, @Today) <= 90  THEN 1
+            WHEN DATEDIFF(DAY, d, @Today) <= 180 THEN 2
+            WHEN DATEDIFF(DAY, d, @Today) <= 360 THEN 3
+            ELSE 4
+        END,
 
         -- Financial Year
         fy_yr,
