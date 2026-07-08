@@ -27,12 +27,15 @@ init_prefix = "init_"      # frozen tables live as init_stage_<entity> in the SA
     (r'''tid = str(tenant_id)
 where = "tenant_id = '" + tid + "'"
 
-def copy_one(src_tbl, dst_tbl):
+def copy_one(src_tbl, dst_tbl, stamp=None):
     df = spark.table(src_tbl).where(where)
     n = df.count()
     if n == 0:
         print("  skip " + src_tbl + " (0 rows for tenant " + tid + ")")
         return 0
+    if stamp is not None:                        # restore: re-stamp so onboarding's sync-poll sees it
+        from pyspark.sql.functions import lit
+        df = df.withColumn("DW_Stage_Loaded_At", lit(stamp))
     w = df.write.format("delta")
     if spark.catalog.tableExists(dst_tbl):
         w = w.mode("overwrite").option("replaceWhere", where).option("mergeSchema", "true")
