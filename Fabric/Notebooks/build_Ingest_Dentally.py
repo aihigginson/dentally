@@ -84,11 +84,18 @@ print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental f
     (r'''RATE_FLOOR = 5      # when x-ratelimit-remaining hits this, sleep to the window reset
 MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (reset is an epoch on the hour)
 MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
+MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off + retry, don't skip the entity
 # Appointments + rota require an after/before window (plain params, NOT filter[...]).
 WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
 # These two big historical tables get an updated_after floor (history_floor param) so they fit in
 # one rate window; every other entity keeps full history. Confirmed filter param: updated_after.
 HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items"}
+# treatment_appointments (548k) has NO date field (updated_after -> HTTP 400) and ignores
+# practitioner_id + keyset (sort / filter[id][gt] / since_id) -- only patient_id filters, which is
+# per-patient (too many calls). So it can't be windowed; plain paging deep-offset-413s at ~354k.
+# Default order is NEWEST-FIRST, so landing the rows up to the wall keeps the most recent ~354k
+# (>= the 2021 tp/tpi floor; the dropped tail is oldest/pre-window links). Full history = per-patient backfill.
+PARTIAL_OK_413 = {"treatment_appointments"}
 ''', False),
 
     # 4 -- API helpers (rate-aware: sleep to the window reset, never skip on 429) ----
@@ -118,6 +125,16 @@ def req(base, headers, path, params):
             if attempt >= MAX_429:
                 raise RuntimeError("Rate-limited " + str(MAX_429) + "x on " + path)
             continue
+        if 500 <= r.status_code < 600:
+            # Transient server error (Dentally 500'd recalls page 1 once, 200 on retry). Back off
+            # and retry a few times before letting it raise -> a blip won't skip the whole entity.
+            if attempt <= MAX_5XX:
+                back = min(5 * attempt, 30)
+                print("      " + str(r.status_code) + " server error on " + path
+                      + " (try " + str(attempt) + "); retrying in " + str(back) + "s")
+                time.sleep(back)
+                continue
+            # exhausted retries -> fall through and raise below
         r.raise_for_status()
         rem = r.headers.get("RateLimit-Remaining") or r.headers.get("X-RateLimit-Remaining")
         if rem is not None and str(rem).isdigit() and int(rem) <= RATE_FLOOR:
@@ -126,12 +143,23 @@ def req(base, headers, path, params):
             time.sleep(wait)
         return r
 
-def fetch_all(base, headers, ep, params=None, max_pages=None):
+def fetch_all(base, headers, ep, params=None, max_pages=None, partial_ok_on_413=False):
     # Page until a short/empty page. size = the server's ACTUAL page-1 count, so a per_page the
     # API silently caps below what we asked can't trigger an early stop. Logs every 10 pages.
+    # partial_ok_on_413: for entities that can't be windowed (treatment_appointments) -- on the
+    # deep-offset 413, LAND the newest-first rows pulled so far instead of raising (which would
+    # skip the whole entity and lose them, as happened on the first onboard).
     out, page, size = [], 1, None
     while True:
-        r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=per_page))
+        try:
+            r = req(base, headers, "/" + ep, dict(params or {}, page=page, per_page=per_page))
+        except requests.HTTPError as e:
+            if partial_ok_on_413 and getattr(e.response, "status_code", None) == 413:
+                print("      !! " + ep + " deep-offset 413 at page " + str(page) + " -- landing the "
+                      + str(len(out)) + " newest rows pulled so far; older links beyond the wall "
+                      + "NOT pulled (per-patient backfill needed for full history).")
+                return out
+            raise
         rows = next((v for k, v in r.json().items() if k != "meta"), [])
         if isinstance(rows, dict):
             rows = [rows]
@@ -408,7 +436,8 @@ REGISTRY = [
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
                                               step_days=window_days, cap=cap)
                 else:
-                    raw_rows = fetch_all(base, headers, ep, dict(inc), max_pages=cap)
+                    raw_rows = fetch_all(base, headers, ep, dict(inc), max_pages=cap,
+                                         partial_ok_on_413=(ep in PARTIAL_OK_413))
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             if ep == "patients":
