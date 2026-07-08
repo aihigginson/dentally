@@ -17,4 +17,4 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Gold.Dim_P
     ALTER TABLE Gold.Dim_Patients ADD [Lapsed_Type] VARCHAR(30) NULL;
 
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Gold.Dim_Patients') AND name = 'fk_Date_Lapsed')
-    ALTER TABLE Gold.Dim_Patients ADD [fk_Date_Lapsed] BIGINT NULL;
+    ALTER TABLE Gold.Dim_Patients ADD [fk_Date_Lapsed] INT NULL;

@@ -58,7 +58,7 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Patient_Created_Date]               [date]          NULL,
     [Patient_Updated_Date]               [date]          NULL,
     [Lapsed_Type]                        [varchar](30)   NULL,
-    [fk_Date_Lapsed]                     [bigint]        NULL,
+    [fk_Date_Lapsed]                     [int]           NULL,
     [Patient_Count]                      [int]           NOT NULL,
     [DW_Created_At]                      [datetime2](6)  NOT NULL,
     [DW_Updated_At]                      [datetime2](6)  NOT NULL
