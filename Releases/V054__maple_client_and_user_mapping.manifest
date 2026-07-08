@@ -1,0 +1,29 @@
+# =====================================================================
+# Release V054 -- Maple (Tenant 100) client + user RLS mapping
+# =====================================================================
+# The RLS anchor view PBI.[Application Users] joins Application_Users.Client_ID =
+# Audit.Tenants.Client_ID, so a user sees the tenant(s) under their Client. Maple's
+# real data is Tenant 100 / Client 100, but the Maple users were mapped to Client 11
+# (the demo tenant) and Security.Clients had no Client 100 -- so post-onboard nobody
+# could see Tenant 100. This wires it up:
+#   * Security.Clients        -> add (100, 'Maple Dental').
+#   * Application_Users        -> admin@analytically.info, craigjack@, StephenRoberts@
+#                                 moved from Client 11 -> 100 (they now see Tenant 100).
+#   * Audit.Tenants            -> already carries (100, Client 100, 'Maple Dental',
+#                                 https://api.dentally.co/v1, Is_Active=1, Full_Refresh=1);
+#                                 re-seeded here so prod definitely has the record.
+# Then regenerate the Gold views so PBI.[Application Users] reflects the new mapping.
+#
+# NB: these *.Data.sql seeds are SHARED dev+prod (DELETE+INSERT reseed). Deploying to
+# dev also flips the Maple users from Tenant-11 demo to Tenant-100 real data.
+# Prereq for the actual connection: Key Vault secret dentally-tokens-prod (tenant 100).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V054__maple_client_and_user_mapping.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Security.Clients.Data.sql
+DEPLOY  Fabric\Audit.Tenants.Data.sql
+DEPLOY  Fabric\Security.Application_Users.Data.sql
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+TEST

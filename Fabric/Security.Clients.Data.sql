@@ -21,5 +21,7 @@ VALUES
   (11, 'Demonstration Practice'),
   (12, 'Elara Dental'),
   (13, 'NorthCity Dental'),
-  (14, 'Eastside Dental');
+  (14, 'Eastside Dental'),
+-- Real practices (loaded via Ingest_Dentally)
+  (100, 'Maple Dental');
 GO
