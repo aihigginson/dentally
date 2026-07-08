@@ -402,9 +402,9 @@ add("Phone Details Rate",
 
 kpi("New Patients",             "#,##0",    tEffRunRateAdd("new_patients"),         vPct("New Patients"),               bgHigherEff("New Patients", "new_patients"));
 kpi("Net Patient Growth",       "#,##0",    tEffRunRate("net_patient_growth"),   vPctP("Net Patient Growth"),        bgHigherEff("Net Patient Growth", "net_patient_growth"));
-kpi("Lapsed Patients",          "#,##0",    tEffAdd("lapsed_patients"),             vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
-kpi("Lapsed (Set Inactive)",    "#,##0",    tEffAdd("lapsed_deactivated"),          vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
-kpi("Lapsed (Silently)",        "#,##0",    tEffAdd("lapsed_calculated"),           vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
+kpi("Lapsed Patients",          "#,##0",    tEffRunRateAdd("lapsed_patients"),      vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
+kpi("Lapsed (Set Inactive)",    "#,##0",    tEffRunRateAdd("lapsed_deactivated"),   vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
+kpi("Lapsed (Silently)",        "#,##0",    tEffRunRateAdd("lapsed_calculated"),    vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
 kpi("Active Patients",          "#,##0",    tEffAdd("active_patients"),             vPctGreyP("Active Patients"),       bgHigherEffGrey("Active Patients", "active_patients"));
 kpi("Recall Effectiveness",     "#,##0.0%", tEff100("recall_compliance"),        vPp("Recall Effectiveness"),        bgHigherPp("Recall Effectiveness", "recall_compliance"));
 kpi("Patient Retention",        "#,##0.0%", tEff100("patient_retention"),        vPpP("Patient Retention"),          bgHigherPp("Patient Retention", "patient_retention"));
