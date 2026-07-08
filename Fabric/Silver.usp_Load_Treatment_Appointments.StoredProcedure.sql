@@ -6,6 +6,8 @@
 --  History          :
 --    *01     29/04/2026  AIH Initial Release
 --    *02     19/05/2026  AIH Add Completed, Completed_At from Bronze (now populated)
+--    *03     07/07/2026  AIH Remove Completed / Completed_At -- real Dentally treatment_appointments has
+--                            no such field (mock phantom -> always NULL for real). No consumers.
 --    *03     20/05/2026  AIH Column naming convention fixes (ID/_ID)
 --    *04     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Treatment_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
@@ -49,9 +51,7 @@ BEGIN
         ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Status] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Position] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Bookable] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Completed] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Completed_At] AS VARCHAR(500)), '')
+        ISNULL(CAST(staged.[Bookable] AS VARCHAR(500)), '')
         ))) AS _Hash
         INTO #src
         FROM (
@@ -70,9 +70,7 @@ BEGIN
         NULL  AS [Status],
                 -- Status not in Bronze
         Position  AS [Position],
-                CASE WHEN LOWER(TRIM(Bookable))  IN ('true','1') THEN 1 ELSE 0 END  AS [Bookable],
-                CASE WHEN LOWER(TRIM(Completed)) IN ('true','1') THEN 1 ELSE 0 END  AS [Completed],
-                LEFT(Completed_At, 50)  AS [Completed_At]
+                CASE WHEN LOWER(TRIM(Bookable))  IN ('true','1') THEN 1 ELSE 0 END  AS [Bookable]
             FROM Bronze.Treatment_Appointments
         ) AS staged;
 
@@ -87,8 +85,6 @@ BEGIN
             [Status] = src.[Status],
             [Position] = src.[Position],
             [Bookable] = src.[Bookable],
-            [Completed] = src.[Completed],
-            [Completed_At] = src.[Completed_At],
             [DW_Updated_At] = SYSUTCDATETIME(),
             [_Row_Hash]     = src._Hash,
             [_Raw_Json]     = NULL
@@ -97,8 +93,8 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Treatment_Appointments] ([Tenant_ID], [Id], [Appointment_ID], [Treatment_Plan_Item_ID], [Treatment_Plan_ID], [Patient_ID], [Practitioner_ID], [Site_ID], [Status], [Position], [Bookable], [Completed], [Completed_At], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
-        SELECT src.[Tenant_ID], src.[Id], src.[Appointment_ID], src.[Treatment_Plan_Item_ID], src.[Treatment_Plan_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Site_ID], src.[Status], src.[Position], src.[Bookable], src.[Completed], src.[Completed_At], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
+        INSERT INTO [Silver].[Treatment_Appointments] ([Tenant_ID], [Id], [Appointment_ID], [Treatment_Plan_Item_ID], [Treatment_Plan_ID], [Patient_ID], [Practitioner_ID], [Site_ID], [Status], [Position], [Bookable], [DW_Created_At], [DW_Updated_At], [_Row_Hash], [_Raw_Json])
+        SELECT src.[Tenant_ID], src.[Id], src.[Appointment_ID], src.[Treatment_Plan_Item_ID], src.[Treatment_Plan_ID], src.[Patient_ID], src.[Practitioner_ID], src.[Site_ID], src.[Status], src.[Position], src.[Bookable], SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash, NULL
         FROM #src AS src
         WHERE NOT EXISTS (
             SELECT 1 FROM [Silver].[Treatment_Appointments] AS tgt WHERE tgt.[Tenant_ID] = src.[Tenant_ID] AND tgt.[Id] = src.[Id]

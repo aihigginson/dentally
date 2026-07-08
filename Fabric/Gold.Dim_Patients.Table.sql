@@ -41,7 +41,7 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Recall_Method]                      [varchar](100)  NULL,
     [Use_Email]                          [bit]           NULL,
     [Use_SMS]                            [bit]           NULL,
-    [Preferred_Phone]                    [varchar](20)   NULL,
+    [Preferred_Phone]                    [varchar](50)   NULL,
     [Marketing_Consent]                  [varchar](255)  NULL,
     [First_Appointment_Date]             [date]          NULL,
     [Last_Appointment_Date]              [date]          NULL,
@@ -57,6 +57,8 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Total_Invoiced]                     [decimal](18, 4) NULL,
     [Patient_Created_Date]               [date]          NULL,
     [Patient_Updated_Date]               [date]          NULL,
+    [Lapsed_Type]                        [varchar](30)   NULL,
+    [fk_Date_Lapsed]                     [int]           NULL,
     [Patient_Count]                      [int]           NOT NULL,
     [DW_Created_At]                      [datetime2](6)  NOT NULL,
     [DW_Updated_At]                      [datetime2](6)  NOT NULL

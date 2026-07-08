@@ -58,7 +58,7 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(ROUND(CAST(ID AS float),0) AS int)  AS [Id],
+                TRY_CAST(ROUND(TRY_CAST(ID AS float),0) AS int)  AS [Id],
                 Email  AS [Email],
                 NULL  AS [Title],
                 -- Title not in Bronze.Users
@@ -67,7 +67,7 @@ BEGIN
                 LEFT(Last_Name,   100)  AS [Last_Name],
                 LEFT(Mobile_Phone,100)  AS [Mobile_Phone],
                 LEFT(Role,        100)  AS [Role],
-                TRY_CAST(ROUND(CAST(Permission_Level AS float),0) AS int)  AS [Permission_Level],
+                TRY_CAST(ROUND(TRY_CAST(Permission_Level AS float),0) AS int)  AS [Permission_Level],
                 LEFT(Practice_ID, 100)  AS [Practice_ID],
                 LEFT(Site_ID,     100)  AS [Site_ID],
                 LEFT(Image_Url,   100)  AS [Image_URL],
@@ -75,7 +75,7 @@ BEGIN
                 LEFT(Created_At,  100)  AS [Created_At],
                 LEFT(Updated_At,  100)  AS [Updated_At]
             FROM Bronze.Users
-            WHERE TRY_CAST(ROUND(CAST(ID AS float),0) AS int) IS NOT NULL
+            WHERE TRY_CAST(ROUND(TRY_CAST(ID AS float),0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

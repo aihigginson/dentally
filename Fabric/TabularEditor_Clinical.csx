@@ -196,40 +196,39 @@ add("Treatment Acceptance Rate",
 )",
     "#,##0.0%");
 
-// Open courses: live count of incomplete, started plans. Plan grain via '_Treatment Plans'
-// (Gold.Fact_Treatment_Plans) -- the plan's own fk_Practitioner drives the slicer and there is
-// no active date relationship, so this is naturally current-state (date slicer ignored).
+// Open courses: started-but-unfinished courses -- the plan has at least one COMPLETED item AND
+// at least one OPEN item (Course Status In Progress | Open - No Appointment). Course Status
+// (Gold.Fact_Treatment_Plans, item roll-up) already honours the plan-complete override (a plan
+// marked complete is 'Complete' regardless of a stray open line). Plan grain via '_Treatment
+// Plans' -- the plan's own fk_Practitioner drives the slicer and there is no active date
+// relationship, so this is naturally current-state (date slicer ignored).
 add("Open Courses",
     @"CALCULATE(
-    SUM('_Treatment Plans'[Treatment Plan Count]),
-    '_Treatment Plans'[Completed]   = FALSE(),
-    NOT ISBLANK('_Treatment Plans'[Start Date])
+    COUNTROWS('_Treatment Plans'),
+    '_Treatment Plans'[Course Status] IN { ""In Progress"", ""Open - No Appointment"" }
 )",
     "#,##0");
 
-// Open courses with no future appointment booked. Open-plan patients come from the plan-grain
-// '_Treatment Plans' (plan's own practitioner slicer, no active date relationship), then we
-// check List Patients[Next Appointment Date] for no future booking.
+// Open courses with no future appointment booked -- the leaky bucket. Read straight off the
+// fact's Course Status (Has_Future_Appointment already resolved at build time: a non-cancelled
+// appointment dated today-or-later). NO recency filter here -- we show ALL of them; the 3-month
+// fresh/stale band is a separate DAX read off [Last Activity Date] so nothing is hidden.
 add("Open Courses Without Appointment",
-    @"VAR today = TODAY()
-VAR open_plan_patients =
-    CALCULATETABLE(
-        DISTINCT('_Treatment Plans'[fk Patient]),
-        '_Treatment Plans'[Completed]   = FALSE(),
-        NOT ISBLANK('_Treatment Plans'[Start Date])
-    )
-RETURN
-CALCULATE(
-    COUNTROWS('List Patients'),
-    TREATAS(open_plan_patients, 'List Patients'[pk Patient]),
-    'List Patients'[pk Patient] > 0,
-    FILTER(
-        'List Patients',
-        ISBLANK('List Patients'[Next Appointment Date])
-            || 'List Patients'[Next Appointment Date] <= today
-    )
+    @"CALCULATE(
+    COUNTROWS('_Treatment Plans'),
+    '_Treatment Plans'[Course Status] = ""Open - No Appointment""
 )",
     "#,##0");
+
+// Outstanding private value tied up in the leaky-bucket courses (started, unfinished, no future
+// appointment). Private Treatment Value Outstanding = sum of open (NHS_Charge=0) item value,
+// rolled up onto the plan. This is the "eye-watering" number for the review.
+add("Open Courses Without Appointment Value",
+    @"CALCULATE(
+    SUM('_Treatment Plans'[Private Treatment Value Outstanding]),
+    '_Treatment Plans'[Course Status] = ""Open - No Appointment""
+)",
+    "£#,##0");
 
 // Exam ratio: exam appointments / all appointments
 add("Exam Ratio",
@@ -238,27 +237,14 @@ add("Exam Ratio",
     SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
-// Open Courses Value: point-in-time CURRENT-STATE -- always the LATEST weekly snapshot,
-// independent of the page/embed period slicer. REMOVEFILTERS the date dims so it shows the
-// current open-course value (like the period-independent Open Courses count) instead of 0
-// under any non-current period (the snapshot spine only has current-FY rows). Practitioner/
-// site slicers still apply (only date is removed).
+// Open Courses Value: outstanding private value across ALL open courses (In Progress +
+// Open - No Appointment), read live off the plan-grain fact. Current-state by construction --
+// the fact has no active date relationship, so the page/embed period slicer is ignored;
+// practitioner slicer still applies (site is always -1 on the plan object).
 add("Open Courses Value",
-    @"VAR last_date =
-    CALCULATE(
-        MAX( '_KPI Snapshot'[fk Date] ),
-        '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-        REMOVEFILTERS( 'List Date' ),
-        REMOVEFILTERS( 'List Date Grouping' )
-    )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date]        = last_date,
-    '_KPI Snapshot'[Metric]         = ""open_courses_value"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-    REMOVEFILTERS( 'List Date' ),
-    REMOVEFILTERS( 'List Date Grouping' )
+    @"CALCULATE(
+    SUM('_Treatment Plans'[Private Treatment Value Outstanding]),
+    '_Treatment Plans'[Course Status] IN { ""In Progress"", ""Open - No Appointment"" }
 )",
     "£#,##0");
 

@@ -10,6 +10,10 @@
 --    *04     20/05/2026  AIH Column naming convention fixes (ID/_ID, UUID, API)
 --    *05     02/06/2026  AIH Bronze boolean columns are now VARCHAR; convert with LOWER(TRIM) IN ('true','1')
 --    *06     02/06/2026  AIH Derive Site_ID via LEFT JOIN Silver.Rooms on Room_ID (not in Dentally API direct)
+--    *07     07/07/2026  AIH Two distinct sites: add Practitioner_Site_ID (from Bronze practitioner_site_id,
+--                            the GUID the practitioner is attached to) and rename the room-derived Site_ID
+--                            -> Room_Site_ID (site of the room the appt took place in; NULL until rooms
+--                            configured). Gold fk_Practice_Site uses the practitioner site for now.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Appointments]    Script Date: 20/04/2026 10:15:06 ******/
@@ -52,7 +56,8 @@ BEGIN
         ISNULL(CAST(staged.[User_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Payment_Plan_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Room_ID] AS VARCHAR(500)), ''),
-        ISNULL(CAST(staged.[Site_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Practitioner_Site_ID] AS VARCHAR(500)), ''),
+        ISNULL(CAST(staged.[Room_Site_ID] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Start_Time] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Finish_Time] AS VARCHAR(500)), ''),
         ISNULL(CAST(staged.[Duration] AS VARCHAR(500)), ''),
@@ -93,7 +98,8 @@ BEGIN
                 User_ID  AS [User_ID],
                 Payment_Plan_ID  AS [Payment_Plan_ID],
                 LEFT(a.Room_ID, 50)  AS [Room_ID],
-                r.Site_ID            AS [Site_ID],
+                LEFT(a.Practitioner_Site_ID, 50)  AS [Practitioner_Site_ID],
+                r.Site_ID            AS [Room_Site_ID],
                 LEFT(Start_Time,  50)  AS [Start_Time],
                 LEFT(Finish_Time, 50)  AS [Finish_Time],
                 Duration  AS [Duration],
@@ -132,7 +138,8 @@ BEGIN
             [User_ID] = src.[User_ID],
             [Payment_Plan_ID] = src.[Payment_Plan_ID],
             [Room_ID] = src.[Room_ID],
-            [Site_ID] = src.[Site_ID],
+            [Practitioner_Site_ID] = src.[Practitioner_Site_ID],
+            [Room_Site_ID] = src.[Room_Site_ID],
             [Start_Time] = src.[Start_Time],
             [Finish_Time] = src.[Finish_Time],
             [Duration] = src.[Duration],
@@ -161,9 +168,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_ID], [Appointment_UUID], [Appointment_Cancellation_Reason_ID], [Patient_ID], [Patient_Name], [Patient_Image_Url], [Practitioner_ID], [User_ID], [Payment_Plan_ID], [Room_ID], [Site_ID], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Booked_Via_API], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Appointments] ([Tenant_ID], [Appointment_ID], [Appointment_UUID], [Appointment_Cancellation_Reason_ID], [Patient_ID], [Patient_Name], [Patient_Image_Url], [Practitioner_ID], [User_ID], [Payment_Plan_ID], [Room_ID], [Practitioner_Site_ID], [Room_Site_ID], [Start_Time], [Finish_Time], [Duration], [Reason], [State], [Booked_Via_API], [Pending_At], [Confirmed_At], [Arrived_At], [In_Surgery_At], [Completed_At], [Cancelled_At], [Did_Not_Attend_At], [Metadata_1_Key], [Metadata_1_Value], [Metadata_2_Key], [Metadata_2_Value], [Metadata_3_Key], [Metadata_3_Value], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Appointment_ID], src.[Appointment_UUID], src.[Appointment_Cancellation_Reason_ID], src.[Patient_ID], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_ID], src.[User_ID], src.[Payment_Plan_ID], src.[Room_ID], src.[Site_ID], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Booked_Via_API], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Appointment_ID], src.[Appointment_UUID], src.[Appointment_Cancellation_Reason_ID], src.[Patient_ID], src.[Patient_Name], src.[Patient_Image_Url], src.[Practitioner_ID], src.[User_ID], src.[Payment_Plan_ID], src.[Room_ID], src.[Practitioner_Site_ID], src.[Room_Site_ID], src.[Start_Time], src.[Finish_Time], src.[Duration], src.[Reason], src.[State], src.[Booked_Via_API], src.[Pending_At], src.[Confirmed_At], src.[Arrived_At], src.[In_Surgery_At], src.[Completed_At], src.[Cancelled_At], src.[Did_Not_Attend_At], src.[Metadata_1_Key], src.[Metadata_1_Value], src.[Metadata_2_Key], src.[Metadata_2_Value], src.[Metadata_3_Key], src.[Metadata_3_Value], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

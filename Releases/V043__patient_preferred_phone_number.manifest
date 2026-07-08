@@ -1,0 +1,38 @@
+# =====================================================================
+# Release V043 -- Preferred_Phone as the actual number (real Dentally is a code)
+# =====================================================================
+# Real Dentally patient.preferred_phone_number is an integer CODE (1=Home, 2=Work,
+# 3=Mobile), NOT a phone number, and NOT the mock's `preferred_phone` enum -- so the
+# column came through blank for real tenants (audit finding). Now:
+#   * Bronze.usp_Load_Patients reads preferred_phone_number (the code) into Preferred_Phone.
+#   * Silver.usp_Load_Patients RESOLVES the code -> the actual number using the already
+#     active-gated Home_Phone/Mobile_Phone (code 2 Work -> NULL; work numbers dropped V011).
+#   * Preferred_Phone widened VARCHAR(20)->(50) in Silver + Gold to hold a number.
+#   * Gold.usp_Load_Dim_Patients unchanged (carries Silver's value, now a number).
+#
+# Ingest + generator (NOT in this manifest -- deployed by re-importing the notebook /
+# next seed): Ingest_Dentally already lands preferred_phone_number; generate_data.py now
+# emits the integer code for synthetic tenants (same rng draw -> no regression drift).
+#
+# DESTRUCTIVE: Silver.Patients + Gold.Dim_Patients are DROP/CREATE (width change) ->
+# emptied and rebuilt from Bronze/Silver. Deploy tables before SPs.
+# AFTER deploy: reload patients Bronze->Silver->Gold (Orchestrate_Build) for affected
+# tenants. Validate: SELECT TOP 20 Preferred_Phone, Mobile_Phone, Home_Phone
+# FROM Gold.Dim_Patients WHERE Tenant_ID=100 -- Preferred_Phone should equal the mobile/home
+# number, not a code or enum.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V043__patient_preferred_phone_number.manifest
+# =====================================================================
+
+# Stage.Patients is SELECT * bound at CREATE time; recreate it FIRST so preferred_phone_number
+# (which landed in stage after the real T100 ingest / V015 view-recreate) is exposed, else the
+# Bronze SP fails "Invalid column name 'preferred_phone_number'".
+DEPLOY   Fabric\Stage.Views.sql
+
+DEPLOY   Fabric\Silver.Patients.Table.sql
+DEPLOY   Fabric\Gold.Dim_Patients.Table.sql
+
+DEPLOY   Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+
+TEST

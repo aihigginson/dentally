@@ -61,9 +61,9 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                TRY_CAST(ROUND(CAST(ID AS float),0) AS int)  AS [Id],
+                TRY_CAST(ROUND(TRY_CAST(ID AS float),0) AS int)  AS [Id],
                 LEFT(Nickname, 50)  AS [Nickname],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float),0) AS int)  AS [Patient_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float),0) AS int)  AS [Patient_ID],
                 Practitioner_ID  AS [Practitioner_ID],
                 NULL  AS [Site_ID],
                 -- Site_ID not in Bronze
@@ -82,7 +82,7 @@ BEGIN
                 LEFT(Created_At, 50)  AS [Created_At],
                 LEFT(Updated_At, 50)  AS [Updated_At]
             FROM Bronze.Treatment_Plans
-            WHERE TRY_CAST(ROUND(CAST(ID AS float),0) AS int) IS NOT NULL
+            WHERE TRY_CAST(ROUND(TRY_CAST(ID AS float),0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

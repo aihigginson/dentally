@@ -233,22 +233,45 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
+// Lapsed = a FLOW metric (V050): read the AGG ('_Metric Actuals' -- a fact PROPERLY related to
+// List Date), SUMmed over the period via TREATAS. NO dim-to-dim relationship. Total + two disjoint
+// cohorts. This is the 'cum' shape; TabularEditor_MetricActuals.csx apply-mode sets the same in place.
 add("Lapsed Patients",
-    @"VAR snap_fk =
-    CALCULATE(
-        MAXX(
-            FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-            '_KPI Snapshot'[fk Date]
-        ),
-        REMOVEFILTERS( 'List Practitioners' )
-    )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date]        = snap_fk,
-    '_KPI Snapshot'[Metric]         = ""lapsed_patients"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-    REMOVEFILTERS( 'List Practitioners' )
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_patients"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
+)",
+    "#,##0");
+
+add("Lapsed (Set Inactive)",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_deactivated"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
+)",
+    "#,##0");
+
+add("Lapsed (Silently)",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_calculated"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
@@ -358,12 +381,18 @@ CALCULATE(
 )",
     "#,##0");
 
+// Contactability is about the ACTIVE base (inactive patients have contact removed), so both
+// numerator and denominator are active-scoped -> % of ACTIVE patients contactable (~94%), not
+// diluted by the ~21k historical/inactive patients.
 add("Email Details Rate",
     @"DIVIDE(
     CALCULATE(
         SUM('List Patients'[Patient Count]),
-        NOT ISBLANK('List Patients'[Email Address])),
-    SUM('List Patients'[Patient Count]))",
+        NOT ISBLANK('List Patients'[Email Address]),
+        'List Patients'[Active] = TRUE()),
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        'List Patients'[Active] = TRUE()))",
     "#,##0.0%");
 
 add("Phone Details Rate",
@@ -371,15 +400,20 @@ add("Phone Details Rate",
     CALCULATE(
         SUM('List Patients'[Patient Count]),
         NOT ISBLANK('List Patients'[Mobile Phone])
-        || NOT ISBLANK('List Patients'[Home Phone])),
-    SUM('List Patients'[Patient Count]))",
+        || NOT ISBLANK('List Patients'[Home Phone]),
+        'List Patients'[Active] = TRUE()),
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        'List Patients'[Active] = TRUE()))",
     "#,##0.0%");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
 
 kpi("New Patients",             "#,##0",    tEffRunRateAdd("new_patients"),         vPct("New Patients"),               bgHigherEff("New Patients", "new_patients"));
 kpi("Net Patient Growth",       "#,##0",    tEffRunRate("net_patient_growth"),   vPctP("Net Patient Growth"),        bgHigherEff("Net Patient Growth", "net_patient_growth"));
-kpi("Lapsed Patients",          "#,##0",    tEffAdd("lapsed_patients"),             vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
+kpi("Lapsed Patients",          "#,##0",    tEffRunRateAdd("lapsed_patients"),      vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
+kpi("Lapsed (Set Inactive)",    "#,##0",    tEffRunRateAdd("lapsed_deactivated"),   vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
+kpi("Lapsed (Silently)",        "#,##0",    tEffRunRateAdd("lapsed_calculated"),    vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
 kpi("Active Patients",          "#,##0",    tEffAdd("active_patients"),             vPctGreyP("Active Patients"),       bgHigherEffGrey("Active Patients", "active_patients"));
 kpi("Recall Effectiveness",     "#,##0.0%", tEff100("recall_compliance"),        vPp("Recall Effectiveness"),        bgHigherPp("Recall Effectiveness", "recall_compliance"));
 kpi("Patient Retention",        "#,##0.0%", tEff100("patient_retention"),        vPpP("Patient Retention"),          bgHigherPp("Patient Retention", "patient_retention"));

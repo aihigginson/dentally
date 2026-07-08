@@ -5,6 +5,10 @@
 --  Initial Date     :  21/06/2026
 --  History          :
 --    *01     21/06/2026  AIH  Initial release.
+--    *02     07/07/2026  AIH  Refactor: the medallion data-clear now delegates to
+--                             Audit.usp_Clear_Tenant_Data (single source of truth for the data-row
+--                             list -- no drift); this SP adds only the identity/config deletes
+--                             (tenant-bearing tables OUTSIDE Bronze/Silver/Gold). = clear + metadata.
 --  Purpose          :  Delete ALL rows for one tenant across EVERY tenant-bearing table in
 --                      ALL schemas -- Bronze/Silver/Gold data PLUS Audit.Tenants registration
 --                      and Config/Input/Security per-tenant config, targets and RLS mappings.
@@ -66,16 +70,21 @@ BEGIN
     END
     ELSE
     BEGIN
+        -- 1) medallion DATA rows -- delegate to the shared clear (single data-row list, no drift).
+        EXEC Audit.usp_Clear_Tenant_Data @Tenant_ID = @Tenant_ID, @Dry_Run = 0;
+
+        -- 2) identity/config rows -- every tenant-bearing table OUTSIDE the medallion (Audit.Tenants,
+        --    Config.*, Input.*, Security.* ...). NULL is fine (no config table may carry Tenant_ID).
         SELECT @sql = STRING_AGG(CAST(
             'DELETE FROM [' + c.TABLE_SCHEMA + '].[' + c.TABLE_NAME + '] WHERE Tenant_ID = ' + @tid + ';'
             AS NVARCHAR(MAX)), CHAR(10))
         FROM INFORMATION_SCHEMA.COLUMNS c
         JOIN INFORMATION_SCHEMA.TABLES  t
           ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME AND t.TABLE_TYPE = 'BASE TABLE'
-        WHERE c.COLUMN_NAME = 'Tenant_ID';
+        WHERE c.COLUMN_NAME = 'Tenant_ID'
+          AND c.TABLE_SCHEMA NOT IN ('Bronze', 'Silver', 'Gold');
 
-        IF @sql IS NULL THROW 500032, 'usp_Delete_All_Tenant:: no tenant-bearing tables found.', 1;
-        EXEC sp_executesql @sql;
+        IF @sql IS NOT NULL EXEC sp_executesql @sql;
         SELECT @Tenant_ID AS Tenant_ID, 'DELETED' AS Mode;
     END
 END

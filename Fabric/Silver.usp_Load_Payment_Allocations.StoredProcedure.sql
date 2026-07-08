@@ -55,8 +55,8 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [Payment_Allocation_ID],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
-                TRY_CAST(ROUND(CAST(Payment_Explanation_ID AS float), 0) AS int)  AS [Payment_Explanation_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
+                TRY_CAST(ROUND(TRY_CAST(Payment_Explanation_ID AS float), 0) AS int)  AS [Payment_Explanation_ID],
                 LEFT(Invoice_Item_ID,  50)  AS [Invoice_Item_ID],
                 LEFT(Reversal_Of_ID,   50)  AS [Reversal_Of_ID],
                 Amount  AS [Amount],

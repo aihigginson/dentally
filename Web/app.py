@@ -213,10 +213,39 @@ def _fabric_conn(autocommit=False):
     )
     return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
+# Is the Fabric capacity up? When it's PAUSED (to save cost pre-revenue) the warehouse is
+# unreachable and PBI embeds fail, so we show a holding page rather than a broken app. Cached
+# 30s so we don't ping the warehouse on every hit; a short login timeout keeps a paused check fast.
+_cap_check = {'ts': 0.0, 'ok': True}
+def _capacity_available():
+    import time
+    now = time.time()
+    if now - _cap_check['ts'] < 30:
+        return _cap_check['ok']
+    ok = False
+    try:
+        token = _fabric_access_token()
+        tb = token.encode('utf-16-le')
+        ts = struct.pack(f'<I{len(tb)}s', len(tb), tb)
+        cs = (f"Driver={{ODBC Driver 18 for SQL Server}};Server={FABRIC_SERVER},1433;"
+              f"Database={FABRIC_DB};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=4;")
+        c = pyodbc.connect(cs, attrs_before={1256: ts})
+        c.close()
+        ok = True
+    except Exception:
+        ok = False
+    _cap_check['ts'] = now
+    _cap_check['ok'] = ok
+    return ok
+
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
+    # Cost-saving pause: when the Fabric capacity is suspended the warehouse + embeds are
+    # unreachable, so serve a friendly holding page instead of a broken app.
+    if not _capacity_available():
+        return send_from_directory('.', 'holding.html')
     return send_from_directory('.', 'index.html')
 
 
@@ -401,14 +430,20 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
-        role_clause  = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
-        pract_params = list(tids) + ([role_filter] if role_filter != 'all' else [])
+        active_clause = "AND Active = 1 " if active_only else ""
+        # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
+        excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
+        role_clause   = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        pract_params  = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
-            f"SELECT Practitioner_ID, Full_Name "
+            f"SELECT MIN(Practitioner_ID) AS Practitioner_ID, Full_Name "
             f"FROM   Gold.Dim_Practitioners "
             f"WHERE  Tenant_ID IN ({placeholders}) "
             f"AND    pk_Practitioner > 0 "
+            f"{active_clause}"
+            f"{excl_clause}"
             f"{role_clause}"
+            f"GROUP BY Full_Name "     # dedup by name (same person can have >1 record)
             f"ORDER BY Full_Name",
             pract_params,
         )

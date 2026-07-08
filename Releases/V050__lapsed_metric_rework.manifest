@@ -1,0 +1,32 @@
+# =====================================================================
+# Release V050 -- Lapsed metric rework (2-cohort flow model)
+# =====================================================================
+# Lapsed was a single wrong point-in-time count (17,425 = whole historical base).
+# Rework to the agreed 2-cohort flow model:
+#   * Dim_Patients gains Lapsed_Type + fk_Date_Lapsed (per-patient flags).
+#   * Fact_Metric_Actuals materialises a FLOW metric keyed on fk_Date_Lapsed:
+#       lapsed_deactivated  (Active=0)
+#       lapsed_calculated   (Active but >730d since last appt AND no future booking)
+#       lapsed_patients     (total) -- MOVED off the weekly snapshot onto this flow source.
+#     Global + site + practitioner grain; a booking un-lapses (recomputed each build).
+#   * Config: lapsed_patients -> Target_Type 'cumulative' (summed over the period) +
+#     practitioner-enabled; two cohort metrics added.
+# ALTER (not drop/create) preserves Dim_Patients surrogate keys -> facts stay valid.
+#
+# ORDER: MIGRATE first so the columns exist before the SP CREATEs reference them.
+#
+# AFTER deploy: run Orchestrate_Build (build-only) to repopulate Dim_Patients +
+# Fact_Metric_Actuals. THEN re-run the patient KPI measures in Tabular Editor so the
+# lapsed_patients measure regenerates as a SUM (was latest-snapshot) and the two new
+# cohort cards are created -- otherwise the card still reads the old snapshot pattern.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V050__lapsed_metric_rework.manifest -SkipTests
+# =====================================================================
+
+MIGRATE Migrations\V050__lapsed_columns.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+TEST

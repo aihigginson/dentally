@@ -11,6 +11,8 @@
 --    *06     17/06/2026  AIH DATA MINIMISATION (V011): stop landing special-category + excess-identifier fields;
 --                            load identity-for-contact, marketing flag + operational analytics only
 --    *07     19/06/2026  AIH V015: re-land contact-preference fields (use_email, use_sms, preferred_phone)
+--    *08     07/07/2026  AIH Read real field preferred_phone_number (Dentally code 1=Home/2=Work/3=Mobile),
+--                            not the mock's preferred_phone. Silver resolves the code to the actual number.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Patients]
@@ -44,7 +46,7 @@ BEGIN
             , LEFT(home_phone,                    255)            AS Home_Phone
             , LEFT(use_email,                     255)            AS Use_Email
             , LEFT(use_sms,                       255)            AS Use_SMS
-            , LEFT(preferred_phone,               255)            AS Preferred_Phone
+            , LEFT(preferred_phone_number,        255)            AS Preferred_Phone
             , TRY_CAST(payment_plan_id           AS INT)          AS Payment_Plan_ID
             , TRY_CAST(dentist_id                AS INT)          AS Dentist_ID
             , TRY_CAST(hygienist_id              AS INT)          AS Hygienist_ID

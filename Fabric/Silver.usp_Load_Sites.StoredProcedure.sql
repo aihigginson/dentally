@@ -81,7 +81,7 @@ BEGIN
                 Website  AS [Website],
                 Logo_Url  AS [Logo_URL],
                 -- Bronze Default_Payment_Plan_ID is decimal(18,4); Silver is VARCHAR(255)
-        LEFT(CAST(TRY_CAST(ROUND(CAST(Default_Payment_Plan_ID AS float),0) AS bigint) AS VARCHAR(255)), 255)  AS [Default_Payment_Plan_ID],
+        LEFT(CAST(TRY_CAST(ROUND(TRY_CAST(Default_Payment_Plan_ID AS float),0) AS bigint) AS VARCHAR(255)), 255)  AS [Default_Payment_Plan_ID],
                 Monday_Open  AS [Monday_Open],
                 Monday_Close  AS [Monday_Close],
                 Tuesday_Open  AS [Tuesday_Open],

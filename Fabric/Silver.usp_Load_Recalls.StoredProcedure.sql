@@ -66,7 +66,7 @@ BEGIN
             SELECT
                 Tenant_ID                                                              AS [Tenant_ID],
                 LEFT(ID, 50)                                                           AS [Id],
-                TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)                  AS [Patient_ID],
+                TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)                  AS [Patient_ID],
                 LEFT(Appointment_ID, 50)                                              AS [Appointment_ID],
                 LEFT(Recall_Type, 50)                                                 AS [Recall_Type],
                 LEFT(Recall_Method, 50)                                               AS [Recall_Method],

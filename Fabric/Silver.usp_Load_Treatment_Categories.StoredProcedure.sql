@@ -50,7 +50,7 @@ BEGIN
         FROM (
             SELECT
                 Tenant_ID  AS [Tenant_ID],
-                LEFT(CAST(TRY_CAST(ROUND(CAST(ID AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Id],
+                LEFT(CAST(TRY_CAST(ROUND(TRY_CAST(ID AS float),0) AS bigint) AS VARCHAR(50)), 50)  AS [Id],
                 Name  AS [Name],
                 NULL  AS [Description],
                 -- Description not in Bronze

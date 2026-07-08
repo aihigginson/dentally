@@ -70,7 +70,7 @@ BEGIN
                 LEFT(Region,               255)  AS [Region],
                 TRY_CAST(UDA_Band           AS decimal(10,2))  AS [UDA_Band],
                 TRY_CAST(NHS_Treatment_Cat  AS decimal(10,2))  AS [NHS_Treatment_Cat],
-                TRY_CAST(ROUND(CAST(Treatment_Category_ID AS float),0) AS int)  AS [Treatment_Category_ID],
+                TRY_CAST(ROUND(TRY_CAST(Treatment_Category_ID AS float),0) AS int)  AS [Treatment_Category_ID],
                 LEFT(Created_At, 20)  AS [Created_At],
                 LEFT(Updated_At, 20)  AS [Updated_At]
             FROM Bronze.Treatments

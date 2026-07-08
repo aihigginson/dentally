@@ -15,6 +15,11 @@
 --                            placeholder 'Inactive Patient', contact NULLed; PII held for active patients only
 --    *08     19/06/2026  AIH V015: add contact-preference fields (Use_Email, Use_SMS, Preferred_Phone);
 --                            held for active patients only (NULL for inactive, per V013)
+--    *09     07/07/2026  AIH Preferred_Phone now holds the ACTUAL number: resolve Bronze's Dentally code
+--                            (1=Home/2=Work/3=Mobile) -> Home/Mobile (code 2 Work -> NULL, not stored). Widened 20->50.
+--    *10     07/07/2026  AIH Preferred_Phone falls back to any available number (mobile then home) when
+--                            there's no code -- the code is only set when the patient has a choice, so
+--                            otherwise it was NULL despite having a phone. Populated whenever a phone exists.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Silver.usp_Load_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Silver].[usp_Load_Patients]    Script Date: 20/04/2026 10:15:06 ******/
@@ -77,8 +82,8 @@ BEGIN
         FROM (
             SELECT
                     Tenant_ID  AS [Tenant_ID],
-                    TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)    AS Patient_ID,
-                    TRY_CAST(ROUND(CAST(Account_ID AS float), 0) AS int)    AS Account_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)    AS Patient_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Account_ID AS float), 0) AS int)    AS Account_ID,
                     LEFT(Site_ID, 50)                                        AS Site_ID,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Active,
@@ -98,25 +103,39 @@ BEGIN
                          THEN CASE WHEN LOWER(TRIM(Use_Email)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_Email,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CASE WHEN LOWER(TRIM(Use_SMS)) IN ('true','1') THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END END AS Use_SMS,
-                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Phone, 20) END AS Preferred_Phone,
+                    -- Preferred_Phone: real Dentally sets a preference CODE (1=Home,2=Work,3=Mobile)
+                    -- only when the patient has a CHOICE of numbers; most patients have no code. So
+                    -- honour the coded choice when present, but ALWAYS fall back to any number they
+                    -- have (mobile then home) -> populated whenever a phone exists. Work isn't stored
+                    -- (V011) so code 2 falls through. Active patients only (V013).
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
+                         THEN LEFT(COALESCE(
+                                  CASE TRY_CAST(Preferred_Phone AS INT)
+                                       WHEN 1 THEN NULLIF(TRIM(Home_Phone),   '')
+                                       WHEN 3 THEN NULLIF(TRIM(Mobile_Phone), '')
+                                  END,
+                                  NULLIF(TRIM(Mobile_Phone), ''),
+                                  NULLIF(TRIM(Home_Phone),   '')
+                              ), 50)
+                    END AS Preferred_Phone,
                     -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
                     CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
-                    TRY_CAST(ROUND(CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
-                    TRY_CAST(ROUND(CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
+                    TRY_CAST(ROUND(TRY_CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,
                     Payment_Plan_ID                                          AS Payment_Plan_ID,
                     LEFT(Acquisition_Source_ID, 50)                          AS Acquisition_Source_ID,
                     TRY_CAST(Dentist_Recall_Date AS date)                    AS Dentist_Recall_Date,
-                    TRY_CAST(ROUND(CAST(Dentist_Recall_Interval AS float),0) AS int)
+                    TRY_CAST(ROUND(TRY_CAST(Dentist_Recall_Interval AS float),0) AS int)
                                                                              AS Dentist_Recall_Interval,
                     TRY_CAST(Hygienist_Recall_Date AS date)                  AS Hygienist_Recall_Date,
-                    TRY_CAST(ROUND(CAST(Hygienist_Recall_Interval AS float),0) AS int)
+                    TRY_CAST(ROUND(TRY_CAST(Hygienist_Recall_Interval AS float),0) AS int)
                                                                              AS Hygienist_Recall_Interval,
                     LEFT(Recall_Method, 20)                                  AS Recall_Method,
                     LEFT(Created_At,    50)                                  AS Created_At,
                     LEFT(Updated_At,    50)                                  AS Updated_At
                 FROM Bronze.Patients
-                WHERE TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
+                WHERE TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

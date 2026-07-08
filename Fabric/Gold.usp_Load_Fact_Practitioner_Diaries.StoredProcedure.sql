@@ -10,6 +10,11 @@
 --    *04     19/05/2026  AIH DATEDIFF casts: datetime2(3) -> TIME; time-only strings fail TRY_CAST to datetime2 in Fabric
 --    *05     19/05/2026  AIH Time extractor: test-data format is '2023-07-21T09:00.000+00:00'; strip date prefix via CHARINDEX('T')
 --    *06     20/05/2026  AIH Column naming convention fixes (ID/_ID)
+--    *07     07/07/2026  AIH Days-worked-only filter: keep rows that are Available AND have real
+--                            start/finish times. Dentally writes one diary row per practitioner per
+--                            calendar day (non-working = NULL times; holiday = unavailable=1); those
+--                            zero-hour rows bloated the fact and dragged down per-row hour averages.
+--                            Silver retains all rows (reversible). Pairs with Bronze *05 (unavailable).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -85,7 +90,15 @@ BEGIN
             FROM Silver.Practitioner_Diary_Breaks
             GROUP BY Practitioner_Diary_ID
         ) brk ON brk.Practitioner_Diary_ID = pd.Id
-        WHERE pd.Id IS NOT NULL;
+        -- DAYS WORKED ONLY. Dentally writes one diary row per practitioner per calendar day; a
+        -- non-working day has NULL start/finish (day off) and unavailable days are flagged. We keep
+        -- only actually-worked sessions (available + real times) so the fact is one-row-per-worked-day,
+        -- not one-per-calendar-day. Silver retains every row (reversible). This also stops zero-hour
+        -- rows dragging down any per-diary-row average of working hours.
+        WHERE pd.Id IS NOT NULL
+          AND CAST(ISNULL(pd.Available,0) AS BIT) = 1
+          AND NULLIF(TRIM(pd.Start_Time),'')  IS NOT NULL
+          AND NULLIF(TRIM(pd.Finish_Time),'') IS NOT NULL;
 
         -- Remove rows no longer in source
         DELETE tgt

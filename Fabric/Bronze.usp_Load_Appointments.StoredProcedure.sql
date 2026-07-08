@@ -10,6 +10,9 @@
 --    *05     16/05/2026  AIH Add Site_ID (missing from Stage read despite being in Bronze table)
 --    *06     19/05/2026  AIH Remove Site_ID, Created_At, Updated_At Stage reads (not in Dentally API)
 --    *07     02/06/2026  AIH Boolean columns stored raw (VARCHAR) in Bronze; cast moved to Silver
+--    *08     07/07/2026  AIH Re-add site: read practitioner_site_id (the real Dentally field, a GUID)
+--                            as Practitioner_Site_ID. The *06 removal was wrong -- site IS in the API,
+--                            as practitioner_site_id (not site_id). Feeds Fact_Appointments fk_Practice_Site.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -43,6 +46,7 @@ BEGIN
             , TRY_CAST(user_id                           AS INT)  AS User_ID
             , TRY_CAST(payment_plan_id                   AS INT)  AS Payment_Plan_ID
             , LEFT(room_id,                                255)   AS Room_ID
+            , LEFT(practitioner_site_id,                    50)   AS Practitioner_Site_ID
             , LEFT(start_time,                             255)   AS Start_Time
             , LEFT(finish_time,                            255)   AS Finish_Time
             , TRY_CAST(duration                          AS INT)  AS Duration
@@ -70,6 +74,7 @@ BEGIN
             , tgt.User_ID                            = src.User_ID
             , tgt.Payment_Plan_ID                    = src.Payment_Plan_ID
             , tgt.Room_ID                            = src.Room_ID
+            , tgt.Practitioner_Site_ID               = src.Practitioner_Site_ID
             , tgt.Start_Time                         = src.Start_Time
             , tgt.Finish_Time                        = src.Finish_Time
             , tgt.Duration                           = src.Duration
@@ -91,7 +96,7 @@ BEGIN
         INSERT INTO Bronze.Appointments (
             Tenant_ID, ID, UUID, Appointment_Cancellation_Reason_ID,
             Patient_ID, Patient_Name, Patient_Image_Url,
-            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID,
+            Practitioner_ID, User_ID, Payment_Plan_ID, Room_ID, Practitioner_Site_ID,
             Start_Time, Finish_Time, Duration, Reason, State,
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
@@ -101,7 +106,7 @@ BEGIN
         SELECT
             src.Tenant_ID, src.ID, src.UUID, src.Appointment_Cancellation_Reason_ID,
             src.Patient_ID, src.Patient_Name, src.Patient_Image_Url,
-            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID,
+            src.Practitioner_ID, src.User_ID, src.Payment_Plan_ID, src.Room_ID, src.Practitioner_Site_ID,
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State,
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,

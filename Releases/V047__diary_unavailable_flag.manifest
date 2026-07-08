@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V047 -- practitioner diary `unavailable` flag (working hours inflated)
+# =====================================================================
+# Real Dentally rota_practitioner_diaries carries `unavailable` (bool: true = practitioner NOT
+# available that day/session). The mock did NOT have it, so Bronze hardcoded Unavailable = 0 with
+# the note "field not in API". For real tenants that made EVERY entry look available -- including
+# holiday/blocked days that still carry the practitioner's normal 09:00-17:00 hours -- so
+# Silver.Available was always 1 and Fact_Practitioner_Diaries.Available_Clinical_Mins counted those
+# hours as working capacity. Result: working hours inflated, chair utilisation deflated, and the
+# "weird" capacity numbers on the reports.
+#
+# Fix (SP-only, Bronze): read `unavailable` from stage (Stage.Practitioner_Diary_Entries is
+# SELECT * so the column is already exposed -- no view change). CAST covers a bit ('1'/'0') OR a
+# string ('true'/'false'); NULL/absent -> available (0). Silver already inverts Unavailable->Available
+# and Fact already gates Available_Clinical_Mins on Available=1, so no downstream change is needed.
+#
+# NB (CREATE-time validation): this references stage column `unavailable`, which exists because the
+# real T100 pull landed it. Synthetic tenants (T11/T12) must emit `unavailable` too once the
+# generator is reworked (test-data-revisit) or a stage reload without the column would fail the
+# CREATE. Fine now -- real stage has it.
+#
+# AFTER deploy: re-run Orchestrate_Build (build-only, T100). Diary chain updates via the hash gate
+# (Unavailable 0->1 changes Silver + Fact hashes), daily aggregate + Fact_Metric_Actuals rebuild,
+# so working-hours / chair-utilisation cards correct. No truncate needed.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V047__diary_unavailable_flag.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Practitioner_Diary_Entries.StoredProcedure.sql
+
+TEST

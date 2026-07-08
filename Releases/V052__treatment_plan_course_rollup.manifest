@@ -1,0 +1,27 @@
+# =====================================================================
+# Release V052 -- Treatment-plan course roll-up (Open Courses leaky bucket)
+# =====================================================================
+# Pushes the item roll-up onto Gold.Fact_Treatment_Plans so the plan grain carries
+# the open-course lifecycle directly (no routing through the line-grain fact):
+#   * Private_Treatment_Value_Completed / _Outstanding  -- private (NHS_Charge=0) value split
+#   * Last_Activity_Date  -- MAX completed-item date, pushed up
+#   * Has_Completed_Item / Has_Open_Item / Has_Future_Appointment  -- state flags
+#   * Course_Status  -- Complete / Effectively Complete / Proposed / In Progress /
+#                       Open - No Appointment / No Items  (STRUCTURAL; recency is DAX)
+# The 3-month fresh/stale recency band is computed in DAX off Last_Activity_Date
+# (TODAY()-relative) so courses age with NO row rebuild. ALTER-in-place migration.
+#
+# ORDER: MIGRATE first so the columns exist before the SP CREATE references them.
+#
+# AFTER deploy: run Orchestrate_Build (build-only) to repopulate Fact_Treatment_Plans,
+# then refresh the model. PBI report ('Open - No Appointment' with patient/value/last
+# activity) is built by hand in Desktop.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V052__treatment_plan_course_rollup.manifest -SkipTests
+# =====================================================================
+
+MIGRATE Migrations\V052__treatment_plan_course_rollup.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+TEST

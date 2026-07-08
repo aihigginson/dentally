@@ -71,15 +71,15 @@ BEGIN
                 Tenant_ID  AS [Tenant_ID],
                 LEFT(ID, 50)  AS [NHS_Claim_ID],
                 -- Bronze Patient_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
+        TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
                 Practitioner_ID  AS [Practitioner_ID],
                 -- Bronze Treatment_Plan_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Treatment_Plan_ID AS float), 0) AS int)  AS [Treatment_Plan_ID],
+        TRY_CAST(ROUND(TRY_CAST(Treatment_Plan_ID AS float), 0) AS int)  AS [Treatment_Plan_ID],
                 LEFT(Site_ID, 50)  AS [Site_ID],
                 LEFT(Contract_ID, 50)  AS [Contract_ID],
                 LEFT(Claim_Status, 50)  AS [Claim_Status],
                 -- Bronze Sequence_Number is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Sequence_Number AS float), 0) AS int)  AS [Sequence_Number],
+        TRY_CAST(ROUND(TRY_CAST(Sequence_Number AS float), 0) AS int)  AS [Sequence_Number],
                 -- Bronze UDA_Band is decimal(18,4); Silver is VARCHAR(10)
         LEFT(CAST(CAST(UDA_Band AS int) AS VARCHAR(10)), 10)  AS [UDA_Band],
                 Expected_UDA  AS [Expected_UDA],

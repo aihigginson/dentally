@@ -60,7 +60,7 @@ BEGIN
             SELECT
                 Tenant_ID  AS [Tenant_ID],
                 -- Bronze Patient_ID is decimal(18,4); Silver is int
-        TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
+        TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int)  AS [Patient_ID],
                 LEFT(First_Appointment_Date,            50)  AS [First_Appointment_Date],
                 LEFT(First_Exam_Date,                   50)  AS [First_Exam_Date],
                 LEFT(Last_Appointment_Date,             50)  AS [Last_Appointment_Date],
@@ -78,7 +78,7 @@ BEGIN
                 LEFT(Created_At, 50)  AS [Created_At],
                 LEFT(Updated_At, 50)  AS [Updated_At]
             FROM Bronze.Patient_Stats
-            WHERE TRY_CAST(ROUND(CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
+            WHERE TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int) IS NOT NULL
         ) AS staged;
 
         UPDATE tgt

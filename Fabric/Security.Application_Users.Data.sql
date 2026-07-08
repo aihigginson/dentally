@@ -20,8 +20,8 @@ INSERT INTO Security.Application_Users
      Access_Home, Access_Revenue, Access_Patient, Access_Schedule, Access_Clinical, Access_NHS,
      Access_Day_Book, Access_Finance, Access_My_Data, Access_Marketing, Practitioner_Full_Name)
 VALUES
-    ('aihigginson@outlook.com',           1,  'Andy Higginson Personal', 1,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
-    ('admin@analytically.info',           11, 'Andrew Higginson',        1,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
-    ('craigjack@mapledental.co.uk',       11, 'Craig Jack',              0,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
-    ('StephenRoberts@mapledental.co.uk',  11, 'Stephen Roberts',         0,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL);
+    ('aihigginson@outlook.com',           1,   'Andy Higginson Personal', 1,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
+    ('admin@analytically.info',           100, 'Andrew Higginson',        1,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
+    ('craigjack@mapledental.co.uk',       100, 'Craig Jack',              0,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL),
+    ('StephenRoberts@mapledental.co.uk',  100, 'Stephen Roberts',         0,  1, 1, 1, 1, 1, 1,  0, 0, 0, 0,  NULL);
 GO

@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V044 -- drop phantom Completed / Completed_At from treatment_appointments
+# =====================================================================
+# Real Dentally treatment_appointments has NO completion field (only appointment_id,
+# treatment_plan_id, bookable, position, notes, created/updated). Completed / Completed_At
+# were a mock-only invention -> always NULL for real tenants (audit finding). No consumer
+# (Gold Fact_Treatment_Appointments does not read them; treatment_plan_items.Completed is a
+# separate, real field and is untouched). Removed from Bronze + Silver tables + loaders.
+#
+# DESTRUCTIVE: the two .Table.sql are DROP/CREATE -> Bronze + Silver Treatment_Appointments
+# are emptied and rebuilt from Stage/Bronze. Deploy tables before SPs.
+# AFTER deploy: reload treatment_appointments Bronze->Silver (Orchestrate_Build). No
+# re-baseline (dropped columns carried no tested metric; they were NULL for real anyway).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V044__treatment_appointments_drop_phantom_completed.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.Treatment_Appointments.Table.sql
+DEPLOY   Fabric\Silver.Treatment_Appointments.Table.sql
+
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Treatment_Appointments.StoredProcedure.sql
+
+TEST

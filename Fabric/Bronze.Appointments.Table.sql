@@ -20,6 +20,7 @@ CREATE TABLE [Bronze].[Appointments](
 	[Patient_Name] [VARCHAR](255) NULL,
 	[Patient_ID] [int] NULL,
 	[Room_ID] [VARCHAR](255) NULL,
+	[Practitioner_Site_ID] [VARCHAR](50) NULL,
 	[Patient_Image_Url] [VARCHAR](255) NULL,
 	[Payment_Plan_ID] [int] NULL,
 	[Pending_At] [VARCHAR](255) NULL,

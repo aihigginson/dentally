@@ -1,0 +1,39 @@
+# =====================================================================
+# Release V041 -- real-data type hardening (mock made numeric, real is string)
+# =====================================================================
+# First real Dentally build (Tenant 100) surfaced fields the mock kept numeric but
+# real Dentally fills with strings, breaking hard casts:
+#   * SILVER (8114 varchar->float): inner CAST(<col> AS float) on
+#     payment.transaction_number = Stripe charge ids (ch_3Tl...). Swept every inner
+#     CAST(<col> AS float) -> TRY_CAST across 18 Silver procs (NULL not error).
+#     Payments Reference/Transaction_Number keep the RAW string (COALESCE fallback).
+#   * GOLD (245 varchar 'DOMI'->int): Gold.usp_Load_Dim_Treatments cast t.Code to INT,
+#     but real treatment codes are alphanumeric (DOMI, 1005a, SYS001). Keep Code as the
+#     string (column is already VARCHAR(50)); TRY_CAST the genuinely-numeric fields.
+# Behaviour-preserving for numeric/synthetic data (T11). Re-run Orchestrate_Build after.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V041__realdata_type_hardening.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Silver.usp_Load_Fees.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_NHS_Claims.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Patient_Referral_Reasons.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Patient_Referrals.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Patient_Stats.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Payment_Allocations.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Payment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Payments.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Practitioners.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Recalls.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Rooms.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Sites.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Treatment_Categories.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Treatment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Treatments.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Users.StoredProcedure.sql
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Treatments.StoredProcedure.sql
+
+TEST

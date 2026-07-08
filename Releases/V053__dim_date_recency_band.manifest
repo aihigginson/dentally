@@ -1,0 +1,29 @@
+# =====================================================================
+# Release V053 -- Dim_Date recency age-band (Last 3 / 3-6 / 6-12 / Over 12 Months)
+# =====================================================================
+# Adds Recency_Band + Recency_Band_Sort to Gold.Dim_Date so any date field can be sliced
+# by age relative to today. Day-based (30d = 1 month -> 90 / 180 / 360), plus a 'Future'
+# bucket so the column stays NOT NULL for a generic date dim.
+#
+# WHY THE SORT KEY: the labels do NOT sort alphabetically -- 'Last 3 Months' starts 'L' and
+# lands after '3-6 Months' / '6-12 Months'. In PBI set Recency_Band's "Sort by column" to
+# Recency_Band_Sort (0 Future, 1 Last 3, 2 3-6, 3 6-12, 4 Over 12).
+#
+# Dim_Date is DROP/CREATE, so the columns only exist AFTER the load runs -> the view regen
+# must follow the rebuild. But Fabric validates the SP body at CREATE time against the LIVE
+# table, so the MIGRATE pre-adds the columns (nullable) FIRST or the DEPLOY fails with
+# "Invalid column name 'Recency_Band'". ORDER: pre-add cols -> deploy SP -> rebuild Dim_Date
+# -> regen Gold views.
+#
+# AFTER deploy: run Orchestrate_Build so the daily Dim_Date rebuild + model refresh pick it up.
+# Then in PBI set the Sort-by-column on 'List Date'[Recency Band].
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V053__dim_date_recency_band.manifest -SkipTests
+# =====================================================================
+
+MIGRATE Migrations\V053__dim_date_recency_columns.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Date.StoredProcedure.sql
+EXEC    DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Dim_Date @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+EXEC    EXEC Meta.usp_Create_Gold_Views;
+
+TEST

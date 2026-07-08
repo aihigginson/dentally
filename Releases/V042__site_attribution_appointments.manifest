@@ -1,0 +1,55 @@
+# =====================================================================
+# Release V042 -- practice-site attribution for appointments
+# =====================================================================
+# All facts for real Dentally practices were resolving fk_Practice_Site to the
+# sentinel (-1) -> reporting could not split by practice site. Root cause: the
+# APPOINTMENT load lost its site source. Real Dentally carries site as a GUID;
+# appointments as practitioner_site_id (100% filled on Tenant 100), not site_id.
+# Bronze/Silver *06 REMOVED the site read ("not in Dentally API" -- wrong) and
+# derived site only from the (empty) rooms path -> NULL -> sentinel.
+#
+# Fix (warehouse-only; NO re-pull -- Ingest_Dentally already lands practitioner_site_id
+# + room_id in stage_appointments):
+#   * Bronze.Appointments      + Practitioner_Site_ID VARCHAR(50); SP reads practitioner_site_id.
+#   * Silver.Appointments      + Practitioner_Site_ID; room-derived Site_ID renamed -> Room_Site_ID
+#                              (two genuinely different sites kept distinct: the practitioner's site
+#                              vs the site of the room the appt took place in).
+#   * Gold.Fact_Appointments   fk_Practice_Site now joins on a.Practitioner_Site_ID (was room Site_ID).
+#
+# The dimension (Dim_Practice_Sites.Site_ID VARCHAR(50)) + all fact joins were already
+# GUID-safe; invoices/payments/patients/nhs_claims/referrals/contracts still read site_id
+# and are structurally fine (verify post-build, no code change).
+#
+# DESTRUCTIVE: the two .Table.sql are DROP/CREATE -> Bronze + Silver Appointments are
+# emptied and rebuilt from stage. Agreed with AIH ("happy to blow away Appointments").
+# Deploy order matters (Fabric validates columns at CREATE time): TABLES before SPs.
+#
+# PRECONDITION: stage_appointments must expose practitioner_site_id (true after the real
+# T100 ingest). The Stage.* views are SELECT * bound at CREATE time, so a view created
+# before the column landed is stale -> "Invalid column name 'practitioner_site_id'". This
+# manifest recreates Stage.Views.sql FIRST to re-resolve * against the current lakehouse
+# schema. (If it STILL fails, the column is genuinely absent from stage -> re-ingest
+# appointments with the current Ingest_Dentally, only_entities=["appointments"].)
+#
+# AFTER deploy: re-run Orchestrate_Build (Bronze->Silver->Gold) for affected tenants, then
+# validate: SELECT fk_Practice_Site, COUNT(*) FROM Gold.Fact_Appointments WHERE Tenant_ID=100
+# GROUP BY fk_Practice_Site  -> expect the real site pk, not -1.
+#
+# TODO (separate): generate_data.py must emit practitioner_site_id for synthetic tenants
+# (T11-14) so dev appointments also attribute; mergeSchema means mixed stage is fine (NULL
+# until then). Do NOT remove the PBI Practice Site filter -- single-site practices just get a
+# 1-item list.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V042__site_attribution_appointments.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Stage.Views.sql
+
+DEPLOY   Fabric\Bronze.Appointments.Table.sql
+DEPLOY   Fabric\Silver.Appointments.Table.sql
+
+DEPLOY   Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+
+TEST
