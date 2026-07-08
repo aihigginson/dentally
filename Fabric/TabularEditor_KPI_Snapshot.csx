@@ -11,25 +11,17 @@ Action<string,string,string> add = (name, dax, fmt) => {
 };
 
 // ── Open Courses Value ─────────────────────────────────────────────────
-// Point-in-time snapshot metric: value of uninvoiced treatment plan items on
-// plans that were open at the snapshot date.
+// The current-state CARD "Open Courses Value" is now owned by TabularEditor_Clinical.csx
+// (live off Gold.Fact_Treatment_Plans -> [Private Treatment Value Outstanding], the item
+// roll-up). It is NOT defined here any more -- both scripts share the "Clinical KPIs"
+// folder + delete-first, so defining it in both made the card depend on run order.
 //
-// Card measure  — semi-additive: picks the latest snapshot date in the current
-//                 slicer selection so the card always shows one value.
+// This script keeps the HISTORICAL series only (Trend / Target / vs / BG). NB: the snapshot
+// history was captured under the OLD open_courses_value definition, so the Trend line and the
+// live card measure are not strictly like-for-like until the snapshot metric is rebuilt.
 // Trend measure — plain SUM: the date-axis context in a chart already restricts
 //                 to a single snapshot date per point; add a visual filter
 //                 Snapshot Grain = "monthly" for clean month-end series.
-
-add("Open Courses Value",
-    @"VAR last_date =
-    MAXX( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[fk Date] )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date] = last_date,
-    '_KPI Snapshot'[Metric]  = ""open_courses_value""
-)",
-    "£#,##0");
 
 add("Open Courses Value Trend",
     @"CALCULATE(

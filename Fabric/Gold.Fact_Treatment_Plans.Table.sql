@@ -36,6 +36,14 @@ CREATE TABLE [Gold].[Fact_Treatment_Plans](
     [NHS_UDA_Value]             [decimal](18, 4) NULL,
     [NHS_Completed_UDA_Value]   [decimal](18, 4) NULL,
     [Private_Treatment_Value]   [decimal](18, 4) NULL,
+    -- Item roll-up: value split (private-only, NHS_Charge=0) + course lifecycle state.
+    [Private_Treatment_Value_Completed]   [decimal](18, 4) NULL,
+    [Private_Treatment_Value_Outstanding] [decimal](18, 4) NULL,
+    [Last_Activity_Date]        [date]           NULL,
+    [Has_Completed_Item]        [bit]            NULL,
+    [Has_Open_Item]             [bit]            NULL,
+    [Has_Future_Appointment]    [bit]            NULL,
+    [Course_Status]             [varchar](40)    NULL,
     [DW_Created_At]             [datetime2](6)   NOT NULL,
     [DW_Updated_At]             [datetime2](6)   NOT NULL
 )
