@@ -381,12 +381,18 @@ CALCULATE(
 )",
     "#,##0");
 
+// Contactability is about the ACTIVE base (inactive patients have contact removed), so both
+// numerator and denominator are active-scoped -> % of ACTIVE patients contactable (~94%), not
+// diluted by the ~21k historical/inactive patients.
 add("Email Details Rate",
     @"DIVIDE(
     CALCULATE(
         SUM('List Patients'[Patient Count]),
-        NOT ISBLANK('List Patients'[Email Address])),
-    SUM('List Patients'[Patient Count]))",
+        NOT ISBLANK('List Patients'[Email Address]),
+        'List Patients'[Active] = TRUE()),
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        'List Patients'[Active] = TRUE()))",
     "#,##0.0%");
 
 add("Phone Details Rate",
@@ -394,8 +400,11 @@ add("Phone Details Rate",
     CALCULATE(
         SUM('List Patients'[Patient Count]),
         NOT ISBLANK('List Patients'[Mobile Phone])
-        || NOT ISBLANK('List Patients'[Home Phone])),
-    SUM('List Patients'[Patient Count]))",
+        || NOT ISBLANK('List Patients'[Home Phone]),
+        'List Patients'[Active] = TRUE()),
+    CALCULATE(
+        SUM('List Patients'[Patient Count]),
+        'List Patients'[Active] = TRUE()))",
     "#,##0.0%");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────

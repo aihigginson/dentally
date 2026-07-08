@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V051 -- Email/Phone Details Rate scoped to ACTIVE patients
+# =====================================================================
+# The rates read ~24% because the numerator (patients WITH contact -- only active have it,
+# inactive have contact removed) was divided by ALL 27,748 patients. Over the ACTIVE base they're
+# ~94% email / ~100% phone. Fix: denominator = active patients (both metrics), numerators
+# active-scoped too. In Fact_Metric_Actuals the email/phone rate section now sums an active_count
+# for the Denominator instead of Patient_Count.
+#
+# Card impact is immediate: the Email/Phone cards read '_Metric Actuals' (dRate = Num/Den), so a
+# rebuild + model refresh corrects them with NO Tabular Editor re-run. (The matching fix in
+# TabularEditor_Patients.csx is the live oracle, for compare-mode consistency only.)
+#
+# AFTER deploy: Orchestrate_Build (Fact_Metric_Actuals rebuilds every run) + model refresh.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V051__contact_rate_active_scope.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST
