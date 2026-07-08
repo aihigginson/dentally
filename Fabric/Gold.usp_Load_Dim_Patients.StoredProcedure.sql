@@ -111,9 +111,9 @@ BEGIN
             -- "Calculated as inactive" (Active, last appt > 730d ago AND no future appt booked -- a
             -- booking un-lapses them, recomputed each build; lapse date = last appt + 730). Disjoint
             -- by Active. Date -> Dim_Date (fk_Date_Lapsed) so Lapsed slices by the period it fell in.
-            CASE WHEN CAST(ISNULL(p.Active,0) AS BIT) = 0 THEN N'Set as inactive'
+            CASE WHEN CAST(ISNULL(p.Active,0) AS BIT) = 0 THEN 'Set as inactive'
                  WHEN TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date),'') AS DATE) <= DATEADD(DAY,-730,@Today)
-                      AND next_apt.Next_Appointment_Date IS NULL THEN N'Calculated as inactive'
+                      AND next_apt.Next_Appointment_Date IS NULL THEN 'Calculated as inactive'
                  ELSE NULL END                                                                      AS Lapsed_Type,
             dd_lap.pk_Date                                                                          AS fk_Date_Lapsed
         INTO #src
