@@ -213,10 +213,39 @@ def _fabric_conn(autocommit=False):
     )
     return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
 
+# Is the Fabric capacity up? When it's PAUSED (to save cost pre-revenue) the warehouse is
+# unreachable and PBI embeds fail, so we show a holding page rather than a broken app. Cached
+# 30s so we don't ping the warehouse on every hit; a short login timeout keeps a paused check fast.
+_cap_check = {'ts': 0.0, 'ok': True}
+def _capacity_available():
+    import time
+    now = time.time()
+    if now - _cap_check['ts'] < 30:
+        return _cap_check['ok']
+    ok = False
+    try:
+        token = _fabric_access_token()
+        tb = token.encode('utf-16-le')
+        ts = struct.pack(f'<I{len(tb)}s', len(tb), tb)
+        cs = (f"Driver={{ODBC Driver 18 for SQL Server}};Server={FABRIC_SERVER},1433;"
+              f"Database={FABRIC_DB};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=4;")
+        c = pyodbc.connect(cs, attrs_before={1256: ts})
+        c.close()
+        ok = True
+    except Exception:
+        ok = False
+    _cap_check['ts'] = now
+    _cap_check['ok'] = ok
+    return ok
+
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
+    # Cost-saving pause: when the Fabric capacity is suspended the warehouse + embeds are
+    # unreachable, so serve a friendly holding page instead of a broken app.
+    if not _capacity_available():
+        return send_from_directory('.', 'holding.html')
     return send_from_directory('.', 'index.html')
 
 
