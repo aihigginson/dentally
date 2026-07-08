@@ -233,22 +233,30 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
+// Lapsed = a FLOW metric now (V050): count patients whose lapse date (fk Date Lapsed)
+// falls in the period, via the inactive List Patients[fk Date Lapsed]->List Date[pk Date]
+// relationship (create it in the model as INACTIVE). Two disjoint cohorts + total.
 add("Lapsed Patients",
-    @"VAR snap_fk =
-    CALCULATE(
-        MAXX(
-            FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-            '_KPI Snapshot'[fk Date]
-        ),
-        REMOVEFILTERS( 'List Practitioners' )
-    )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date]        = snap_fk,
-    '_KPI Snapshot'[Metric]         = ""lapsed_patients"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-    REMOVEFILTERS( 'List Practitioners' )
+    @"CALCULATE(
+    COUNTROWS( 'List Patients' ),
+    NOT ISBLANK( 'List Patients'[Lapsed Type] ),
+    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
+)",
+    "#,##0");
+
+add("Lapsed (Set Inactive)",
+    @"CALCULATE(
+    COUNTROWS( 'List Patients' ),
+    'List Patients'[Lapsed Type] = ""Set as inactive"",
+    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
+)",
+    "#,##0");
+
+add("Lapsed (Silently)",
+    @"CALCULATE(
+    COUNTROWS( 'List Patients' ),
+    'List Patients'[Lapsed Type] = ""Calculated as inactive"",
+    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
 )",
     "#,##0");
 
@@ -380,6 +388,8 @@ add("Phone Details Rate",
 kpi("New Patients",             "#,##0",    tEffRunRateAdd("new_patients"),         vPct("New Patients"),               bgHigherEff("New Patients", "new_patients"));
 kpi("Net Patient Growth",       "#,##0",    tEffRunRate("net_patient_growth"),   vPctP("Net Patient Growth"),        bgHigherEff("Net Patient Growth", "net_patient_growth"));
 kpi("Lapsed Patients",          "#,##0",    tEffAdd("lapsed_patients"),             vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
+kpi("Lapsed (Set Inactive)",    "#,##0",    tEffAdd("lapsed_deactivated"),          vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
+kpi("Lapsed (Silently)",        "#,##0",    tEffAdd("lapsed_calculated"),           vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
 kpi("Active Patients",          "#,##0",    tEffAdd("active_patients"),             vPctGreyP("Active Patients"),       bgHigherEffGrey("Active Patients", "active_patients"));
 kpi("Recall Effectiveness",     "#,##0.0%", tEff100("recall_compliance"),        vPp("Recall Effectiveness"),        bgHigherPp("Recall Effectiveness", "recall_compliance"));
 kpi("Patient Retention",        "#,##0.0%", tEff100("patient_retention"),        vPpP("Patient Retention"),          bgHigherPp("Patient Retention", "patient_retention"));

@@ -27,5 +27,6 @@ MIGRATE Migrations\V050__lapsed_columns.sql
 DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
 DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
 DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+EXEC    EXEC Meta.usp_Create_Gold_Views;
 
 TEST
