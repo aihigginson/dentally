@@ -233,30 +233,45 @@ add("New Patients",
     'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
     "#,##0");
 
-// Lapsed = a FLOW metric now (V050): count patients whose lapse date (fk Date Lapsed)
-// falls in the period, via the inactive List Patients[fk Date Lapsed]->List Date[pk Date]
-// relationship (create it in the model as INACTIVE). Two disjoint cohorts + total.
+// Lapsed = a FLOW metric (V050): read the AGG ('_Metric Actuals' -- a fact PROPERLY related to
+// List Date), SUMmed over the period via TREATAS. NO dim-to-dim relationship. Total + two disjoint
+// cohorts. This is the 'cum' shape; TabularEditor_MetricActuals.csx apply-mode sets the same in place.
 add("Lapsed Patients",
-    @"CALCULATE(
-    COUNTROWS( 'List Patients' ),
-    NOT ISBLANK( 'List Patients'[Lapsed Type] ),
-    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_patients"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
 add("Lapsed (Set Inactive)",
-    @"CALCULATE(
-    COUNTROWS( 'List Patients' ),
-    'List Patients'[Lapsed Type] = ""Set as inactive"",
-    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_deactivated"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
 add("Lapsed (Silently)",
-    @"CALCULATE(
-    COUNTROWS( 'List Patients' ),
-    'List Patients'[Lapsed Type] = ""Calculated as inactive"",
-    USERELATIONSHIP( 'List Patients'[fk Date Lapsed], 'List Date'[pk Date] )
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE(
+    SUM('_Metric Actuals'[Numerator]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric]           = ""lapsed_calculated"",
+    '_Metric Actuals'[fk Practice Site] = sel_site,
+    '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
