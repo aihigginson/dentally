@@ -92,7 +92,7 @@ MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off
 # rota uses an `after` window (plain param, NOT filter[...]). NO `before` -- we want every future
 # diary entry Dentally holds. (appointments moved to updated_after; the historical tables window on
 # updated_at up to run time. No `before` date-cap on ANY entity -- future-dated rows are wanted.)
-WINDOW = {"after": "2022-01-01T00:00:00Z"}
+WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2030-01-01T00:00:00Z"}
 # appointments honours updated_after but NOT updated_before, so updated_at windowing can't tile it.
 # Its COLD pull tiles by APPOINTMENT DATE (start_time via after/before) FROM history_floor (never before
 # it -- pre-floor rows are migrated junk) UP TO APPT_CEILING, which pushes the upper bound into the
@@ -474,7 +474,7 @@ WM = {
 WM_OVERLAP_HOURS = 4
 # Per-entity extra query params merged into every appointments pull. cancelled=true is REQUIRED or
 # the API omits cancelled/DNA appointments -> a cancellation (an UPDATE) would never reach the delta.
-PULL_EXTRA = {"appointments": {"cancelled": "true"}}
+PULL_EXTRA = {"appointments": {"cancelled": "true"}, "treatment_appointments": {"sort_by": "updated_at"}}
 def bronze_watermark(tenant_id, stage_name):
     if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
         return None
@@ -524,7 +524,10 @@ for tid, cfg in TOKENS.items():
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
             elif kind == "win":
-                raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
+                # rota requires a bounded after/before window and has NO updated_after (can't delta).
+                # Tile by diary date so a large span doesn't deep-offset-413; each tile keeps after+before.
+                raw_rows = fetch_windowed(base, headers, ep, WINDOW["after"], WINDOW["before"],
+                                          step_days=window_days, cap=cap, after_key="after", before_key="before")
             elif kind == "txn":
                 extra = PULL_EXTRA.get(stage_name, {})                 # e.g. appointments -> cancelled=true
                 wm = bronze_watermark(tid, stage_name)
