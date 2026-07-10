@@ -14,7 +14,6 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Fees]
 (
       @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
@@ -73,13 +72,6 @@ BEGIN
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Fees tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Fee_ID = src.Fee_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
-        IF @Full_Refresh = 1
-        BEGIN
-            DELETE tgt FROM Bronze.Fees AS tgt
-            WHERE tgt.Tenant_ID = @Tenant_ID
-              AND NOT EXISTS (SELECT 1 FROM #src WHERE Fee_ID = tgt.Fee_ID);
-            SET @My_Deletes = @@ROWCOUNT;
-        END
 
         DROP TABLE IF EXISTS #src;
 

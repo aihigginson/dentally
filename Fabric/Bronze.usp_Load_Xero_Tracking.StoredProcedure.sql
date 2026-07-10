@@ -13,7 +13,6 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Xero_Tracking]
 (
       @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT

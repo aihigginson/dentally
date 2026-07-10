@@ -579,7 +579,7 @@ def main():
     write_stage(xero_orgs_all,     'xero_orgs')
     write_stage(xero_tracking_all, 'xero_tracking')
 
-    print('\nAll tenants seeded. Run Audit.usp_Load_Bronze for tenants 11-14.')
+    print('\nAll tenants seeded. Run Orchestrate_Build (build-only) for tenants 11-14.')
 
 
 if __name__ == '__main__':

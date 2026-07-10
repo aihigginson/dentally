@@ -25,19 +25,23 @@ CELLS = [
 keyvault_url  = "https://kv-analytically.vault.azure.net/"
 dentally_env  = "dev"    # which env's tokens: dentally-tokens-<env> (dev|prod). PROD passes "prod".
 only_tenant   = ""       # optional Tenant_ID to restrict to; blank = every mapped practice
-full_refresh  = True     # True = full pull; False = incremental via updated_after
+full_refresh  = False    # DELTA by default (per-entity Bronze watermark, per bronze_watermark).
+                         # Onboarding passes True for a one-off FULL pull. A delta run ignores
+                         # both full_refresh(False) and history_floor for any WARM entity.
 updated_after = ""       # ISO8601 incremental start; blank + not full = last 24h
 sample_pages  = 0        # >0 caps pages/entity for a quick smoke test; 0 = no cap
+run_uuid      = ""       # correlation id from Orchestrate_Build; blank -> fresh uuid. Progress -> Audit.Ingest_Log
 only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY these (skip the
                          # ones already landed after a partial run); [] = every entity
 per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
                          # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
-history_floor = "2024-04-01T00:00:00Z"  # updated_after floor applied ONLY to the huge historical
-                         # tables (treatment_plans / treatment_plan_items); "" = full history.
-                         # Those two span many years (items ~1.32M full vs ~107k from 2024-04) so
-                         # flooring keeps the pull inside a single rate window (no sleep-to-reset,
-                         # which is the fragile path). 'updated_after' is the confirmed filter and
-                         # matches on UPDATED date, not created.
+history_floor = "2021-01-01T00:00:00Z"  # COLD-START-only floor for the updated_at-windowed historical
+                         # tables treatment_plans / treatment_plan_items / treatment_appointments (NOT the
+                         # diary `appointments`, which cold-windows by start_time from history_floor to APPT_CEILING).
+                         # Used ONLY when a tenant+entity has no Bronze rows yet;
+                         # a WARM run uses the per-entity Bronze watermark instead (see bronze_watermark).
+                         # Windowing keeps a cold full pull inside rate windows (deep-offset 413 otherwise).
+                         # 'updated_after' is the confirmed filter and matches on UPDATED date, not created.
 window_days   = 30       # ONBOARDING window size (days) for the floored historical tables. Dentally
                          # 413s on DEEP offset pagination (the scan-cost limit DRIFTS with load --
                          # seen ~50k one run, ~106k another), so we pull these in updated_at windows
@@ -70,12 +74,12 @@ if not TOKENS:
     raise SystemExit("dentally-tokens-" + dentally_env + " is empty/missing -- load a token first.")
 
 cap = sample_pages or None
-if not updated_after and not full_refresh:
-    updated_after = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
 load_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-inc = {} if full_refresh else {"updated_after": updated_after}
-print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental from " + updated_after),
-      "| tenants", list(TOKENS.keys()))
+# No blanket 24h lookback (it silently dropped changes when a run was missed). Each txn entity pulls
+# updated_after = its own Bronze high-watermark (bronze_watermark below); an explicit updated_after
+# param is a manual override for ALL entities.
+_mode = "FULL" if full_refresh else ("incremental from " + updated_after if updated_after else "incremental (per-entity Bronze watermark)")
+print("Env", dentally_env, "| mode", _mode, "| tenants", list(TOKENS.keys()))
 ''', False),
 
     # 3 -- config --------------------------------------------------------------
@@ -85,17 +89,21 @@ print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental f
 MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (reset is an epoch on the hour)
 MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
 MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off + retry, don't skip the entity
-# Appointments + rota require an after/before window (plain params, NOT filter[...]).
-WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
-# These two big historical tables get an updated_after floor (history_floor param) so they fit in
-# one rate window; every other entity keeps full history. Confirmed filter param: updated_after.
-HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items"}
-# treatment_appointments (548k) has NO date field (updated_after -> HTTP 400) and ignores
-# practitioner_id + keyset (sort / filter[id][gt] / since_id) -- only patient_id filters, which is
-# per-patient (too many calls). So it can't be windowed; plain paging deep-offset-413s at ~354k.
-# Default order is NEWEST-FIRST, so landing the rows up to the wall keeps the most recent ~354k
-# (>= the 2021 tp/tpi floor; the dropped tail is oldest/pre-window links). Full history = per-patient backfill.
-PARTIAL_OK_413 = {"treatment_appointments"}
+# rota uses an `after` window (plain param, NOT filter[...]). NO `before` -- we want every future
+# diary entry Dentally holds. (appointments moved to updated_after; the historical tables window on
+# updated_at up to run time. No `before` date-cap on ANY entity -- future-dated rows are wanted.)
+WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2030-01-01T00:00:00Z"}
+# appointments honours updated_after but NOT updated_before, so updated_at windowing can't tile it.
+# Its COLD pull tiles by APPOINTMENT DATE (start_time via after/before) FROM history_floor (never before
+# it -- pre-floor rows are migrated junk) UP TO APPT_CEILING, which pushes the upper bound into the
+# future so all forward bookings are captured (Dentally has no updated_before for appointments).
+APPT_CEILING = "2030-01-01T00:00:00Z"
+# These big historical tables get an updated_after floor (history_floor) so a FULL/onboarding pull
+# tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
+# everything else (few recent rows). treatment_appointments ALSO supports updated_after/updated_before
+# (per the API docs), so it windows too -- the earlier "no date field / 413 full-pull" note was stale.
+HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments"}
+PARTIAL_OK_413 = set()   # nothing full-pulls-with-413-tolerance now; windowed entities avoid deep offsets
 ''', False),
 
     # 4 -- API helpers (rate-aware: sleep to the window reset, never skip on 429) ----
@@ -169,6 +177,7 @@ def fetch_all(base, headers, ep, params=None, max_pages=None, partial_ok_on_413=
         out.extend(rows)
         if page % 10 == 0:
             print("      " + ep + " page " + str(page) + " (" + str(len(out)) + " rows so far)")
+            log_ingest(ep, "PAGE", rows=len(out), detail="page " + str(page))
         if n == 0 or (size and n < size) or (max_pages and page >= max_pages):
             return out
         page += 1
@@ -198,8 +207,10 @@ def _win_fmt(d):
 def _is_413(e):
     return isinstance(e, requests.HTTPError) and getattr(e.response, "status_code", None) == 413
 
-def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved):
-    params = {"updated_after": _win_fmt(lo), "updated_before": _win_fmt(hi)}
+def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra=None, after_key="updated_after", before_key="updated_before"):
+    params = {after_key: _win_fmt(lo), before_key: _win_fmt(hi)}
+    if extra:
+        params.update(extra)
     for attempt in (1, 2):                       # 2nd try absorbs a transient/load-spike 413
         try:
             return fetch_all(base, headers, ep, params, max_pages=cap)
@@ -218,10 +229,10 @@ def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved):
         return []
     mid = lo + (hi - lo) / 2
     print("      413 on " + _win_fmt(lo) + ".." + _win_fmt(hi) + " -> halving")
-    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved)
-            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved))
+    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved, extra, after_key, before_key)
+            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved, extra, after_key, before_key))
 
-def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None):
+def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None, extra=None, after_key="updated_after", before_key="updated_before"):
     # Tile [floor,end] into step_days windows; halve any that 413 down to min_hours. Returns rows +
     # loudly flags any window that stays 413 at min_hours (bulk-update cluster -> raise history_floor
     # past it, or pull that span by id). Deltas don't use this (few recent rows).
@@ -230,10 +241,11 @@ def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap
     out, w, unresolved = [], 0, []
     while lo < end:
         hi = min(lo + step, end)
-        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved)
+        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra, after_key, before_key)
         out.extend(rows); w += 1
         print("      " + ep + " window " + _win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10]
               + ": " + str(len(rows)) + " rows (" + str(len(out)) + " total across " + str(w) + " windows)")
+        log_ingest(ep, "WINDOW", rows=len(out), detail=_win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10])
         lo = hi
     if unresolved:
         print("  !!!! " + ep + ": " + str(len(unresolved)) + " WINDOW(S) UNRESOLVED at min span -- a "
@@ -383,7 +395,7 @@ REGISTRY = [
     ("sundries",                         "sundries",              "ref", passthrough),
     ("contracts",                        "contracts",             "ref", passthrough),
     ("waiting_lists",                    "waiting_lists",         "ref", passthrough),
-    ("appointments",                     "appointments",          "win", t_appointment),
+    ("appointments",                     "appointments",          "txn", t_appointment),
     ("rota_practitioner_diaries",        "practitioner_diary_entries", "win", t_rota),
     ("patients",                         "patients",              "txn", t_patient),
     ("accounts",                         "accounts",              "txn", passthrough),
@@ -405,7 +417,89 @@ REGISTRY = [
 ''', False),
 
     # 8 -- main: pull -> transform -> land ------------------------------------
-    (r'''for tid, cfg in TOKENS.items():
+    (r'''import struct, pyodbc, uuid as _uuidlib
+if not run_uuid:
+    run_uuid = str(_uuidlib.uuid4())
+_lcur = None
+try:
+    import sempy.fabric as _fab
+    _wsid = _fab.get_workspace_id()
+    _whs  = _fab.FabricRestClient().get(f"/v1/workspaces/{_wsid}/warehouses").json()["value"]
+    _ep   = next((w["properties"]["connectionString"] for w in _whs if w["displayName"] == "WH_Dentally"), None)
+    _tb   = notebookutils.credentials.getToken("https://database.windows.net/").encode("UTF-16-LE")
+    _ts   = struct.pack(f"<I{len(_tb)}s", len(_tb), _tb)
+    _lconn = pyodbc.connect("Driver={ODBC Driver 18 for SQL Server};Server=" + _ep + ",1433;Database=WH_Dentally;Encrypt=yes;TrustServerCertificate=no;", attrs_before={1256: _ts})
+    _lconn.autocommit = True
+    _lcur = _lconn.cursor()
+    print("ingest-log -> Audit.Ingest_Log (run_uuid " + run_uuid + ")")
+except Exception as _e:
+    print("ingest-log DISABLED (cell output only):", str(_e)[:200])
+
+_LOG_TID = None
+def log_ingest(entity, phase, rows=None, detail=None):
+    print("  [" + phase + "] " + str(entity) + (" rows=" + str(rows) if rows is not None else "") + ((" " + str(detail)) if detail else ""))
+    if _lcur is None:
+        return
+    try:
+        _lcur.execute(
+            "INSERT INTO Audit.Ingest_Log (Run_UUID, Tenant_ID, Entity, Phase, Rows_Landed, Detail, Logged_At) VALUES (?,?,?,?,?,?,SYSUTCDATETIME())",
+            run_uuid, (int(_LOG_TID) if _LOG_TID is not None else None), str(entity)[:100], str(phase)[:20], rows, (str(detail)[:1000] if detail is not None else None))
+    except Exception:
+        pass
+
+# --- per-entity, per-tenant Bronze high-watermark (replaces the old blanket 24h lookback) --------
+# Each incremental (txn) entity pulls updated_after = MAX(Updated_At already consumed by Bronze for
+# THIS tenant) minus a 4h overlap, so a missed/failed run self-heals (next cutoff is simply older).
+# Only entities whose Bronze table stores Updated_At are listed; accounts/payments/recalls have none
+# so they full-pull each run (recalls is delete-heavy by design). Cold start (no Bronze rows yet)
+# falls back to history_floor (windowed) for the big tables, else a plain full pull.
+# WM entry: (Bronze table, Bronze column, API filter param, kind). kind "dt" = an updated_at
+# datetime column filtered by updated_after (4h overlap); kind "d" = a DATE column filtered by a
+# date param -- payments is strictly transactional (no updates) so it keys on dated_on/dated_after
+# with a 1-day overlap. Entities not listed have no usable Bronze timestamp -> full-pull each run
+# (accounts has no date column; recalls is delete-heavy by design; appointments Bronze lacks
+# Updated_At -- needs it adding through the transform before it can be watermarked).
+WM = {
+    "patients":               ("Patients",               "Updated_At", "updated_after", "dt"),
+    "appointments":           ("Appointments",           "Updated_At", "updated_after", "dt"),
+    "invoices":               ("Invoices",               "Updated_At", "updated_after", "dt"),
+    "invoice_items":          ("Invoice_Items",          "Updated_At", "updated_after", "dt"),
+    "treatment_plans":        ("Treatment_Plans",        "Updated_At", "updated_after", "dt"),
+    "treatment_plan_items":   ("Treatment_Plan_Items",   "Updated_At", "updated_after", "dt"),
+    "treatment_appointments": ("Treatment_Appointments", "Updated_At", "updated_after", "dt"),
+    "nhs_claims":             ("NHS_Claims",             "Updated_At", "updated_after", "dt"),
+    "patient_referrals":      ("Patient_Referrals",      "Updated_At", "updated_after", "dt"),
+    "payments":               ("Payments",               "Dated_On",   "dated_after",   "d"),
+}
+WM_OVERLAP_HOURS = 4
+# Per-entity extra query params merged into every appointments pull. cancelled=true is REQUIRED or
+# the API omits cancelled/DNA appointments -> a cancellation (an UPDATE) would never reach the delta.
+PULL_EXTRA = {"appointments": {"cancelled": "true"}, "treatment_appointments": {"sort_by": "updated_at"}}
+def bronze_watermark(tenant_id, stage_name):
+    if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
+        return None
+    if stage_name not in WM:         # no usable Bronze timestamp -> full pull (accounts / recalls)
+        return None
+    tbl, col, param, kind = WM[stage_name]
+    if updated_after:                # explicit param = manual override; honour the entity's filter
+        return {param: (updated_after[:10] if kind == "d" else updated_after)}
+    if _lcur is None:
+        return None
+    cast = "date" if kind == "d" else "datetime2(3)"
+    try:
+        _lcur.execute("SELECT MAX(TRY_CAST([" + col + "] AS " + cast + ")) FROM Bronze.[" + tbl + "] WHERE Tenant_ID = ?", int(tenant_id))
+        row = _lcur.fetchone()
+        mx = row[0] if row and row[0] is not None else None
+        if mx is None:
+            return None
+        if kind == "d":
+            return {param: (mx - timedelta(days=1)).strftime("%Y-%m-%d")}
+        return {param: (mx - timedelta(hours=WM_OVERLAP_HOURS)).strftime("%Y-%m-%dT%H:%M:%S")}
+    except Exception as _e:
+        print("  watermark read failed " + stage_name + ": " + str(_e)[:120])
+        return None
+
+for tid, cfg in TOKENS.items():
     if only_tenant and str(tid) != str(only_tenant):
         continue
     base    = cfg.get("base_url", "https://api.dentally.co/v1").rstrip("/")
@@ -423,21 +517,37 @@ REGISTRY = [
         run_list = list(REGISTRY)
 
     all_patient_ids = []   # captured from the patients pull; used to gap-fill patient_stats
+    _LOG_TID = tid
     for ep, stage_name, kind, fn in run_list:
         try:  # one bad/absent endpoint must not abort the whole practice's ingest
+            log_ingest(ep, "START")
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
             elif kind == "win":
-                raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
+                # rota requires a bounded after/before window and has NO updated_after (can't delta).
+                # Tile by diary date so a large span doesn't deep-offset-413; each tile keeps after+before.
+                raw_rows = fetch_windowed(base, headers, ep, WINDOW["after"], WINDOW["before"],
+                                          step_days=window_days, cap=cap, after_key="after", before_key="before")
             elif kind == "txn":
-                if history_floor and ep in HISTORY_FLOOR_ENTITIES:
-                    # Huge historical table -> WINDOW the pull (Dentally 413s on deep offsets).
-                    # window_end fixed at run start so mid-pull updates fall to the next delta.
+                extra = PULL_EXTRA.get(stage_name, {})                 # e.g. appointments -> cancelled=true
+                wm = bronze_watermark(tid, stage_name)
+                if wm is not None:                                     # WARM -> incremental from watermark
+                    params = dict(wm); params.update(extra)
+                    log_ingest(ep, "DELTA", detail=str(params))
+                    raw_rows = fetch_all(base, headers, ep, params, max_pages=cap)
+                elif ep == "appointments":                             # COLD: appointments date-window
+                    # appointments ignores updated_before -> can't tile on updated_at. Window by start_time
+                    # (after/before) from history_floor to APPT_CEILING (shallow; includes future bookings).
+                    log_ingest(ep, "COLD", detail="date-window " + history_floor[:10] + ".." + APPT_CEILING[:10])
+                    raw_rows = fetch_windowed(base, headers, ep, history_floor, APPT_CEILING,
+                                              step_days=window_days, cap=cap, extra=extra,
+                                              after_key="after", before_key="before")
+                elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
+                    log_ingest(ep, "COLD", detail="window from " + history_floor)
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
-                                              step_days=window_days, cap=cap)
-                else:
-                    raw_rows = fetch_all(base, headers, ep, dict(inc), max_pages=cap,
-                                         partial_ok_on_413=(ep in PARTIAL_OK_413))
+                                              step_days=window_days, cap=cap, extra=extra)
+                else:                                                  # COLD + small / no watermark -> full
+                    raw_rows = fetch_all(base, headers, ep, dict(extra), max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             if ep == "patients":
@@ -465,8 +575,10 @@ REGISTRY = [
             write_stage(main, stage_name, tid)
             for cname, crows in children.items():
                 write_stage(crows, cname, tid)
+            log_ingest(ep, "DONE", rows=len(main))
         except Exception as e:
             print("  SKIP " + ep + ": " + str(e)[:200])
+            log_ingest(ep, "SKIP", detail=str(e)[:200])
 
     # fees: one call per treatment (fees?treatment_id=) -- 5 price/duration tiers each.
     # In sample mode cap to a few treatments (the sweep is otherwise full even when sampling).

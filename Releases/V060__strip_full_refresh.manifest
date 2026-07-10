@@ -1,0 +1,51 @@
+# =====================================================================
+# Release V060 -- strip @Full_Refresh (Bronze SPs + Process_Config) + remove dead code
+# =====================================================================
+# Bronze SPs no longer take @Full_Refresh (upsert-only; clean-slate = usp_Clear_Tenant_Data).
+# Process_Config Bronze rows drop the {FR} token. V060 migration drops the dead usp_Load_Bronze
+# proc + Tenants.Full_Refresh column. Notebook (Orchestrate_Build) rides the Fabric pipeline.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V060__strip_full_refresh.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Bronze.usp_Load_Accounts.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Acquisition_Sources.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Cancellation_Reasons.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Contracts.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Fees.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Invoice_Items.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Invoices.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_NHS_Claims.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patient_Referral_Reasons.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patient_Referrals.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patient_Stats.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Payment_Allocations.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Payment_Explanations.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Payment_Plans.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Payments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Practice.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Practitioner_Diary_Breaks.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Practitioner_Diary_Entries.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Practitioners.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Recalls.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Rooms.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Sites.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Sundries.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Categories.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatment_Plans.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Treatments.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Users.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Waiting_Lists.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Xero_Accounts.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Xero_Lines.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Xero_Orgs.StoredProcedure.sql
+DEPLOY  Fabric\Bronze.usp_Load_Xero_Tracking.StoredProcedure.sql
+
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+MIGRATE Migrations\V060__remove_dead_full_refresh.sql
+
+TEST
