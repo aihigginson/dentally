@@ -62,7 +62,7 @@ DECLARE @Msg        nvarchar(500);
     SET @Parent_Run_UUID = @Run_UUID
 
 -- ── Silver ────────────────────────────────────────────────────────────────────
--- Bronze is loaded per-tenant by Orchestrate_Bronze before this procedure runs.
+-- Bronze is loaded per-tenant by Orchestrate_Build (the metadata DAG) before this procedure runs.
 
     SET @Step = 'Acquisition_Sources';
     SET @Start = SYSUTCDATETIME();

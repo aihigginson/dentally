@@ -9,7 +9,6 @@ CREATE TABLE [Audit].[Tenants](
 	[Dentally_Client_ID]  [varchar](255)  NULL,
 	[Dentally_Secret]     [varchar](500)  NULL,
 	[Is_Active]           [int]           NULL,
-	[Full_Refresh]        [int]           NULL,
 	[Last_Loaded_At]      [varchar](255)  NULL,
 	[Notes]               [varchar](1000) NULL
 )

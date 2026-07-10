@@ -87,9 +87,9 @@ INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Proc
 INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('SILVER_TREATMENTS',                'Silver.usp_Load_Treatments',                'Load Silver.Treatments from Bronze.Treatments using MERGE upsert',                              '@Mode = ''LIVE'', @Logging = 1', 'SILVER', 'PROCEDURE');
 INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('SILVER_USERS',                     'Silver.usp_Load_Users',                     'Load Silver.Users from Bronze.Users using MERGE upsert',                                        '@Mode = ''LIVE'', @Logging = 1', 'SILVER', 'PROCEDURE');
 
--- == BRONZE -- one job per table (31 rows). Tenant + full-refresh are supplied at
---    runtime by Audit.usp_Load_Bronze via Audit.ETL_Run_Process, which resolves the
---    {TID}/{FR} tokens below. Execution stays per-tenant (one extract per tenant);
+-- == BRONZE -- one job per table. Tenant is supplied at
+--    runtime by Orchestrate_Build via Audit.ETL_Run_Process, which resolves the
+--    {TID} token below. Execution stays per-tenant (one extract per tenant);
 --    Process_Execution_Log records the resolved @Tenant_ID per run.
 --    Process_Code pattern: BRONZE_{ENTITY_UPPER}
 
