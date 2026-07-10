@@ -89,11 +89,16 @@ MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off
 # diary entry Dentally holds. (appointments moved to updated_after; the historical tables window on
 # updated_at up to run time. No `before` date-cap on ANY entity -- future-dated rows are wanted.)
 WINDOW = {"after": "2022-01-01T00:00:00Z"}
+# appointments honours updated_after but NOT updated_before, so updated_at windowing can't tile it.
+# Its COLD pull tiles by APPOINTMENT DATE (start_time via after/before -- both honoured, spread evenly
+# across years so windows stay shallow) between these bounds; the ceiling captures future bookings.
+APPT_FLOOR   = "2015-01-01T00:00:00Z"
+APPT_CEILING = "2030-01-01T00:00:00Z"
 # These big historical tables get an updated_after floor (history_floor) so a FULL/onboarding pull
 # tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
 # everything else (few recent rows). treatment_appointments ALSO supports updated_after/updated_before
 # (per the API docs), so it windows too -- the earlier "no date field / 413 full-pull" note was stale.
-HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments", "appointments"}
+HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments"}
 PARTIAL_OK_413 = set()   # nothing full-pulls-with-413-tolerance now; windowed entities avoid deep offsets
 ''', False),
 
@@ -198,8 +203,8 @@ def _win_fmt(d):
 def _is_413(e):
     return isinstance(e, requests.HTTPError) and getattr(e.response, "status_code", None) == 413
 
-def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra=None):
-    params = {"updated_after": _win_fmt(lo), "updated_before": _win_fmt(hi)}
+def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra=None, after_key="updated_after", before_key="updated_before"):
+    params = {after_key: _win_fmt(lo), before_key: _win_fmt(hi)}
     if extra:
         params.update(extra)
     for attempt in (1, 2):                       # 2nd try absorbs a transient/load-spike 413
@@ -220,10 +225,10 @@ def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra=No
         return []
     mid = lo + (hi - lo) / 2
     print("      413 on " + _win_fmt(lo) + ".." + _win_fmt(hi) + " -> halving")
-    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved, extra)
-            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved, extra))
+    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved, extra, after_key, before_key)
+            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved, extra, after_key, before_key))
 
-def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None, extra=None):
+def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None, extra=None, after_key="updated_after", before_key="updated_before"):
     # Tile [floor,end] into step_days windows; halve any that 413 down to min_hours. Returns rows +
     # loudly flags any window that stays 413 at min_hours (bulk-update cluster -> raise history_floor
     # past it, or pull that span by id). Deltas don't use this (few recent rows).
@@ -232,7 +237,7 @@ def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap
     out, w, unresolved = [], 0, []
     while lo < end:
         hi = min(lo + step, end)
-        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra)
+        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra, after_key, before_key)
         out.extend(rows); w += 1
         print("      " + ep + " window " + _win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10]
               + ": " + str(len(rows)) + " rows (" + str(len(out)) + " total across " + str(w) + " windows)")
@@ -523,6 +528,13 @@ for tid, cfg in TOKENS.items():
                     params = dict(wm); params.update(extra)
                     log_ingest(ep, "DELTA", detail=str(params))
                     raw_rows = fetch_all(base, headers, ep, params, max_pages=cap)
+                elif ep == "appointments":                             # COLD: appointments date-window
+                    # appointments ignores updated_before -> can't tile on updated_at. Window by start_time
+                    # (after/before) from APPT_FLOOR to APPT_CEILING (even, shallow, includes future).
+                    log_ingest(ep, "COLD", detail="date-window " + APPT_FLOOR[:10] + ".." + APPT_CEILING[:10])
+                    raw_rows = fetch_windowed(base, headers, ep, APPT_FLOOR, APPT_CEILING,
+                                              step_days=window_days, cap=cap, extra=extra,
+                                              after_key="after", before_key="before")
                 elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
                     log_ingest(ep, "COLD", detail="window from " + history_floor)
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
