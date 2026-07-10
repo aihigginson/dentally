@@ -439,30 +439,44 @@ def log_ingest(entity, phase, rows=None, detail=None):
 # Only entities whose Bronze table stores Updated_At are listed; accounts/payments/recalls have none
 # so they full-pull each run (recalls is delete-heavy by design). Cold start (no Bronze rows yet)
 # falls back to history_floor (windowed) for the big tables, else a plain full pull.
+# WM entry: (Bronze table, Bronze column, API filter param, kind). kind "dt" = an updated_at
+# datetime column filtered by updated_after (4h overlap); kind "d" = a DATE column filtered by a
+# date param -- payments is strictly transactional (no updates) so it keys on dated_on/dated_after
+# with a 1-day overlap. Entities not listed have no usable Bronze timestamp -> full-pull each run
+# (accounts has no date column; recalls is delete-heavy by design; appointments Bronze lacks
+# Updated_At -- needs it adding through the transform before it can be watermarked).
 WM = {
-    "patients":               ("Patients",               "Updated_At"),
-    "invoices":               ("Invoices",               "Updated_At"),
-    "invoice_items":          ("Invoice_Items",          "Updated_At"),
-    "treatment_plans":        ("Treatment_Plans",        "Updated_At"),
-    "treatment_plan_items":   ("Treatment_Plan_Items",   "Updated_At"),
-    "treatment_appointments": ("Treatment_Appointments", "Updated_At"),
-    "nhs_claims":             ("NHS_Claims",             "Updated_At"),
-    "patient_referrals":      ("Patient_Referrals",      "Updated_At"),
+    "patients":               ("Patients",               "Updated_At", "updated_after", "dt"),
+    "invoices":               ("Invoices",               "Updated_At", "updated_after", "dt"),
+    "invoice_items":          ("Invoice_Items",          "Updated_At", "updated_after", "dt"),
+    "treatment_plans":        ("Treatment_Plans",        "Updated_At", "updated_after", "dt"),
+    "treatment_plan_items":   ("Treatment_Plan_Items",   "Updated_At", "updated_after", "dt"),
+    "treatment_appointments": ("Treatment_Appointments", "Updated_At", "updated_after", "dt"),
+    "nhs_claims":             ("NHS_Claims",             "Updated_At", "updated_after", "dt"),
+    "patient_referrals":      ("Patient_Referrals",      "Updated_At", "updated_after", "dt"),
+    "payments":               ("Payments",               "Dated_On",   "dated_after",   "d"),
 }
 WM_OVERLAP_HOURS = 4
 def bronze_watermark(tenant_id, stage_name):
     if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
         return None
-    if updated_after:                # explicit param = manual override for all entities
-        return updated_after
-    if _lcur is None or stage_name not in WM:
+    if stage_name not in WM:         # no usable Bronze timestamp -> full pull (accounts / recalls)
         return None
-    tbl, col = WM[stage_name]
+    tbl, col, param, kind = WM[stage_name]
+    if updated_after:                # explicit param = manual override; honour the entity's filter
+        return {param: (updated_after[:10] if kind == "d" else updated_after)}
+    if _lcur is None:
+        return None
+    cast = "date" if kind == "d" else "datetime2(3)"
     try:
-        _lcur.execute("SELECT MAX(TRY_CAST([" + col + "] AS datetime2(3))) FROM Bronze.[" + tbl + "] WHERE Tenant_ID = ?", int(tenant_id))
+        _lcur.execute("SELECT MAX(TRY_CAST([" + col + "] AS " + cast + ")) FROM Bronze.[" + tbl + "] WHERE Tenant_ID = ?", int(tenant_id))
         row = _lcur.fetchone()
         mx = row[0] if row and row[0] is not None else None
-        return (mx - timedelta(hours=WM_OVERLAP_HOURS)).strftime("%Y-%m-%dT%H:%M:%S") if mx is not None else None
+        if mx is None:
+            return None
+        if kind == "d":
+            return {param: (mx - timedelta(days=1)).strftime("%Y-%m-%d")}
+        return {param: (mx - timedelta(hours=WM_OVERLAP_HOURS)).strftime("%Y-%m-%dT%H:%M:%S")}
     except Exception as _e:
         print("  watermark read failed " + stage_name + ": " + str(_e)[:120])
         return None
@@ -496,8 +510,8 @@ for tid, cfg in TOKENS.items():
             elif kind == "txn":
                 wm = bronze_watermark(tid, stage_name)
                 if wm is not None:                                     # WARM -> incremental from watermark
-                    log_ingest(ep, "DELTA", detail="updated_after " + wm)
-                    raw_rows = fetch_all(base, headers, ep, {"updated_after": wm}, max_pages=cap)
+                    log_ingest(ep, "DELTA", detail=str(wm))
+                    raw_rows = fetch_all(base, headers, ep, wm, max_pages=cap)
                 elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
                     log_ingest(ep, "COLD", detail="window from " + history_floor)
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
