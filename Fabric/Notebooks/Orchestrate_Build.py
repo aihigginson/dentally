@@ -114,7 +114,13 @@ job_rows = q_all("""
 job_name     = {r[0]: r[1] for r in job_rows}
 job_category = {r[0]: r[2] for r in job_rows}
 per_tenant   = {r[0] for r in job_rows if r[3] and "{TID}" in r[3]}
-all_codes    = set(job_name)
+
+# POST-RUN gate jobs (category POSTRUN_GATE, e.g. the referential-integrity check)
+# are NOT part of the DAG: they must run AFTER every load, so keep them out of the
+# waves and fire them explicitly post-build (CELL 9b). All other jobs are DAG jobs.
+GATE_CATEGORY = "POSTRUN_GATE"
+gate_codes = sorted(c for c in job_name if job_category[c] == GATE_CATEGORY)
+all_codes  = set(c for c in job_name if job_category[c] != GATE_CATEGORY)
 
 # Active dependency edges Prev -> Next (only between known jobs)
 dep_rows = q_all("""
@@ -136,7 +142,7 @@ if tenants_override:
 if not tenants:
     raise RuntimeError("No active tenants to run (check Audit.Tenants / tenants_override)")
 
-print(f"{len(all_codes)} jobs, {len(dep_rows)} dependency edges, {len(tenants)} tenant(s): {tenants}")
+print(f"{len(all_codes)} jobs, {len(dep_rows)} dependency edges, {len(gate_codes)} post-run gate(s), {len(tenants)} tenant(s): {tenants}")
 
 
 # -----------------------------------------------------------------------------
@@ -275,6 +281,32 @@ for i, wave in enumerate(waves):
             failed.add(code)
 
 real_failures = failed - skipped
+
+
+# -----------------------------------------------------------------------------
+# CELL 9b - POST-RUN GATE: referential integrity + sentinel check
+# Not a DAG job (excluded from the waves in CELL 4) -- it must run AFTER every load.
+# On an otherwise-clean build, fire each gate via ETL_Run_Process so it self-logs to
+# Audit.Process_Execution_Log (SUCCEEDED = integrity OK ; FAILED = orphaned fact fk or
+# missing dim -1 sentinel -- the SP THROWs, ETL_Run_Process catches + logs FAILED).
+# A FAILED gate joins `failed`, which SKIPS the semantic-model refresh (CELL 11) so a
+# broken build cannot reach PBI, and makes CELL 12 raise. If the build already failed we
+# skip the gate (not publishing regardless) but say so.
+# -----------------------------------------------------------------------------
+
+if gate_codes and not failed:
+    print(f"\n=== Post-run gate ({len(gate_codes)} job(s)) ===")
+    for code in gate_codes:
+        print(f"  GATE {code} ({job_name[code]})")
+        if run_job(code):
+            ok_codes.add(code)
+        else:
+            failed.add(code)
+            print(f"    GATE FAILED {code} -- see Audit.RI_Check_Result / Process_Execution_Log.Error_Message")
+elif gate_codes:
+    print(f"\nSkipping post-run gate: build already had failures ({len(gate_codes)} gate job(s) not run).")
+
+real_failures = failed - skipped   # recompute after the gate so CELL 12 summary is accurate
 
 
 # -----------------------------------------------------------------------------

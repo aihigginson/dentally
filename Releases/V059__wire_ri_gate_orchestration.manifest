@@ -1,0 +1,29 @@
+# =====================================================================
+# Release V059 -- wire the referential-integrity gate into orchestration
+# =====================================================================
+# Registers the V058 RI gate (Audit.usp_Check_Referential_Integrity) as a POST-RUN job so
+# Orchestrate_Build fires it AFTER every load and a violating build cannot reach PBI.
+#
+# It is NOT a DAG job: the new category POSTRUN_GATE keeps it OUT of the dependency waves
+# (Orchestrate_Build CELL 4 excludes that category), and the notebook runs it explicitly
+# after the waves (new CELL 9b) via Audit.ETL_Run_Process -- so it self-logs to
+# Audit.Process_Execution_Log (SUCCEEDED = integrity OK ; FAILED = the SP THROWs on any
+# orphaned fact fk / missing dim -1 sentinel). A FAILED gate skips the semantic-model
+# refresh and fails the run.
+#
+#   * Audit.Process_Category.Data.sql -- adds POSTRUN_GATE (+ GOLD_AGG, previously unseeded).
+#   * Audit.Process_Config.Data.sql   -- adds POSTRUN_RI_CHECK -> Audit.usp_Check_Referential_Integrity.
+#
+# BOTH files are idempotent (DELETE + reseed), so this redeploys the full seed.
+#
+# NOTEBOOK (deploys SEPARATELY via the Fabric pipeline, NOT this manifest): re-import
+# Fabric/Notebooks/Orchestrate_Build.ipynb -- it now excludes POSTRUN_GATE from the waves
+# (CELL 4) and fires the gate post-build (CELL 9b). The .py mirror is updated to match.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V059__wire_ri_gate_orchestration.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Audit.Process_Category.Data.sql
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+
+TEST

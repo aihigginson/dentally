@@ -10,4 +10,6 @@ INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc
 INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc) VALUES ('GOLD',      'Gold layer: orchestrators');
 INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc) VALUES ('GOLD_DIM',  'Gold layer: dimension table loads');
 INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc) VALUES ('GOLD_FACT', 'Gold layer: fact table loads');
+INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc) VALUES ('GOLD_AGG',  'Gold layer: aggregate/terminal loads (read Gold facts/dims)');
+INSERT INTO Audit.Process_Category (Process_Category_Code, Process_Category_Desc) VALUES ('POSTRUN_GATE', 'Post-run gates: run AFTER the DAG waves (excluded from them), e.g. the referential-integrity check');
 GO
