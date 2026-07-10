@@ -168,6 +168,7 @@ def fetch_all(base, headers, ep, params=None, max_pages=None, partial_ok_on_413=
         out.extend(rows)
         if page % 10 == 0:
             print("      " + ep + " page " + str(page) + " (" + str(len(out)) + " rows so far)")
+            log_ingest(ep, "PAGE", rows=len(out), detail="page " + str(page))
         if n == 0 or (size and n < size) or (max_pages and page >= max_pages):
             return out
         page += 1
