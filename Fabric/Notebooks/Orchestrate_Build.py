@@ -35,7 +35,6 @@ warehouse_sql_endpoint = ""            # leave BLANK -> auto-resolved from the c
 warehouse_name         = "WH_Dentally" # same name in every workspace
 semantic_model         = "DM Dentally" # same name in every workspace
 workspace_name         = None          # None = the notebook's current workspace (so dev/prod are identical)
-full_refresh           = False         # nightly = incremental (Bronze @Full_Refresh = 0)
 run_stage_ingest       = False         # True = run Stage_Ingest (API->Stage) per tenant first; off while Stage is seeded out-of-band
 refresh_semantic_model = True
 refresh_settle_seconds = 180           # wait after the loads before refreshing the model: the SQL
@@ -175,7 +174,7 @@ print(f"{len(waves)} waves: " + " | ".join(f"w{i}={len(w)}" for i, w in enumerat
 # CELL 6 - Start the parent run (groups all child ETL_Run_Process runs in Audit)
 # -----------------------------------------------------------------------------
 
-run_opts = f"@full_refresh={int(full_refresh)}, @stage_ingest={int(run_stage_ingest)}, @max_parallel={max_parallel}"
+run_opts = f"@stage_ingest={int(run_stage_ingest)}, @max_parallel={max_parallel}"
 
 # ETL_Start_Run does an INSERT then SELECTs the new UUID. pyodbc surfaces the INSERT
 # (a non-query) first, so we must WALK the result sets and read whichever one is a query.
@@ -209,7 +208,7 @@ print(f"Parent run: {parent_uuid}")
 if run_stage_ingest:
     for tid in tenants:
         print(f"Stage_Ingest tenant {tid} ...")
-        mssparkutils.notebook.run("Stage_Ingest", 1200, {"tenant_id": tid, "full_refresh": full_refresh})
+        mssparkutils.notebook.run("Stage_Ingest", 1200, {"tenant_id": tid, "full_refresh": False})
     time.sleep(30)   # let lakehouse metadata propagate to the SQL engine before Bronze reads Stage
 
 
@@ -225,8 +224,8 @@ def fire(code, tenant_id=None):
         cursor.execute("SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?", code, parent_uuid)
     else:
         cursor.execute(
-            "SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?, @Tenant_ID=?, @Full_Refresh=?",
-            code, parent_uuid, tenant_id, int(full_refresh)
+            "SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?, @Tenant_ID=?",
+            code, parent_uuid, tenant_id
         )
     while cursor.nextset():   # drain ETL_Run_Process's nested result sets (it calls ETL_Start_Run)
         pass
