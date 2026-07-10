@@ -25,7 +25,9 @@ CELLS = [
 keyvault_url  = "https://kv-analytically.vault.azure.net/"
 dentally_env  = "dev"    # which env's tokens: dentally-tokens-<env> (dev|prod). PROD passes "prod".
 only_tenant   = ""       # optional Tenant_ID to restrict to; blank = every mapped practice
-full_refresh  = True     # True = full pull; False = incremental via updated_after
+full_refresh  = False    # DELTA by default (per-entity Bronze watermark, per bronze_watermark).
+                         # Onboarding passes True for a one-off FULL pull. A delta run ignores
+                         # both full_refresh(False) and history_floor for any WARM entity.
 updated_after = ""       # ISO8601 incremental start; blank + not full = last 24h
 sample_pages  = 0        # >0 caps pages/entity for a quick smoke test; 0 = no cap
 run_uuid      = ""       # correlation id from Orchestrate_Build; blank -> fresh uuid. Progress -> Audit.Ingest_Log
@@ -33,8 +35,10 @@ only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY 
                          # ones already landed after a partial run); [] = every entity
 per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
                          # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
-history_floor = "2021-01-01T00:00:00Z"  # COLD-START floor for the big windowed tables (treatment_plans/
-                         # _items/_appointments). Used ONLY when a tenant+entity has no Bronze rows yet;
+history_floor = "2021-01-01T00:00:00Z"  # COLD-START-only floor for the updated_at-windowed historical
+                         # tables treatment_plans / treatment_plan_items / treatment_appointments (NOT the
+                         # diary `appointments`, which cold-windows by start_time between APPT_FLOOR/CEILING).
+                         # Used ONLY when a tenant+entity has no Bronze rows yet;
                          # a WARM run uses the per-entity Bronze watermark instead (see bronze_watermark).
                          # Windowing keeps a cold full pull inside rate windows (deep-offset 413 otherwise).
                          # 'updated_after' is the confirmed filter and matches on UPDATED date, not created.
