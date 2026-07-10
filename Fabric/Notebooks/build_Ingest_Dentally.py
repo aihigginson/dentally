@@ -37,7 +37,7 @@ per_page      = 100      # 100 is Dentally's MAX per page -- asking for more sil
                          # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
 history_floor = "2021-01-01T00:00:00Z"  # COLD-START-only floor for the updated_at-windowed historical
                          # tables treatment_plans / treatment_plan_items / treatment_appointments (NOT the
-                         # diary `appointments`, which cold-windows by start_time between APPT_FLOOR/CEILING).
+                         # diary `appointments`, which cold-windows by start_time from history_floor to APPT_CEILING).
                          # Used ONLY when a tenant+entity has no Bronze rows yet;
                          # a WARM run uses the per-entity Bronze watermark instead (see bronze_watermark).
                          # Windowing keeps a cold full pull inside rate windows (deep-offset 413 otherwise).
@@ -94,9 +94,9 @@ MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off
 # updated_at up to run time. No `before` date-cap on ANY entity -- future-dated rows are wanted.)
 WINDOW = {"after": "2022-01-01T00:00:00Z"}
 # appointments honours updated_after but NOT updated_before, so updated_at windowing can't tile it.
-# Its COLD pull tiles by APPOINTMENT DATE (start_time via after/before -- both honoured, spread evenly
-# across years so windows stay shallow) between these bounds; the ceiling captures future bookings.
-APPT_FLOOR   = "2015-01-01T00:00:00Z"
+# Its COLD pull tiles by APPOINTMENT DATE (start_time via after/before) FROM history_floor (never before
+# it -- pre-floor rows are migrated junk) UP TO APPT_CEILING, which pushes the upper bound into the
+# future so all forward bookings are captured (Dentally has no updated_before for appointments).
 APPT_CEILING = "2030-01-01T00:00:00Z"
 # These big historical tables get an updated_after floor (history_floor) so a FULL/onboarding pull
 # tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
@@ -534,9 +534,9 @@ for tid, cfg in TOKENS.items():
                     raw_rows = fetch_all(base, headers, ep, params, max_pages=cap)
                 elif ep == "appointments":                             # COLD: appointments date-window
                     # appointments ignores updated_before -> can't tile on updated_at. Window by start_time
-                    # (after/before) from APPT_FLOOR to APPT_CEILING (even, shallow, includes future).
-                    log_ingest(ep, "COLD", detail="date-window " + APPT_FLOOR[:10] + ".." + APPT_CEILING[:10])
-                    raw_rows = fetch_windowed(base, headers, ep, APPT_FLOOR, APPT_CEILING,
+                    # (after/before) from history_floor to APPT_CEILING (shallow; includes future bookings).
+                    log_ingest(ep, "COLD", detail="date-window " + history_floor[:10] + ".." + APPT_CEILING[:10])
+                    raw_rows = fetch_windowed(base, headers, ep, history_floor, APPT_CEILING,
                                               step_days=window_days, cap=cap, extra=extra,
                                               after_key="after", before_key="before")
                 elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
