@@ -13,6 +13,9 @@
 --    *08     07/07/2026  AIH Re-add site: read practitioner_site_id (the real Dentally field, a GUID)
 --                            as Practitioner_Site_ID. The *06 removal was wrong -- site IS in the API,
 --                            as practitioner_site_id (not site_id). Feeds Fact_Appointments fk_Practice_Site.
+--    *09     10/07/2026  AIH Re-add Updated_At (the *06 removal was also wrong -- updated_at IS in the API).
+--                            Feeds the per-tenant Bronze high-watermark so appointments can delta on
+--                            updated_after instead of a fixed-window full re-pull.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Bronze.usp_Load_Appointments @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Appointments]
@@ -59,6 +62,7 @@ BEGIN
             , LEFT(completed_at,                           255)   AS Completed_At
             , LEFT(cancelled_at,                           255)   AS Cancelled_At
             , LEFT(did_not_attend_at,                      255)   AS Did_Not_Attend_At
+            , LEFT(updated_at,                             255)   AS Updated_At
         INTO #src
         FROM Stage.Appointments
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -87,6 +91,7 @@ BEGIN
             , tgt.Completed_At                       = src.Completed_At
             , tgt.Cancelled_At                       = src.Cancelled_At
             , tgt.Did_Not_Attend_At                  = src.Did_Not_Attend_At
+            , tgt.Updated_At                         = src.Updated_At
             , tgt.DW_Loaded_At                       = SYSUTCDATETIME()
         FROM Bronze.Appointments AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
@@ -99,7 +104,7 @@ BEGIN
             Start_Time, Finish_Time, Duration, Reason, State,
             Booked_Via_API,
             Pending_At, Confirmed_At, Arrived_At, In_Surgery_At,
-            Completed_At, Cancelled_At, Did_Not_Attend_At,
+            Completed_At, Cancelled_At, Did_Not_Attend_At, Updated_At,
             DW_Loaded_At
         )
         SELECT
@@ -109,7 +114,7 @@ BEGIN
             src.Start_Time, src.Finish_Time, src.Duration, src.Reason, src.State,
             src.Booked_Via_API,
             src.Pending_At, src.Confirmed_At, src.Arrived_At, src.In_Surgery_At,
-            src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At,
+            src.Completed_At, src.Cancelled_At, src.Did_Not_Attend_At, src.Updated_At,
             SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Appointments tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);

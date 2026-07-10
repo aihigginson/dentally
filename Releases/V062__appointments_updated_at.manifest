@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V062 -- appointments delta: re-add Updated_At + cancelled=true
+# =====================================================================
+# ALTER Bronze.Appointments +Updated_At (preserves rows) and redeploy Bronze.usp_Load_Appointments
+# to read updated_at from Stage.Appointments (which already exposes it). Notebook side (rides the
+# Fabric pipeline): appointments moves from a fixed-window full re-pull to a watermarked txn entity
+# (updated_after + cancelled=true; cold-start windows from 2021). After deploy, the next appointments
+# pull is a cold start that backfills cancelled/DNA appointments + lands Updated_At.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V062__appointments_updated_at.manifest -SkipTests
+# =====================================================================
+
+MIGRATE Migrations\V062__appointments_updated_at.sql
+DEPLOY  Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+
+TEST

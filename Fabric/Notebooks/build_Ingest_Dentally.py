@@ -91,7 +91,7 @@ WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
 # tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
 # everything else (few recent rows). treatment_appointments ALSO supports updated_after/updated_before
 # (per the API docs), so it windows too -- the earlier "no date field / 413 full-pull" note was stale.
-HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments"}
+HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments", "appointments"}
 PARTIAL_OK_413 = set()   # nothing full-pulls-with-413-tolerance now; windowed entities avoid deep offsets
 ''', False),
 
@@ -195,8 +195,10 @@ def _win_fmt(d):
 def _is_413(e):
     return isinstance(e, requests.HTTPError) and getattr(e.response, "status_code", None) == 413
 
-def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved):
+def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra=None):
     params = {"updated_after": _win_fmt(lo), "updated_before": _win_fmt(hi)}
+    if extra:
+        params.update(extra)
     for attempt in (1, 2):                       # 2nd try absorbs a transient/load-spike 413
         try:
             return fetch_all(base, headers, ep, params, max_pages=cap)
@@ -215,10 +217,10 @@ def _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved):
         return []
     mid = lo + (hi - lo) / 2
     print("      413 on " + _win_fmt(lo) + ".." + _win_fmt(hi) + " -> halving")
-    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved)
-            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved))
+    return (_fetch_window(base, headers, ep, lo, mid, min_span, cap, unresolved, extra)
+            + _fetch_window(base, headers, ep, mid, hi, min_span, cap, unresolved, extra))
 
-def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None):
+def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap=None, extra=None):
     # Tile [floor,end] into step_days windows; halve any that 413 down to min_hours. Returns rows +
     # loudly flags any window that stays 413 at min_hours (bulk-update cluster -> raise history_floor
     # past it, or pull that span by id). Deltas don't use this (few recent rows).
@@ -227,7 +229,7 @@ def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap
     out, w, unresolved = [], 0, []
     while lo < end:
         hi = min(lo + step, end)
-        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved)
+        rows = _fetch_window(base, headers, ep, lo, hi, min_span, cap, unresolved, extra)
         out.extend(rows); w += 1
         print("      " + ep + " window " + _win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10]
               + ": " + str(len(rows)) + " rows (" + str(len(out)) + " total across " + str(w) + " windows)")
@@ -381,7 +383,7 @@ REGISTRY = [
     ("sundries",                         "sundries",              "ref", passthrough),
     ("contracts",                        "contracts",             "ref", passthrough),
     ("waiting_lists",                    "waiting_lists",         "ref", passthrough),
-    ("appointments",                     "appointments",          "win", t_appointment),
+    ("appointments",                     "appointments",          "txn", t_appointment),
     ("rota_practitioner_diaries",        "practitioner_diary_entries", "win", t_rota),
     ("patients",                         "patients",              "txn", t_patient),
     ("accounts",                         "accounts",              "txn", passthrough),
@@ -447,6 +449,7 @@ def log_ingest(entity, phase, rows=None, detail=None):
 # Updated_At -- needs it adding through the transform before it can be watermarked).
 WM = {
     "patients":               ("Patients",               "Updated_At", "updated_after", "dt"),
+    "appointments":           ("Appointments",           "Updated_At", "updated_after", "dt"),
     "invoices":               ("Invoices",               "Updated_At", "updated_after", "dt"),
     "invoice_items":          ("Invoice_Items",          "Updated_At", "updated_after", "dt"),
     "treatment_plans":        ("Treatment_Plans",        "Updated_At", "updated_after", "dt"),
@@ -457,6 +460,9 @@ WM = {
     "payments":               ("Payments",               "Dated_On",   "dated_after",   "d"),
 }
 WM_OVERLAP_HOURS = 4
+# Per-entity extra query params merged into every appointments pull. cancelled=true is REQUIRED or
+# the API omits cancelled/DNA appointments -> a cancellation (an UPDATE) would never reach the delta.
+PULL_EXTRA = {"appointments": {"cancelled": "true"}}
 def bronze_watermark(tenant_id, stage_name):
     if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
         return None
@@ -508,16 +514,18 @@ for tid, cfg in TOKENS.items():
             elif kind == "win":
                 raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
             elif kind == "txn":
+                extra = PULL_EXTRA.get(stage_name, {})                 # e.g. appointments -> cancelled=true
                 wm = bronze_watermark(tid, stage_name)
                 if wm is not None:                                     # WARM -> incremental from watermark
-                    log_ingest(ep, "DELTA", detail=str(wm))
-                    raw_rows = fetch_all(base, headers, ep, wm, max_pages=cap)
+                    params = dict(wm); params.update(extra)
+                    log_ingest(ep, "DELTA", detail=str(params))
+                    raw_rows = fetch_all(base, headers, ep, params, max_pages=cap)
                 elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
                     log_ingest(ep, "COLD", detail="window from " + history_floor)
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
-                                              step_days=window_days, cap=cap)
+                                              step_days=window_days, cap=cap, extra=extra)
                 else:                                                  # COLD + small / no watermark -> full
-                    raw_rows = fetch_all(base, headers, ep, {}, max_pages=cap)
+                    raw_rows = fetch_all(base, headers, ep, dict(extra), max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             if ep == "patients":
