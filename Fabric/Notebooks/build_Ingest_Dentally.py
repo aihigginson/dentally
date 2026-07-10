@@ -28,6 +28,7 @@ only_tenant   = ""       # optional Tenant_ID to restrict to; blank = every mapp
 full_refresh  = True     # True = full pull; False = incremental via updated_after
 updated_after = ""       # ISO8601 incremental start; blank + not full = last 24h
 sample_pages  = 0        # >0 caps pages/entity for a quick smoke test; 0 = no cap
+run_uuid      = ""       # correlation id from Orchestrate_Build; blank -> fresh uuid. Progress -> Audit.Ingest_Log
 only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY these (skip the
                          # ones already landed after a partial run); [] = every entity
 per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
@@ -87,15 +88,12 @@ MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effec
 MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off + retry, don't skip the entity
 # Appointments + rota require an after/before window (plain params, NOT filter[...]).
 WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
-# These two big historical tables get an updated_after floor (history_floor param) so they fit in
-# one rate window; every other entity keeps full history. Confirmed filter param: updated_after.
-HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items"}
-# treatment_appointments (548k) has NO date field (updated_after -> HTTP 400) and ignores
-# practitioner_id + keyset (sort / filter[id][gt] / since_id) -- only patient_id filters, which is
-# per-patient (too many calls). So it can't be windowed; plain paging deep-offset-413s at ~354k.
-# Default order is NEWEST-FIRST, so landing the rows up to the wall keeps the most recent ~354k
-# (>= the 2021 tp/tpi floor; the dropped tail is oldest/pre-window links). Full history = per-patient backfill.
-PARTIAL_OK_413 = {"treatment_appointments"}
+# These big historical tables get an updated_after floor (history_floor) so a FULL/onboarding pull
+# tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
+# everything else (few recent rows). treatment_appointments ALSO supports updated_after/updated_before
+# (per the API docs), so it windows too -- the earlier "no date field / 413 full-pull" note was stale.
+HISTORY_FLOOR_ENTITIES = {"treatment_plans", "treatment_plan_items", "treatment_appointments"}
+PARTIAL_OK_413 = set()   # nothing full-pulls-with-413-tolerance now; windowed entities avoid deep offsets
 ''', False),
 
     # 4 -- API helpers (rate-aware: sleep to the window reset, never skip on 429) ----
@@ -234,6 +232,7 @@ def fetch_windowed(base, headers, ep, floor, end, step_days=30, min_hours=1, cap
         out.extend(rows); w += 1
         print("      " + ep + " window " + _win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10]
               + ": " + str(len(rows)) + " rows (" + str(len(out)) + " total across " + str(w) + " windows)")
+        log_ingest(ep, "WINDOW", rows=len(out), detail=_win_fmt(lo)[:10] + ".." + _win_fmt(hi)[:10])
         lo = hi
     if unresolved:
         print("  !!!! " + ep + ": " + str(len(unresolved)) + " WINDOW(S) UNRESOLVED at min span -- a "
@@ -405,7 +404,37 @@ REGISTRY = [
 ''', False),
 
     # 8 -- main: pull -> transform -> land ------------------------------------
-    (r'''for tid, cfg in TOKENS.items():
+    (r'''import struct, pyodbc, uuid as _uuidlib
+if not run_uuid:
+    run_uuid = str(_uuidlib.uuid4())
+_lcur = None
+try:
+    import sempy.fabric as _fab
+    _wsid = _fab.get_workspace_id()
+    _whs  = _fab.FabricRestClient().get(f"/v1/workspaces/{_wsid}/warehouses").json()["value"]
+    _ep   = next((w["properties"]["connectionString"] for w in _whs if w["displayName"] == "WH_Dentally"), None)
+    _tb   = notebookutils.credentials.getToken("https://database.windows.net/").encode("UTF-16-LE")
+    _ts   = struct.pack(f"<I{len(_tb)}s", len(_tb), _tb)
+    _lconn = pyodbc.connect("Driver={ODBC Driver 18 for SQL Server};Server=" + _ep + ",1433;Database=WH_Dentally;Encrypt=yes;TrustServerCertificate=no;", attrs_before={1256: _ts})
+    _lconn.autocommit = True
+    _lcur = _lconn.cursor()
+    print("ingest-log -> Audit.Ingest_Log (run_uuid " + run_uuid + ")")
+except Exception as _e:
+    print("ingest-log DISABLED (cell output only):", str(_e)[:200])
+
+_LOG_TID = None
+def log_ingest(entity, phase, rows=None, detail=None):
+    print("  [" + phase + "] " + str(entity) + (" rows=" + str(rows) if rows is not None else "") + ((" " + str(detail)) if detail else ""))
+    if _lcur is None:
+        return
+    try:
+        _lcur.execute(
+            "INSERT INTO Audit.Ingest_Log (Run_UUID, Tenant_ID, Entity, Phase, Rows_Landed, Detail, Logged_At) VALUES (?,?,?,?,?,?,SYSUTCDATETIME())",
+            run_uuid, (int(_LOG_TID) if _LOG_TID is not None else None), str(entity)[:100], str(phase)[:20], rows, (str(detail)[:1000] if detail is not None else None))
+    except Exception:
+        pass
+
+for tid, cfg in TOKENS.items():
     if only_tenant and str(tid) != str(only_tenant):
         continue
     base    = cfg.get("base_url", "https://api.dentally.co/v1").rstrip("/")
@@ -423,8 +452,10 @@ REGISTRY = [
         run_list = list(REGISTRY)
 
     all_patient_ids = []   # captured from the patients pull; used to gap-fill patient_stats
+    _LOG_TID = tid
     for ep, stage_name, kind, fn in run_list:
         try:  # one bad/absent endpoint must not abort the whole practice's ingest
+            log_ingest(ep, "START")
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
             elif kind == "win":
@@ -465,8 +496,10 @@ REGISTRY = [
             write_stage(main, stage_name, tid)
             for cname, crows in children.items():
                 write_stage(crows, cname, tid)
+            log_ingest(ep, "DONE", rows=len(main))
         except Exception as e:
             print("  SKIP " + ep + ": " + str(e)[:200])
+            log_ingest(ep, "SKIP", detail=str(e)[:200])
 
     # fees: one call per treatment (fees?treatment_id=) -- 5 price/duration tiers each.
     # In sample mode cap to a few treatments (the sweep is otherwise full even when sampling).

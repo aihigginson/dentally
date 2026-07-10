@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V061 -- Audit.Ingest_Log (live progress for Ingest_Dentally)
+# =====================================================================
+# Ingest_Dentally now writes per-entity START/WINDOW/DONE/SKIP rows here via a direct warehouse
+# connection, so a running pull is watchable in SQL instead of only the notebook's cell output.
+# Also (notebook side, rides the Fabric pipeline): treatment_appointments is now delta-capable
+# (updated_after), and Orchestrate_Build passes history_floor="" so the nightly is a real delta.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V061__ingest_progress_log.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Audit.Ingest_Log.Table.sql
+
+TEST
