@@ -85,8 +85,10 @@ print("Env", dentally_env, "| mode", _mode, "| tenants", list(TOKENS.keys()))
 MAX_WAIT   = 3700   # clamp any single rate sleep to ~1h (reset is an epoch on the hour)
 MAX_429    = 200    # 429 retries before giving up (each waits to reset -> effectively never skips)
 MAX_5XX    = 4      # transient 5xx (recalls 500'd once, 200 on retry): back off + retry, don't skip the entity
-# Appointments + rota require an after/before window (plain params, NOT filter[...]).
-WINDOW = {"after": "2022-01-01T00:00:00Z", "before": "2027-01-01T00:00:00Z"}
+# rota uses an `after` window (plain param, NOT filter[...]). NO `before` -- we want every future
+# diary entry Dentally holds. (appointments moved to updated_after; the historical tables window on
+# updated_at up to run time. No `before` date-cap on ANY entity -- future-dated rows are wanted.)
+WINDOW = {"after": "2022-01-01T00:00:00Z"}
 # These big historical tables get an updated_after floor (history_floor) so a FULL/onboarding pull
 # tiles into rate-window-sized chunks; on a DELTA run history_floor="" -> they use updated_after like
 # everything else (few recent rows). treatment_appointments ALSO supports updated_after/updated_before
