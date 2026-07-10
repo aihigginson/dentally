@@ -33,12 +33,11 @@ only_entities = []       # RESUME: e.g. ["treatment_plans","fees"] to pull ONLY 
                          # ones already landed after a partial run); [] = every entity
 per_page      = 100      # 100 is Dentally's MAX per page -- asking for more silently falls back
                          # to 25 (=> more calls), so leave at 100. (Confirmed against the API.)
-history_floor = "2024-04-01T00:00:00Z"  # updated_after floor applied ONLY to the huge historical
-                         # tables (treatment_plans / treatment_plan_items); "" = full history.
-                         # Those two span many years (items ~1.32M full vs ~107k from 2024-04) so
-                         # flooring keeps the pull inside a single rate window (no sleep-to-reset,
-                         # which is the fragile path). 'updated_after' is the confirmed filter and
-                         # matches on UPDATED date, not created.
+history_floor = "2021-01-01T00:00:00Z"  # COLD-START floor for the big windowed tables (treatment_plans/
+                         # _items/_appointments). Used ONLY when a tenant+entity has no Bronze rows yet;
+                         # a WARM run uses the per-entity Bronze watermark instead (see bronze_watermark).
+                         # Windowing keeps a cold full pull inside rate windows (deep-offset 413 otherwise).
+                         # 'updated_after' is the confirmed filter and matches on UPDATED date, not created.
 window_days   = 30       # ONBOARDING window size (days) for the floored historical tables. Dentally
                          # 413s on DEEP offset pagination (the scan-cost limit DRIFTS with load --
                          # seen ~50k one run, ~106k another), so we pull these in updated_at windows
@@ -71,12 +70,12 @@ if not TOKENS:
     raise SystemExit("dentally-tokens-" + dentally_env + " is empty/missing -- load a token first.")
 
 cap = sample_pages or None
-if not updated_after and not full_refresh:
-    updated_after = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
 load_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-inc = {} if full_refresh else {"updated_after": updated_after}
-print("Env", dentally_env, "| mode", "FULL" if full_refresh else ("incremental from " + updated_after),
-      "| tenants", list(TOKENS.keys()))
+# No blanket 24h lookback (it silently dropped changes when a run was missed). Each txn entity pulls
+# updated_after = its own Bronze high-watermark (bronze_watermark below); an explicit updated_after
+# param is a manual override for ALL entities.
+_mode = "FULL" if full_refresh else ("incremental from " + updated_after if updated_after else "incremental (per-entity Bronze watermark)")
+print("Env", dentally_env, "| mode", _mode, "| tenants", list(TOKENS.keys()))
 ''', False),
 
     # 3 -- config --------------------------------------------------------------
@@ -434,6 +433,40 @@ def log_ingest(entity, phase, rows=None, detail=None):
     except Exception:
         pass
 
+# --- per-entity, per-tenant Bronze high-watermark (replaces the old blanket 24h lookback) --------
+# Each incremental (txn) entity pulls updated_after = MAX(Updated_At already consumed by Bronze for
+# THIS tenant) minus a 4h overlap, so a missed/failed run self-heals (next cutoff is simply older).
+# Only entities whose Bronze table stores Updated_At are listed; accounts/payments/recalls have none
+# so they full-pull each run (recalls is delete-heavy by design). Cold start (no Bronze rows yet)
+# falls back to history_floor (windowed) for the big tables, else a plain full pull.
+WM = {
+    "patients":               ("Patients",               "Updated_At"),
+    "invoices":               ("Invoices",               "Updated_At"),
+    "invoice_items":          ("Invoice_Items",          "Updated_At"),
+    "treatment_plans":        ("Treatment_Plans",        "Updated_At"),
+    "treatment_plan_items":   ("Treatment_Plan_Items",   "Updated_At"),
+    "treatment_appointments": ("Treatment_Appointments", "Updated_At"),
+    "nhs_claims":             ("NHS_Claims",             "Updated_At"),
+    "patient_referrals":      ("Patient_Referrals",      "Updated_At"),
+}
+WM_OVERLAP_HOURS = 4
+def bronze_watermark(tenant_id, stage_name):
+    if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
+        return None
+    if updated_after:                # explicit param = manual override for all entities
+        return updated_after
+    if _lcur is None or stage_name not in WM:
+        return None
+    tbl, col = WM[stage_name]
+    try:
+        _lcur.execute("SELECT MAX(TRY_CAST([" + col + "] AS datetime2(3))) FROM Bronze.[" + tbl + "] WHERE Tenant_ID = ?", int(tenant_id))
+        row = _lcur.fetchone()
+        mx = row[0] if row and row[0] is not None else None
+        return (mx - timedelta(hours=WM_OVERLAP_HOURS)).strftime("%Y-%m-%dT%H:%M:%S") if mx is not None else None
+    except Exception as _e:
+        print("  watermark read failed " + stage_name + ": " + str(_e)[:120])
+        return None
+
 for tid, cfg in TOKENS.items():
     if only_tenant and str(tid) != str(only_tenant):
         continue
@@ -461,14 +494,16 @@ for tid, cfg in TOKENS.items():
             elif kind == "win":
                 raw_rows = fetch_all(base, headers, ep, WINDOW, max_pages=cap)
             elif kind == "txn":
-                if history_floor and ep in HISTORY_FLOOR_ENTITIES:
-                    # Huge historical table -> WINDOW the pull (Dentally 413s on deep offsets).
-                    # window_end fixed at run start so mid-pull updates fall to the next delta.
+                wm = bronze_watermark(tid, stage_name)
+                if wm is not None:                                     # WARM -> incremental from watermark
+                    log_ingest(ep, "DELTA", detail="updated_after " + wm)
+                    raw_rows = fetch_all(base, headers, ep, {"updated_after": wm}, max_pages=cap)
+                elif history_floor and ep in HISTORY_FLOOR_ENTITIES:   # COLD + big -> window from floor
+                    log_ingest(ep, "COLD", detail="window from " + history_floor)
                     raw_rows = fetch_windowed(base, headers, ep, history_floor, load_timestamp,
                                               step_days=window_days, cap=cap)
-                else:
-                    raw_rows = fetch_all(base, headers, ep, dict(inc), max_pages=cap,
-                                         partial_ok_on_413=(ep in PARTIAL_OK_413))
+                else:                                                  # COLD + small / no watermark -> full
+                    raw_rows = fetch_all(base, headers, ep, {}, max_pages=cap)
             else:  # ref -- always full
                 raw_rows = fetch_all(base, headers, ep)
             if ep == "patients":
