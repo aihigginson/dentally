@@ -160,10 +160,10 @@ two flags — **rolls up by Site? rolls up by Practitioner?** — which is exact
    - `net_patient_growth` → New Patients counts per-practitioner but lapsed half scans all patients →
      that practitioner's new minus the whole practice's lapsed → **actively wrong** ❌❌
 
-3. **🔴 Default view compares 3 months actual vs a YTD-prorated target.** Default Period = "Last 3
-   Months" (rolling), but `_Target FY Key` falls back to current FY and cumulative targets prorate by
-   *elapsed FY working days*. So actual ≈ 3 months vs target ≈ elapsed-FY → every cumulative KPI looks
-   badly behind on landing. (Verify, but the logic says broken on the default view.)
+3. ~~Default view compares 3 months actual vs a YTD-prorated target.~~ **RETRACTED (session 2, user
+   tested):** the target WAS pro-rata correct when tested. The daily-target fact is summed over the
+   SAME date context as the actual, and `_Period Run Rate` returns 1.0 for non-FY groupings, so
+   "Last 3 Months" target = 3 months of daily targets vs 3 months of actual → reconciles. Not a bug.
 
 4. **🟠 Current-state metrics ignore Period.** Snapshots + live current-state use
    `REMOVEFILTERS('List Date')`. Mathematically correct, but sliding Period and seeing them not move
@@ -204,12 +204,436 @@ two flags — **rolls up by Site? rolls up by Practitioner?** — which is exact
    `Scripts/fabric_creds.local.ps1`) to ground the real-data validity calls (real `Role` values,
    plan/site attribution coverage, snapshot coverage) as we hit each metric.
 
-## 8. Next artifact to build
-A **metric × dimension matrix**: each of the 34 metrics × { rolls-up-by-Site?, rolls-up-by-
-Practitioner?, Period type = cumulative|rate|current-state, current behaviour under each dimension,
-real-data validity, visualisation, verdict: keep|fix|re-scope|impossible|misleading|superseded }.
-Assemble from `Config.Metric_Definitions` + the measure scripts, validate against real data, then the
-metric-by-metric visualisation/validity discussion hangs off each row.
+## 7b. Session-2 decisions (2026-07-11)
+
+Filter-rule decisions ratified:
+- **Rule B (off-grain) = BLANK / greyed** — when a metric doesn't roll up by the filtered dimension,
+  the card blanks/greys (not "stay correct + marker"). Implication: every measure needs a clean
+  "dimension X is filtered and I don't support it -> BLANK" guard, INCLUDING the Role multi-select
+  case; metrics that DO roll up still need the Role-multiselect −1 aggregation fixed so they don't
+  silently blank.
+- **"Active only" = data filter on CURRENT-STATE metrics only** — becomes a real report filter that
+  bites only on current-state/forward measures; historical metrics stay unfiltered.
+- **Read-only warehouse queries = approved.** BUT dev Fabric capacity is currently **paused**
+  ("capacity not active") and prod is unreachable from the laptop (prod SP secret not local). So live
+  grounding is deferred until dev is resumed OR the user runs prod queries. Query harness itself works
+  (SP token + SqlClient; connects fine once capacity is up).
+
+**Re-tiering is now an explicit output.** Real data has moved the tiers vs `project_kpi_design`.
+Provisional calls from the user (off the top of head, to be confirmed in the methodical walk):
+- **DNA rate / DNA revenue lost — DEMOTE.** Real DNAs are "not that much of an issue."
+- **Net Patient Growth — ELEVATE.** Strongly negative on real data → this is a headline story.
+- **Open courses — the one that matters is "without appointment" (esp. its VALUE).** Demote the
+  plain `open_courses` count and `open_courses_value` (all-open); keep/elevate
+  `open_courses_without_appt` + its value variant.
+- **Recalls must be restricted to ACTIVE patients.** (retention_outlook, overdue_recalls,
+  recalls_overdue_not_sent, recall_compliance — scope to active base.)
+- **Lapsed patients — possibly its own tab under Marketing** (separate from the owner KPI pages).
+- **Scheduling forwards:** drop `days_until_1hr_free`; keep `days_until_30min_free`. Add more focus on
+  **immediate forward utilisation** (near-term booked/available capacity), not just "days until free".
+
+Matrix gains a new column: **Tier / prominence** (Tier 1 headline / Tier 2 diagnostic / Tier 3
+operational / cut / move-to-Marketing).
+
+### Rule B mechanism — MASKS/OVERLAYS (to TRIAL first; user's idea)
+Instead of blanking off-grain metrics measure-by-measure, overlay a mask/shape per page whose
+visibility is bound to a measure, greying the cards that don't roll up by the filtered dimension.
+Only ~2 visibility measures needed (support is fixed by card position):
+- `_Practitioner filter active` = `IF( ISFILTERED('List Practitioners'[Role]) || ISFILTERED('List Practitioners'[Full Name]), 1, 0 )`
+- `_Site filter active`         = `IF( ISFILTERED('List Practice Sites'[Site Name]), 1, 0 )`
+Lay one mask over the non-practitioner cards (visible when practitioner filter active) and one over
+the non-site cards (visible when site filter active). Keeps measures honest; better UX than a blank;
+it's **.pbix Desktop layout work (user's job)**, out of the C#/measure layer.
+- **Known risk:** pixel-perfect overlay alignment.
+- **Does NOT solve Rule A** (Role multi-select on a metric that DOES roll up still returns the wrong
+  −1 all-roles total behind the mask) — that still needs the warehouse/measure grain fix.
+- **DECISION: do NOT implement per-metric measure-blanking until the mask trial is evaluated.**
+
+### Revenue section — verdicts (session 2, user feedback)
+1. **Total Revenue** — Tier 1, keep. Target proration confirmed correct. Still needs the Rule A
+   Role-multiselect fix.
+2. **NHS Revenue — REDEFINE (currently wrong).** Today = `SUM(Invoice Items)` where NHS_Charge>0.
+   Should be **accepted NHS claims × a claims rate derived from the contract** (NHS work is paid by
+   the NHS per UDA at the contract £/UDA rate, not via patient invoice lines). Source =
+   `Fact_NHS_Claims` (accepted) × contract rate (`Fact_Contracts` / `Fact_NHS_Contract_Week`). Detail
+   in the NHS section.
+3. **Private Revenue — OPEN:** redefining NHS Revenue breaks `Total = NHS + Private` (Total = all
+   invoice items; NHS was invoice-based). Need to decide how Total/Private recompose once NHS = claims
+   × rate. Resolve during the NHS section.
+4. **Revenue per Patient** — keep; denominator = **active patients** (confirmed). Ratio only
+   meaningful at practice/site (patient count is practice-level) → set `Supports_Practitioner = 0`,
+   mask at practitioner grain.
+5. **Revenue per Clinical Hour** — Tier 1, keep. **Add Site support** AND ensure it works at
+   Practitioner. Its Role-filter correctness is now load-bearing (it subsumes #6).
+6. **Revenue per Dentist Hour — CUT (defunct).** Same as #5 with Practitioner Type = Dentist. (Makes
+   the Rule A Role fix on #5 essential.)
+7. **Deposit Ratio — REDEFINE % → £ value.** "Money received but work not done." Demote to a
+   "by-the-way" figure, not a KPI. Rename toward `deposit_value`.
+8. **Discounts — PARK (don't delete).** Blank on Maple, but other practices may discount. Keep,
+   low/inactive prominence.
+9. **Outstanding Invoices — keep but DEMOTE** (cash-on-delivery; exception-data area). Priority = make
+   it **work under Practitioner filters** (Rule A fix; it already stores a practitioner grain).
+
+### Patients section — verdicts (session 2, user feedback)
+1. **Net Patient Growth — Tier 1, ELEVATE** (strongly negative = the headline story). Push down to
+   `new_patients − lapsed_patients` (both already daily flows) so it's consistent + rolls up by
+   site/practitioner. (Current live version's practitioner grain is wrong.)
+2. **New Patients — Tier 2** (component of growth). Fix Role multi-select; consider enabling Site.
+3. **Active Patients — keep** (denominator for per-patient + recalls). Practice-level → masked at
+   practitioner.
+4. **Retention Outlook — Tier 1** (best forward-looking retention number; pairs with the growth
+   story). Restrict to ACTIVE patients. Patient/site grain → masked at practitioner.
+5. **Recalls family** (`overdue_recalls`, `recalls_overdue_not_sent`, `recall_compliance`/Recall
+   Effectiveness, `patient_retention`) — **restrict all to ACTIVE patients** (user call). Tier 2/3.
+   Masked at practitioner. Catalog the uncatalogued ones (`recall_compliance`, `patient_retention`).
+6. **Lapsed — `lapsed_patients` (total) KEEP on Patients as a KPI.** The three-way breakdown
+   (`lapsed_deactivated` / `lapsed_calculated`) + corrective insight moves to the future **Marketing
+   tab**. "A patient insight that is fixed by Marketing." Marketing tab does not exist yet.
+7. **Email / Phone Details Rate — Tier 3** (reachability / data quality). Feed the proposed
+   *reachable recall pipeline / revenue-at-risk* metric. Masked at practitioner.
+
+**NEW SECTION FLAGGED: Marketing tab** (not built). First tenant = the lapsed-patient deep-dive +
+corrective actions. Later home for acquisition-source / campaign attribution work
+([[project_marketing_attribution]]).
+
+### Clinical section — verdicts (session 2, user feedback)
+1. **Treatment Acceptance Rate — LIKELY DEAD END; DEFER pending query.** Suspected uncomputable. Need
+   to query real Maple: **can we identify REJECTED / declined plans** (not just un-started ones)? If
+   yes, acceptance = accepted ÷ (accepted + rejected) may be salvageable; if no, **CUT**. Blocked on
+   dev capacity.
+2. **Open Courses (count, all open) — CUT / demote.**
+3. **Open Courses Value (£, all open) — CUT / demote** (superseded by 4b).
+4a. **Open Courses Without Appointment (count) — Tier 2, keep.**
+4b. **Open Courses Without Appointment VALUE (£) — Tier 1, HOME card.** Not in the catalog today
+    (lives as a live measure in `Clinical.csx`). **Catalog it** as `open_courses_without_appt_value`.
+    Money committed, work not scheduled = owner anxiety number.
+5. **Exam Ratio — Tier 3, keep pending verify** — does the appointment→exam classification survive
+    real Dentally slot/treatment types (real `treatment_description` = slot-type, not clinical)?
+6. **Average Plan Value — Tier 2, keep.**
+- All Clinical metrics are plan-grain → `Supports_Site = 0` → **masked at site**; live-DAX open-course
+  measures currently *ignore* site (masking fixes that consistently). Practitioner works (plan's own).
+
+### Scheduling section — verdicts (session 2, user feedback)
+1. **Chair Utilisation (historical, period)** — **Tier 2** (backward-looking capacity view).
+2. **DNA Rate — Tier 2** (revised: sits at the SAME level as short-notice cancellations; keep both at
+   Tier 2 for now — may be more significant for other practices). Uncatalogued **DNA Revenue Lost** —
+   demote/park.
+3. **Days Until Next 30-Min Free — Tier 2, keep.**
+4. **Days Until Next 1-Hour Free — CUT** (user call).
+5. **Book Before You Leave — Tier 2, keep — but REDEFINE.** BBYL *is* detectable. Current rule is
+   suspected to require the next appointment to be booked **on the same day as the visit** — too
+   narrow. Correct definition: at the point a patient leaves, do they **already have a future
+   appointment on the books at all** (booked at any earlier time counts) — "in BBYL" until that next
+   appointment occurs; 2+ appts already booked when leaving = BBYL. Use `Fact_Appointment_Journey`
+   next-appointment pointers (V063) to compute. INVESTIGATE current rule + quantify corrected one.
+6. **Cancellation Frequency — Tier 3.**
+7. **Short Notice Cancellation Rate — Tier 2** (same level as DNA; the cost-bearing cancellation).
+- Section pivots from a DNA/cancellation focus → a **forward-capacity focus**.
+
+### NEW METRIC: Immediate Forward Utilisation — Tier 1, HOME (SPEC)
+- **Horizon = next 7 days.** Present **both**: (a) **% fill** = booked appointment hours ÷ available
+  worked hours over the forward 7-day window; (b) **£ Forward-Book Value** = confirmed forward revenue
+  from appointments booked in the window (the missing Tier-1 "patient pipeline").
+- **OPEN — data source:** can we use the **forward treatment_appointment** definitions for this, or
+  should booked chair time come from **Fact_Appointments** (all booked slots, not just treatment-
+  linked)? Forward CAPACITY (denominator) = `Fact_Practitioner_Diaries` (has ~14mo forward). Needs a
+  real-data query once dev capacity is back to confirm forward appt + diary coverage.
+
+### NEW VISUAL: 2-week diary HEAT MAP (operational)
+Heat map of the **next 2 weeks** — chairs booked vs empty by day/practitioner. Operational (Tier 3),
+distinct from the 7-day headline %.
+
+### NEW FEATURE: Gap-filler function (operational, Tier 3)
+"How you could fill the gaps" — surface **candidate open treatments / recalls / waiting-list patients**
+against the empty forward slots. Turns the empty heat-map cells into an action list.
+
+### Confirmations (session 2, user — no query needed)
+- **Deposits** will be **sparse and transitory** on real data → confirms Deposit metric demote to a
+  by-the-way £value, not a KPI.
+- **Discounts blank** is **practice-specific** (Maple runs no discount schemes) → confirms PARK (keep
+  for other practices, don't delete).
+- **Role values are hard-coded in Dentally** (fixed enum) → low concern; still confirm the actual set
+  present in Maple (does orthodontist/specialist appear → app dropdown only offers
+  Dentist/Hygienist/Therapist).
+
+### GROUNDING SWEEP (autonomous — user resuming dev capacity, away for hours)
+User green-lit restarting dev capacity + autonomous investigation. Run one read-only sweep + write
+findings back here. Targets:
+1. **Roles** — distinct Role/count/active, T100 (confirm enum; orthodontist/specialist present?).
+2. **Acceptance / rejected plans** — can a REJECTED/declined plan state be derived from
+   `Fact_Treatment_Plans` (Start_Date / Completed / End_Date / any status field)? Decides
+   acceptance_rate keep-vs-cut.
+3. **Exam classification** — is `Exam_Count` populated + plausible on real slot/treatment types?
+4. **BBYL** — read current rule (aggregate load SP); quantify current rate vs redefined
+   ("future appt already on the books" via `Fact_Appointment_Journey`).
+5. **Immediate forward utilisation feasibility** — forward non-cancelled appointments (next 7/14d)
+   + hours from `Fact_Appointments`; forward worked hours from `Fact_Practitioner_Diaries`; forward
+   expected value on treatment-appointments (for the £ side).
+6. **Deposits / Discounts / Outstanding** — confirm sparse/blank/near-zero (cheap sums).
+7. **Net patient growth / lapsed** — confirm flow data present + growth negative.
+8. **NHS** — accepted claims (count/UDA) from `Fact_NHS_Claims` + contract £/UDA rate
+   (`Fact_Contracts`/`Fact_NHS_Contract_Week`) → can we compute NHS Revenue = claims × rate? vs
+   current invoice-based NHS revenue (preps the NHS-section redefinition + Private recomposition).
+
+### GROUNDING SWEEP RESULTS (2026-07-12, dev warehouse, T100 Maple — real data)
+Ordered by severity. Several are **warehouse correctness bugs**, not just metric re-scoping.
+
+**A. 🔴🔴 NHS Revenue is showing £0 (critical).** Invoiced total = **£7,239,486**, but current NHS
+Revenue (`SUM(Invoice_Items)` where `NHS_Charge>0`) = **£0** — `NHS_Charge` is never populated on
+invoice items. So **Private Revenue = the entire £7.24M** (absorbs NHS work). Real NHS revenue via
+**claims × rate = £624,621** (12,842 `completed` claims × £32.72). `Awarded_Dentist_Charge` /
+`Dentist_Charge` are both £0 → the £ must come from `Awarded_UDA × contract UDA_Value`.
+→ REDEFINE NHS Revenue = Σ(Awarded_UDA, completed claims) × contract rate. Decide Total/Private
+recomposition (Total = private invoiced + NHS claim income?).
+→ **Contracts stale:** only 2 loaded (2020-21, 2021-22; rate £32.72). **No current-year contract** →
+contracts ingestion gap; need a current rate. Separate pipeline fix.
+
+**B. 🔴🔴 Chair Utilisation understated ~2×.** "Block" appointments (NOT WORKING / Lunch / Annual
+Leave / Bank Holiday — no patient, huge durations: NOT WORKING avg 435 min, Bank Holiday 647 min)
+landing **on rostered days = 62,078 h**, vs total dentist+hygienist diary = ~122,342 h. Worked-hours
+denominator doesn't subtract these → utilisation ~halved. **Fix:** subtract block-appt minutes on
+rostered days from `Available_Clinical_Mins` in the aggregate/diary load. (User-flagged.)
+
+**C. 🔴 Appointment-denominator pollution.** 17% of non-cancelled "appointments" (24,739 rows) are
+diary blocks. Inflates DNA rate, exam ratio, cancellation, BBYL denominators. **Fix:** exclude blocks
+(no-patient / reason-based) from appointment metrics.
+
+**D. 🔴 Exam classification undercounts; Reason is free-text; HEX is dual-purpose.** Real appointment
+`Reason` is free-text per practice (`HEX`, `Hex 20`, `3 12 Hyg`, `HYG 30 + AIRFLOW`, `Exam + Scale &
+Polish`…). Current rule `LIKE '%Exam%'` = 35,653 and **misses all HEX (20,380)**; exam incl HEX =
+56,033. **HEX = Exam + Hygiene combined → counts in BOTH exam and hygiene views** (user's unexpected
+find; needs working into display). **Fix:** per-tenant `Config.Appointment_Reason_Classification`
+mapping (Exam / Hygiene / Treatment / Emergency / New-Patient / Block; HEX → both).
+
+**E. 🔴 Open Courses Without Appointment VALUE = £0 (fixable bug; it's the Tier-1 "eye-watering"
+metric).** Raw `Private_Treatment_Value` = £8.6M (30,907 plans) landed fine, but
+`Private_Treatment_Value_Outstanding` and `_Completed` are **£0 everywhere** (even on
+`Has_Open_Item=True` plans). The outstanding/completed **split in `usp_Load_Fact_Treatment_Plans` is
+broken on real data** — item open/charged classification doesn't match real Dentally item fields
+(`Charged`/`Completed`/`Appear_On_Invoice`/`Status`/`NHS_Charge` on `Silver.Treatment_Plan_Items`).
+Fixable; data is present. **Blocks the Tier-1 leaky-bucket £value + Open Courses Value.**
+
+**F. Acceptance Rate — DEAD END confirmed.** `Accepted_At` NULL on all 68,371 plans; every plan has a
+`Start_Date`; no reject state. Uncomputable as designed → **CUT** (or investigate whether `Accepted_At`
+is a mapping gap before final cut — but as-is, nothing to compute).
+
+**G. BBYL — redefined, REAL NUMBER = 66.7%.** Current same-day rule = **48.8%** (too narrow — only
+counts next appts booked ON the visit day); "has any next appt" = **96%** (too broad). User's correct
+definition ("a future appointment already on the books when they leave") = next appt's booking date ≤
+this visit date = **66.7%** (69,817 / 104,741 completed). **Join key resolved:**
+`Fact_Appointment_Journey.fk_Appointment_Next` = **`bk_Appointment_ID`** (the business key — NOT a pk;
+confirmed 161,825 matches to both journey.bk and Fact_Appointments.bk; matches to either pk = 0).
+Implement: `journey j LEFT JOIN Fact_Appointments nxt ON nxt.bk_Appointment_ID = j.fk_Appointment_Next
+AND nxt.Tenant_ID = j.Tenant_ID`, BBYL = `nxt.fk_Date_Pending <= j.fk_Date_Start`. Ready to build.
+
+**H. Net Patient Growth — strongly negative (Tier 1 justified).** Last 12mo: **379 new − 1,540 lapsed
+= −1,161**. Active base **6,969** vs **20,784 inactive** (3× more lapsed than active).
+
+**I. Recalls (active-scoped) — computable + meaningful.** Overdue active = **2,263**; overdue active
+with no future appt = **1,885** (27% of the active base). Confirms scoping recalls to active.
+
+**J. Contactability — healthy.** Active base: **94% have email, 99% have phone** (427 no-email, 39
+no-phone of 6,969). email/phone metrics fine; feed the reachable-recall / revenue-at-risk metric.
+
+**K. Low-value metrics confirmed.** Deposits **£87,037 / 534 rows** (~1.2% of revenue → by-the-way
+£value). Discounts **£0** (→ park). Outstanding **£6,557** (0.09% → cash-on-delivery, heavy demote).
+
+**L. Immediate forward utilisation — feasible.** Next 7d: **137 h booked / 171 h capacity ≈ 80% fill**
+(mechanism works: `Fact_Appointments` forward ∩ `Fact_Practitioner_Diaries` forward). £ side needs a
+value proxy (appts carry no price → avg-appt-value × forward count, or treatment linkage). Dev
+forward-diary looked thin in the near term (data freshness) but horizon is long (diary → ~2029,
+appts → ~2028).
+
+**M. Roles (app filter mismatch).** Real roles: Dentist 15 (9 active), Hygienist 10 (6), + non-clinical
+Administrator 13 / Receptionist 6 / Practice Manager 1 (all inactive). **No Therapist** — but the app
+Role dropdown offers Dentist/Hygienist/**Therapist** (dead option). Non-clinical practitioner records
+exist but are inactive → the "Active only" picker strips them (its real purpose). Fix the Role
+dropdown to the roles actually present.
+
+### NEW WAREHOUSE ACTIONS (from the sweep — warehouse layer, my side)
+1. **Redefine NHS Revenue** = claims × contract rate (+ resolve Total/Private recomposition).
+2. **Fix worked-hours** = subtract on-rostered-day block-appt minutes from `Available_Clinical_Mins`.
+3. **Exclude diary blocks** from appointment-based metric denominators.
+4. **Rebuild the appointment reason map** (per-tenant; HEX → exam+hygiene). DISCOVERY: a map already
+   exists as **`Silver.Appointment_Reason_Map`** `(Reason_Text, Category, Sort_Key)` but it's a
+   MOCK-ERA STUB — seeded with synthetic reasons ('Examination','Scale & Polish', etc.), so ALL real
+   Maple reasons ('Exam','HEX','Hex 20','3 12 Hyg','NOT WORKING'…) fall through to 'Other'. It's also
+   wrong-schema (Silver, not the `Config.*_Standard`+`Input.*_Map` pattern), 1:1 (can't do HEX dual),
+   not per-tenant, and has no Block category. **Rebuild** as: `Config.Appointment_Reason_Standard`
+   (canonical: Exam, Hygiene, Continuing Treatment, Emergency, Review, New Patient, **Block**, Other) +
+   `Input.Appointment_Reason_Map` (`Tenant_ID, Reason_Text, Standard_Category`; **many rows per reason
+   allowed** so HEX→{Exam,Hygiene}); retire `Silver.Appointment_Reason_Map`. Same map drives both
+   classification AND the diary-block denominator filter (Block category). Seed from the real sweep
+   taxonomy. OPEN: many-rows (recommended) vs boolean flags for the dual-category.
+   Existing pattern refs: `Config.Cancellation_Reason_Standard` + `Input.Cancellation_Reason_Map`
+   (mapping tooling: `Scripts/Generate_Mapping_Template.py`, `Scripts/Load_Mapping_From_Template.py`).
+5. **Fix `Private_Treatment_Value_Outstanding`/`_Completed`** roll-up in `usp_Load_Fact_Treatment_Plans`.
+6. **Cut acceptance_rate** (pending a quick Accepted_At mapping check).
+7. **Contracts ingestion** — land current-year NHS contract (rate) — pipeline, not metric.
+
+### ROOT-CAUSE + FIX DETAIL (autonomous session 2026-07-12)
+
+**Bug E — Open Courses (Without Appt) Value = £0 → ROOT-CAUSED, one-field fix.**
+`usp_Load_Fact_Treatment_Plans` computes the completed/outstanding split from **`tpi.Total_Price`**
+(SP lines 97-100), but on real data `Total_Price` is **NULL on all 249,933 items** — the real value
+field is **`tpi.Price`** (Σ = £8,445,161; matches plan-level Private_Treatment_Value £8.6M).
+Recomputing outstanding with `Price` → **£1,338,575** (the real leaky-bucket value).
+FIX: in the item aggregate CTE, change `ISNULL(tpi.Total_Price,0)` → `ISNULL(TRY_CAST(tpi.Price AS
+DECIMAL(18,4)),0)` in BOTH `Private_Treatment_Value_Completed` (line 97-98) and
+`Private_Treatment_Value_Outstanding` (line 99-100). (Also: item `Status` is blank on all rows — not
+used by the Course_Status derivation, which keys off `Completed`, so no impact. `Quantity` also
+unpopulated → use `Price` directly, not `Price*Quantity`.)
+
+**Bug A — NHS Revenue redefinition, with real composition numbers.**
+- Total invoiced (patient-paid) = **£7,239,486**. This INCLUDES NHS patient band charges.
+- NHS patient charge (from completed claims `Patient_Charge`) = **£103,210** — the patient-paid slice
+  sitting inside the £7.24M invoiced.
+- NHS claim income (NHS-paid) = Σ(Awarded_UDA completed) × rate = **£624,621** — NOT invoiced, on top.
+- `Awarded_Dentist_Charge`/`Dentist_Charge` both £0 → cannot use a charge field; must be UDA × rate.
+- **Recommended recomposition (reconciles):**
+  - Private Revenue = invoiced − NHS patient charge = £7,239,486 − £103,210 = **£7,136,276**
+  - NHS Revenue = NHS claim income + NHS patient charge = £624,621 + £103,210 = **£727,831**
+  - Total Revenue = Private + NHS = **£7,864,107** (= invoiced £7.24M + NHS-paid £625k)
+  - NOTE: can't split invoiced items by NHS (NHS_Charge unpopulated on invoice items), but the NHS
+    patient-charge slice IS knowable from claims — so the split above is computable.
+  - **QUESTION FOR USER:** confirm this recomposition (esp. whether Total should include the NHS-paid
+    £625k, i.e. cash the practice actually receives — recommended yes).
+- Dim_Date has `Financial_Year` / `Financial_Year_Name` for per-FY UDA×rate (needed since the rate is
+  per-contract-year; contracts currently stale — only 2020-22 loaded, rate £32.72).
+
+### SYSTEMIC FINDING 🔴🔴 — the whole mapping layer is mock-seeded & blind to real values
+The `Config.*_Standard` + `Input.*_Map` classification layer was seeded from synthetic data, so it
+does not cover real Maple source values. Confirmed degradations:
+- **Appointment reasons** → only coincidental matches (`Scale & Polish`→Hygiene works; `HEX`,
+  `Hex 20`, `3 12 Hyg`, `Continuing Treatment`, `View` pass through unclassified). Exam undercounts
+  (misses HEX), Hygiene/Treatment/Block all unreliable. [`Silver.Appointment_Reason_Map`]
+- **Cancellation reasons** → **0 of 31,268 resolved** (`fk_Cancellation_Reason` unmapped for ALL
+  cancelled appts) → **Short-Notice Cancellation Rate = 0%** (broken), cancellation-reason breakdown
+  empty. [`Input.Cancellation_Reason_Map` / `Config.Cancellation_Reason_Standard`]
+- **Acquisition source** → only **6,974 of 27,753 (25%) resolved** (~= active base) → 75% unmapped;
+  marketing attribution sparse. [`Input.Acquisition_Source_Map`]
+- (Payment plan map likely the same — unverified.)
+→ **ACTION:** systematic RE-SEED of all Config/Input mapping tables from real per-tenant values, using
+  the existing tooling (`Scripts/Generate_Mapping_Template.py` + `Load_Mapping_From_Template.py`).
+  This is a prerequisite for: exam/hygiene/treatment split, Short-Notice rate, cancellation reasons,
+  acquisition/marketing. One workstream, not per-metric. Rooted in the mock→real transition.
+
+### More root-causes / section findings (autonomous session)
+**Bug B — Chair Utilisation: block time is on BOTH sides (OPEN — finish with user tomorrow AM).**
+Chair Util = appointment hours (numerator) ÷ worked hours (denominator). The block/dummy time
+(NOT WORKING / Lunch / Annual Leave / Bank Holiday) is **neither appointment hours NOR worked hours —
+it is a distinct non-working category**, and it currently contaminates BOTH sides:
+ - Numerator: block "appointments" carry durations → they inflate appointment hours (they are NOT
+   real appointment hours).
+ - Denominator: the diary shows the practitioner available on those days → inflates worked hours
+   (that time was NOT actually worked/available).
+My earlier "subtract from Worked_Hours only" was HALF the fix. The correct principle (user, 2026-07-12):
+**remove the block time symmetrically from both numerator and denominator** — real appointment hours
+(excluding blocks) ÷ true available hours (diary minus block time). Worked example: 8h session, 3h
+NOT-WORKING block, 4h real appts → 4 ÷ (8−3) = 80% (not 7/8 and not 4/8).
+`Worked_Hours` today = `SUM(Available_Clinical_Mins)/60` from `#diary_agg` (SP lines 198-206);
+Appointment_Hours is the numerator source. **STILL TO PIN DOWN TOMORROW:** exactly what the block time
+represents / how to identify it cleanly (reason-map Block category vs no-patient), and confirm the
+numerator currently does/doesn't already include the block durations, before writing the symmetric fix.
+DO NOT implement the one-sided version.
+
+**NHS section — contract tracking broken on real data (pipeline gap).** Awarded UDA is steady
+(~3,400-3,570/yr: FY22-23 3,362 · FY23-24 3,411 · FY24-25 3,557 · FY25-26 3,569 · FY26-27 977 partial),
+but **contract targets exist ONLY for FY20-21 & FY21-22**. So NHS UDA Completion Rate, pace, Target,
+and the £/UDA rate for NHS Revenue are **uncomputable for every year from FY22-23 on**. The whole NHS
+contract page is blank/broken until current contracts are ingested. → PIPELINE: land current NHS
+contracts (investigate why Fact_Contracts stops at 2022 — ingestion gap vs Dentally not exposing).
+
+**NHS UOA = N/A for Maple.** 0 ortho claims of 12,958. Hide/skip UOA where a practice has no ortho
+contract (it's a per-practice applicability flag, like NHS-vs-private).
+
+**Finance/Xero — no data for T100.** `Fact_Finance` = 368 rows, **Tenant 11 only**. Maple hasn't
+connected Xero, so EBITDA/Net Profit/margins are blank for the live customer. Metrics are sound
+(validated on T11); it's a data-availability gap → Finance page needs the customer's Xero connected,
+or hide until connected.
+
+### PIPELINE GAP: Waiting-list MEMBERS not landed
+We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
+the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,
+not a metric. See [[project_entity_design_remaining]] (Waiting Lists: NHS / Private New Patient).
+
+## 8. THE METRIC × DIMENSION MATRIX (built, session 2026-07-12)
+Legend — **Site/Prac** = rolls up by that dimension (Y/N; N ⇒ Rule-B mask). **Per** =
+C(cumulative)/R(rate)/P(point-in-time)/Cur(current-state). **Data** = real-Maple status.
+**Tier** post-review.
+
+| Metric | Sec | Site | Prac | Per | Data (real Maple) | Tier | Verdict / fix |
+|---|---|---|---|---|---|---|---|
+| total_revenue | Rev | Y | Y | C | OK £7.24M | 1 | keep; fix Role-multiselect |
+| nhs_revenue | Rev | Y | Y | C | 🔴 £0 (NHS_Charge unpop) | 1 | REDEFINE = claims×rate (£728k incl patient charge) |
+| private_revenue | Rev | Y | Y | C | ⚠ overstated (absorbs NHS) | 1 | recompose = invoiced − NHS patient charge (£7.14M) |
+| revenue_per_patient | Rev | Y | N | R | OK | 2 | denom=active pts; mask at prac |
+| revenue_per_clinical_hour | Rev | **Y(add)** | Y | R | 🔴 understated ~2× | 1 | fix worked-hours; ADD site |
+| revenue_per_dentist_hour | Rev | — | — | R | — | CUT | = rev/clinical hr + Role=Dentist |
+| deposit_ratio→deposit_value | Rev | Y | Y | £ | sparse £87k | by-the-way | REDEFINE %→£; not a KPI |
+| discounts | Rev | Y | Y | R | £0 (none) | park | keep for other practices |
+| outstanding_invoices | Rev | Y | Y | P | tiny £6.5k | demote | fix Role filter |
+| net_patient_growth | Pat | Y | Y | C | 🔴 −1,161/yr | 1 | ELEVATE; push down = new−lapsed |
+| new_patients | Pat | N(→Y?) | Y | C | OK 379/12mo | 2 | fix Role; maybe enable site |
+| active_patients | Pat | Y | N | P | OK 6,969 | keep | denominator; mask at prac |
+| retention_outlook | Pat | Y | N | Cur | OK | 1 | scope ACTIVE; mask at prac |
+| overdue_recalls | Pat | Y | N | P | OK 2,263 active | 2 | scope ACTIVE |
+| recalls_overdue_not_sent | Pat | Y | N | Cur | OK | 2/3 | scope ACTIVE |
+| recall_compliance / patient_retention | Pat | Y | N | Cur | OK (uncatalogued) | 2/3 | catalog + scope ACTIVE |
+| lapsed_patients | Pat | Y | Y | C | OK 1,540/12mo | 2 | keep on Patients (total) |
+| lapsed_deactivated / lapsed_calculated | Pat | Y | Y | C | OK | Mktg | move breakdown to Marketing tab |
+| email_details_rate | Pat | Y | N | Cur | OK 94% | 3 | mask at prac; feed reachable-recall |
+| phone_details_rate | Pat | Y | N | Cur | OK 99% | 3 | mask at prac |
+| acceptance_rate | Clin | N | Y | R | 🔴 DEAD (Accepted_At null) | CUT | uncomputable |
+| open_courses (count) | Clin | N | Y | Cur | OK 879 open (207 IP + 672 no-appt) | demote | superseded |
+| open_courses_value (all) | Clin | N | Y | Cur | 🔴 £0→fix(Price) | demote | superseded by w/o-appt value |
+| open_courses_without_appt (count) | Clin | N | Y | Cur | OK 672 | 2 | keep |
+| **open_courses_without_appt_value** | Clin | N | Y | Cur | 🔴 £0→**£1.34M via Price** | **1** | CATALOG it; Home card; fix Price |
+| exam_ratio | Clin | N | Y | R | 🔴 denom polluted + HEX miss | 3 | needs reason-map + block filter |
+| avg_plan_value | Clin | N | Y | R | OK (via Price) | 2 | keep |
+| chair_utilisation | Sch | N(→Y?) | Y | R | 🔴 block time on BOTH sides | 2 | OPEN: symmetric block exclusion (num & denom) — finish w/ user tomorrow |
+| dna_rate | Sch | N | Y | R | OK ~2% | 2 | block filter denom |
+| days_until_30min_free | Sch | Y | Y | Cur | OK | 2 | keep |
+| days_until_1hr_free | Sch | — | — | Cur | — | CUT | user call |
+| book_before_you_leave | Sch | N | Y | R | ⚠ 48.8% (narrow rule) | 2 | REDEFINE via journey next-ptr |
+| cancellation_frequency | Sch | N | Y | R | OK ~18% | 3 | block filter denom |
+| short_notice_cancellation_rate | Sch | N | Y | R | 🔴 0% (cancel map dead) | 2 | needs cancel-reason re-seed |
+| **immediate_forward_utilisation** (%+£) | Sch | Y | Y | Cur | feasible (80% fill 7d) | **1** | NEW; Home; £ needs value proxy |
+| nhs_uda_completion_rate | NHS | Y | Y | R | 🔴 no recent target | 1(NHS) | blocked on contract ingestion |
+| nhs_udas | NHS | Y | Y | C | OK delivery | 2 | target blocked |
+| nhs_uoas | NHS | Y | Y | C | N/A (0 ortho) | hide | per-practice applicability |
+| EBITDA/Net Profit/margins | Fin | Y | N | C | no T100 data | — | needs Xero connected |
+
+## 9. CONSOLIDATED QUESTIONS FOR THE USER (accumulated this session)
+1. **NHS Total/Private recomposition** — confirm: Private = invoiced − NHS patient charge (£7.14M);
+   NHS = claim income + patient charge (£728k); Total = £7.86M (includes the £625k NHS-paid). OK?
+2. **Acceptance rate** — `Accepted_At` is NULL on ALL plans. Is that a Dentally-doesn't-expose fact,
+   or a transform MAPPING gap worth fixing before we hard-cut? (As-is → CUT.)
+3. **HEX display** — HEX = exam+hygiene. Count in BOTH exam & hygiene, or show a separate "combined"
+   line? (drives the reason-map many-to-many shape.)
+4. **Reason map shape** — many-rows (recommended) vs boolean flags for dual-category reasons.
+5. **Mapping-layer re-seed** — OK to re-seed ALL Config/Input maps (appointment reason, cancellation
+   reason, acquisition source, payment plan) from real per-tenant values via the existing tooling?
+   (Prerequisite for exam/hygiene split, short-notice rate, cancellation & marketing breakdowns.)
+6. **NHS contracts ingestion** — Fact_Contracts stops at FY21-22. Land current contracts (needed for
+   completion rate + NHS £/UDA rate). Is this a known ingestion gap or does Dentally not expose them?
+7. **Chair Utilisation / Rev-per-Clinical-Hour site support** — both are `Supports_Site=0` today but
+   arguably need per-site for multi-site owners. Add site grain? (Maple is single-site so low urgency.)
+8. **Immediate forward utilisation £** — appointments carry no price; use avg-appt-value × forward
+   count (proxy) or wait for treatment-appointment expected value? (proxy is buildable now.)
+9. **"Active only" as a data filter on current-state metrics** — confirm which metrics it should bite
+   (availability/forward) vs never (all historical).
+
+## 10. Recommended build order (once questions resolved)
+1. **Mapping-layer re-seed** (systemic; unblocks exam/hygiene, short-notice, cancellation, marketing).
+2. **Quick warehouse bug fixes:** Price→outstanding (Bug E, 1 line); worked-hours block subtraction
+   (Bug B); NHS Revenue redefine + Private recompose (Bug A); block-filter appointment denominators.
+3. **Metric re-scope + tiers** in `Config.Metric_Definitions` (catalog the uncatalogued; cut
+   acceptance/dentist-hour/1hr-free; add open_courses_without_appt_value + immediate_utilisation).
+4. **Rule-A fix** (Role multi-select on materialised metrics) + **Rule-B masks** (Desktop trial).
+5. **New builds:** immediate forward utilisation, Marketing/lapsed tab, 2-week heat map, gap-filler,
+   waiting-list ingestion, NHS contracts ingestion.
+6. **DAX simplification** (one metadata-driven builder) — last, once the catalog is settled.
 
 ## Key file references
 - Catalog: `Fabric/Config.Metric_Definitions.Data.sql` (34 metrics)
