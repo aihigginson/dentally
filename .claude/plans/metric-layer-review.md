@@ -591,6 +591,78 @@ Notes: New-Patient is a cross-cut like HEX (a "New Patient Exam" is New Patient 
 the many-rows shape. The `Block` category does double duty (chair-util fix + cancellation/appt denom).
 63 distinct reasons total; this is per-tenant (each practice's free-text differs).
 
+### READY-TO-APPLY SQL DRAFTS (drafted 2026-07-13; NOT yet applied — package as a manifest when approved)
+
+**FIX 1 — Bug E: Open-course outstanding value (FULLY CONFIRMED).**
+File `Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql`, item aggregate CTE lines 97-100.
+Real value field is `Price`, not `Total_Price` (NULL on real data). Swap both:
+```
+-- BEFORE (lines 97-100):
+    SUM(CASE WHEN tpi.Completed = 1 AND ISNULL(tpi.NHS_Charge,0) = 0
+             THEN ISNULL(tpi.Total_Price,0) ELSE 0 END)                          AS Private_Treatment_Value_Completed,
+    SUM(CASE WHEN ISNULL(tpi.Completed,0) = 0 AND ISNULL(tpi.NHS_Charge,0) = 0
+             THEN ISNULL(tpi.Total_Price,0) ELSE 0 END)                          AS Private_Treatment_Value_Outstanding
+-- AFTER:
+    SUM(CASE WHEN tpi.Completed = 1 AND ISNULL(tpi.NHS_Charge,0) = 0
+             THEN ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0) ELSE 0 END)     AS Private_Treatment_Value_Completed,
+    SUM(CASE WHEN ISNULL(tpi.Completed,0) = 0 AND ISNULL(tpi.NHS_Charge,0) = 0
+             THEN ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0) ELSE 0 END)     AS Private_Treatment_Value_Outstanding
+```
+Effect: outstanding → £1.34M (from £0); lights up Open Courses Value + Without-Appt Value.
+
+**FIX 2 — Bug B/C numerator + appointment-denominator pollution (CONFIRMED).**
+File `Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql`, spine WHERE (line 142).
+No-patient block/placeholder rows must not count as appointments (they are 76% of Appointment_Hours):
+```
+-- BEFORE (line 142):
+        WHERE apt.Is_Cancelled = 0
+-- AFTER:
+        WHERE apt.Is_Cancelled = 0 AND apt.fk_Patient > 0
+```
+Effect: removes blocks from Appointments, Appointment_Hours, DNA, BBYL, Exam denominators. NOTE: this
+intentionally SHIFTS DNA rate / cancellation freq / exam ratio (they were inflated). Does NOT fix the
+exam UNDERcount (HEX) — that needs the reason map, separate.
+
+**FIX 3 — Bug B denominator: worked hours minus block time (DESIGN CONFIRMED; Block reason list PENDING
+your approval — currently inline, swap for the reason-map `Block` category once re-seeded).**
+Same file. Add a block-minutes aggregate BEFORE `#diary_agg` (after line 191), then subtract it:
+```
+        -- Unavailable/block time (entered as no-patient appts) must come OUT of worked hours.
+        -- INTERIM reason list -> replace with the reason-map Block category after the mapping re-seed.
+        DROP TABLE IF EXISTS #block_agg;
+        SELECT apt.fk_Practitioner, apt.fk_Date_Start AS fk_Date, apt.Tenant_ID,
+               SUM(ISNULL(apt.Duration_Mins,0)) AS Block_Mins
+        INTO #block_agg
+        FROM Gold.Fact_Appointments apt
+        WHERE apt.Is_Cancelled = 0 AND (apt.fk_Patient IS NULL OR apt.fk_Patient <= 0)
+          AND apt.Reason IN ('NOT WORKING','Not working','Lunch','Annual Leave','Bank Holiday',
+                             'Training Course','Meeting','Medical appointment')
+        GROUP BY apt.fk_Practitioner, apt.fk_Date_Start, apt.Tenant_ID;
+```
+Then replace the `#diary_agg` SELECT (lines 196-207) with the block-subtracted, floored version:
+```
+        SELECT
+            d.fk_Practitioner,
+            d.fk_Date_Day                                      AS fk_Date,
+            d.Tenant_ID,
+            CAST(CASE WHEN SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) < 0 THEN 0
+                      ELSE SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) END
+                 AS DECIMAL(10,2)) / 60.0                      AS Worked_Hours
+        INTO #diary_agg
+        FROM Gold.Fact_Practitioner_Diaries d
+        LEFT JOIN #block_agg bl ON bl.fk_Practitioner = d.fk_Practitioner
+                               AND bl.fk_Date        = d.fk_Date_Day
+                               AND bl.Tenant_ID      = d.Tenant_ID
+        GROUP BY d.fk_Practitioner, d.fk_Date_Day, d.Tenant_ID, bl.Block_Mins;
+        DROP TABLE IF EXISTS #block_agg;   -- after #diary_agg is built
+```
+Effect (with FIX 2): chair utilisation ≈ real appts ÷ (diary − block) ≈ ~74% instead of block-inflated.
+
+**Apply path:** each is a `DEPLOY` of the SP + a new manifest (e.g. `V064__tp_price_outstanding`,
+`V065__chair_util_blocks`), then `Orchestrate_Build` to rebuild the aggregate/Fact_Treatment_Plans/
+Fact_Metric_Actuals + model. FIX 1 is independent; FIX 2+3 ship together (both touch the aggregate).
+Files are UTF-16 LE BOM — preserve encoding on edit.
+
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
 the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,
