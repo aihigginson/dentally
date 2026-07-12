@@ -532,10 +532,23 @@ My earlier "subtract from Worked_Hours only" was HALF the fix. The correct princ
 (excluding blocks) ÷ true available hours (diary minus block time). Worked example: 8h session, 3h
 NOT-WORKING block, 4h real appts → 4 ÷ (8−3) = 80% (not 7/8 and not 4/8).
 `Worked_Hours` today = `SUM(Available_Clinical_Mins)/60` from `#diary_agg` (SP lines 198-206);
-Appointment_Hours is the numerator source. **STILL TO PIN DOWN TOMORROW:** exactly what the block time
-represents / how to identify it cleanly (reason-map Block category vs no-patient), and confirm the
-numerator currently does/doesn't already include the block durations, before writing the symmetric fix.
-DO NOT implement the one-sided version.
+`Appointment_Hours = SUM(Duration_Mins)/60` over the spine (`Is_Cancelled=0`, grouped by fk_Patient,
+NO patient-present filter). **RESOLVED (autonomous, capacity back on 2026-07-13):**
+- **Numerator IS polluted — heavily.** Of 188,647 h total Appointment_Hours in the aggregate,
+  **144,179 h (76%) is no-patient block time**; only **44,468 h** is real patient appointments.
+  (`NOT WORKING` alone = 97,728 h.) So today's numerator is nonsense, not just the denominator.
+- **Cleanest fix — two filters, one per side:**
+  - Numerator = appointment hours WHERE **`fk_Patient > 0`** (only patient-attended clinical time is
+    "utilised") → 44,468 h.
+  - Denominator = diary available − **explicit unavailable blocks by reason** (the reason-map `Block`
+    category): NOT WORKING, Not working, Lunch, Annual Leave, Bank Holiday, Training Course, Meeting,
+    Medical appointment. (NOT just `fk_Patient IS NULL`, which would also strip no-patient Exam
+    *placeholders* that aren't "unavailable" time.) `'Other'` is ambiguous — 84% no-patient but 794
+    real appts — so classify it in the reason-map, don't blanket-treat as Block.
+- **Corrected utilisation ≈ 44,468 ÷ ~60,264 ≈ ~74%** (denominator = dentist+hyg diary 122,342 h −
+  62,078 h on-rostered block; grains to be aligned in build). Sensible vs today's block-inflated value.
+- Depends on the reason-map `Block` category (part of the mapping re-seed). Ready to build once the
+  Block reason list is confirmed with the user. NO one-sided fix.
 
 **NHS section — contract tracking broken on real data (pipeline gap).** Awarded UDA is steady
 (~3,400-3,570/yr: FY22-23 3,362 · FY23-24 3,411 · FY24-25 3,557 · FY25-26 3,569 · FY26-27 977 partial),
@@ -551,6 +564,32 @@ contract (it's a per-practice applicability flag, like NHS-vs-private).
 connected Xero, so EBITDA/Net Profit/margins are blank for the live customer. Metrics are sound
 (validated on T11); it's a data-availability gap → Finance page needs the customer's Xero connected,
 or hide until connected.
+
+### DRAFT: Appointment-reason classification (real Maple, 63 distinct — for user approval)
+Proposed mapping of the real reasons → standard categories. **Many-to-many** (HEX & New-Patient rows
+map to 2 categories). Confirms the reason-map design. Approve/adjust, then load via
+`Input.Appointment_Reason_Map` re-seed. (Counts are the ≥20-occurrence set; long tail <20 to bucket.)
+
+- **Exam:** Exam · New Patient Exam* · Returning pt Exam · New Patient Exam 40*
+- **Hygiene:** Scale & Polish · 30/20/40 Scale & Polish · Routine Hygiene · 3 12 Hyg · HYG 30/20 +
+  AIRFLOW · Routine Hygiene + Airflow
+- **Exam + Hygiene (DUAL):** HEX · Hex 20 · Hex 30 · Exam + Scale & Polish
+- **Continuing Treatment:** Continuing Treatment · Crown recement/Fit/prep · RCT · XLA · Surgical XLA ·
+  Impressions · Implant Placement · Bridge Recement · Denture Ease · Invisalign · Direct Access(?)
+- **Emergency:** Emergency · Broken Tooth · Lost Filling · Lost Crown · Pain · Toothache · Chipped tooth
+- **Review / Consult:** Review · New Patient Consultation* · Consult · Invisailgn Consulation · Implant
+  Consult · mini Implant consult · New Patient Child Consultation*
+- **New Patient (DUAL — cross-cut flag):** New Patient Exam{+Exam} · New Patient Consultation{+Review} ·
+  New Patient Child Consultation{+Review} · New Patient Exam 40{+Exam}
+- **Block (non-clinical — drives BOTH the denominator subtraction AND numerator exclusion):**
+  NOT WORKING · Not working · Lunch · Annual Leave · Bank Holiday · Training Course · Meeting ·
+  Medical appointment
+- **Ambiguous → user call:** `Other` (4,981; 84% no-patient — Block or Other?) · `View` (2,683; has
+  patients — a real slot type? Review?) · `Direct Access` (65)
+
+Notes: New-Patient is a cross-cut like HEX (a "New Patient Exam" is New Patient AND Exam) → reinforces
+the many-rows shape. The `Block` category does double duty (chair-util fix + cancellation/appt denom).
+63 distinct reasons total; this is per-tenant (each practice's free-text differs).
 
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
