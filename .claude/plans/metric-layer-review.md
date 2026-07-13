@@ -719,6 +719,17 @@ Files: Fact_Practitioner_Diaries (table + load: Is_Dummy + synthetic), aggregate
 tracked count columns), Fact_Metric_Actuals (3 metrics), Config.Metric_Definitions (rename + 2 new),
 TabularEditor_Scheduling/MetricActuals.csx (measures — needs model re-apply). Build stage-by-stage, verify on dev.
 
+**BUILT + COMMITTED 2026-07-13 (all 5 stages, dev-validated):**
+- V074 = diary Is_Dummy + synthetic entries (2,344 dummy days on Maple, avg 6.9h).
+- V075 = aggregate Chair_Hours (capped, LEAD-to-next-appt / diary end-of-day) + Tracked_Appointments;
+  Fact_Metric_Actuals diary_fill / chair_utilisation(actual) / patient_tracked_in_surgery; catalog
+  redefine chair_utilisation(actual) + 2 new rows (all 3 carry targets).
+- C# (not a warehouse deploy): Scheduling.csx Diary Fill / Chair Utilisation(actual) / Patient Tracked
+  measures + cards; MetricActuals.csx mapping. Needs Tabular Editor re-apply.
+DEPLOY ORDER: V074 then V075 (GitHub Deploy Warehouse action / Deploy.ps1) -> Orchestrate_Build ->
+re-apply TabularEditor_Scheduling.csx + TabularEditor_MetricActuals.csx (MODE=apply) -> refresh DM Dentally.
+Craig Jack dev proof: Diary Fill 80-108%, Chair Util 55-102% (below fill, In_Surgery<Duration), Tracked ~85-90%.
+
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
 the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,
