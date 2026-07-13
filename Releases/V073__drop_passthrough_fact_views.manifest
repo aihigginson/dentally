@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V073 -- Drop stale passthrough Gold views (unblocks the model)
+# =====================================================================
+# ROOT CAUSE of "the numbers won't move": Gold.vw_Fact_Treatment_Plans (and
+# vw_Fact_Invoice_Items) were hardcoded 1-1 passthrough views frozen at an old
+# column set. They supersede the table in Meta.usp_Create_Gold_Views, so
+# PBI.[_Treatment Plans] lost Course_Status / Private_Treatment_Value_Outstanding
+# etc. -> the model's _Treatment Plans table failed to load -> every plan measure
+# errored -> the semantic-model refresh failed -> the report stayed on stale data.
+#
+# These two views carry NO logic (pure column passthrough), so removing them and
+# letting the generator build the PBI views from the Fact tables (sys.columns) is
+# identical at the PBI layer -- but complete and self-maintaining. The logic-bearing
+# views (vw_Dim_Invoices, vw_Fact_Payments, vw_Fact_Appointment_Journey) are untouched.
+#
+# The migration drops the two views + regenerates the PBI views. After deploy, refresh
+# the semantic model 'DM Dentally' -- the failed measures resolve and everything updates.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V073__drop_passthrough_fact_views.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V073__drop_passthrough_fact_views.sql
+
+TEST
