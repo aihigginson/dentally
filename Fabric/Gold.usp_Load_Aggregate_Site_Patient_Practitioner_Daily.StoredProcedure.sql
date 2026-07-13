@@ -24,6 +24,12 @@
 --                             (Dim_Cancellation_Reasons.Is_Short_Notice) is empty on real Dentally
 --                             data. Now date-based -- cancelled within @Short_Notice_Days of the
 --                             appointment (Cancelled_At vs the appointment date).
+--    *08     13/07/2026  AIH  Scheduling pkg: add Chair_Hours (ACTUAL capped in-chair time) +
+--                             Tracked_Appointments. Chair time per appt = In_Surgery_Mins (fallback
+--                             scheduled Duration if untracked), CAPPED at minutes to the next appt's
+--                             start (or diary end-of-day for the last appt) so unclosed-session
+--                             outliers can't exceed the slot. Feeds Chair Utilisation (actual) and
+--                             Patient Tracked in Surgery %. Appointment_Hours stays scheduled (Diary Fill).
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -241,6 +247,46 @@ BEGIN
         GROUP BY d.fk_Practitioner, d.fk_Date_Day, d.Tenant_ID, bl.Block_Mins;
         DROP TABLE IF EXISTS #block_agg;
 
+        -- ── In-chair (actual, capped) time + tracked count ───────────────────
+        -- Chair Utilisation uses the ACTUAL time the patient was in surgery (In_Surgery_Mins),
+        -- capped so unclosed-session outliers can't exceed the slot: cap = minutes to the NEXT
+        -- appointment's start (same practitioner/day) or, for the last appt, minutes to the diary
+        -- end-of-day. Untracked appts (no In_Surgery) fall back to scheduled Duration. Tracked_
+        -- Appointments = appts with In_Surgery logged (reception patient-tracking behaviour).
+        DROP TABLE IF EXISTS #day_end;
+        SELECT d.fk_Practitioner, d.fk_Date_Day AS fk_Date, d.Tenant_ID, MAX(d.End_Time) AS End_Time
+        INTO #day_end
+        FROM Gold.Fact_Practitioner_Diaries d
+        GROUP BY d.fk_Practitioner, d.fk_Date_Day, d.Tenant_ID;
+
+        DROP TABLE IF EXISTS #appt_chair;
+        SELECT
+            apt.fk_Practice_Site                               AS fk_Site,
+            apt.fk_Patient,
+            apt.fk_Practitioner,
+            apt.fk_Date_Start                                  AS fk_Date,
+            apt.Tenant_ID,
+            CASE WHEN apt.In_Surgery_Mins > 0 THEN apt.In_Surgery_Mins ELSE ISNULL(apt.Duration_Mins,0) END AS chair_raw,
+            CASE WHEN apt.In_Surgery_Mins > 0 THEN 1 ELSE 0 END AS tracked,
+            CASE WHEN LEAD(apt.Start_Time) OVER (PARTITION BY apt.Tenant_ID, apt.fk_Practitioner, apt.fk_Date_Start ORDER BY apt.Start_Time, apt.pk_Appointment) IS NOT NULL
+                 THEN DATEDIFF(MINUTE, apt.Start_Time, LEAD(apt.Start_Time) OVER (PARTITION BY apt.Tenant_ID, apt.fk_Practitioner, apt.fk_Date_Start ORDER BY apt.Start_Time, apt.pk_Appointment))
+                 ELSE COALESCE(NULLIF(DATEDIFF(MINUTE, CAST(apt.Start_Time AS TIME), de.End_Time), 0), apt.Duration_Mins) END AS cap_mins
+        INTO #appt_chair
+        FROM Gold.Fact_Appointments apt
+        LEFT JOIN #day_end de ON de.fk_Practitioner = apt.fk_Practitioner AND de.fk_Date = apt.fk_Date_Start AND de.Tenant_ID = apt.Tenant_ID
+        WHERE apt.Is_Cancelled = 0 AND apt.fk_Patient > 0;
+
+        DROP TABLE IF EXISTS #chair_agg;
+        SELECT
+            ac.fk_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID,
+            CAST(SUM(CASE WHEN ac.cap_mins > 0 AND ac.chair_raw > ac.cap_mins THEN ac.cap_mins ELSE ac.chair_raw END) AS DECIMAL(10,2)) / 60.0 AS Chair_Hours,
+            SUM(ac.tracked)                                    AS Tracked_Appointments
+        INTO #chair_agg
+        FROM #appt_chair ac
+        GROUP BY ac.fk_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID;
+        DROP TABLE IF EXISTS #appt_chair;
+        DROP TABLE IF EXISTS #day_end;
+
         -- ── Full rebuild ─────────────────────────────────────────────────────
         DELETE FROM Gold.Aggregate_Site_Patient_Practitioner_Daily;
         SET @My_Deletes = @@ROWCOUNT;
@@ -255,6 +301,7 @@ BEGIN
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
             Cancelled_Appointments, Short_Notice_Cancellations,
+            Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -281,6 +328,8 @@ BEGIN
             a.Appointment_Hours,
             ISNULL(c.Cancelled_Appointments,     0)            AS Cancelled_Appointments,
             ISNULL(c.Short_Notice_Cancellations, 0)            AS Short_Notice_Cancellations,
+            ISNULL(ch.Chair_Hours, 0)                          AS Chair_Hours,
+            ISNULL(ch.Tracked_Appointments, 0)                 AS Tracked_Appointments,
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #apt_agg a
@@ -300,7 +349,12 @@ BEGIN
                                  AND c.fk_Patient       = a.fk_Patient
                                  AND c.fk_Practitioner  = a.fk_Practitioner
                                  AND c.fk_Date          = a.fk_Date
-                                 AND c.Tenant_ID        = a.Tenant_ID;
+                                 AND c.Tenant_ID        = a.Tenant_ID
+        LEFT JOIN #chair_agg  ch ON  ch.fk_Site         = a.fk_Site
+                                 AND ch.fk_Patient      = a.fk_Patient
+                                 AND ch.fk_Practitioner = a.fk_Practitioner
+                                 AND ch.fk_Date         = a.fk_Date
+                                 AND ch.Tenant_ID       = a.Tenant_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
         -- Insert cancellation-only rows: dates where a practitioner had a
@@ -319,6 +373,7 @@ BEGIN
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
             Cancelled_Appointments, Short_Notice_Cancellations,
+            Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -335,6 +390,7 @@ BEGIN
             NULL, 0,                 -- Worked_Hours, Appointment_Hours
             c.Cancelled_Appointments,
             c.Short_Notice_Cancellations,
+            NULL, 0,                 -- Chair_Hours, Tracked_Appointments
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #cancel_agg c
@@ -355,6 +411,7 @@ BEGIN
         DROP TABLE #tpi_agg;
         DROP TABLE #diary_agg;
         DROP TABLE #cancel_agg;
+        DROP TABLE #chair_agg;
 
         --*********************************
         --**** Procedure logic ends    ****

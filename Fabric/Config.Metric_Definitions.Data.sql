@@ -65,8 +65,10 @@ USING (VALUES
     ('avg_plan_value',             'Average Plan Value',                 'treatment',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
         'The average value of the treatment plans presented to patients in the period — total presented plan value divided by the number of plans. A measure of case size and treatment ambition. Higher generally means larger cases proposed.'),
 -- Scheduling
-    ('chair_utilisation',          'Chair Utilisation',                  'scheduling', 'percent',  'Percentage of available chair time that was booked', 0, 1, 1, 40, 'above', 'rate',
-        'The percentage of available chair (surgery) time that was booked with appointments in the period. A capacity measure of how fully the diary is used. Higher is better, up to practical limits.'),
+    ('diary_fill',                 'Diary Fill',                         'scheduling', 'percent',  'Percentage of worked time booked with appointments', 0, 1, 1, 39, 'above', 'rate',
+        'The percentage of available worked time booked with patient appointments (scheduled appointment hours / worked hours). Measures how full the diary is -- the forward-plannable capacity metric, and the only chair metric computable ahead of time. Higher is better, up to practical limits; can exceed 100% when over-booked.'),
+    ('chair_utilisation',          'Chair Utilisation',                  'scheduling', 'percent',  'Percentage of worked time the patient was actually in the chair', 0, 1, 1, 40, 'above', 'rate',
+        'The percentage of available worked time in which a patient was actually in the surgery, from logged in-surgery time (capped to the slot so unclosed sessions cannot overstate it). Distinct from Diary Fill (how full the diary is booked): a full diary with poor chair utilisation means appointments are scheduled longer than the patient is really in the chair. Higher is better, up to practical limits.'),
     ('dna_rate',                   'DNA Rate',                           'scheduling', 'percent',  'Percentage of appointments that were did-not-attend', 0, 1, 1, 41, 'below', 'rate',
         'The percentage of booked appointments where the patient did not attend (DNA) and gave no notice. Represents lost capacity and revenue. Lower is better.'),
     ('days_until_30min_free',      'Days Until Next 30 Minute Free',     'scheduling', 'count',    'Days until the next available 30-minute diary slot for any practitioner', 1, 1, 1, 42, 'below', 'point_in_time',
@@ -81,6 +83,8 @@ USING (VALUES
         'Of cancelled appointments, the percentage cancelled at short notice — too late to realistically rebook the slot. These are the most damaging cancellations for capacity and revenue. Lower is better.'),
     ('immediate_forward_utilisation', 'Immediate Forward Utilisation', 'scheduling', 'percent', 'Percentage of the next 7 days of chair capacity already booked', 1, 1, 1, 47, 'above', 'point_in_time',
         'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
+    ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
+        'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
