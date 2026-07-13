@@ -695,6 +695,30 @@ Target machinery works (proven on T11) but is **empty for T100**:
   (avg-appt-value × forward count, or treatment-appt expected value). That SP addition is the remaining
   piece for IFU. (open_courses_without_appt_value already materialised via Fact_Treatment_Plans.)
 
+### SCHEDULING PACKAGE — build spec (agreed 2026-07-13, real-data validated on Craig Jack #28)
+Three distinct metrics + supporting data fixes. Real data proved: In_Surgery_Mins/Waiting_Mins ARE
+populated (~82-91%); scheduled slots overstate chair time (Exam 92%, HEX 72% of scheduled); ~1% of
+In_Surgery values are junk (unclosed sessions, 207 >8h) → must be capped.
+
+1. **Diary Fill %** (`diary_fill`, NEW) = scheduled appt hours ÷ available worked hours (block-adjusted).
+   "How full is the diary." The only one computable FORWARD. Can exceed 100% (over-booked).
+2. **Chair Utilisation** (`chair_utilisation`, REDEFINE from scheduled→actual) = capped in-chair hours ÷
+   available worked hours. In-chair per appt = LEAST(In_Surgery_Mins, mins to next appt's start, mins to
+   end of day); fall back to scheduled Duration_Mins where In_Surgery missing/out-of-range. Next appt via
+   LEAD(start) OVER (PARTITION BY practitioner, day ORDER BY start). Naturally <100%.
+3. **Patient Tracked in Surgery %** (`patient_tracked_in_surgery`, NEW) = appts with In_Surgery logged ÷
+   all appts. Reception behaviour / data quality (~82%).
+4. **Dummy diary entries** — Fact_Practitioner_Diaries gains `Is_Dummy` BIT. For (practitioner, day) with
+   real patient appts but NO diary row, insert a synthetic entry: Start=MIN(appt start), End=MAX(appt
+   finish), Available_Clinical_Mins=span, Is_Dummy=1 (real rows Is_Dummy=0). Needs Fact_Appointments
+   loaded before diaries. So appt-only days get a denominator.
+5. **Rename** current `chair_utilisation` display/meaning → Diary Fill; keep key `chair_utilisation` for
+   the actual metric. `immediate_forward_utilisation` = forward Diary Fill (already catalogued).
+
+Files: Fact_Practitioner_Diaries (table + load: Is_Dummy + synthetic), aggregate (capped chair mins +
+tracked count columns), Fact_Metric_Actuals (3 metrics), Config.Metric_Definitions (rename + 2 new),
+TabularEditor_Scheduling/MetricActuals.csx (measures — needs model re-apply). Build stage-by-stage, verify on dev.
+
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
 the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,

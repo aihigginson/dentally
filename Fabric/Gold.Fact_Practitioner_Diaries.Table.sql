@@ -19,6 +19,7 @@ CREATE TABLE [Gold].[Fact_Practitioner_Diaries](
 	[Total_Break_Mins] [int] NULL,
 	[Available_Clinical_Mins] [int] NULL,
 	[Break_Count] [int] NULL,
+	[Is_Dummy] [bit] NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )
