@@ -275,19 +275,45 @@ def main():
         for r in cur.fetchall()
     }
 
-    # Prior-year ACTUALS from Gold.Fact_Metric_Actuals, mapped surrogate -> business
-    # keys. Wrapped: the table may not exist until release V031 is deployed.
+    # Prior-year ACTUALS from Gold.Fact_Metric_Actuals. That fact is now DAILY grain
+    # (fk_Date + Numerator/Denominator), not the old FY grain, so we aggregate per
+    # (Metric, grain, FY) here, matching the DAX shapes:
+    #   rate (any Denominator present)  -> SUM(Num)/SUM(Den)  (x100 for percent format)
+    #   cumulative                      -> SUM(Num)
+    #   point-in-time (no Denominator)  -> Num at the latest date in the FY
+    # FY comes from Dim_Date.Financial_Year_Name; surrogate keys mapped to business keys
+    # (-1 -> NULL = practice/all grain). Wrapped: the fact may not exist on a fresh install.
     actuals = {}
     try:
         cur.execute("""
+            WITH base AS (
+                SELECT a.Tenant_ID, a.fk_Practice_Site, a.fk_Practitioner, a.Metric,
+                       d.Financial_Year_Name AS Period_Value, a.fk_Date,
+                       a.Numerator, a.Denominator, md.Target_Type, md.Format_Type,
+                       ROW_NUMBER() OVER (PARTITION BY a.Tenant_ID, a.fk_Practice_Site,
+                            a.fk_Practitioner, a.Metric, d.Financial_Year_Name
+                            ORDER BY a.fk_Date DESC) AS rn
+                FROM Gold.Fact_Metric_Actuals a
+                JOIN Gold.Dim_Date d            ON d.pk_Date    = a.fk_Date
+                JOIN Config.Metric_Definitions md ON md.Metric_Key = a.Metric
+                WHERE a.Tenant_ID = ?
+            )
             SELECT
-                CASE WHEN a.fk_Practice_Site = -1 THEN NULL ELSE ps.Site_ID END        AS Site_ID,
-                CASE WHEN a.fk_Practitioner  = -1 THEN NULL ELSE pr.Practitioner_ID END AS Practitioner_ID,
-                a.Metric, a.Period_Value, a.Actual_Value
-            FROM Gold.Fact_Metric_Actuals a
-            LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = a.Tenant_ID AND ps.pk_Practice_Site = a.fk_Practice_Site
-            LEFT JOIN Gold.Dim_Practitioners pr ON pr.Tenant_ID = a.Tenant_ID AND pr.pk_Practitioner  = a.fk_Practitioner
-            WHERE a.Tenant_ID = ?
+                CASE WHEN b.fk_Practice_Site = -1 THEN NULL ELSE ps.Site_ID END        AS Site_ID,
+                CASE WHEN b.fk_Practitioner  = -1 THEN NULL ELSE pr.Practitioner_ID END AS Practitioner_ID,
+                b.Metric, b.Period_Value,
+                CASE
+                    WHEN MAX(CASE WHEN b.Denominator IS NOT NULL THEN 1 ELSE 0 END) = 1
+                        THEN (CASE WHEN b.Format_Type = 'percent' THEN 100.0 ELSE 1 END)
+                             * SUM(b.Numerator) / NULLIF(SUM(b.Denominator), 0)
+                    WHEN b.Target_Type = 'cumulative' THEN SUM(b.Numerator)
+                    ELSE MAX(CASE WHEN b.rn = 1 THEN b.Numerator END)
+                END AS Actual_Value
+            FROM base b
+            LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = b.Tenant_ID AND ps.pk_Practice_Site = b.fk_Practice_Site
+            LEFT JOIN Gold.Dim_Practitioners  pr ON pr.Tenant_ID = b.Tenant_ID AND pr.pk_Practitioner  = b.fk_Practitioner
+            GROUP BY b.fk_Practice_Site, b.fk_Practitioner, ps.Site_ID, pr.Practitioner_ID,
+                     b.Metric, b.Period_Value, b.Target_Type, b.Format_Type
         """, [tid])
         actuals = {
             (r.Site_ID, r.Practitioner_ID, r.Metric, _norm_fy(r.Period_Value)): float(r.Actual_Value)
