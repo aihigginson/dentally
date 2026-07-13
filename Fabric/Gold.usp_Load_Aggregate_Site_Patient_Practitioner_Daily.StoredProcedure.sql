@@ -30,6 +30,11 @@
 --                             start (or diary end-of-day for the last appt) so unclosed-session
 --                             outliers can't exceed the slot. Feeds Chair Utilisation (actual) and
 --                             Patient Tracked in Surgery %. Appointment_Hours stays scheduled (Diary Fill).
+--    *09     13/07/2026  AIH  Dummy diary days: do NOT subtract block minutes from Worked_Hours. The
+--                             dummy Available_Clinical_Mins is now the booked patient time (diary *09),
+--                             which excludes blocks already; subtracting them again dropped the
+--                             denominator below booked -> Diary Fill ~145% / Chair Util ~116% on dummy
+--                             days. With worked = booked: Diary Fill 100% by design, Chair Util <=100%.
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -236,7 +241,11 @@ BEGIN
             d.fk_Practitioner,
             d.fk_Date_Day                                      AS fk_Date,
             d.Tenant_ID,
-            CAST(CASE WHEN SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) < 0 THEN 0
+            CAST(CASE
+                      -- Dummy days: Available_Clinical_Mins is already the booked patient time; blocks
+                      -- are not part of it, so do NOT subtract them (else Diary Fill exceeds 100%).
+                      WHEN MAX(CAST(ISNULL(d.Is_Dummy,0) AS INT)) = 1 THEN SUM(d.Available_Clinical_Mins)
+                      WHEN SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) < 0 THEN 0
                       ELSE SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) END
                  AS DECIMAL(10,2)) / 60.0                      AS Worked_Hours
         INTO #diary_agg

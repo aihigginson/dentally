@@ -20,6 +20,11 @@
 --                            a dummy entry spanning first->last appointment (Is_Dummy=1) so those days
 --                            get a worked-hours denominator for Chair Utilisation / Diary Fill. Sourced
 --                            from Silver.Appointments (no dependency on the Gold appointments fact).
+--    *09     13/07/2026  AIH Dummy Available_Clinical_Mins = SUM of appointment durations (booked time)
+--                            not the first->last span. The span swept in gap + block time and, once the
+--                            aggregate subtracted blocks, pushed dummy-day Diary Fill to ~145% / Chair
+--                            Util ~116%. Worked = booked -> Diary Fill 100% by design, Chair Util <=100%.
+--                            Pairs with aggregate *09 (no block subtraction on dummy days).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -107,9 +112,12 @@ BEGIN
           AND NULLIF(TRIM(pd.Finish_Time),'') IS NOT NULL;
 
         -- SYNTHETIC (dummy) diary entries: (practitioner, day) with real non-cancelled patient
-        -- appointments but NO worked diary row above. Span = first appt start -> last appt finish, so
-        -- those days get a worked-hours denominator. Sourced from Silver.Appointments (no dependency on
-        -- the Gold appointments fact). Marked Is_Dummy=1.
+        -- appointments but NO worked diary row above. Available_Clinical_Mins = SUM of the appointment
+        -- durations (the BOOKED time) -- NOT the first->last span, which would sweep in gap + block time
+        -- and (with the aggregate's block subtraction) push Diary Fill over 100%. With worked = booked,
+        -- Diary Fill on a dummy day is 100% by design and Chair Utilisation = in-chair / booked (<=100%).
+        -- Start/End_Time still show the first->last window. Blocks are NOT subtracted for dummy days in
+        -- the aggregate. Sourced from Silver.Appointments (no dependency on the Gold appointments fact).
         INSERT INTO #src (Tenant_ID, bk_Practitioner_Diary_ID, fk_Practitioner, fk_Date_Day, Day_Date,
                           Start_Time, End_Time, Unavailable, Session_Duration_Mins, Total_Break_Mins,
                           Break_Count, Available_Clinical_Mins, Is_Dummy)
@@ -126,7 +134,7 @@ BEGIN
             ag.span_mins                                                    AS Session_Duration_Mins,
             0                                                               AS Total_Break_Mins,
             0                                                               AS Break_Count,
-            ag.span_mins                                                    AS Available_Clinical_Mins,
+            ag.booked_mins                                                  AS Available_Clinical_Mins,
             CAST(1 AS BIT)                                                  AS Is_Dummy
         FROM (
             SELECT a.Tenant_ID, TRY_CAST(a.Practitioner_ID AS INT) AS Practitioner_ID,
@@ -135,7 +143,13 @@ BEGIN
                    MAX(TRY_CAST(SUBSTRING(a.Finish_Time, CHARINDEX('T',a.Finish_Time)+1, 8) AS TIME(0))) AS end_t,
                    DATEDIFF(MINUTE,
                        MIN(TRY_CAST(SUBSTRING(a.Start_Time,  CHARINDEX('T',a.Start_Time)+1,  8) AS TIME(0))),
-                       MAX(TRY_CAST(SUBSTRING(a.Finish_Time, CHARINDEX('T',a.Finish_Time)+1, 8) AS TIME(0)))) AS span_mins
+                       MAX(TRY_CAST(SUBSTRING(a.Finish_Time, CHARINDEX('T',a.Finish_Time)+1, 8) AS TIME(0)))) AS span_mins,
+                   -- BOOKED time = sum of the per-appointment durations (matches Fact Appointment_Hours),
+                   -- so Diary Fill = 100% on dummy days. Prefer the source Duration; fall back to finish-start.
+                   SUM(COALESCE(TRY_CAST(a.Duration AS INT),
+                       DATEDIFF(MINUTE,
+                           TRY_CAST(SUBSTRING(a.Start_Time,  CHARINDEX('T',a.Start_Time)+1,  8) AS TIME(0)),
+                           TRY_CAST(SUBSTRING(a.Finish_Time, CHARINDEX('T',a.Finish_Time)+1, 8) AS TIME(0))))) AS booked_mins
             FROM Silver.Appointments a
             WHERE ISNULL(a.State,'') NOT IN ('Cancelled') AND a.Patient_ID IS NOT NULL
               AND CHARINDEX('T', a.Start_Time) > 0 AND CHARINDEX('T', a.Finish_Time) > 0
