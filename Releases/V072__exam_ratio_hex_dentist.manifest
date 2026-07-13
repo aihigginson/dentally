@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V072 -- Exam Ratio: HEX-included + Dentist-scoped
+# =====================================================================
+# Exam Ratio read too low (all practitioners in the denominator; HEX excluded from
+# the numerator). Two changes:
+#  - Aggregate Exam_Count now counts Reason LIKE '%Exam%' OR '%HEX%' (HEX = combined
+#    Exam + Hygiene). Interim until the appointment reason-map lands.
+#  - Fact_Metric_Actuals exam_ratio computed over DENTIST practitioners only (num + den)
+#    via a dentist-only #exam aggregate.
+# Dev T100: ~22% -> ~59%.
+#
+# NB: re-deploying these two SPs also carries their accumulated fixes (aggregate =
+# chair-util V065 + short-notice V070; metric-actuals = the active-denominator
+# email/phone fix). Rebuild the aggregate -> Fact_Metric_Actuals -> model after deploy.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V072__exam_ratio_hex_dentist.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST

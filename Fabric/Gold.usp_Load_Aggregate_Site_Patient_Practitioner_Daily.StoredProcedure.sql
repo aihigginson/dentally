@@ -132,8 +132,10 @@ BEGIN
             SUM(CAST(apt.Is_DNA AS INT))                                        AS DNA_Appointments,
             SUM(b.Is_BBYL)                                                      AS BBYL_Appointments,
 
-            -- Exams: appointments whose Reason contains 'Exam' (case-insensitive)
-            SUM(CASE WHEN apt.Reason LIKE '%Exam%' THEN 1 ELSE 0 END)          AS Exam_Count,
+            -- Exams: Reason contains 'Exam' OR 'HEX' (HEX = combined Exam + Hygiene, so it counts as
+            -- an exam). Interim until the appointment reason-map lands; case-insensitive via collation.
+            SUM(CASE WHEN apt.Reason LIKE '%Exam%' OR apt.Reason LIKE '%HEX%' OR apt.Reason LIKE '%Hex%'
+                     THEN 1 ELSE 0 END)                                        AS Exam_Count,
 
             -- Appointment_Hours: scheduled clinical time in hours
             CAST(SUM(ISNULL(apt.Duration_Mins, 0)) AS DECIMAL(10,2)) / 60.0   AS Appointment_Hours,
