@@ -15,6 +15,11 @@
 --                             Cancellation rows excluded from the appointment spine are aggregated
 --                             separately and included via LEFT JOIN (matched dates) or a second
 --                             INSERT (cancellation-only dates with no other appointment on that day)
+--    *06     13/07/2026  AIH  Chair-utilisation fix (real data): no-patient diary BLOCKS (NOT WORKING/
+--                             Lunch/Leave -- ~76% of appt-hours) polluted BOTH sides. Numerator: spine
+--                             now requires fk_Patient>0 (blocks/placeholders are not appointments).
+--                             Denominator: Worked_Hours = diary avail MINUS on-day block minutes
+--                             (interim reason list -> reason-map Block category later).
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -139,7 +144,7 @@ BEGIN
         JOIN  #bbyl                  b   ON b.pk_Appointment = apt.pk_Appointment
         LEFT JOIN Gold.Dim_Patients  dp  ON dp.pk_Patient    = apt.fk_Patient
         LEFT JOIN Gold.Dim_Date      dd  ON dd.pk_Date       = apt.fk_Date_Start
-        WHERE apt.Is_Cancelled = 0
+        WHERE apt.Is_Cancelled = 0 AND apt.fk_Patient > 0   -- exclude no-patient diary BLOCKS/placeholders (*06)
         GROUP BY
             apt.fk_Practice_Site,
             apt.fk_Patient,
@@ -190,21 +195,42 @@ BEGIN
             tpi.fk_Date_Created,
             tpi.Tenant_ID;
 
-        -- ── Practitioner diary hours ─────────────────────────────────────────
-        -- Available_Clinical_Mins is the scheduled clinical time after breaks.
-        -- Same value across every patient row for that practitioner on that day.
+        -- ── Block/unavailable time (must come OUT of worked hours) ────────────
+        -- No-patient block appointments (NOT WORKING / Lunch / Annual Leave / Bank Holiday /
+        -- Training / Meeting / Medical) are NOT available clinical time. INTERIM explicit reason
+        -- list -> replace with the reason-map Block category once the appointment-reason map is
+        -- re-seeded from real data.
+        DROP TABLE IF EXISTS #block_agg;
         SELECT
-            fpd.fk_Practitioner,
-            fpd.fk_Date_Day                                    AS fk_Date,
-            fpd.Tenant_ID,
-            CAST(SUM(fpd.Available_Clinical_Mins) AS DECIMAL(10,2)) / 60.0
-                                                               AS Worked_Hours
+            apt.fk_Practitioner,
+            apt.fk_Date_Start                                  AS fk_Date,
+            apt.Tenant_ID,
+            SUM(ISNULL(apt.Duration_Mins,0))                   AS Block_Mins
+        INTO #block_agg
+        FROM Gold.Fact_Appointments apt
+        WHERE apt.Is_Cancelled = 0
+          AND (apt.fk_Patient IS NULL OR apt.fk_Patient <= 0)
+          AND apt.Reason IN ('NOT WORKING','Not working','Lunch','Annual Leave','Bank Holiday',
+                             'Training Course','Meeting','Medical appointment')
+        GROUP BY apt.fk_Practitioner, apt.fk_Date_Start, apt.Tenant_ID;
+
+        -- ── Practitioner diary hours (block time subtracted, floored at 0) ────
+        -- Available_Clinical_Mins is the scheduled clinical time after breaks; on-day block
+        -- appointments are removed so Worked_Hours reflects TRUE available time (*06).
+        SELECT
+            d.fk_Practitioner,
+            d.fk_Date_Day                                      AS fk_Date,
+            d.Tenant_ID,
+            CAST(CASE WHEN SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) < 0 THEN 0
+                      ELSE SUM(d.Available_Clinical_Mins) - ISNULL(bl.Block_Mins,0) END
+                 AS DECIMAL(10,2)) / 60.0                      AS Worked_Hours
         INTO #diary_agg
-        FROM Gold.Fact_Practitioner_Diaries fpd
-        GROUP BY
-            fpd.fk_Practitioner,
-            fpd.fk_Date_Day,
-            fpd.Tenant_ID;
+        FROM Gold.Fact_Practitioner_Diaries d
+        LEFT JOIN #block_agg bl ON bl.fk_Practitioner = d.fk_Practitioner
+                               AND bl.fk_Date        = d.fk_Date_Day
+                               AND bl.Tenant_ID      = d.Tenant_ID
+        GROUP BY d.fk_Practitioner, d.fk_Date_Day, d.Tenant_ID, bl.Block_Mins;
+        DROP TABLE IF EXISTS #block_agg;
 
         -- ── Full rebuild ─────────────────────────────────────────────────────
         DELETE FROM Gold.Aggregate_Site_Patient_Practitioner_Daily;

@@ -1,0 +1,19 @@
+# =====================================================================
+# Release V065 -- Chair utilisation: strip diary BLOCK time from both sides
+# =====================================================================
+# No-patient "block" appointments (NOT WORKING/Lunch/Annual Leave/Bank Holiday/
+# Training/Meeting/Medical) were ~76% of Appointment_Hours and also left worked
+# hours inflated. Fix in the daily aggregate:
+#  (1) appointment spine now requires fk_Patient>0 so blocks/placeholders don't
+#      count as appointments (also shifts DNA/exam/cancellation denominators -- intended);
+#  (2) Worked_Hours = diary Available_Clinical_Mins MINUS on-day block minutes,
+#      floored at 0 (interim explicit reason list -> reason-map Block category later).
+# Corrected chair utilisation ~74% on dev T100.
+#
+# Rebuild Gold.Aggregate_Site_Patient_Practitioner_Daily (+ Fact_Metric_Actuals + model).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V065__chair_util_blocks.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+TEST

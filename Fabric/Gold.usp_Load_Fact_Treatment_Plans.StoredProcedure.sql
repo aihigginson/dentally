@@ -9,6 +9,10 @@
 --                            fk_Patient/Practitioner/Practice_Site/Treatment_Plan + fk_Date_*
 --                            from Silver.Treatment_Plans. Delete-orphans / hash-update /
 --                            insert-new upsert (no watermark; processes all Silver, like the dim).
+--    *02     13/07/2026  AIH Item value split used tpi.Total_Price (NULL on real Dentally data -- a
+--                            mock-era field); real line value is tpi.Price. Completed/Outstanding
+--                            private value were £0 -> Open Courses (Without Appt) Value blank. Now
+--                            ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0).
 --  To Run			 :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -95,9 +99,9 @@ BEGIN
                 MAX(CASE WHEN ISNULL(tpi.Completed,0) = 0 THEN 1 ELSE 0 END)                 AS Has_Open_Item,
                 MAX(CASE WHEN tpi.Completed = 1 THEN TRY_CAST(tpi.Completed_At AS DATE) END) AS Last_Activity_Date,
                 SUM(CASE WHEN tpi.Completed = 1 AND ISNULL(tpi.NHS_Charge,0) = 0
-                         THEN ISNULL(tpi.Total_Price,0) ELSE 0 END)                          AS Private_Treatment_Value_Completed,
+                         THEN ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0) ELSE 0 END)                          AS Private_Treatment_Value_Completed,
                 SUM(CASE WHEN ISNULL(tpi.Completed,0) = 0 AND ISNULL(tpi.NHS_Charge,0) = 0
-                         THEN ISNULL(tpi.Total_Price,0) ELSE 0 END)                          AS Private_Treatment_Value_Outstanding
+                         THEN ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0) ELSE 0 END)                          AS Private_Treatment_Value_Outstanding
             FROM Silver.Treatment_Plan_Items tpi
             GROUP BY tpi.Tenant_ID, tpi.Treatment_Plan_ID
         ) itm ON itm.Treatment_Plan_ID = CAST(tp.Id AS INT) AND itm.Tenant_ID = tp.Tenant_ID

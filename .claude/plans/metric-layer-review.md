@@ -591,7 +591,11 @@ Notes: New-Patient is a cross-cut like HEX (a "New Patient Exam" is New Patient 
 the many-rows shape. The `Block` category does double duty (chair-util fix + cancellation/appt denom).
 63 distinct reasons total; this is per-tenant (each practice's free-text differs).
 
-### READY-TO-APPLY SQL DRAFTS (drafted 2026-07-13; NOT yet applied — package as a manifest when approved)
+### SQL FIXES — APPLIED 2026-07-13 (V064 + V065; awaiting user deploy + rebuild)
+FIX 1 → `V064__tp_price_outstanding` (Fact_Treatment_Plans SP). FIX 2 + FIX 3 → `V065__chair_util_blocks`
+(daily aggregate SP). Files edited + manifests written; NOT yet deployed. User to run:
+`.\Scripts\Deploy.ps1 -Manifest Releases\V064__tp_price_outstanding.manifest -SkipTests` then V065, then
+`Orchestrate_Build`. Drafts below kept for reference.
 
 **FIX 1 — Bug E: Open-course outstanding value (FULLY CONFIRMED).**
 File `Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql`, item aggregate CTE lines 97-100.
