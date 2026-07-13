@@ -127,6 +127,11 @@ UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
 
+-- NHS Revenue target is derived from the NHS CONTRACT (UDA target x rate), not the
+-- manually-entered targets spreadsheet.
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] = 'nhs_revenue';
+
 -- Exam Ratio target is only meaningful for Dentists -> only generate Dentist practitioner rows.
 UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
     WHERE [Metric_Key] = 'exam_ratio';

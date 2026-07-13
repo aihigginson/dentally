@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V068 -- NHS Revenue: no manual (spreadsheet) target
+# =====================================================================
+# NHS Revenue's target is derived from the NHS contract (UDA target x rate),
+# not the manually-entered targets template, so it should not appear as a
+# target-bearing row. Sets Has_Target = 0 for nhs_revenue (post-seed adjustment
+# in Config.Metric_Definitions.Data.sql). Idempotent re-seed; the Has_Target
+# column already exists (V067), so only the Data.sql needs re-deploying.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V068__nhs_revenue_no_sheet_target.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST
