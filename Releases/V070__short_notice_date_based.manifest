@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V070 -- Short Notice Cancellation: date-based
+# =====================================================================
+# Dim_Cancellation_Reasons.Is_Short_Notice is empty on real Dentally data (the
+# cancellation-reason map is mock-seeded), so Short Notice Cancellation Rate read 0%.
+# Redefine in the daily aggregate: short notice = cancelled within @Short_Notice_Days
+# of the appointment (Cancelled_At vs appointment date). On dev T100: ~24% at <=1 day.
+#
+# NOTE: this re-deploys the daily aggregate SP, so it also carries the V065 chair-
+# utilisation block fix (same file). Rebuild the aggregate (+ Fact_Metric_Actuals +
+# model) after deploy.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V070__short_notice_date_based.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+TEST

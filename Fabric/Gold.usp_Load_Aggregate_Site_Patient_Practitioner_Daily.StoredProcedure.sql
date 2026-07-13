@@ -20,6 +20,10 @@
 --                             now requires fk_Patient>0 (blocks/placeholders are not appointments).
 --                             Denominator: Worked_Hours = diary avail MINUS on-day block minutes
 --                             (interim reason list -> reason-map Block category later).
+--    *07     13/07/2026  AIH  Short Notice Cancellations redefined: the reason-map flag
+--                             (Dim_Cancellation_Reasons.Is_Short_Notice) is empty on real Dentally
+--                             data. Now date-based -- cancelled within @Short_Notice_Days of the
+--                             appointment (Cancelled_At vs the appointment date).
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -88,7 +92,10 @@ BEGIN
 
         -- ── Cancellation counts (per site-patient-practitioner-date) ────────────
         -- Built separately because cancelled appointments are excluded from the
-        -- appointment spine.  Is_Short_Notice comes from Dim_Cancellation_Reasons.
+        -- appointment spine. Short notice = cancelled within @Short_Notice_Days of the
+        -- appointment (Cancelled_At vs the appointment date) -- the reason-map
+        -- Dim_Cancellation_Reasons.Is_Short_Notice is empty on real Dentally data (*07).
+        DECLARE @Short_Notice_Days INT = 1;   -- days before the appt that count as short notice (configurable)
         SELECT
             apt.fk_Practice_Site                                                AS fk_Site,
             apt.fk_Patient,
@@ -96,12 +103,12 @@ BEGIN
             apt.fk_Date_Start                                                   AS fk_Date,
             apt.Tenant_ID,
             COUNT(*)                                                            AS Cancelled_Appointments,
-            SUM(CAST(ISNULL(dcr.Is_Short_Notice, 0) AS INT))                   AS Short_Notice_Cancellations
+            SUM(CASE WHEN apt.Cancelled_At IS NOT NULL AND dd.Full_Date IS NOT NULL
+                      AND DATEDIFF(day, CAST(apt.Cancelled_At AS DATE), dd.Full_Date) BETWEEN 0 AND @Short_Notice_Days
+                     THEN 1 ELSE 0 END)                                         AS Short_Notice_Cancellations
         INTO #cancel_agg
         FROM Gold.Fact_Appointments apt
-        LEFT JOIN Gold.Dim_Cancellation_Reasons dcr
-            ON  dcr.pk_Cancellation_Reason = apt.fk_Cancellation_Reason
-            AND dcr.pk_Cancellation_Reason > 0
+        LEFT JOIN Gold.Dim_Date dd ON dd.pk_Date = apt.fk_Date_Start
         WHERE apt.Is_Cancelled = 1
         GROUP BY
             apt.fk_Practice_Site,
