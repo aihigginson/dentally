@@ -118,10 +118,11 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
-// Chair utilisation: appointment hours / worked hours
-// Worked Hours is stored per practitioner-day; deduplicate to avoid
-// inflating it when a practitioner sees multiple patients on the same day
-add("Chair Utilisation",
+// Diary Fill: SCHEDULED appointment hours / worked hours -- how full the diary is.
+// Worked Hours is stored per practitioner-day; deduplicate to avoid inflating it when a
+// practitioner sees multiple patients on the same day. (Retargeted onto _Metric Actuals
+// [diary_fill] by TabularEditor_MetricActuals.csx; bespoke fallback kept for standalone runs.)
+add("Diary Fill",
     @"VAR by_prac_day =
     SUMMARIZE(
         'Aggregate Site Patient Practitioner Daily',
@@ -133,6 +134,29 @@ RETURN
     DIVIDE(
         SUM('Aggregate Site Patient Practitioner Daily'[Appointment Hours]),
         total_worked)",
+    "#,##0.0%");
+
+// Chair Utilisation: ACTUAL capped in-chair hours / worked hours -- real time in the chair.
+// (Retargeted onto _Metric Actuals[chair_utilisation]; bespoke fallback for standalone runs.)
+add("Chair Utilisation",
+    @"VAR by_prac_day =
+    SUMMARIZE(
+        'Aggregate Site Patient Practitioner Daily',
+        'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
+        'Aggregate Site Patient Practitioner Daily'[fk Date],
+        ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+RETURN
+    DIVIDE(
+        SUM('Aggregate Site Patient Practitioner Daily'[Chair Hours]),
+        total_worked)",
+    "#,##0.0%");
+
+// Patient Tracked in Surgery: appts with an in-surgery timestamp / all appts (reception tracking).
+add("Patient Tracked in Surgery",
+    @"DIVIDE(
+    SUM('Aggregate Site Patient Practitioner Daily'[Tracked Appointments]),
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
 add("DNA Rate",
@@ -204,7 +228,9 @@ RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'),
 // book_before_you_leave → above + percent → absolute pp
 // cancellation_frequency / short_notice → below + percent → absolute pp (lower is better)
 
+kpi("Diary Fill",                       "#,##0.0%", tEff100("diary_fill"),                     vPp("Diary Fill"),                       bgHigherPp("Diary Fill", "diary_fill"));
 kpi("Chair Utilisation",                "#,##0.0%", tEff100("chair_utilisation"),              vPp("Chair Utilisation"),                bgHigherPp("Chair Utilisation", "chair_utilisation"));
+kpi("Patient Tracked in Surgery",       "#,##0.0%", tEff100("patient_tracked_in_surgery"),     vPp("Patient Tracked in Surgery"),       bgHigherPp("Patient Tracked in Surgery", "patient_tracked_in_surgery"));
 kpi("DNA Rate",                         "#,##0.0%", tEff100("dna_rate"),                       vPp("DNA Rate"),                         bgLowerPp("DNA Rate", "dna_rate"));
 kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_free"),             vPct("Days Until Next 30 Minute Free"),  bgLowerEff("Days Until Next 30 Minute Free", "days_until_30min_free"));
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
