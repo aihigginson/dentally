@@ -231,9 +231,9 @@ def main():
     # Metrics
     cur.execute("""
         SELECT Metric_Key, Display_Name, Section, Format_Type,
-               Supports_Site, Supports_Practitioner
+               Supports_Site, Supports_Practitioner, Target_Practitioner_Roles
         FROM Config.Metric_Definitions
-        WHERE Is_Active = 1
+        WHERE Is_Active = 1 AND ISNULL(Has_Target, 1) = 1
         ORDER BY Display_Order
     """)
     metrics = cur.fetchall()
@@ -256,7 +256,7 @@ def main():
 
     # Practitioners
     cur.execute("""
-        SELECT Practitioner_ID, Full_Name, Site_ID
+        SELECT Practitioner_ID, Full_Name, Site_ID, Role
         FROM Gold.Dim_Practitioners
         WHERE Tenant_ID = ? AND Active = 1
         ORDER BY Full_Name
@@ -358,7 +358,12 @@ def main():
                 for s in sites:
                     data_rows.append(build_row("Site", s.Site_ID, s.Site_Name, "", "", m))
             if m.Supports_Practitioner:
+                # Target_Practitioner_Roles (CSV) scopes which roles get a practitioner target
+                # row; NULL/empty = all supported practitioners (e.g. exam_ratio -> Dentist only).
+                roles = [x.strip().lower() for x in (m.Target_Practitioner_Roles or "").split(",") if x.strip()]
                 for pr in practitioners:
+                    if roles and (pr.Role or "").strip().lower() not in roles:
+                        continue
                     data_rows.append(build_row("Practitioner", "", "", pr.Practitioner_ID, pr.Full_Name, m))
 
         out_path = out_dir / f"T{tid}_{fy}.xlsx"

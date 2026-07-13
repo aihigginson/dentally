@@ -112,3 +112,22 @@ WHEN NOT MATCHED THEN INSERT (
     src.[Supports_Site], src.[Supports_Practitioner], src.[Is_Active], src.[Display_Order], src.[Range_Type], src.[Target_Type], src.[Long_Description]
 );
 GO
+
+-- ── Post-seed adjustments (2026-07-13) ──────────────────────────────────────
+-- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
+
+-- Cut metrics: removed from the product (dead-end / superseded).
+--   revenue_per_dentist_hour = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
+--   acceptance_rate          = dead end on real data (Accepted_At NULL on all plans)
+--   days_until_1hr_free       = dropped; keep only the 30-minute availability metric
+UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free');
+
+-- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
+
+-- Exam Ratio target is only meaningful for Dentists -> only generate Dentist practitioner rows.
+UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
+    WHERE [Metric_Key] = 'exam_ratio';
+GO
