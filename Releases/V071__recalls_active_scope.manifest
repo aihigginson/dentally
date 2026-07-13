@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V071 -- Recall KPIs scoped to active patients
+# =====================================================================
+# Overdue Recalls + Retention Outlook were including inactive patients.
+# Fact_Recalls now requires Dim_Patients.Active=1 in Is_In_Scope and
+# Retention_Outlook_In_Scope, so both cards (which read those flags via
+# Fact_KPI_Snapshot / Fact_Metric_Actuals) become active-scoped.
+#
+# Rebuild order after deploy: Fact_Recalls -> Fact_KPI_Snapshot -> Fact_Metric_Actuals
+# -> model (a normal Orchestrate_Build covers it).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V071__recalls_active_scope.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+
+TEST
