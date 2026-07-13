@@ -118,7 +118,6 @@ var metrics = new[] {
     new[]{"Lapsed Patients",                  "lapsed_patients",                "cum",     "#,##0"},
     new[]{"Lapsed (Set Inactive)",            "lapsed_deactivated",             "cum",     "#,##0"},
     new[]{"Lapsed (Silently)",                "lapsed_calculated",              "cum",     "#,##0"},
-    new[]{"Overdue Recalls",                  "overdue_recalls",                "snap",    "#,##0"},
     new[]{"Outstanding Invoices",             "outstanding_invoices",           "snap",    "£#,##0"},
     // Open Courses family now reads Gold.Fact_Treatment_Plans LIVE (via '_Treatment Plans' +
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
@@ -126,7 +125,10 @@ var metrics = new[] {
     new[]{"Days Until Next 30 Minute Free",   "days_until_30min_free",          "cur",     "#,##0"},
     new[]{"Email Details Rate",               "email_details_rate",             "currate", "#,##0.0%"},
     new[]{"Phone Details Rate",               "phone_details_rate",             "currate", "#,##0.0%"},
-    new[]{"Retention Outlook",                "retention_outlook",              "currate", "#,##0.0%"},
+    new[]{"Dentist Retention Outlook",        "dentist_retention_outlook",      "currate", "#,##0.0%"},
+    new[]{"Hygiene Retention Outlook",        "hygiene_retention_outlook",      "currate", "#,##0.0%"},
+    new[]{"Dentist Recall Conversion",        "dentist_recall_conversion",      "currate", "#,##0.0%"},
+    new[]{"Hygiene Recall Conversion",        "hygiene_recall_conversion",      "currate", "#,##0.0%"},
 };
 
 int applied = 0, missing = 0, made = 0;

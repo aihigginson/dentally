@@ -292,21 +292,52 @@ VAR lapsed_flow  =
 RETURN [New Patients] - lapsed_flow",
     "#,##0");
 
-add("Retention Outlook",
-    @"VAR due =
-    CALCULATE(
-        DISTINCTCOUNT( '_Recalls'[fk Patient] ),
-        '_Recalls'[Is In Scope] = TRUE(),
-        REMOVEFILTERS( 'List Date' )
-    )
-VAR booked =
-    CALCULATE(
-        DISTINCTCOUNT( '_Recalls'[fk Patient] ),
-        '_Recalls'[Is In Scope] = TRUE(),
-        '_Recalls'[Is Booked]   = TRUE(),
-        REMOVEFILTERS( 'List Date' )
-    )
-RETURN DIVIDE( booked, due )",
+// Recall model (two sources): Dentist/Hygiene Retention Outlook (FORWARD, patient recall dates) and
+// Dentist/Hygiene Recall Conversion (REACTIVE, recall-record status). All four are materialised in
+// Gold.Fact_Metric_Actuals and read date-blind (currate shape) -- retargeted by TabularEditor_MetricActuals.csx.
+add("Dentist Retention Outlook",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)",
+    "#,##0.0%");
+add("Hygiene Retention Outlook",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)",
+    "#,##0.0%");
+add("Dentist Recall Conversion",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)",
+    "#,##0.0%");
+add("Hygiene Recall Conversion",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)",
     "#,##0.0%");
 
 add("Active Patients",
@@ -362,25 +393,6 @@ add("Recalls Overdue Not Sent",
         'Aggregate Site Patient Current'[Recall Due] = TRUE())))",
     "#,##0.0%");
 
-add("Overdue Recalls",
-    @"VAR snap_fk =
-    CALCULATE(
-        MAXX(
-            FILTER( ALLSELECTED( '_KPI Snapshot' ), '_KPI Snapshot'[Snapshot Grain] = ""weekly"" ),
-            '_KPI Snapshot'[fk Date]
-        ),
-        REMOVEFILTERS( 'List Practitioners' )
-    )
-RETURN
-CALCULATE(
-    SUM( '_KPI Snapshot'[Value] ),
-    '_KPI Snapshot'[fk Date]        = snap_fk,
-    '_KPI Snapshot'[Metric]         = ""overdue_recalls"",
-    '_KPI Snapshot'[Snapshot Grain] = ""weekly"",
-    REMOVEFILTERS( 'List Practitioners' )
-)",
-    "#,##0");
-
 // Contactability is about the ACTIVE base (inactive patients have contact removed), so both
 // numerator and denominator are active-scoped -> % of ACTIVE patients contactable (~94%), not
 // diluted by the ~21k historical/inactive patients.
@@ -418,8 +430,10 @@ kpi("Active Patients",          "#,##0",    tEffAdd("active_patients"),         
 kpi("Recall Effectiveness",     "#,##0.0%", tEff100("recall_compliance"),        vPp("Recall Effectiveness"),        bgHigherPp("Recall Effectiveness", "recall_compliance"));
 kpi("Patient Retention",        "#,##0.0%", tEff100("patient_retention"),        vPpP("Patient Retention"),          bgHigherPp("Patient Retention", "patient_retention"));
 kpi("Recalls Overdue Not Sent", "#,##0.0%", tEff100("recalls_overdue_not_sent"), vPpP("Recalls Overdue Not Sent"),   bgLowerPp("Recalls Overdue Not Sent", "recalls_overdue_not_sent"));
-kpi("Retention Outlook",        "#,##0.0%", tEff100("retention_outlook"),        vPpGreyP("Retention Outlook"),      bgHigherPpGrey("Retention Outlook", "retention_outlook"));
-kpi("Overdue Recalls",          "#,##0",    tEffAdd("overdue_recalls"),             vPctGreyP("Overdue Recalls"),       bgLowerEffGrey("Overdue Recalls", "overdue_recalls"));
+kpi("Dentist Retention Outlook","#,##0.0%", tEff100("dentist_retention_outlook"), vPpGreyP("Dentist Retention Outlook"), bgHigherPpGrey("Dentist Retention Outlook", "dentist_retention_outlook"));
+kpi("Hygiene Retention Outlook","#,##0.0%", tEff100("hygiene_retention_outlook"), vPpGreyP("Hygiene Retention Outlook"), bgHigherPpGrey("Hygiene Retention Outlook", "hygiene_retention_outlook"));
+kpi("Dentist Recall Conversion","#,##0.0%", tEff100("dentist_recall_conversion"), vPpGreyP("Dentist Recall Conversion"), bgHigherPpGrey("Dentist Recall Conversion", "dentist_recall_conversion"));
+kpi("Hygiene Recall Conversion","#,##0.0%", tEff100("hygiene_recall_conversion"), vPpGreyP("Hygiene Recall Conversion"), bgHigherPpGrey("Hygiene Recall Conversion", "hygiene_recall_conversion"));
 kpi("Email Details Rate",       "#,##0.0%", tEff100("email_details_rate"),       vPpP("Email Details Rate"),         bgHigherPp("Email Details Rate", "email_details_rate"));
 kpi("Phone Details Rate",       "#,##0.0%", tEff100("phone_details_rate"),       vPpP("Phone Details Rate"),         bgHigherPp("Phone Details Rate", "phone_details_rate"));
 

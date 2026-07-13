@@ -39,6 +39,14 @@ USING (VALUES
         'Of patients whose recall is overdue, the percentage who have not been sent any recall reminder. A process-failure measure — these patients are due back but have had no prompt. Lower is better.'),
     ('retention_outlook',          'Retention Outlook',                  'patients',   'percent',  'Percentage of patients with an active recall who have a future appointment booked', 1, 0, 1, 25, 'above', 'point_in_time',
         'The percentage of patients with an active recall who already have a future appointment booked. A forward-looking retention measure: how much of the recalled patient base is secured to return. Higher is better.'),
+    ('dentist_retention_outlook',  'Dentist Retention Outlook',          'patients',   'percent',  'Of patients whose dentist recall falls in the next 4 weeks, the % with a future exam booked', 1, 0, 1, 23, 'above', 'point_in_time',
+        'Of active patients whose dentist recall date falls within the next four weeks, the percentage who already have a future examination booked. A forward-looking retention gauge -- how well the upcoming recall book is converting into booked exams. Higher is better.'),
+    ('hygiene_retention_outlook',  'Hygiene Retention Outlook',          'patients',   'percent',  'Of patients whose hygiene recall falls in the next 4 weeks, the % with a future hygiene appointment booked', 1, 0, 1, 24, 'above', 'point_in_time',
+        'Of active patients whose hygienist recall date falls within the next four weeks, the percentage who already have a future hygiene (scale & polish) appointment booked. A forward-looking retention gauge for hygiene. Higher is better.'),
+    ('dentist_recall_conversion',  'Dentist Recall Conversion',          'patients',   'percent',  'Of concluded dentist recalls that were reminded, the % where the patient returned', 1, 0, 1, 25, 'above', 'point_in_time',
+        'Of dentist recall cycles that were actively chased (a reminder was sent) and have since concluded, the percentage that ended with the patient returning (Completed vs Missed). Measures how effective the recall reach-out is once you have to contact the patient. Higher is better.'),
+    ('hygiene_recall_conversion',  'Hygiene Recall Conversion',          'patients',   'percent',  'Of concluded hygiene recalls that were reminded, the % where the patient returned', 1, 0, 1, 26, 'above', 'point_in_time',
+        'Of hygienist recall cycles that were actively chased (a reminder was sent) and have since concluded, the percentage that ended with the patient returning (Completed vs Missed). Higher is better.'),
     ('lapsed_patients',            'Lapsed Patients',                    'patients',   'count',    'Patients who lapsed in the period (deactivated, or 730+ days since last seen)', 1, 1, 1, 26, 'below', 'cumulative',
         'The number of patients whose 24-month examination clock expired during the period — who passed the point of being considered active without returning. Now a flow metric summed over the period. Lower is better; a measure of attrition.'),
     ('lapsed_deactivated',         'Lapsed (Set Inactive)',              'patients',   'count',    'Patients set inactive (Active=0) in the period',                             1, 1, 1, 27, 'below', 'cumulative',
@@ -126,8 +134,12 @@ GO
 --   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
 --   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
 --                                   forward date window via the 'List Date Unconstrained' heatmap axis)
+--   retention_outlook / overdue_recalls = replaced by the two-source recall model: Dentist/Hygiene
+--                                   Retention Outlook (forward, patient recall dates) + Dentist/Hygiene
+--                                   Recall Conversion (reactive, real recall-record status). The old
+--                                   pair counted completed/historical recall cycles as overdue.
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation');
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'overdue_recalls');
 
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0

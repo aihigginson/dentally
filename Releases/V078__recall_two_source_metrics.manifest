@@ -1,0 +1,28 @@
+# =====================================================================
+# Release V078 -- Recall model rebuild (two-source metrics)
+# =====================================================================
+# Root cause (verified): recall RECORDS are a HISTORY of cycles (Completed/Missed/Unbooked/
+# Booked), materialised only ~1 month before due; Gold re-derived status from the due date,
+# so completed/historical cycles were counted as "overdue" -> Overdue Recalls (3,126) and
+# Retention Outlook (52%) were both wrong. The FORWARD schedule lives on the PATIENT
+# (Dim_Patients.Dentist_Recall_Date / Hygienist_Recall_Date).
+#
+# Replaces retention_outlook + overdue_recalls with FOUR metrics:
+#   dentist_retention_outlook / hygiene_retention_outlook  (FORWARD: patient recall date <=4wk,
+#       numerator = future exam / scale&polish booked)               -> ~77.7% / ~79.6%
+#   dentist_recall_conversion / hygiene_recall_conversion  (REACTIVE: recall records where a
+#       reminder was sent + concluded, real Status Completed vs Missed) -> ~95.6% / ~95.3%
+#
+#   * usp_Load_Fact_Metric_Actuals: new #ret (Dim_Patients) + #conv (Fact_Recalls.Status) blocks.
+#   * Config.Metric_Definitions: 4 new rows; retention_outlook + overdue_recalls set Is_Active=0.
+#
+# C# (NOT a warehouse deploy): TabularEditor_Patients.csx + TabularEditor_MetricActuals.csx --
+# re-apply in Tabular Editor + refresh the model.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V078__recall_two_source_metrics.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST
