@@ -667,6 +667,18 @@ Effect (with FIX 2): chair utilisation ≈ real appts ÷ (diary − block) ≈ ~
 Fact_Metric_Actuals + model. FIX 1 is independent; FIX 2+3 ship together (both touch the aggregate).
 Files are UTF-16 LE BOM — preserve encoding on edit.
 
+### TARGET COVERAGE — Maple has NO business targets (found 2026-07-13)
+Target machinery works (proven on T11) but is **empty for T100**:
+- `Input.Targets`: 0 rows for T100 (99 rows T11 only). `Fact_Effective_Targets`: 0 for T100 (252 T11).
+- `Fact_Daily_Targets` T100 = 261 rows but **`nhs_udas` only, STALE (fk_Date 7762-8126 ≈ 2020-21)**.
+→ Every Tier-1 card shows an ACTUAL but no target / variance / RAG for the live customer.
+- Target-calc (DAX) exists for 4 of the 6 Tier-1: total_revenue (tDaily), net_patient_growth
+  (tEffRunRate), revenue_per_clinical_hour (tEff), retention_outlook (tEff100). The 2 NEW ones
+  (immediate_forward_utilisation, open_courses_without_appt_value) have neither metric nor target.
+→ ACTIONS: (a) build the 2 new metrics + their target keys; (b) **enter Maple business targets into
+  `Input.Targets`** (per-practice onboarding step; use the T11 Excel template/prefill); (c) NHS target
+  needs current contracts (see contract-ingestion gap). Tier-1 RAG is blank until (b).
+
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
 the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,
