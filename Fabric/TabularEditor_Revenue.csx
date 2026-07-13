@@ -220,20 +220,6 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
 
-add("Revenue Per Dentist Hour",
-    @"VAR by_prac_day =
-SUMMARIZE(
-    FILTER(
-        'Aggregate Site Patient Practitioner Daily',
-        RELATED('List Practitioners'[Role]) IN {""dentist"",""orthodontist""}
-    ),
-    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
-    'Aggregate Site Patient Practitioner Daily'[fk Date],
-    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
-VAR total_worked = SUMX(by_prac_day, [WH])
-RETURN DIVIDE([Total Revenue], total_worked)",
-    "£#,##0");
-
 add("DNA Revenue Lost",
     @"VAR dna_count =
     CALCULATE(
