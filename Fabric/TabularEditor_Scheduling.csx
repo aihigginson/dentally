@@ -192,21 +192,27 @@ add("Short Notice Cancellation Rate",
     SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
     "#,##0.0%");
 
-// ── NEW Tier-1: Immediate forward utilisation + forward book value ────────────
-// Current-state metrics fed from Gold.Fact_Metric_Actuals (materialised like days_until_free).
-// BLANK until the warehouse SP writes the metric rows: 'immediate_forward_utilisation'
-// (Numerator = booked forward hours, Denominator = available forward hours, next 7 days) and
-// 'forward_book_value' (Numerator = £ forward-book value). Read via the generic current-state
-// shape (date-blind: REMOVEFILTERS on List Date + List Date Grouping), respecting site/practitioner.
-add("Immediate Forward Utilisation",
+// ── Forward heatmap: Diary Fill projected forwards ───────────────────────────
+// Same metric as [Diary Fill], but its date axis comes from 'List Date Unconstrained'
+// (a second alias of PBI.[List Date]) so the external period filter can't clamp it to today.
+// Put 'List Date Unconstrained' on the heatmap axis + a relative-date slicer (e.g. 0..13 days)
+// to look as far forward as you like. REMOVEFILTERS drops the app's period filter; the TREATAS
+// on 'List Date Unconstrained'[pk Date] re-applies the heatmap's date window onto the fact --
+// robust whether or not the physical relationship you add to _Metric Actuals is active.
+// (Works forwards because 7,040 future appts + 5,127 future rota rows exist in the aggregate.)
+add("Diary Fill (Forward)",
     @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
+    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""immediate_forward_utilisation"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
-VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
+    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""immediate_forward_utilisation"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 
@@ -236,7 +242,7 @@ kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_fr
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
-// NEW Tier-1: forward fill % -> above + percent -> absolute pp band (like chair_utilisation).
-kpi("Immediate Forward Utilisation",    "#,##0.0%", tEff100("immediate_forward_utilisation"),   vPp("Immediate Forward Utilisation"),    bgHigherPp("Immediate Forward Utilisation", "immediate_forward_utilisation"));
+// Diary Fill (Forward) is a bespoke heatmap measure (its own unconstrained date axis), so it has
+// no data-driven KPI triple here -- colour the heatmap by value, or vs the [Diary Fill Target].
 
 Info("Scheduling KPI measures created (data-driven).");

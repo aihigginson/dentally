@@ -121,11 +121,13 @@ GO
 -- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
 
 -- Cut metrics: removed from the product (dead-end / superseded).
---   revenue_per_dentist_hour = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
---   acceptance_rate          = dead end on real data (Accepted_At NULL on all plans)
---   days_until_1hr_free       = dropped; keep only the 30-minute availability metric
+--   revenue_per_dentist_hour      = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
+--   acceptance_rate               = dead end on real data (Accepted_At NULL on all plans)
+--   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
+--   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
+--                                   forward date window via the 'List Date Unconstrained' heatmap axis)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free');
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation');
 
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
