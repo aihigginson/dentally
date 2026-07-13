@@ -108,7 +108,6 @@ var metrics = new[] {
     new[]{"Short Notice Cancellation Rate",   "short_notice_cancellation_rate", "rate",    "#,##0.0%"},
     new[]{"Exam Ratio",                       "exam_ratio",                     "rate",    "#,##0.0%"},
     new[]{"Chair Utilisation",                "chair_utilisation",              "rate",    "#,##0.0%"},
-    new[]{"Treatment Acceptance Rate",        "acceptance_rate",                "rate",    "#,##0.0%"},
     new[]{"Average Plan Value",               "avg_plan_value",                 "rate",    "£#,##0"},
     new[]{"Revenue Per Clinical Hour",        "revenue_per_clinical_hour",      "rate",    "£#,##0"},
     new[]{"Discounts",                        "discounts",                      "rate",    "0.0%"},
@@ -123,7 +122,6 @@ var metrics = new[] {
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
     // rules + 3-month recency band evaluate at query time (no row rebuild as courses age).
     new[]{"Days Until Next 30 Minute Free",   "days_until_30min_free",          "cur",     "#,##0"},
-    new[]{"Days Until Next 1 Hour Free",      "days_until_1hr_free",            "cur",     "#,##0"},
     new[]{"Email Details Rate",               "email_details_rate",             "currate", "#,##0.0%"},
     new[]{"Phone Details Rate",               "phone_details_rate",             "currate", "#,##0.0%"},
     new[]{"Retention Outlook",                "retention_outlook",              "currate", "#,##0.0%"},

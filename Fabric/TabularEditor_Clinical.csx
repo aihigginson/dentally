@@ -182,20 +182,6 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
-// Acceptance rate: plans that have progressed to having a start date / all plans.
-// Plan grain via Gold.Fact_Treatment_Plans ('_Treatment Plans'): the plan's OWN fk_Practitioner
-// relationship drives the practitioner slicer -- no item routing. No ACTIVE date relationship on
-// the fact, so the page/embed date slicer is ignored (current-state), no REMOVEFILTERS needed.
-add("Treatment Acceptance Rate",
-    @"DIVIDE(
-    CALCULATE(
-        SUM('_Treatment Plans'[Treatment Plan Count]),
-        NOT ISBLANK('_Treatment Plans'[Start Date])
-    ),
-    SUM('_Treatment Plans'[Treatment Plan Count])
-)",
-    "#,##0.0%");
-
 // Open courses: started-but-unfinished courses -- the plan has at least one COMPLETED item AND
 // at least one OPEN item (Course Status In Progress | Open - No Appointment). Course Status
 // (Gold.Fact_Treatment_Plans, item roll-up) already honours the plan-complete override (a plan
@@ -268,7 +254,6 @@ add("Average Plan Value",
 // open_courses_value        → above + currency → relative %
 // avg_plan_value            → above + currency → relative %
 
-kpi("Treatment Acceptance Rate",        "#,##0.0%", tEff100("acceptance_rate"),         vPp("Treatment Acceptance Rate"),                bgHigherPp("Treatment Acceptance Rate", "acceptance_rate"));
 kpi("Open Courses",                     "#,##0",    tEffAdd("open_courses"),               vPctGrey("Open Courses"),                        bgLowerEffGrey("Open Courses", "open_courses"));
 kpi("Open Courses Without Appointment", "#,##0",    tEffAdd("open_courses_without_appt"),  vPctP("Open Courses Without Appointment"),       bgLowerEff("Open Courses Without Appointment", "open_courses_without_appt"));
 // Tier-1 Home card: the £ value of the leaky bucket (started, unfinished, no future appt). Value

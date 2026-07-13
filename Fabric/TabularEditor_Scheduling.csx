@@ -146,10 +146,6 @@ add("Days Until Next 30 Minute Free",
     @"MIN('Aggregate Site Practitioner Current'[Days Until Next 30 Mins])",
     "#,##0");
 
-add("Days Until Next 1 Hour Free",
-    @"MIN('Aggregate Site Practitioner Current'[Days Until Next 1 Hour Free])",
-    "#,##0");
-
 add("Book Before You Leave",
     @"DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[BBYL Appointments]),
@@ -211,7 +207,6 @@ RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'),
 kpi("Chair Utilisation",                "#,##0.0%", tEff100("chair_utilisation"),              vPp("Chair Utilisation"),                bgHigherPp("Chair Utilisation", "chair_utilisation"));
 kpi("DNA Rate",                         "#,##0.0%", tEff100("dna_rate"),                       vPp("DNA Rate"),                         bgLowerPp("DNA Rate", "dna_rate"));
 kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_free"),             vPct("Days Until Next 30 Minute Free"),  bgLowerEff("Days Until Next 30 Minute Free", "days_until_30min_free"));
-kpi("Days Until Next 1 Hour Free",      "#,##0",    tEffAdd("days_until_1hr_free"),               vPct("Days Until Next 1 Hour Free"),     bgLowerEff("Days Until Next 1 Hour Free", "days_until_1hr_free"));
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
