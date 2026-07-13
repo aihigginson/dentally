@@ -679,6 +679,22 @@ Target machinery works (proven on T11) but is **empty for T100**:
   `Input.Targets`** (per-practice onboarding step; use the T11 Excel template/prefill); (c) NHS target
   needs current contracts (see contract-ingestion gap). Tier-1 RAG is blank until (b).
 
+### 2 NEW TIER-1 METRICS — C# + CATALOG BUILT (2026-07-13, V066)
+- **Config.Metric_Definitions**: added `open_courses_without_appt_value` (treatment, £, below,
+  point_in_time, Site 0 / Prac 1) + `immediate_forward_utilisation` (scheduling, %, above,
+  point_in_time, Site 1 / Prac 1). Manifest `V066`. **Deploy V066 BEFORE generating the targets
+  spreadsheet** — `Generate_Targets_Template.py` reads `Config.Metric_Definitions WHERE Is_Active=1`,
+  so it only creates target spaces for these once the seed is deployed.
+- **TabularEditor_Clinical.csx**: added the Target/vs/BG triple for the existing "Open Courses Without
+  Appointment Value" measure (tEffAdd + vPctGrey + bgLowerEffGrey). READY — data lit up by V064.
+- **TabularEditor_Scheduling.csx**: added value measures "Immediate Forward Utilisation" (currate off
+  `_Metric Actuals`) + "Forward Book Value" (cur, £ companion, no target), plus the IFU Target/vs/BG
+  (tEff100 + vPp + bgHigherPp). REPORT-READY but **BLANK until the warehouse materialises the
+  `immediate_forward_utilisation` (num=booked fwd hrs / den=avail fwd hrs, 7d) and `forward_book_value`
+  metric rows** in `usp_Load_Fact_Metric_Actuals` — the % is query-ready; the £ needs the proxy call
+  (avg-appt-value × forward count, or treatment-appt expected value). That SP addition is the remaining
+  piece for IFU. (open_courses_without_appt_value already materialised via Fact_Treatment_Plans.)
+
 ### PIPELINE GAP: Waiting-list MEMBERS not landed
 We ingest waiting-list NAMES but **not the people on them**. Needs landing (new ingestion) to power
 the gap-filler ("these waiting-list patients could fill these gaps"). Separate ingestion workstream,

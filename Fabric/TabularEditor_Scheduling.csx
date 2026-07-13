@@ -172,6 +172,34 @@ add("Short Notice Cancellation Rate",
     SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
     "#,##0.0%");
 
+// ── NEW Tier-1: Immediate forward utilisation + forward book value ────────────
+// Current-state metrics fed from Gold.Fact_Metric_Actuals (materialised like days_until_free).
+// BLANK until the warehouse SP writes the metric rows: 'immediate_forward_utilisation'
+// (Numerator = booked forward hours, Denominator = available forward hours, next 7 days) and
+// 'forward_book_value' (Numerator = £ forward-book value). Read via the generic current-state
+// shape (date-blind: REMOVEFILTERS on List Date + List Date Grouping), respecting site/practitioner.
+add("Immediate Forward Utilisation",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""immediate_forward_utilisation"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""immediate_forward_utilisation"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+RETURN DIVIDE(n, d)",
+    "#,##0.0%");
+
+// Forward Book Value — the £ companion to the % fill (confirmed forward revenue, next 7 days).
+// Display measure (no target triple; add a catalog row later if you want a £ target).
+add("Forward Book Value",
+    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
+    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
+    '_Metric Actuals'[Metric] = ""forward_book_value"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )",
+    "£#,##0");
+
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
 // chair_utilisation     → above + percent → absolute pp
 // dna_rate              → below + percent → absolute pp (lower is better)
@@ -187,5 +215,7 @@ kpi("Days Until Next 1 Hour Free",      "#,##0",    tEffAdd("days_until_1hr_free
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
+// NEW Tier-1: forward fill % -> above + percent -> absolute pp band (like chair_utilisation).
+kpi("Immediate Forward Utilisation",    "#,##0.0%", tEff100("immediate_forward_utilisation"),   vPp("Immediate Forward Utilisation"),    bgHigherPp("Immediate Forward Utilisation", "immediate_forward_utilisation"));
 
 Info("Scheduling KPI measures created (data-driven).");

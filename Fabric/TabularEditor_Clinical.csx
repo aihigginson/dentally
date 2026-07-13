@@ -271,6 +271,10 @@ add("Average Plan Value",
 kpi("Treatment Acceptance Rate",        "#,##0.0%", tEff100("acceptance_rate"),         vPp("Treatment Acceptance Rate"),                bgHigherPp("Treatment Acceptance Rate", "acceptance_rate"));
 kpi("Open Courses",                     "#,##0",    tEffAdd("open_courses"),               vPctGrey("Open Courses"),                        bgLowerEffGrey("Open Courses", "open_courses"));
 kpi("Open Courses Without Appointment", "#,##0",    tEffAdd("open_courses_without_appt"),  vPctP("Open Courses Without Appointment"),       bgLowerEff("Open Courses Without Appointment", "open_courses_without_appt"));
+// Tier-1 Home card: the £ value of the leaky bucket (started, unfinished, no future appt). Value
+// measure defined above; lives off Gold.Fact_Treatment_Plans[Private Treatment Value Outstanding]
+// (lit up by V064's tpi.Price fix). Lower is better (money committed but unscheduled -> book it).
+kpi("Open Courses Without Appointment Value", "£#,##0", tEffAdd("open_courses_without_appt_value"), vPctGrey("Open Courses Without Appointment Value"), bgLowerEffGrey("Open Courses Without Appointment Value", "open_courses_without_appt_value"));
 kpi("Exam Ratio",                       "#,##0.0%", tEff100("exam_ratio"),              vPp("Exam Ratio"),                               bgWithinPp("Exam Ratio", "exam_ratio"));
 kpi("Open Courses Value",               "£#,##0",   tEffAdd("open_courses_value"),         vPctGrey("Open Courses Value"),                  bgHigherEffGrey("Open Courses Value", "open_courses_value"));
 kpi("Average Plan Value",               "£#,##0",   tEff("avg_plan_value"),             vPct("Average Plan Value"),                      bgHigherEff("Average Plan Value", "avg_plan_value"));

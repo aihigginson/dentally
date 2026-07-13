@@ -58,6 +58,8 @@ USING (VALUES
         'The number of courses of treatment currently open (started but not completed) as at the reporting date. A point-in-time work-in-progress count; persistently high or rising figures can indicate stalled treatment. Lower is generally better.'),
     ('open_courses_without_appt',  'Open Courses Without Appointment',   'treatment',  'count',    'Number of open courses with no future appointment booked', 0, 1, 1, 33, 'below', 'point_in_time',
         'Of the open courses of treatment, the number with no future appointment booked to continue them. These are at risk of stalling — the patient is mid-treatment with nothing scheduled. Lower is better.'),
+    ('open_courses_without_appt_value', 'Open Courses Without Appointment Value', 'treatment', 'currency', 'Total uncharged value of open courses with no future appointment booked', 0, 1, 1, 51, 'below', 'point_in_time',
+        'The total price of work still to be charged on open courses of treatment that have no future appointment booked — money committed but not scheduled. The at-risk work-in-progress; lower is better, and converted by booking these patients back in.'),
     ('exam_ratio',                 'Exam Ratio',                         'treatment',  'percent',  'Percentage of appointments that are examinations', 0, 1, 1, 34, 'within', 'rate',
         'The percentage of appointments that are examinations (check-ups) rather than treatment. Judged against a healthy band rather than simply higher or lower — too low may mean under-recall, too high may mean too little treatment delivered.'),
     ('avg_plan_value',             'Average Plan Value',                 'treatment',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
@@ -77,6 +79,8 @@ USING (VALUES
         'The percentage of appointments in the period that were cancelled, at any notice. A measure of diary stability. Lower is better.'),
     ('short_notice_cancellation_rate', 'Short Notice Cancellation Rate', 'scheduling', 'percent',  'Percentage of cancellations that were made with short notice', 0, 1, 1, 46, 'below', 'rate',
         'Of cancelled appointments, the percentage cancelled at short notice — too late to realistically rebook the slot. These are the most damaging cancellations for capacity and revenue. Lower is better.'),
+    ('immediate_forward_utilisation', 'Immediate Forward Utilisation', 'scheduling', 'percent', 'Percentage of the next 7 days of chair capacity already booked', 1, 1, 1, 47, 'above', 'point_in_time',
+        'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
