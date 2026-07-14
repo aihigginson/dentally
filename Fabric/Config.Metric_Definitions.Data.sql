@@ -94,7 +94,7 @@ USING (VALUES
     ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
         'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
 -- Home
-    ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time',
+    ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
  -- NHS
     ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'within', 'rate',

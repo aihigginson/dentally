@@ -1,0 +1,12 @@
+# =====================================================================
+# Release V081 -- Open Courses Value Range_Type above -> within
+# =====================================================================
+# open_courses_value should be judged against a variance BAND (within = good), not
+# higher-is-better. Catalog-only; idempotent MERGE re-seed.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V081__open_courses_value_within.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST
