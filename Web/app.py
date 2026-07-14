@@ -113,6 +113,11 @@ AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET', CLIENT_SECRET)
 REPORT_ROLES   = [r.strip() for r in os.environ.get('REPORT_ROLES', 'RLS').split(',') if r.strip()]
 FABRIC_SERVER  = os.environ['FABRIC_SERVER']
 FABRIC_DB      = os.environ.get('FABRIC_DB', 'WH_Dentally')
+# AppDB: the Fabric SQL Database holding the owner-curated target Inputs (Practitioner_Role /
+# Targets / Metric_Variance). The Settings screens read/write here (fast OLTP); the warehouse syncs
+# from it. See AppDB/README.md. Same SP token as the warehouse (needs a user grant in AppDB).
+APPDB_SERVER   = os.environ.get('APPDB_SERVER', '')
+APPDB_DB       = os.environ.get('APPDB_DB', '')
 
 PBI_AUTHORITY = f'https://login.microsoftonline.com/{TENANT_ID}'
 PBI_SCOPE     = ['https://analysis.windows.net/powerbi/api/.default']
@@ -208,6 +213,21 @@ def _fabric_conn(autocommit=False):
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={FABRIC_SERVER},1433;"
         f"Database={FABRIC_DB};"
+        f"Encrypt=yes;"
+        f"TrustServerCertificate=no;"
+    )
+    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
+
+def _appdb_conn(autocommit=False):
+    """Connection to the AppDB Fabric SQL Database (target-model Input tables). Same SP token as the
+    warehouse; the SP/managed identity must be granted a user in AppDB (see AppDB/README.md)."""
+    token        = _fabric_access_token()
+    token_bytes  = token.encode('utf-16-le')
+    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+    conn_str = (
+        f"Driver={{ODBC Driver 18 for SQL Server}};"
+        f"Server={APPDB_SERVER},1433;"
+        f"Database={APPDB_DB};"
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
     )
@@ -940,6 +960,181 @@ def save_practitioner_pay():
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_practitioner_pay')
+
+
+# ── Target model: owner-curated Inputs in the AppDB Fabric SQL Database ────────
+# Reads join the warehouse (practitioner list / metric catalogue) with the AppDB overrides;
+# writes go to AppDB (fast OLTP). All gated on Maintain_Targets.
+
+@app.route('/api/roles', methods=['GET'])
+def get_roles():
+    """Active practitioners + their current Modified Role (AppDB override, else the Dentally role)
+    + the distinct role set (the target-grid columns), for the role-assignment screen."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage roles'}), 403
+        practitioners = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT Tenant_ID, Practitioner_ID, Full_Name, Role "
+                f"FROM Gold.Dim_Practitioners "
+                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
+                f"ORDER BY Full_Name",
+                tids,
+            )
+            practitioners = [
+                {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2],
+                 'dentally_role': r[3], 'custom_role': r[3]}
+                for r in cur.fetchall()
+            ]
+        conn.close()
+        # Overlay the owner overrides from AppDB (current role = override if set, else Dentally role).
+        if tids and practitioners:
+            ac = _appdb_conn(); acur = ac.cursor()
+            ph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role "
+                f"WHERE Tenant_ID IN ({ph})", tids)
+            overrides = {(r[0], r[1]): r[2] for r in acur.fetchall()}
+            ac.close()
+            for p in practitioners:
+                ov = overrides.get((p['tenant_id'], p['practitioner_id']))
+                if ov:
+                    p['custom_role'] = ov
+        roles = sorted({p['custom_role'] for p in practitioners if p['custom_role']})
+        return jsonify({'practitioners': practitioners, 'roles': roles})
+    except Exception as e:
+        return _server_error(e, 'get_roles')
+
+
+@app.route('/api/roles', methods=['POST'])
+def save_roles():
+    """Upsert practitioner -> Custom_Role overrides into AppDB.Input.Practitioner_Role (SCD-1)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can manage roles'}), 403
+        rows    = request.get_json(force=True) or []
+        allowed = set(tids)
+        valid   = []
+        for r in rows:
+            try:
+                tid = int(r['tenant_id']); pid = int(r['practitioner_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            role = (r.get('custom_role') or '').strip()
+            if tid in allowed and role:
+                valid.append((tid, pid, role))
+        if valid:
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.executemany(
+                "DELETE FROM Input.Practitioner_Role WHERE Tenant_ID = ? AND Practitioner_ID = ?",
+                [(t, p) for t, p, _ in valid])
+            acur.executemany(
+                "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, Updated_At, Updated_By) "
+                "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, role, upn) for t, p, role in valid])
+            ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_roles')
+
+
+@app.route('/api/variances', methods=['GET'])
+def get_variances():
+    """Active metrics + their current per-metric tolerance band (AppDB override, else null)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage variances'}), 403
+        cur.execute(
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type "
+            "FROM Config.Metric_Definitions WHERE Is_Active = 1 AND ISNULL(Has_Target, 1) = 1 "
+            "ORDER BY Display_Order")
+        metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2],
+                    'format_type': r[3], 'range_type': r[4]} for r in cur.fetchall()]
+        conn.close()
+        variances = {}
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor()
+            ph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Metric, Variance FROM Input.Metric_Variance WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                variances[f"{r[0]}|{r[1]}"] = float(r[2]) if r[2] is not None else None
+            ac.close()
+        return jsonify({'metrics': metrics, 'variances': variances})
+    except Exception as e:
+        return _server_error(e, 'get_variances')
+
+
+@app.route('/api/variances', methods=['POST'])
+def save_variances():
+    """Upsert per-metric variance bands into AppDB.Input.Metric_Variance. Blank/null clears (DELETE only)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can manage variances'}), 403
+        rows    = request.get_json(force=True) or []
+        allowed = set(tids)
+        valid   = []
+        for r in rows:
+            try:
+                tid = int(r['tenant_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            metric = str(r.get('metric') or '').strip()
+            if tid not in allowed or not metric:
+                continue
+            v = r.get('variance')
+            valid.append((tid, metric, float(v) if v not in (None, '') else None))
+        if valid:
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.executemany(
+                "DELETE FROM Input.Metric_Variance WHERE Tenant_ID = ? AND Metric = ?",
+                [(t, m) for t, m, _ in valid])
+            inserts = [(t, m, v) for t, m, v in valid if v is not None]
+            if inserts:
+                acur.executemany(
+                    "INSERT INTO Input.Metric_Variance (Tenant_ID, Metric, Variance, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
+                    [(t, m, v, upn) for t, m, v in inserts])
+            ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_variances')
 
 
 if __name__ == '__main__':
