@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Patient_Practitioner_Daily] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Patient_Practitioner_Daily] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily
 --  Author           :  AIH
@@ -363,7 +363,8 @@ BEGIN
                                  AND ch.fk_Patient      = a.fk_Patient
                                  AND ch.fk_Practitioner = a.fk_Practitioner
                                  AND ch.fk_Date         = a.fk_Date
-                                 AND ch.Tenant_ID       = a.Tenant_ID;
+                                 AND ch.Tenant_ID       = a.Tenant_ID
+        WHERE a.fk_Date IS NOT NULL;
         SET @My_Inserts = @@ROWCOUNT;
 
         -- Insert cancellation-only rows: dates where a practitioner had a
@@ -403,7 +404,8 @@ BEGIN
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #cancel_agg c
-        WHERE NOT EXISTS (
+        WHERE c.fk_Date IS NOT NULL
+          AND NOT EXISTS (
             SELECT 1
             FROM #apt_agg a
             WHERE a.fk_Site        = c.fk_Site

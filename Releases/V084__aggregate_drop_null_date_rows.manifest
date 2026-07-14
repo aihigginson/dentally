@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V084 -- Aggregate: drop NULL fk_Date rows at source (root fix for the 515)
+# =====================================================================
+# Root cause of the metric-actuals 515 (guarded downstream in V082/V083): the daily aggregate
+# carried rows with NULL fk_Date. Confirmed on prod -- they are PENDING (unscheduled) appointments:
+#   State='Pending', Start_Time=NULL  ->  Fact_Appointments.fk_Date_Start = NULL
+#   (LEFT JOIN Dim_Date on CAST(Start_Time AS DATE), no match, no ISNULL(-1)).
+# A pending appointment has no confirmed slot, so it belongs to NO day -- it must not be in the
+# DAILY aggregate. It does have a resolved fk_Date_Pending (the booking day); a forward-book /
+# pending metric should read that, not fk_Date_Start.
+#
+# Fix (one layer up from the metric-actuals symptom guards): filter NULL fk_Date at the two
+# aggregate inserts, the single clean choke point --
+#   * main insert (spine #apt_agg a)      -> WHERE a.fk_Date IS NOT NULL
+#   * cancellation-only insert (#cancel_agg c) -> AND c.fk_Date IS NOT NULL (folded into its WHERE)
+# Covers all source blocks (appointment/invoice/tp/diary) in one place, since every output row's
+# fk_Date comes from the spine. Behaviour-neutral where data is clean (dev had 0 null-date rows).
+#
+# After this, the aggregate is clean and metric-actuals never sees a null; keep V082/V083 as
+# belt-and-braces. Idempotent (DELETE + INSERT rebuild). No C#/catalog/schema change.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V084__aggregate_drop_null_date_rows.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+TEST
