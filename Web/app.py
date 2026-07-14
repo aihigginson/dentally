@@ -1137,6 +1137,167 @@ def save_variances():
         return _server_error(e, 'save_variances')
 
 
+@app.route('/api/target-grid', methods=['GET'])
+def get_target_grid():
+    """The target grid for an FY: metric catalogue x (Practice + roles), current target values +
+    per-metric variance (AppDB), and the current ACTUAL per cell (Fact_Metric_Actuals aggregated to
+    Practice / Custom_Role) for the actual-above-entry display. Actuals are indicative: cumulative =
+    SUM(num), rate = SUM(num)/SUM(den) over the FY; point_in_time is approximated by SUM(num)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        import datetime
+        fy = int(request.args.get('fy') or 0)
+        if not fy:
+            t = datetime.date.today()
+            fy = t.year if t.month >= 4 else t.year - 1
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage targets'}), 403
+
+        cur.execute(
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
+            "ISNULL(Supports_Practitioner, 0) "
+            "FROM Config.Metric_Definitions WHERE Is_Active = 1 AND ISNULL(Has_Target, 1) = 1 "
+            "ORDER BY Display_Order")
+        metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3],
+                    'range_type': r[4], 'target_type': r[5], 'splits_by_role': bool(r[6])}
+                   for r in cur.fetchall()]
+
+        tenants, roles_by_tenant, pract_act, role_act = {}, {}, {}, {}
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
+            tenants = {r[0]: {'id': r[0], 'name': r[1], 'levels': ['Practice'],
+                              'targets': {}, 'variances': {}, 'actuals': {}} for r in cur.fetchall()}
+            cur.execute(
+                f"SELECT DISTINCT Tenant_ID, Custom_Role FROM Gold.Dim_Practitioners "
+                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 AND Custom_Role IS NOT NULL", tids)
+            for r in cur.fetchall():
+                roles_by_tenant.setdefault(r[0], set()).add(r[1])
+            # Practice-level actuals (global grain -1/-1) over the FY
+            cur.execute(
+                f"SELECT fma.Tenant_ID, fma.Metric, SUM(fma.Numerator), SUM(fma.Denominator) "
+                f"FROM Gold.Fact_Metric_Actuals fma "
+                f"JOIN Gold.Dim_Date d ON d.pk_Date = fma.fk_Date AND d.Financial_Year = ? "
+                f"WHERE fma.Tenant_ID IN ({ph}) AND fma.fk_Practice_Site = -1 AND fma.fk_Practitioner = -1 "
+                f"GROUP BY fma.Tenant_ID, fma.Metric", [fy] + tids)
+            for r in cur.fetchall():
+                pract_act[(r[0], r[1])] = (r[2], r[3])
+            # Role-level actuals (practitioner grain -> Custom_Role) over the FY
+            cur.execute(
+                f"SELECT fma.Tenant_ID, fma.Metric, dp.Custom_Role, SUM(fma.Numerator), SUM(fma.Denominator) "
+                f"FROM Gold.Fact_Metric_Actuals fma "
+                f"JOIN Gold.Dim_Date d ON d.pk_Date = fma.fk_Date AND d.Financial_Year = ? "
+                f"JOIN Gold.Dim_Practitioners dp ON dp.pk_Practitioner = fma.fk_Practitioner AND dp.Tenant_ID = fma.Tenant_ID "
+                f"WHERE fma.Tenant_ID IN ({ph}) AND fma.fk_Practitioner <> -1 AND dp.Custom_Role IS NOT NULL "
+                f"GROUP BY fma.Tenant_ID, fma.Metric, dp.Custom_Role", [fy] + tids)
+            for r in cur.fetchall():
+                role_act[(r[0], r[1], r[2])] = (r[3], r[4])
+        conn.close()
+
+        def resolve(num, den, tt):
+            if num is None:
+                return None
+            if tt == 'rate':
+                return float(num) / float(den) if den else None
+            return float(num)   # cumulative + point_in_time (approx)
+
+        available_fys = []
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Metric, Target_Level, Target_Value FROM Input.Targets "
+                f"WHERE Tenant_ID IN ({ph}) AND FY = ?", tids + [fy])
+            for r in acur.fetchall():
+                if r[0] in tenants:
+                    tenants[r[0]]['targets'][f"{r[1]}|{r[2]}"] = float(r[3])
+            acur.execute(f"SELECT Tenant_ID, Metric, Variance FROM Input.Metric_Variance WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                if r[0] in tenants:
+                    tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
+            acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
+            available_fys = [r[0] for r in acur.fetchall()]
+            ac.close()
+
+        for tid, t in tenants.items():
+            roles = roles_by_tenant.get(tid, set())
+            t['levels'] = ['Practice'] + sorted(roles)
+            for m in metrics:
+                pa = pract_act.get((tid, m['key']))
+                if pa:
+                    v = resolve(pa[0], pa[1], m['target_type'])
+                    if v is not None:
+                        t['actuals'][f"{m['key']}|Practice"] = v
+                if m['splits_by_role']:
+                    for role in roles:
+                        ra = role_act.get((tid, m['key'], role))
+                        if ra:
+                            v = resolve(ra[0], ra[1], m['target_type'])
+                            if v is not None:
+                                t['actuals'][f"{m['key']}|{role}"] = v
+
+        return jsonify({'fy': fy, 'available_fys': available_fys,
+                        'metrics': metrics, 'tenants': list(tenants.values())})
+    except Exception as e:
+        return _server_error(e, 'get_target_grid')
+
+
+@app.route('/api/target-grid', methods=['POST'])
+def save_target_grid():
+    """Upsert target-grid cells into AppDB.Input.Targets for one FY. Blank value clears (DELETE only).
+    Body: {fy, rows:[{tenant_id, metric, target_level, value}]}."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can manage targets'}), 403
+        body = request.get_json(force=True) or {}
+        try:
+            fy = int(body.get('fy'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'fy required'}), 400
+        allowed = set(tids)
+        valid   = []
+        for r in (body.get('rows') or []):
+            try:
+                tid = int(r['tenant_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            metric = str(r.get('metric') or '').strip()
+            level  = str(r.get('target_level') or '').strip()
+            if tid not in allowed or not metric or not level:
+                continue
+            v = r.get('value')
+            valid.append((tid, metric, level, float(v) if v not in (None, '') else None))
+        if valid:
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.executemany(
+                "DELETE FROM Input.Targets WHERE Tenant_ID = ? AND FY = ? AND Metric = ? AND Target_Level = ?",
+                [(t, fy, m, l) for t, m, l, _ in valid])
+            inserts = [(t, fy, m, l, v, upn) for t, m, l, v in valid if v is not None]
+            if inserts:
+                acur.executemany(
+                    "INSERT INTO Input.Targets (Tenant_ID, FY, Metric, Target_Level, Target_Value, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", inserts)
+            ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_target_grid')
+
+
 if __name__ == '__main__':
     _debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=_debug)
