@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V079 -- Fact_Recall_Gap (Retention Outlook worklist / gap lists)
+# =====================================================================
+# New Gold fact: one row per (active patient x discipline) whose PATIENT recall date falls in
+# the next 4 weeks, tagged Booked / Gap - Recall Active / Gap - No Recall. Drives the listable
+# gap lists behind Dentist/Hygiene Retention Outlook (the "falling through" patients with
+# name/phone/email via Dim_Patients). Dev T100 split (14 Jul): Dentist 455/134/22, Hygiene 411/94/17.
+#
+#   * Gold.Fact_Recall_Gap (table) + Gold.usp_Load_Fact_Recall_Gap (GOLD_AGG: reads Dim_Patients
+#     + Fact_Recalls). Registered as GOLD_AGG_RECALL_GAP in Audit.Process_Config.
+#   * Migration loads it once + regenerates PBI views -> PBI.[_Recall Gap].
+#
+# Deploy AFTER V078. Run: .\Scripts\Deploy.ps1 -Manifest Releases\V079__fact_recall_gap.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Recall_Gap.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recall_Gap.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+MIGRATE  Migrations\V079__recall_gap.sql
+
+TEST
