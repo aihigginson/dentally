@@ -1,0 +1,29 @@
+# =====================================================================
+# Release V089 -- Target model Phase 2b: reshape Input.Targets + rewrite Fact_Daily_Targets
+# =====================================================================
+# BREAKING (dev, deliberate -- user OK'd). Cuts the target DATA layer over to the new model:
+#   * Input.Targets RESHAPED -> (Tenant, FY, Metric, Target_Level, Target_Value). Old Site/
+#     Practitioner/Period shape dropped. Synced from AppDB.Input.Targets by the sync SP.
+#   * Meta.usp_Sync_Input_From_AppDB (*03) now copies all 3 Input tables.
+#   * Gold.Fact_Daily_Targets REWRITTEN -- grain (Tenant, fk_Date, Metric, Target_Level);
+#     Daily_Target_Value (cumulative=annual/working-days, else annual) + Annual_Target_Value +
+#     Variance (from Input.Metric_Variance). NHS UDA/UOA from contracts at Practice level.
+#
+# STILL TO DO (not in this manifest -- follow-ups):
+#   - RETIRE the obsolete Fact_Targets + Fact_Effective_Targets + usp_Load_Targets (deactivate in
+#     Process_Config); they read the OLD Input.Targets columns and will fail at runtime until then.
+#   - Fact_NHS_Contract_Week also reads old Input.Targets -- repoint or retire.
+#   - Wire Meta.usp_Sync_Input_From_AppDB into Orchestrate_Build (before dims/target facts).
+#   - The MEASURES (tDaily/tEff) must be rewritten to read the new Fact_Daily_Targets (Target_Level
+#     resolution by filter) -- user's Tabular Editor job. Until then the target cards are blank on dev.
+#
+# PREREQ: V086-V088. Break-dev acceptable; prod untouched.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V089__target_model_reshape_targets_and_daily_fact.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Input.Targets.Table.sql
+DEPLOY  Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY  Fabric\Gold.Fact_Daily_Targets.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql
+
+TEST
