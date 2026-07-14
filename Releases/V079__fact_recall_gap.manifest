@@ -16,6 +16,7 @@
 DEPLOY   Fabric\Gold.Fact_Recall_Gap.Table.sql
 DEPLOY   Fabric\Gold.usp_Load_Fact_Recall_Gap.StoredProcedure.sql
 DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
 MIGRATE  Migrations\V079__recall_gap.sql
 
 TEST
