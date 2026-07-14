@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V088 -- Target model Phase 2a: Input.Metric_Variance + sync (2nd of 3 Input tables)
+# =====================================================================
+# Adds the per-metric tolerance band table (owner-curated in AppDB) + extends the sync SP to copy it.
+# Additive / non-breaking -- does NOT touch the old Input.Targets or its 3-fact chain (Fact_Targets ->
+# Fact_Daily_Targets -> Fact_Effective_Targets); that reshape is the next dedicated step.
+#
+#   * Input.Metric_Variance  -- WH copy target (Tenant, Metric, Variance).
+#   * Meta.usp_Sync_Input_From_AppDB (*02) -- + Metric_Variance full-refresh copy from [AppDB].[Input].*.
+#
+# Run the sync SP manually to test (not yet in Orchestrate_Build). PREREQ: V086.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V088__target_model_input_metric_variance.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Input.Metric_Variance.Table.sql
+DEPLOY  Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+TEST

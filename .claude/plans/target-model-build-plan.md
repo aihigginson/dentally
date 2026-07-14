@@ -1,6 +1,12 @@
 # Target Model — Development / Build Plan
 
-Status: **PLAN — 2026-07-14. Not started.** Implements the agreed design in
+Status: **IN PROGRESS — 2026-07-14 (dev only, not on prod).** Done: Phase 0 spike (AppDB both pipes);
+V086 Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB (copy pipe); V087 Dim_Practitioner.Custom_Role
+(keystone, COALESCE); V088 Input.Metric_Variance + sync. **NEXT = the big coordinated one:** reshape
+Input.Targets (new FY/Metric/Target_Level shape) + extend sync + rewrite the 3-fact chain
+(Fact_Targets -> Fact_Daily_Targets -> Fact_Effective_Targets) to Practice+Custom_Role together (do it as
+ONE change or dev's build breaks). Then measures, then app, then wire sync into Orchestrate_Build + prod.
+Implements the agreed design in
 `target-model-redesign.md` (do not relitigate design decisions here — this is the *how*).
 Backend = **Fabric SQL Database** (option A from the 2026-07-14 discussion). Deferred until prod is stable.
 
