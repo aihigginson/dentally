@@ -1,0 +1,27 @@
+# =====================================================================
+# Release V079 -- Fact_Patient_At_Risk (unified "At Risk" patient model)
+# =====================================================================
+# One row per (active patient x retention route) with no relevant future appointment -- the
+# generalisation of the recall gap into a single "At Risk" list. Routes (Risk_Route, all
+# filterable): Recall - Dentist / Recall - Hygiene (due <=4wk, no future exam / scale&polish,
+# Risk_Detail = Recall Active / No Recall), Cancelled Not Rebooked (cancelled <=90d, no future
+# appt -- cancellation reason is empty on real Dentally data so no reason exclusion), Open
+# Treatment No Appt (open course, no future appt). Active = Active flag AND last appt <=730d.
+# Dev T100 (14 Jul): Dentist 142/14, Hygiene 97/14, Cancelled 282, Open Treatment 391 ->
+# 785 distinct at-risk patients.
+#
+#   * Gold.Fact_Patient_At_Risk (table) + Gold.usp_Load_Fact_Patient_At_Risk (GOLD_AGG: reads
+#     Dim_Patients + Fact_Recalls + Fact_Treatment_Plans). GOLD_AGG_PATIENT_AT_RISK in Process_Config
+#     + regenerated dependencies. Migration loads it + regenerates PBI views -> PBI.[_Patient At Risk].
+#   * DAX "At Risk Patients" + per-route measures in TabularEditor_Patients.csx (re-apply + refresh).
+#
+# Deploy AFTER V078. Run: .\Scripts\Deploy.ps1 -Manifest Releases\V079__patient_at_risk.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Patient_At_Risk.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Patient_At_Risk.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+MIGRATE  Migrations\V079__patient_at_risk.sql
+
+TEST

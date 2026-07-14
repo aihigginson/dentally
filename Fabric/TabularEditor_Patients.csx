@@ -340,6 +340,14 @@ VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 
+// At Risk Patients: distinct active patients with no relevant future appointment across any retention
+// route (recall due <=4wk, cancelled not rebooked, open treatment no appt). Reads Gold.Fact_Patient_At_Risk
+// (PBI '_Patient At Risk'); slice the report by [Risk Route] / [Risk Detail] for each route or the
+// 'No Recall' / falling-through list. Site/practitioner respected via the fact's relationships.
+add("At Risk Patients",
+    @"DISTINCTCOUNT('_Patient At Risk'[fk Patient])",
+    "#,##0");
+
 add("Active Patients",
     @"VAR snap_fk =
     CALCULATE(
