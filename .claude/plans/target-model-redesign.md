@@ -136,9 +136,11 @@ drag between columns; "Add role" button. Writes `Input.Practitioner_Role`.
 - **Current actual shown ABOVE each entry cell** (not to the left) so the owner sets the aspiration
   eyes-open against the current blend / mix gap.
 - **Variance** = one column (one cell per metric row, spanning the level columns) — per-metric band.
-- **FY selector**; when the chosen FY has no targets, a **"Copy from FY N‑1" button** seeds the grid
-  from last year's numbers (owner then tweaks) — kills the blank-page problem. Copies target VALUES;
-  variance is per-metric (not FY-specific) so it carries over automatically.
+- **FY selector**; when the chosen FY has no targets, a **"Copy from FY…" button with a source-year
+  picker** seeds the grid from any already-populated year (owner then tweaks) — kills the blank-page
+  problem. NOT a fixed FY‑1: owners typically fill the **current** year first to get going, then work
+  **backwards**, so the source must be a chosen year, not "last year" (which is often still empty).
+  Copies target VALUES; variance is per-metric (not FY-specific) so it carries over automatically.
 - Writes `Input.Targets`.
 
 ### Write-back architecture (the real build)
