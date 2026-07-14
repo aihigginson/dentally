@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V083 -- Fact_Metric_Actuals: complete the NULL fk_Date guard (515)
+# =====================================================================
+# V082 guarded ONE aggregate read (#agg) but the SP reads the daily aggregate in THREE places,
+# and two of them run BEFORE #agg -- so the prod re-run still hit error 515 (NULL into fk_Date)
+# at the next unguarded read. This completes the fix after an exhaustive audit of every place
+# the SP inserts its own fk_Date.
+#
+# Root: Gold.Aggregate_Site_Patient_Practitioner_Daily carries 5 rows with NULL fk_Date on prod
+# (inherited from source facts whose date key didn't resolve -- appointment/invoice/plan-item/
+# diary). Every read of that aggregate must filter them out:
+#   * #np  (new_patients)               -> WHERE ... AND fk_Date IS NOT NULL
+#   * #wd  (revenue_per_clinical_hour)  -> WHERE ... AND a.fk_Date IS NOT NULL   (the re-fail point:
+#          joins real practitioners by role, so a null-date row flows straight in)
+#   * #agg (all daily rate metrics)     -> already guarded in V082
+# Also belt-and-braces on #snp (active_patients / outstanding_invoices), the only other block that
+# inserts its OWN fk_Date rather than the @cur sentinel: WHERE ... AND fk_Date IS NOT NULL.
+# All remaining current-state blocks stamp @cur (fallback-guarded in V082) -- verified.
+#
+# DEV never tripped any of these: dev's Maple aggregate has 0 null-date rows; prod's has 5 (live
+# feed carries rows dev's copy lacks). Deeper root (source date resolution) is a separate follow-up;
+# this makes the build robust regardless.
+#
+# Idempotent (DROP/CREATE SP). No C# / catalog / schema change. Deploy AFTER V082.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V083__metric_actuals_null_fkdate_complete.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST
