@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V090 -- Target model cleanup: retire obsolete Fact_Targets / Fact_Effective_Targets
+# =====================================================================
+# The old site/practitioner target-fact chain is superseded by the new Fact_Daily_Targets
+# (Target_Level grain, V089). Remove the two obsolete processes from orchestration so the nightly
+# build no longer runs them (they read the OLD Input.Targets shape and would fail):
+#   * GOLD_FACT_TARGETS          (Gold.usp_Load_Fact_Targets)
+#   * GOLD_AGG_EFFECTIVE_TARGETS (Gold.usp_Load_Fact_Effective_Targets)
+# Dropped from Audit.Process_Config + their 5 Process_Dependency edges. GOLD_AGG_DAILY_TARGETS
+# (the rewritten fact) stays. The SP/table files remain deployed but unorchestrated (dead; delete at
+# the measures cutover). usp_Load_Targets (spreadsheet loader) was never in the build.
+#
+# NOT here (bundled with the measures cutover): wire Meta.usp_Sync_Input_From_AppDB into the build,
+# rewrite tDaily/tEff onto the new Fact_Daily_Targets, then delete the dead SP/table files.
+# Idempotent (both Data files are DELETE+INSERT re-seeds). No build run.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V090__retire_obsolete_target_facts.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Audit.Process_Config.Data.sql
+DEPLOY  Fabric\Audit.Process_Dependency.Data.sql
+
+TEST
