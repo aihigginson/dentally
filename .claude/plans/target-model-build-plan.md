@@ -1,11 +1,23 @@
 # Target Model — Development / Build Plan
 
-Status: **IN PROGRESS — 2026-07-14 (dev only, not on prod).** Done: Phase 0 spike (AppDB both pipes);
-V086 Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB (copy pipe); V087 Dim_Practitioner.Custom_Role
-(keystone, COALESCE); V088 Input.Metric_Variance + sync. **NEXT = the big coordinated one:** reshape
-Input.Targets (new FY/Metric/Target_Level shape) + extend sync + rewrite the 3-fact chain
-(Fact_Targets -> Fact_Daily_Targets -> Fact_Effective_Targets) to Practice+Custom_Role together (do it as
-ONE change or dev's build breaks). Then measures, then app, then wire sync into Orchestrate_Build + prod.
+Status: **IN PROGRESS — 2026-07-14 (dev only, NOT on prod). Data layer + app backend DONE; frontend + measures next.**
+
+DONE on dev: Phase 0 spike (AppDB, both pipes); V086 Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB;
+V087 Dim_Practitioner.Custom_Role (keystone COALESCE); V088 Input.Metric_Variance + sync; V089 Input.Targets
+reshaped (FY/Metric/Target_Level) + Fact_Daily_Targets rewritten (Target_Level grain, verified: cumulative
+prorates+sums to annual, rate/point carry annual, role-level targets, NHS from contracts); V090 retired
+obsolete Fact_Targets/Fact_Effective_Targets from orchestration. App backend (dev branch only, WIP, NOT prod):
+_appdb_conn + /api/roles + /api/variances + /api/target-grid (GET/POST) in Web/app.py (compiles, 19 tests pass).
+
+**RESUME HERE (morning): 2 user setup steps first, then I build the frontend live.**
+ 1. Grant the APP SP a user in AppDB: `CREATE USER [<app AZURE_CLIENT_ID SP>] FROM EXTERNAL PROVIDER; ALTER ROLE db_owner ADD MEMBER [...];`
+    (Also the deploy SP `analytically-deploy-dev` if not done -- its direct login went flaky mid-session.)
+ 2. Set APPDB_SERVER / APPDB_DB on the dev Container App (values in Web/.env.example).
+Then: (a) live-verify the 3 endpoints; (b) BUILD THE FRONTEND -- Settings section + sub-nav (Roles drag board /
+Targets grid actual-above-entry+copy-from-FY / Variances) in Web/index.html. Remaining after: rewrite tDaily/tEff
+measures onto Fact_Daily_Targets (USER's Tabular Editor); cutover (wire sync into Orchestrate_Build, delete dead
+Fact_Targets/Effective/usp_Load_Targets files, drop old target PBI views) then batch-deploy to prod.
+Also: drop Fabric capacity F4 -> F2 once settled. AppDB item id 4c31e989-...; dev workspace 22e235e2-...
 Implements the agreed design in
 `target-model-redesign.md` (do not relitigate design decisions here — this is the *how*).
 Backend = **Fabric SQL Database** (option A from the 2026-07-14 discussion). Deferred until prod is stable.
