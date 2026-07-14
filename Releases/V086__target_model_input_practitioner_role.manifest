@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V086 -- Target model Phase 1a: Input.Practitioner_Role + AppDB sync (copy pipe)
+# =====================================================================
+# First warehouse slice of the target-model rewrite (design: .claude/plans/target-model-redesign.md;
+# build plan: .claude/plans/target-model-build-plan.md). Phase 0 proved the AppDB Fabric SQL Database
+# both pipes; this lands the copy step (option B) for the FIRST Input table.
+#
+#   * Input.Practitioner_Role  -- WH copy target for the owner-curated Modified Role (SCD-1).
+#   * Meta.usp_Sync_Input_From_AppDB -- full-refresh copy from [AppDB].[Input].* by cross-DB query
+#     (proven: WH_Dentally resolves [AppDB].[Input].<t> by item display name). Practitioner_Role now;
+#     Targets + Metric_Variance added when those WH tables land.
+#
+# Does NOT yet touch Dim_Practitioners (Custom_Role = COALESCE(override, Dentally) is the next slice)
+# or the target facts. Safe/additive. NOT yet wired into Process_Config/Orchestrate_Build (run the
+# sync SP manually to test; orchestration follows once the dim consumes it).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V086__target_model_input_practitioner_role.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Input.Practitioner_Role.Table.sql
+DEPLOY  Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+TEST
