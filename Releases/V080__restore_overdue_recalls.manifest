@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V080 -- Restore Overdue Recalls (correct process definition)
+# =====================================================================
+# Overdue Recalls was wrongly removed in the recall rebuild. It IS a valid metric -- a PRACTICE
+# PROCESS backlog: recalls that are DUE but the practice has not actioned (open/Unbooked, past
+# due, NO reminder sent). Nothing to do with the old buggy due-date-derived count (3,126) that
+# swept in completed cycles.
+#
+#   * usp_Load_Fact_Metric_Actuals: dropped overdue_recalls from the (buggy) KPI-snapshot #snp read;
+#     compute it fresh -- Fact_Recalls Status='Unbooked' AND Is_Reminder_Sent=0 AND Due_Date<=today.
+#     Dev T100: 148 recalls (was 3,126).
+#   * Config.Metric_Definitions: overdue_recalls reactivated (Is_Active=1) + redefined.
+#
+# C# (NOT a warehouse deploy): TabularEditor_Patients.csx (restored measure + card) +
+# TabularEditor_MetricActuals.csx (overdue_recalls -> 'cur' mapping) -- re-apply + refresh.
+#
+# Deploy AFTER V078. Idempotent (DROP/CREATE SP + MERGE catalog).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V080__restore_overdue_recalls.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

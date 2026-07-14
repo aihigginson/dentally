@@ -53,8 +53,8 @@ USING (VALUES
         'Patients explicitly marked inactive during the period -- the definitive lapsed cohort. Lower is better.'),
     ('lapsed_calculated',          'Lapsed (Silently)',                  'patients',   'count',    'Active patients 730+ days since last seen, in the period',                    1, 1, 1, 28, 'below', 'cumulative',
         'Patients still marked active but 730+ days since their last appointment with no future booking -- silently lapsed. Lower is better.'),
-    ('overdue_recalls',            'Overdue Recalls',                    'patients',   'count',    'Number of patients whose recall appointment is overdue',                  1, 0, 1, 27, 'below', 'point_in_time',
-        'The number of patients whose recall (re-examination) due date has passed without an appointment booked. A point-in-time backlog of patients overdue to return. Lower is better.'),
+    ('overdue_recalls',            'Overdue Recalls',                    'patients',   'count',    'Recalls that are due but the practice has not actioned (no reminder sent)', 1, 0, 1, 27, 'below', 'point_in_time',
+        'The number of recalls that have fallen due but the practice has not yet actioned -- an open (Unbooked) recall past its due date with no reminder sent. A process/backlog measure of the practice''s own recall workload (are we reaching out?), NOT patient behaviour. Lower is better.'),
     ('email_details_rate',         'Email Details Rate',                 'patients',   'percent',  'Percentage of active patients with a valid email address on file',        1, 0, 1, 28, 'above', 'point_in_time',
         'The percentage of active patients who have a valid email address on file. Higher is better — it underpins recall reminders, marketing and digital communication. A data-quality and reachability measure.'),
     ('phone_details_rate',         'Phone Details Rate',                 'patients',   'percent',  'Percentage of active patients with a valid phone number on file',         1, 0, 1, 29, 'above', 'point_in_time',
@@ -134,12 +134,12 @@ GO
 --   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
 --   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
 --                                   forward date window via the 'List Date Unconstrained' heatmap axis)
---   retention_outlook / overdue_recalls = replaced by the two-source recall model: Dentist/Hygiene
---                                   Retention Outlook (forward, patient recall dates) + Dentist/Hygiene
---                                   Recall Conversion (reactive, real recall-record status). The old
---                                   pair counted completed/historical recall cycles as overdue.
+--   retention_outlook = replaced by the two-source recall model: Dentist/Hygiene Retention Outlook
+--                       (forward, patient recall dates) + Dentist/Hygiene Recall Conversion (reactive,
+--                       real recall-record status). The old single metric counted completed/historical
+--                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'overdue_recalls');
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook');
 
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0

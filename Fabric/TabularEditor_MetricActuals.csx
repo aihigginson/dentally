@@ -119,6 +119,7 @@ var metrics = new[] {
     new[]{"Lapsed (Set Inactive)",            "lapsed_deactivated",             "cum",     "#,##0"},
     new[]{"Lapsed (Silently)",                "lapsed_calculated",              "cum",     "#,##0"},
     new[]{"Outstanding Invoices",             "outstanding_invoices",           "snap",    "£#,##0"},
+    new[]{"Overdue Recalls",                  "overdue_recalls",                "cur",     "#,##0"},
     // Open Courses family now reads Gold.Fact_Treatment_Plans LIVE (via '_Treatment Plans' +
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
     // rules + 3-month recency band evaluate at query time (no row rebuild as courses age).
