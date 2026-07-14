@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V087 -- Target model Phase 1b: Dim_Practitioner.Custom_Role (the keystone)
+# =====================================================================
+# Adds the owner-curated Modified Role to the practitioner dimension:
+#   Custom_Role = COALESCE(Input.Practitioner_Role override, Dentally role).
+# Roles are DATA -> DISTINCT Custom_Role will drive the target-grid columns, the Role filter, and
+# the aggregation grouping (design: .claude/plans/target-model-redesign.md).
+#
+#   * MIGRATE V087: ALTER TABLE ADD Custom_Role (NOT a table DROP/CREATE -- that would reshuffle
+#     pk_Practitioner via ROW_NUMBER and orphan every fact's fk_Practitioner). Idempotent.
+#   * Gold.usp_Load_Dim_Practitioners: #src COALESCE (correlated subquery to Input.Practitioner_Role),
+#     + Custom_Role in the UPDATE SET, the hash (both sides), and the INSERT.
+# (Gold.Dim_Practitioners.Table.sql also gains the column for fresh builds but is NOT deployed here.)
+#
+# PREREQ: V086 (Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB). Run the sync SP before the
+# dim load so the override is present. First dim run updates all rows once (Custom_Role NULL->value)
+# then settles. No churn (varchar=varchar in the hash).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V087__dim_practitioner_custom_role.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V087__dim_practitioner_custom_role.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+
+TEST
