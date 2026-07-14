@@ -76,6 +76,20 @@ VAR full_target = CALCULATE(
     '_Effective Targets'[fk Practitioner]  = sel_prac)
 RETURN IF(ISBLANK(full_target), BLANK(), full_target * [_Period Run Rate])").Replace("{key}", key);
 
+// tDaily: cumulative-metric target from '_Daily Targets' summed over the SELECTED period (TREATAS
+// List Date -> fk Date). Prorates correctly for ANY period (3M / YTD / 12M), unlike tEffRunRateAdd
+// (annual x run_rate) which only prorates FY-YTD and shows the full annual target on rolling periods.
+Func<string,string> tDaily = key => (@"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+VAR sel_prac    = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR run_rate    = [_Period Run Rate]
+VAR full_target = CALCULATE(
+    SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric]           = ""{key}"",
+    '_Daily Targets'[fk Practice Site] = sel_site,
+    '_Daily Targets'[fk Practitioner]  = sel_prac)
+RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)").Replace("{key}", key);
+
 // ── vs-Target builders ───────────────────────────────────────────────────────
 Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
@@ -440,11 +454,11 @@ add("Phone Details Rate",
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
 
-kpi("New Patients",             "#,##0",    tEffRunRateAdd("new_patients"),         vPct("New Patients"),               bgHigherEff("New Patients", "new_patients"));
+kpi("New Patients",             "#,##0",    tDaily("new_patients"),         vPct("New Patients"),               bgHigherEff("New Patients", "new_patients"));
 kpi("Net Patient Growth",       "#,##0",    tEffRunRate("net_patient_growth"),   vPctP("Net Patient Growth"),        bgHigherEff("Net Patient Growth", "net_patient_growth"));
-kpi("Lapsed Patients",          "#,##0",    tEffRunRateAdd("lapsed_patients"),      vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
-kpi("Lapsed (Set Inactive)",    "#,##0",    tEffRunRateAdd("lapsed_deactivated"),   vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
-kpi("Lapsed (Silently)",        "#,##0",    tEffRunRateAdd("lapsed_calculated"),    vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
+kpi("Lapsed Patients",          "#,##0",    tDaily("lapsed_patients"),      vPctGreyP("Lapsed Patients"),       bgLowerEffGrey("Lapsed Patients", "lapsed_patients"));
+kpi("Lapsed (Set Inactive)",    "#,##0",    tDaily("lapsed_deactivated"),   vPctGreyP("Lapsed (Set Inactive)"), bgLowerEffGrey("Lapsed (Set Inactive)", "lapsed_deactivated"));
+kpi("Lapsed (Silently)",        "#,##0",    tDaily("lapsed_calculated"),    vPctGreyP("Lapsed (Silently)"),     bgLowerEffGrey("Lapsed (Silently)", "lapsed_calculated"));
 kpi("Active Patients",          "#,##0",    tEffAdd("active_patients"),             vPctGreyP("Active Patients"),       bgHigherEffGrey("Active Patients", "active_patients"));
 kpi("Recall Effectiveness",     "#,##0.0%", tEff100("recall_compliance"),        vPp("Recall Effectiveness"),        bgHigherPp("Recall Effectiveness", "recall_compliance"));
 kpi("Patient Retention",        "#,##0.0%", tEff100("patient_retention"),        vPpP("Patient Retention"),          bgHigherPp("Patient Retention", "patient_retention"));
