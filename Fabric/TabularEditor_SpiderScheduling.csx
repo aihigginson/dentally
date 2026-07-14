@@ -59,11 +59,6 @@ add("Spider Sch Days Next 30 Min",
 RETURN IFERROR(DIVIDE(tgt, [Days Until Next 30 Minute Free]), 2)",
     @"0.00");
 
-add("Spider Sch Days Next 1 Hr",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""days_until_1hr_free""), '_Targets'[Target Value])
-RETURN IFERROR(DIVIDE(tgt, [Days Until Next 1 Hour Free]), 2)",
-    @"0.00");
-
 // ── Targets ───────────────────────────────────────────────────────────────────
 
 add("Spider Sch Tgt Chair Utilisation",
@@ -95,11 +90,6 @@ add("Spider Sch Tgt Days Next 30 Min",
 RETURN IF(ISBLANK(tgt), BLANK(), 1)",
     @"0.00");
 
-add("Spider Sch Tgt Days Next 1 Hr",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""days_until_1hr_free""), '_Targets'[Target Value])
-RETURN IF(ISBLANK(tgt), BLANK(), 1)",
-    @"0.00");
-
 // ── Practice averages (ALL bypasses practitioner slicer) ──────────────────────
 
 add("Spider Sch Avg Chair Utilisation",
@@ -124,8 +114,4 @@ add("Spider Sch Avg BBYL",
 
 add("Spider Sch Avg Days Next 30 Min",
     @"CALCULATE([Spider Sch Days Next 30 Min], ALLSELECTED('List Practitioners'))",
-    @"0.00");
-
-add("Spider Sch Avg Days Next 1 Hr",
-    @"CALCULATE([Spider Sch Days Next 1 Hr], ALLSELECTED('List Practitioners'))",
     @"0.00");

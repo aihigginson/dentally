@@ -53,10 +53,6 @@ add("Spider New Patients",
     @"[New Patients]",
     @"#,##0");
 
-add("Spider Tx Conversion",
-    @"[Treatment Acceptance Rate]",
-    @"0.0%");
-
 add("Spider DNA Score",
     @"VAR r = [DNA Rate]
 RETURN IF(ISBLANK(r), BLANK(), 1 - r)",
@@ -84,10 +80,6 @@ add("Spider Target New Patients",
     @"[New Patients Target]",
     @"#,##0");
 
-add("Spider Target Tx Conversion",
-    @"[Treatment Acceptance Rate Target]",
-    @"0.0%");
-
 add("Spider Target DNA Score",
     @"VAR r = [DNA Rate Target]
 RETURN IF(ISBLANK(r), BLANK(), 1 - r)",
@@ -114,10 +106,6 @@ add("Spider Avg Rev Per Hour",
 add("Spider Avg New Patients",
     @"CALCULATE([Spider New Patients], ALLSELECTED('List Practitioners'))",
     @"#,##0");
-
-add("Spider Avg Tx Conversion",
-    @"CALCULATE([Spider Tx Conversion], ALLSELECTED('List Practitioners'))",
-    @"0.0%");
 
 add("Spider Avg DNA Score",
     @"CALCULATE([Spider DNA Score], ALLSELECTED('List Practitioners'))",

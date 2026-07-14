@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V064 -- Fact_Treatment_Plans: item value from tpi.Price not Total_Price
+# =====================================================================
+# On real Dentally data tpi.Total_Price is NULL (mock-era field); the real line
+# value is tpi.Price. The completed/outstanding private-value split therefore
+# summed to £0 -> Open Courses Value + Open Courses Without Appointment Value blank.
+# Switch both SUMs to ISNULL(TRY_CAST(tpi.Price AS DECIMAL(18,4)),0). Verified on
+# dev T100: Private_Treatment_Value_Outstanding £0 -> ~£1.34M.
+#
+# Rebuild Gold.Fact_Treatment_Plans (+ Fact_Metric_Actuals + model) after deploy.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V064__tp_price_outstanding.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+
+TEST

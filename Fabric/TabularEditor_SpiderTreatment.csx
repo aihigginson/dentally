@@ -45,10 +45,6 @@ add("Spider Tx Exam Ratio",
     @"[Exam Ratio]",
     @"0.0%");
 
-add("Spider Tx Acceptance Rate",
-    @"[Treatment Acceptance Rate]",
-    @"0.0%");
-
 // ── Targets ───────────────────────────────────────────────────────────────────
 
 add("Spider Tx Tgt Rev Per Hour",
@@ -69,10 +65,6 @@ add("Spider Tx Tgt Exam Ratio",
     @"[Exam Ratio Target]",
     @"0.0%");
 
-add("Spider Tx Tgt Acceptance Rate",
-    @"[Treatment Acceptance Rate Target]",
-    @"0.0%");
-
 // ── Practice averages (ALL bypasses practitioner slicer) ──────────────────────
 
 add("Spider Tx Avg Rev Per Hour",
@@ -89,8 +81,4 @@ add("Spider Tx Avg Open Courses",
 
 add("Spider Tx Avg Exam Ratio",
     @"CALCULATE([Spider Tx Exam Ratio], ALLSELECTED('List Practitioners'))",
-    @"0.0%");
-
-add("Spider Tx Avg Acceptance Rate",
-    @"CALCULATE([Spider Tx Acceptance Rate], ALLSELECTED('List Practitioners'))",
     @"0.0%");

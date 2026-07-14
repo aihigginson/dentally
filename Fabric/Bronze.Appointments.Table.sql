@@ -28,6 +28,7 @@ CREATE TABLE [Bronze].[Appointments](
 	[Reason] [VARCHAR](255) NULL,
 	[Start_Time] [VARCHAR](255) NULL,
 	[State] [VARCHAR](255) NULL,
+	[Updated_At] [VARCHAR](255) NULL,
 	[User_ID] [int] NULL,
 	[UUID] [VARCHAR](255) NULL,
 	[Tenant_ID] [int] NULL,

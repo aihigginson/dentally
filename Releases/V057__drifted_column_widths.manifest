@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V057 -- recreate tables with drifted (too-narrow) column widths
+# =====================================================================
+# Dev-vs-prod width audit (sys.columns) found 3 columns where a *.Table.sql width was widened
+# in the repo but the LIVE table was never recreated (Fabric can't ALTER COLUMN a width), so the
+# live column stayed narrow -> latent 8152. Silver.Patients.Preferred_Phone is fixed by V056;
+# this release does the other two:
+#   * Silver.Practitioners.Contract_Targets_String  -> VARCHAR(MAX)  (live: dev 200 / prod 100)
+#   * Gold.Dim_Patients.Preferred_Phone             -> VARCHAR(50)   (live: prod 20 -- same
+#                                                       resolved-fallback phone as V056, one layer up)
+# Both DROP/CREATE from the repo DDL (the source of truth) + reload. Deploy AFTER V056 (Gold.
+# Dim_Patients reload reads the recreated Silver.Patients).
+#
+# Gold.Dim_Patients pk is deterministic (ROW_NUMBER over Tenant_ID, Patient_ID), so recreating +
+# reloading yields the SAME pk_Patient values -> existing facts' fk_Patient stay valid. Run a full
+# Orchestrate_Build afterwards anyway so every fact re-resolves against the rebuilt dim.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V057__drifted_column_widths.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Silver.Practitioners.Table.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Practitioners @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+DEPLOY  Fabric\Gold.Dim_Patients.Table.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

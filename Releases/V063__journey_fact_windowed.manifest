@@ -1,0 +1,19 @@
+# =====================================================================
+# Release V063 -- Fact_Appointment_Journey windowed next-pointers (perf)
+# =====================================================================
+# Replace the 4x correlated OUTER APPLY TOP-1 next-appointment pointers in
+# Gold.usp_Load_Fact_Appointment_Journey with a single windowed pass
+# (FIRST_VALUE ... IGNORE NULLS + a LAST_VALUE tie broadcast that preserves the
+# strict "Start_Time >" semantics). The APPLYs were O(n^2) on a columnstore work
+# table Fabric cannot index -> ~13 min on ~173k rows; windowed = ~4s.
+#
+# Output is byte-identical: verified 0 pointer mismatches over 246,520 dev rows
+# (same rows, same keys). Pure DROP/CREATE of the proc -- the next build rebuilds
+# the table with identical data, so nothing downstream shifts.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V063__journey_fact_windowed.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Appointment_Journey.StoredProcedure.sql
+
+TEST

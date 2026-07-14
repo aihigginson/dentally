@@ -220,20 +220,6 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
 
-add("Revenue Per Dentist Hour",
-    @"VAR by_prac_day =
-SUMMARIZE(
-    FILTER(
-        'Aggregate Site Patient Practitioner Daily',
-        RELATED('List Practitioners'[Role]) IN {""dentist"",""orthodontist""}
-    ),
-    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
-    'Aggregate Site Patient Practitioner Daily'[fk Date],
-    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
-VAR total_worked = SUMX(by_prac_day, [WH])
-RETURN DIVIDE([Total Revenue], total_worked)",
-    "£#,##0");
-
 add("DNA Revenue Lost",
     @"VAR dna_count =
     CALCULATE(
@@ -271,7 +257,6 @@ kpi("Private Revenue",           "£#,##0", tDaily("private_revenue"),          
 kpi("Outstanding Invoices",      "£#,##0", tEffAdd("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tEff("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tEff("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));
-kpi("Revenue Per Dentist Hour",  "£#,##0", tEff("revenue_per_dentist_hour"),   vPct("Revenue Per Dentist Hour"),  bgHigherEffF("Revenue Per Dentist Hour", "revenue_per_dentist_hour"));
 kpi("DNA Revenue Lost",          "£#,##0", tEff("dna_revenue_lost"),           vPct("DNA Revenue Lost"),          bgLowerEffF("DNA Revenue Lost", "dna_revenue_lost", false));
 kpi("Deposit Value",             "0.0%",   tEff100("deposit_ratio"),           vPp("Deposit Value"),              bgHigherPpF("Deposit Value", "deposit_ratio"));
 kpi("Discounts",                 "0.0%",   tEff100("discounts"),               vPp("Discounts"),                  bgLowerPpF("Discounts", "discounts"));

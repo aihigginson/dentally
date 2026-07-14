@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V067 -- Metric target controls + activation edits
+# =====================================================================
+# Adds two nullable columns to Config.Metric_Definitions:
+#   Has_Target                 -- 0 = no separate target (excluded from the targets
+#                                 template); NULL/1 = has a target.
+#   Target_Practitioner_Roles  -- CSV of roles a practitioner target applies to
+#                                 (NULL = all supported). e.g. exam_ratio -> 'Dentist'.
+# Post-seed adjustments (in the Data.sql):
+#   Is_Active=0  : revenue_per_dentist_hour, acceptance_rate, days_until_1hr_free  (cut)
+#   Has_Target=0 : lapsed_deactivated, lapsed_calculated  (roll up into lapsed_patients)
+#   exam_ratio   : Target_Practitioner_Roles='Dentist'
+# Generate_Targets_Template.py now filters on Is_Active=1 AND Has_Target<>0 and only
+# emits practitioner rows for the scoped roles.
+#
+# DEPLOY THIS BEFORE re-running Generate_Targets_Template.py (it reads the new columns).
+# Table.sql DROP/CREATEs then Data.sql re-seeds (MERGE) + applies the adjustments.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V067__metric_target_controls.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Table.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

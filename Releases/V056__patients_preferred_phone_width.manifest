@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V056 -- widen Silver.Patients.Preferred_Phone to 50 (recreate)
+# =====================================================================
+# 8152 "String or binary data would be truncated" on Silver.usp_Load_Patients for real data.
+# Culprit = Preferred_Phone: real preferred_phone_number is a CODE (1/2/3) that Maple leaves
+# blank, so Silver resolves it and (V045) falls back to any available number -- a Home_Phone up
+# to 31 chars -- into a VARCHAR(20). V043 widened it 20->50 but ONLY in the fresh-install DDL;
+# it shipped no ALTER migration, and Fabric can't ALTER COLUMN a width, so existing tables (prod)
+# stayed at 20 while a recreated dev table got 50. Fix: recreate Silver.Patients from the current
+# DDL (DROP/CREATE at VARCHAR(50)) then reload from Bronze.
+#
+# NB: the DEPLOY DROPs + recreates Silver.Patients (empties it); the EXEC reloads it from Bronze,
+# and the subsequent full build rebuilds Dim_Patients + everything downstream.
+#
+# SYSTEMIC: any width/type change made only in a *.Table.sql (not a recreate-in-manifest) never
+# reaches existing warehouses -- worth auditing other Silver widths vs live prod.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V056__patients_preferred_phone_width.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Silver.Patients.Table.sql
+EXEC    DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

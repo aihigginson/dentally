@@ -1,4 +1,4 @@
-﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Patient_Referrals] @Tenant_ID=1, @Full_Refresh=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Patient_Referrals] @Tenant_ID=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Patient_Referrals
 --  Author           :  AIH
@@ -13,7 +13,6 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Patient_Referrals]
 (
       @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
@@ -80,13 +79,6 @@ BEGIN
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Patient_Referrals tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
 
-        IF @Full_Refresh = 1
-        BEGIN
-            DELETE tgt FROM Bronze.Patient_Referrals AS tgt
-            WHERE tgt.Tenant_ID = @Tenant_ID
-              AND NOT EXISTS (SELECT 1 FROM #src WHERE ID = tgt.ID);
-            SET @My_Deletes = @@ROWCOUNT;
-        END
 
         DROP TABLE IF EXISTS #src;
 

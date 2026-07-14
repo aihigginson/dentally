@@ -14,6 +14,14 @@
 --                            Process_Options; re-execute with the parsed @Tenant_ID/@Full_Refresh so the
 --                            correct tenant is rerun. ROW_NUMBER still partitions by (Name,Options) so
 --                            each failed tenant seeds its own row.
+--    *06     09/07/2026  AIH Fix rerun ORDERING: Step 2 assigned each downstream job the SHORTEST-path
+--                            level (first reached, never bumped), so a job reachable via a short path
+--                            but DEPENDENT on a job reached via a longer path landed at the SAME level
+--                            as its dependency and could run BEFORE it on the Step-3 tie-break. This ran
+--                            the daily aggregate before Fact_Practitioner_Diaries -> Worked_Hours = 0
+--                            (blank Chair Utilisation / Revenue per Clinical Hour). Now LONGEST-path
+--                            levels (level = max(prereq levels)+1) so a job always sequences after every
+--                            dependency. (Process_Dependency is a DAG, so the relaxation terminates.)
 --  To Run           :   EXEC Audit.usp_Rerun_Failed_Jobs
 --                   :   EXEC Audit.usp_Rerun_Failed_Jobs @Category_Code = 'BRONZE'
 --  To inspect plan  :   SELECT * FROM Audit.Rerun_Plan ORDER BY Rerun_ID DESC, Exec_Seq
@@ -60,30 +68,48 @@ BEGIN
         WHERE   latest.Status = 'FAILED'
           AND   (@Category_Code IS NULL OR pc.Process_Category_Code = @Category_Code);
 
-        -- ── Step 2: iteratively add transitive downstream dependencies ─────────
-        DECLARE @Current_Level INT = 0;
-        DECLARE @Added         INT = 1;
+        -- ── Step 2: add transitive downstream deps at their LONGEST-path level ─
+        -- Level = max(level of every in-plan prerequisite) + 1, relaxed to a fixpoint. This
+        -- guarantees a job sequences AFTER all its dependencies even when it is ALSO reachable
+        -- via a shorter path (the old shortest-path BFS pinned it at the first level it was
+        -- reached and never bumped it -> aggregate could tie with the diary it depends on and
+        -- run first -> Worked_Hours=0). Process_Dependency is a DAG so the relaxation terminates.
+        DECLARE @Changed INT = 1;
 
-        WHILE @Added > 0
+        WHILE @Changed > 0
         BEGIN
-            SET @Current_Level = @Current_Level + 1;
+            -- best (max prereq level + 1) each downstream job can currently be reached at
+            DROP TABLE IF EXISTS #cand;
+            SELECT   pd.Next_Process_Code       AS Process_Code
+                   , MAX(p.Run_Level) + 1       AS New_Level
+            INTO    #cand
+            FROM    Audit.Process_Dependency AS pd
+            INNER JOIN #plan AS p ON p.Process_Code = pd.Prev_Process_Code
+            WHERE   pd.Is_Active = 1
+            GROUP BY pd.Next_Process_Code;
 
-            -- Downstream jobs (Silver/Gold) are tenant-agnostic -> no Failed_Options.
+            -- add downstream jobs not yet planned (tenant-agnostic -> no Failed_Options)
             INSERT INTO #plan (Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Downstream, Failed_Options)
             SELECT   pc.Process_Code
                    , pc.Process_Name
                    , pc.Process_Category_Code
-                   , @Current_Level
+                   , c.New_Level
                    , 1
                    , NULL
-            FROM    Audit.Process_Dependency AS pd
-            INNER JOIN Audit.Process_Config  AS pc ON pc.Process_Code = pd.Next_Process_Code
-            WHERE   pd.Is_Active = 1
-              AND   pd.Prev_Process_Code IN (SELECT Process_Code FROM #plan WHERE Run_Level = @Current_Level - 1)
-              AND   pd.Next_Process_Code NOT IN (SELECT Process_Code FROM #plan);
+            FROM    #cand AS c
+            INNER JOIN Audit.Process_Config AS pc ON pc.Process_Code = c.Process_Code
+            WHERE   c.Process_Code NOT IN (SELECT Process_Code FROM #plan);
+            SET @Changed = @@ROWCOUNT;
 
-            SET @Added = @@ROWCOUNT;
+            -- bump any already-planned job whose level is now too low (a longer path was found)
+            UPDATE  p
+            SET     p.Run_Level = c.New_Level
+            FROM    #plan AS p
+            INNER JOIN #cand AS c ON c.Process_Code = p.Process_Code
+            WHERE   p.Run_Level < c.New_Level;
+            SET @Changed = @Changed + @@ROWCOUNT;
         END
+        DROP TABLE IF EXISTS #cand;
 
         -- ── Step 3: write the final ordered plan to Audit.Rerun_Plan once ─────
         -- Exec_Seq is assigned here via ROW_NUMBER — this is the only INSERT,

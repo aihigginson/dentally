@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V058 -- referential-integrity + sentinel gate
+# =====================================================================
+# Post-build guard: PBI import models silently drop/fan-out rows when a fact fk doesn't resolve
+# to a dim pk (a dangling key -- e.g. after a dim DROP/CREATE recreate shifts its ROW_NUMBER pk
+# while a watermark-incremental fact keeps the old fk) or when a dim is missing its -1 sentinel.
+# This cost a full day of "the embed shows less than Desktop" before it was found by hand.
+#
+#   * Audit.RI_Check_Config  -- fact fk -> target pk map (seeded from live Gold metadata;
+#                               sys.* can't be queried inside a Fabric proc, so it's a table).
+#   * Audit.RI_Check_Result  -- persisted per-run violations (a durable RI audit; also #temp is
+#                               unusable inside the dynamic SQL in Fabric distributed mode).
+#   * Audit.usp_Check_Referential_Integrity -- checks sentinels + orphans + a "mostly -1" warn,
+#                               THROWS on any hard violation. Run via ETL_Run_Process so a clean
+#                               run logs SUCCESS and a violation logs FAILED to the Execution log.
+#
+# TO WIRE IN (last step of orchestration): register this SP in Audit.Process_Config as a terminal
+# job and add Audit.Process_Dependency edges from the final Gold/Agg jobs to it, so it runs LAST in
+# Orchestrate_Build and a bad build cannot reach PBI. (Generate_Process_Dependencies handles the
+# edges; classify it GOLD_AGG so the Gold->Agg ordering puts it after the facts.)
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V058__referential_integrity_gate.manifest -SkipTests
+# =====================================================================
+
+# DEPLOY the objects only -- do NOT EXEC the check here (it THROWS on any warehouse that currently
+# has violations, which would fail the deploy). The check runs as a job inside orchestration.
+DEPLOY  Fabric\Audit.RI_Check_Config.Table.sql
+DEPLOY  Fabric\Audit.RI_Check_Config.Data.sql
+DEPLOY  Fabric\Audit.usp_Check_Referential_Integrity.StoredProcedure.sql
+
+TEST

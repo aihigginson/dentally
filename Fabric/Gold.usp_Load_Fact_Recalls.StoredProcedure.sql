@@ -21,6 +21,9 @@
 --                            "first reminder sent" branch from Is_In_Scope + Retention_Outlook_In_Scope
 --                            (reminders precede the due date so it pulled in recalls due beyond the
 --                            window); forward edge +1 month -> +30 days
+--    *10     13/07/2026  AIH Retention Outlook / Overdue Recalls scoped to ACTIVE patients:
+--                            Is_In_Scope + Retention_Outlook_In_Scope now require Dim_Patients.Active=1
+--                            (the recall KPIs were including inactive patients).
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
@@ -103,7 +106,7 @@ BEGIN
             -- (The old "first reminder sent" branch was removed: reminders go out ahead of
             --  the due date, which pulled in recalls due beyond the window e.g. end of next month.)
             CAST(CASE
-                WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo                THEN 1
+                WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo AND ISNULL(dpat.Active,0) = 1 THEN 1
                 ELSE 0
             END AS BIT)                                                     AS Is_In_Scope,
             CAST(CASE
@@ -123,7 +126,7 @@ BEGIN
             -- Retention Outlook pre-computed flags (aggregated by KPI Snapshot SP per patient then per site)
             -- In scope = DUE within [-24m, +30d]; mirrors Is_In_Scope above (reminder-sent branch removed).
             CAST(CASE
-                WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo                THEN 1
+                WHEN r.Due_Date BETWEEN @ScopeFrom AND @ScopeTo AND ISNULL(dpat.Active,0) = 1 THEN 1
                 ELSE 0
             END AS INT)                                                     AS Retention_Outlook_In_Scope,
             CAST(CASE

@@ -39,14 +39,22 @@ USING (VALUES
         'Of patients whose recall is overdue, the percentage who have not been sent any recall reminder. A process-failure measure — these patients are due back but have had no prompt. Lower is better.'),
     ('retention_outlook',          'Retention Outlook',                  'patients',   'percent',  'Percentage of patients with an active recall who have a future appointment booked', 1, 0, 1, 25, 'above', 'point_in_time',
         'The percentage of patients with an active recall who already have a future appointment booked. A forward-looking retention measure: how much of the recalled patient base is secured to return. Higher is better.'),
+    ('dentist_retention_outlook',  'Dentist Retention Outlook',          'patients',   'percent',  'Of patients whose dentist recall falls in the next 4 weeks, the % with a future exam booked', 1, 0, 1, 23, 'above', 'point_in_time',
+        'Of active patients whose dentist recall date falls within the next four weeks, the percentage who already have a future examination booked. A forward-looking retention gauge -- how well the upcoming recall book is converting into booked exams. Higher is better.'),
+    ('hygiene_retention_outlook',  'Hygiene Retention Outlook',          'patients',   'percent',  'Of patients whose hygiene recall falls in the next 4 weeks, the % with a future hygiene appointment booked', 1, 0, 1, 24, 'above', 'point_in_time',
+        'Of active patients whose hygienist recall date falls within the next four weeks, the percentage who already have a future hygiene (scale & polish) appointment booked. A forward-looking retention gauge for hygiene. Higher is better.'),
+    ('dentist_recall_conversion',  'Dentist Recall Conversion',          'patients',   'percent',  'Of concluded dentist recalls that were reminded, the % where the patient returned', 1, 0, 1, 25, 'above', 'point_in_time',
+        'Of dentist recall cycles that were actively chased (a reminder was sent) and have since concluded, the percentage that ended with the patient returning (Completed vs Missed). Measures how effective the recall reach-out is once you have to contact the patient. Higher is better.'),
+    ('hygiene_recall_conversion',  'Hygiene Recall Conversion',          'patients',   'percent',  'Of concluded hygiene recalls that were reminded, the % where the patient returned', 1, 0, 1, 26, 'above', 'point_in_time',
+        'Of hygienist recall cycles that were actively chased (a reminder was sent) and have since concluded, the percentage that ended with the patient returning (Completed vs Missed). Higher is better.'),
     ('lapsed_patients',            'Lapsed Patients',                    'patients',   'count',    'Patients who lapsed in the period (deactivated, or 730+ days since last seen)', 1, 1, 1, 26, 'below', 'cumulative',
         'The number of patients whose 24-month examination clock expired during the period — who passed the point of being considered active without returning. Now a flow metric summed over the period. Lower is better; a measure of attrition.'),
     ('lapsed_deactivated',         'Lapsed (Set Inactive)',              'patients',   'count',    'Patients set inactive (Active=0) in the period',                             1, 1, 1, 27, 'below', 'cumulative',
         'Patients explicitly marked inactive during the period -- the definitive lapsed cohort. Lower is better.'),
     ('lapsed_calculated',          'Lapsed (Silently)',                  'patients',   'count',    'Active patients 730+ days since last seen, in the period',                    1, 1, 1, 28, 'below', 'cumulative',
         'Patients still marked active but 730+ days since their last appointment with no future booking -- silently lapsed. Lower is better.'),
-    ('overdue_recalls',            'Overdue Recalls',                    'patients',   'count',    'Number of patients whose recall appointment is overdue',                  1, 0, 1, 27, 'below', 'point_in_time',
-        'The number of patients whose recall (re-examination) due date has passed without an appointment booked. A point-in-time backlog of patients overdue to return. Lower is better.'),
+    ('overdue_recalls',            'Overdue Recalls',                    'patients',   'count',    'Recalls that are due but the practice has not actioned (no reminder sent)', 1, 0, 1, 27, 'below', 'point_in_time',
+        'The number of recalls that have fallen due but the practice has not yet actioned -- an open (Unbooked) recall past its due date with no reminder sent. A process/backlog measure of the practice''s own recall workload (are we reaching out?), NOT patient behaviour. Lower is better.'),
     ('email_details_rate',         'Email Details Rate',                 'patients',   'percent',  'Percentage of active patients with a valid email address on file',        1, 0, 1, 28, 'above', 'point_in_time',
         'The percentage of active patients who have a valid email address on file. Higher is better — it underpins recall reminders, marketing and digital communication. A data-quality and reachability measure.'),
     ('phone_details_rate',         'Phone Details Rate',                 'patients',   'percent',  'Percentage of active patients with a valid phone number on file',         1, 0, 1, 29, 'above', 'point_in_time',
@@ -58,13 +66,17 @@ USING (VALUES
         'The number of courses of treatment currently open (started but not completed) as at the reporting date. A point-in-time work-in-progress count; persistently high or rising figures can indicate stalled treatment. Lower is generally better.'),
     ('open_courses_without_appt',  'Open Courses Without Appointment',   'treatment',  'count',    'Number of open courses with no future appointment booked', 0, 1, 1, 33, 'below', 'point_in_time',
         'Of the open courses of treatment, the number with no future appointment booked to continue them. These are at risk of stalling — the patient is mid-treatment with nothing scheduled. Lower is better.'),
+    ('open_courses_without_appt_value', 'Open Courses Without Appointment Value', 'treatment', 'currency', 'Total uncharged value of open courses with no future appointment booked', 0, 1, 1, 51, 'below', 'point_in_time',
+        'The total price of work still to be charged on open courses of treatment that have no future appointment booked — money committed but not scheduled. The at-risk work-in-progress; lower is better, and converted by booking these patients back in.'),
     ('exam_ratio',                 'Exam Ratio',                         'treatment',  'percent',  'Percentage of appointments that are examinations', 0, 1, 1, 34, 'within', 'rate',
         'The percentage of appointments that are examinations (check-ups) rather than treatment. Judged against a healthy band rather than simply higher or lower — too low may mean under-recall, too high may mean too little treatment delivered.'),
     ('avg_plan_value',             'Average Plan Value',                 'treatment',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
         'The average value of the treatment plans presented to patients in the period — total presented plan value divided by the number of plans. A measure of case size and treatment ambition. Higher generally means larger cases proposed.'),
 -- Scheduling
-    ('chair_utilisation',          'Chair Utilisation',                  'scheduling', 'percent',  'Percentage of available chair time that was booked', 0, 1, 1, 40, 'above', 'rate',
-        'The percentage of available chair (surgery) time that was booked with appointments in the period. A capacity measure of how fully the diary is used. Higher is better, up to practical limits.'),
+    ('diary_fill',                 'Diary Fill',                         'scheduling', 'percent',  'Percentage of worked time booked with appointments', 0, 1, 1, 39, 'above', 'rate',
+        'The percentage of available worked time booked with patient appointments (scheduled appointment hours / worked hours). Measures how full the diary is -- the forward-plannable capacity metric, and the only chair metric computable ahead of time. Higher is better, up to practical limits; can exceed 100% when over-booked.'),
+    ('chair_utilisation',          'Chair Utilisation',                  'scheduling', 'percent',  'Percentage of worked time the patient was actually in the chair', 0, 1, 1, 40, 'above', 'rate',
+        'The percentage of available worked time in which a patient was actually in the surgery, from logged in-surgery time (capped to the slot so unclosed sessions cannot overstate it). Distinct from Diary Fill (how full the diary is booked): a full diary with poor chair utilisation means appointments are scheduled longer than the patient is really in the chair. Higher is better, up to practical limits.'),
     ('dna_rate',                   'DNA Rate',                           'scheduling', 'percent',  'Percentage of appointments that were did-not-attend', 0, 1, 1, 41, 'below', 'rate',
         'The percentage of booked appointments where the patient did not attend (DNA) and gave no notice. Represents lost capacity and revenue. Lower is better.'),
     ('days_until_30min_free',      'Days Until Next 30 Minute Free',     'scheduling', 'count',    'Days until the next available 30-minute diary slot for any practitioner', 1, 1, 1, 42, 'below', 'point_in_time',
@@ -77,8 +89,12 @@ USING (VALUES
         'The percentage of appointments in the period that were cancelled, at any notice. A measure of diary stability. Lower is better.'),
     ('short_notice_cancellation_rate', 'Short Notice Cancellation Rate', 'scheduling', 'percent',  'Percentage of cancellations that were made with short notice', 0, 1, 1, 46, 'below', 'rate',
         'Of cancelled appointments, the percentage cancelled at short notice — too late to realistically rebook the slot. These are the most damaging cancellations for capacity and revenue. Lower is better.'),
+    ('immediate_forward_utilisation', 'Immediate Forward Utilisation', 'scheduling', 'percent', 'Percentage of the next 7 days of chair capacity already booked', 1, 1, 1, 47, 'above', 'point_in_time',
+        'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
+    ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
+        'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
 -- Home
-    ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'above', 'point_in_time',
+    ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
  -- NHS
     ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'within', 'rate',
@@ -107,4 +123,34 @@ WHEN NOT MATCHED THEN INSERT (
     src.[Metric_Key], src.[Display_Name], src.[Section], src.[Format_Type], src.[Description],
     src.[Supports_Site], src.[Supports_Practitioner], src.[Is_Active], src.[Display_Order], src.[Range_Type], src.[Target_Type], src.[Long_Description]
 );
+GO
+
+-- ── Post-seed adjustments (2026-07-13) ──────────────────────────────────────
+-- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
+
+-- Cut metrics: removed from the product (dead-end / superseded).
+--   revenue_per_dentist_hour      = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
+--   acceptance_rate               = dead end on real data (Accepted_At NULL on all plans)
+--   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
+--   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
+--                                   forward date window via the 'List Date Unconstrained' heatmap axis)
+--   retention_outlook = replaced by the two-source recall model: Dentist/Hygiene Retention Outlook
+--                       (forward, patient recall dates) + Dentist/Hygiene Recall Conversion (reactive,
+--                       real recall-record status). The old single metric counted completed/historical
+--                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
+UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook');
+
+-- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
+
+-- NHS Revenue target is derived from the NHS CONTRACT (UDA target x rate), not the
+-- manually-entered targets spreadsheet.
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] = 'nhs_revenue';
+
+-- Exam Ratio target is only meaningful for Dentists -> only generate Dentist practitioner rows.
+UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
+    WHERE [Metric_Key] = 'exam_ratio';
 GO

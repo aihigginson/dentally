@@ -76,15 +76,16 @@ RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
 
-// Current-state rate: date-blind DIVIDE.
+// Current-state rate: date-blind DIVIDE. currate metrics are all practitioner-AGNOSTIC (stored at
+// fk Practitioner = -1 only), so pin to -1 and IGNORE the practitioner slicer -> shows the global
+// value (greyed by the GreyP variance) instead of blanking to "No data" when a practitioner is picked.
 Func<string,string> dCurRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
 Func<string,string,string> build = (shape, key) => {
@@ -107,8 +108,9 @@ var metrics = new[] {
     new[]{"Cancellation Frequency",           "cancellation_frequency",         "rate",    "0.0%"},
     new[]{"Short Notice Cancellation Rate",   "short_notice_cancellation_rate", "rate",    "#,##0.0%"},
     new[]{"Exam Ratio",                       "exam_ratio",                     "rate",    "#,##0.0%"},
+    new[]{"Diary Fill",                       "diary_fill",                     "rate",    "#,##0.0%"},
     new[]{"Chair Utilisation",                "chair_utilisation",              "rate",    "#,##0.0%"},
-    new[]{"Treatment Acceptance Rate",        "acceptance_rate",                "rate",    "#,##0.0%"},
+    new[]{"Patient Tracked in Surgery",       "patient_tracked_in_surgery",     "rate",    "#,##0.0%"},
     new[]{"Average Plan Value",               "avg_plan_value",                 "rate",    "£#,##0"},
     new[]{"Revenue Per Clinical Hour",        "revenue_per_clinical_hour",      "rate",    "£#,##0"},
     new[]{"Discounts",                        "discounts",                      "rate",    "0.0%"},
@@ -117,16 +119,20 @@ var metrics = new[] {
     new[]{"Lapsed Patients",                  "lapsed_patients",                "cum",     "#,##0"},
     new[]{"Lapsed (Set Inactive)",            "lapsed_deactivated",             "cum",     "#,##0"},
     new[]{"Lapsed (Silently)",                "lapsed_calculated",              "cum",     "#,##0"},
-    new[]{"Overdue Recalls",                  "overdue_recalls",                "snap",    "#,##0"},
     new[]{"Outstanding Invoices",             "outstanding_invoices",           "snap",    "£#,##0"},
+    // Overdue Recalls is practitioner-agnostic but 'cur' also serves practitioner-supporting metrics
+    // (days_until_*), so it is NOT retargeted here -- its bespoke measure in Patients.csx pins fk
+    // Practitioner = -1 (global, greyed) directly.
     // Open Courses family now reads Gold.Fact_Treatment_Plans LIVE (via '_Treatment Plans' +
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
     // rules + 3-month recency band evaluate at query time (no row rebuild as courses age).
     new[]{"Days Until Next 30 Minute Free",   "days_until_30min_free",          "cur",     "#,##0"},
-    new[]{"Days Until Next 1 Hour Free",      "days_until_1hr_free",            "cur",     "#,##0"},
     new[]{"Email Details Rate",               "email_details_rate",             "currate", "#,##0.0%"},
     new[]{"Phone Details Rate",               "phone_details_rate",             "currate", "#,##0.0%"},
-    new[]{"Retention Outlook",                "retention_outlook",              "currate", "#,##0.0%"},
+    new[]{"Dentist Retention Outlook",        "dentist_retention_outlook",      "currate", "#,##0.0%"},
+    new[]{"Hygiene Retention Outlook",        "hygiene_retention_outlook",      "currate", "#,##0.0%"},
+    new[]{"Dentist Recall Conversion",        "dentist_recall_conversion",      "currate", "#,##0.0%"},
+    new[]{"Hygiene Recall Conversion",        "hygiene_recall_conversion",      "currate", "#,##0.0%"},
 };
 
 int applied = 0, missing = 0, made = 0;

@@ -1,0 +1,23 @@
+# =====================================================================
+# Release V077 -- Fix dummy-diary utilisation >100% (worked = booked)
+# =====================================================================
+# Dummy diary days (appt-only, no rota) were reading Diary Fill ~145% and Chair Util ~116%.
+# Cause: the dummy "worked hours" used the first->last SPAN, which swept in gap + block time;
+# the aggregate then subtracted block minutes on top -> denominator fell below the booked time.
+#
+# Fix (matches the intended design -- dummy days are 100% booked by definition):
+#   * Diary load: dummy Available_Clinical_Mins = SUM of appointment durations (booked time),
+#     not the span. Start/End_Time still show the first->last window.
+#   * Aggregate: do NOT subtract block minutes from Worked_Hours on dummy days (Is_Dummy=1);
+#     the booked time already excludes blocks.
+# Result (dev T100): dummy-day Diary Fill ~100%, Chair Util 80%; all-time Chair Util 84% -> ~76%.
+#
+# Both are DROP/CREATE SP redeploys -> rebuild data via Orchestrate_Build.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V077__dummy_diary_worked_equals_booked.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+TEST

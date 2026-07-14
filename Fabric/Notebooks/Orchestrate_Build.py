@@ -35,7 +35,6 @@ warehouse_sql_endpoint = ""            # leave BLANK -> auto-resolved from the c
 warehouse_name         = "WH_Dentally" # same name in every workspace
 semantic_model         = "DM Dentally" # same name in every workspace
 workspace_name         = None          # None = the notebook's current workspace (so dev/prod are identical)
-full_refresh           = False         # nightly = incremental (Bronze @Full_Refresh = 0)
 run_stage_ingest       = False         # True = run Stage_Ingest (API->Stage) per tenant first; off while Stage is seeded out-of-band
 refresh_semantic_model = True
 refresh_settle_seconds = 180           # wait after the loads before refreshing the model: the SQL
@@ -114,7 +113,13 @@ job_rows = q_all("""
 job_name     = {r[0]: r[1] for r in job_rows}
 job_category = {r[0]: r[2] for r in job_rows}
 per_tenant   = {r[0] for r in job_rows if r[3] and "{TID}" in r[3]}
-all_codes    = set(job_name)
+
+# POST-RUN gate jobs (category POSTRUN_GATE, e.g. the referential-integrity check)
+# are NOT part of the DAG: they must run AFTER every load, so keep them out of the
+# waves and fire them explicitly post-build (CELL 9b). All other jobs are DAG jobs.
+GATE_CATEGORY = "POSTRUN_GATE"
+gate_codes = sorted(c for c in job_name if job_category[c] == GATE_CATEGORY)
+all_codes  = set(c for c in job_name if job_category[c] != GATE_CATEGORY)
 
 # Active dependency edges Prev -> Next (only between known jobs)
 dep_rows = q_all("""
@@ -136,7 +141,7 @@ if tenants_override:
 if not tenants:
     raise RuntimeError("No active tenants to run (check Audit.Tenants / tenants_override)")
 
-print(f"{len(all_codes)} jobs, {len(dep_rows)} dependency edges, {len(tenants)} tenant(s): {tenants}")
+print(f"{len(all_codes)} jobs, {len(dep_rows)} dependency edges, {len(gate_codes)} post-run gate(s), {len(tenants)} tenant(s): {tenants}")
 
 
 # -----------------------------------------------------------------------------
@@ -169,7 +174,7 @@ print(f"{len(waves)} waves: " + " | ".join(f"w{i}={len(w)}" for i, w in enumerat
 # CELL 6 - Start the parent run (groups all child ETL_Run_Process runs in Audit)
 # -----------------------------------------------------------------------------
 
-run_opts = f"@full_refresh={int(full_refresh)}, @stage_ingest={int(run_stage_ingest)}, @max_parallel={max_parallel}"
+run_opts = f"@stage_ingest={int(run_stage_ingest)}, @max_parallel={max_parallel}"
 
 # ETL_Start_Run does an INSERT then SELECTs the new UUID. pyodbc surfaces the INSERT
 # (a non-query) first, so we must WALK the result sets and read whichever one is a query.
@@ -203,7 +208,7 @@ print(f"Parent run: {parent_uuid}")
 if run_stage_ingest:
     for tid in tenants:
         print(f"Stage_Ingest tenant {tid} ...")
-        mssparkutils.notebook.run("Stage_Ingest", 1200, {"tenant_id": tid, "full_refresh": full_refresh})
+        mssparkutils.notebook.run("Stage_Ingest", 1200, {"tenant_id": tid, "full_refresh": False})
     time.sleep(30)   # let lakehouse metadata propagate to the SQL engine before Bronze reads Stage
 
 
@@ -219,8 +224,8 @@ def fire(code, tenant_id=None):
         cursor.execute("SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?", code, parent_uuid)
     else:
         cursor.execute(
-            "SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?, @Tenant_ID=?, @Full_Refresh=?",
-            code, parent_uuid, tenant_id, int(full_refresh)
+            "SET NOCOUNT ON; EXEC Audit.ETL_Run_Process @Process_Code=?, @Parent_Run_UUID=?, @Tenant_ID=?",
+            code, parent_uuid, tenant_id
         )
     while cursor.nextset():   # drain ETL_Run_Process's nested result sets (it calls ETL_Start_Run)
         pass
@@ -275,6 +280,32 @@ for i, wave in enumerate(waves):
             failed.add(code)
 
 real_failures = failed - skipped
+
+
+# -----------------------------------------------------------------------------
+# CELL 9b - POST-RUN GATE: referential integrity + sentinel check
+# Not a DAG job (excluded from the waves in CELL 4) -- it must run AFTER every load.
+# On an otherwise-clean build, fire each gate via ETL_Run_Process so it self-logs to
+# Audit.Process_Execution_Log (SUCCEEDED = integrity OK ; FAILED = orphaned fact fk or
+# missing dim -1 sentinel -- the SP THROWs, ETL_Run_Process catches + logs FAILED).
+# A FAILED gate joins `failed`, which SKIPS the semantic-model refresh (CELL 11) so a
+# broken build cannot reach PBI, and makes CELL 12 raise. If the build already failed we
+# skip the gate (not publishing regardless) but say so.
+# -----------------------------------------------------------------------------
+
+if gate_codes and not failed:
+    print(f"\n=== Post-run gate ({len(gate_codes)} job(s)) ===")
+    for code in gate_codes:
+        print(f"  GATE {code} ({job_name[code]})")
+        if run_job(code):
+            ok_codes.add(code)
+        else:
+            failed.add(code)
+            print(f"    GATE FAILED {code} -- see Audit.RI_Check_Result / Process_Execution_Log.Error_Message")
+elif gate_codes:
+    print(f"\nSkipping post-run gate: build already had failures ({len(gate_codes)} gate job(s) not run).")
+
+real_failures = failed - skipped   # recompute after the gate so CELL 12 summary is accurate
 
 
 # -----------------------------------------------------------------------------

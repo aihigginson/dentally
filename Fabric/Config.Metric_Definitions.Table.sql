@@ -17,6 +17,8 @@ CREATE TABLE [Config].[Metric_Definitions] (
     [Is_Active]               BIT            NOT NULL,
     [Display_Order]           INT            NOT NULL,
     [Range_Type]              VARCHAR(10)    NOT NULL,   -- above | below | within
-    [Target_Type]             VARCHAR(20)    NOT NULL    -- cumulative | rate | point_in_time
+    [Target_Type]             VARCHAR(20)    NOT NULL,   -- cumulative | rate | point_in_time
+    [Has_Target]              BIT            NULL,        -- 0 = no separate target (excluded from the targets template); NULL/1 = has a target
+    [Target_Practitioner_Roles] VARCHAR(200) NULL         -- NULL = all supported practitioners; else CSV of roles the target applies to, e.g. 'Dentist'
 )
 GO

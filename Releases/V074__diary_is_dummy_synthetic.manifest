@@ -1,0 +1,19 @@
+# =====================================================================
+# Release V074 -- Scheduling pkg (1/n): diary Is_Dummy + synthetic entries
+# =====================================================================
+# Fact_Practitioner_Diaries gains Is_Dummy. The load now inserts SYNTHETIC diary
+# entries for (practitioner, day) that have real non-cancelled patient appointments
+# but no worked diary row -- span = first->last appointment, Is_Dummy=1. Sourced from
+# Silver.Appointments so there's no dependency on the Gold appointments fact.
+# Gives appointment-only days a worked-hours denominator for Chair Utilisation / Diary
+# Fill. Validated on dev T100: 2,344 dummy days (avg 6.9h).
+#
+# Table is DROP/CREATE (rebuild) -> the next Orchestrate_Build repopulates it.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V074__diary_is_dummy_synthetic.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.Fact_Practitioner_Diaries.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql
+
+TEST

@@ -25,7 +25,7 @@ api_key       = "dev-mock-key-abc123"
 full_refresh  = True
 updated_after = ""   # e.g. "2024-01-01T00:00:00" — leave blank to use last 24h
 
-# When called from Orchestrate_Bronze, parameters arrive as Python native types.
+# When called from Orchestrate_Build, parameters arrive as Python native types.
 # Guard against string values in case of environment differences.
 if isinstance(full_refresh, str):
     full_refresh = full_refresh.strip().lower() == "true"

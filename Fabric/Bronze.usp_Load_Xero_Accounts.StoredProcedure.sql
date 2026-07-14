@@ -11,7 +11,6 @@ GO
 CREATE PROCEDURE [Bronze].[usp_Load_Xero_Accounts]
 (
       @Tenant_ID    INT
-    , @Full_Refresh BIT              = 0
     , @Run_UUID     UNIQUEIDENTIFIER = NULL
     , @Run_Inserts  BIGINT OUT
     , @Run_Updates  BIGINT OUT
@@ -60,13 +59,6 @@ BEGIN
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Xero_Accounts tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.Account_ID = src.Account_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
-        IF @Full_Refresh = 1
-        BEGIN
-            DELETE tgt FROM Bronze.Xero_Accounts AS tgt
-            WHERE tgt.Tenant_ID = @Tenant_ID
-              AND NOT EXISTS (SELECT 1 FROM #src WHERE Account_ID = tgt.Account_ID);
-            SET @My_Deletes = @@ROWCOUNT;
-        END
 
         DROP TABLE IF EXISTS #src;
 

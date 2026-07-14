@@ -26,3 +26,7 @@ Screenshot *.png
 # Published docs are assembled from the canonical root copies at deploy time
 # (deploy-site.yml), never committed — keeps the Trust page in sync with source.
 Website/docs/
+
+# Power BI reports are managed through the Fabric pipeline, not Git
+# (and PBI Dentally.pbix exceeds GitHub's 100MB limit). Never repackage a .pbix.
+PBI/*.pbix

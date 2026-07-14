@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V055 -- usp_Rerun_Failed_Jobs longest-path ordering fix
+# =====================================================================
+# usp_Rerun_Failed_Jobs sequenced downstream reruns by SHORTEST-path level (each job pinned
+# at the first level it was reached, never bumped). A job reachable via a short path but that
+# DEPENDS on a job reached via a longer path landed at the SAME level as its dependency and
+# could run BEFORE it on the Step-3 tie-break. Real-world hit: SILVER_PATIENTS + SILVER_
+# PRACTITIONERS both failed; the daily aggregate (reads Dim_Patients = level 2) tied with
+# Fact_Practitioner_Diaries (level 2) and ran first -> Worked_Hours = 0 -> blank Chair
+# Utilisation / Revenue per Clinical Hour. Fixed to LONGEST-path levels (max(prereq)+1).
+#
+# DEPLOY-only (idempotent DROP/CREATE proc). No data change; re-run the affected loads after.
+# NB: to correct the CURRENT prod state, re-run the aggregate (or a full build-only) once --
+# this release only fixes FUTURE targeted reruns.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V055__rerun_failed_jobs_longest_path.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Audit.usp_Rerun_Failed_Jobs.StoredProcedure.sql
+
+TEST

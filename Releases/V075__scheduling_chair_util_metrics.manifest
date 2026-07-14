@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V075 -- Scheduling pkg (2-4/n): Chair Utilisation model
+# =====================================================================
+# Splits the old single "chair_utilisation" (scheduled/worked) into three metrics:
+#   diary_fill                  = scheduled appt hours / worked hours (how full the diary is;
+#                                 the only one computable forwards; can exceed 100%)
+#   chair_utilisation           = ACTUAL capped in-chair hours / worked hours (real time in the
+#                                 chair; capped at next appt start or diary end-of-day so unclosed
+#                                 sessions can't overstate it; untracked appts fall back to duration)
+#   patient_tracked_in_surgery  = appts with an in-surgery timestamp / all appts (reception tracking)
+#
+#   * Aggregate gains Chair_Hours + Tracked_Appointments (capped-chair logic, LEAD to next appt).
+#   * Fact_Metric_Actuals renames the old chair_utilisation rows -> diary_fill and adds the two new
+#     metrics (tenant + practitioner grain).
+#   * Config.Metric_Definitions: chair_utilisation redefined (actual), diary_fill + patient_tracked
+#     added. All three carry targets (appear in the targets spreadsheet).
+#
+# Deploy AFTER V074 (diary Is_Dummy + synthetic entries). Order below matters: the aggregate TABLE
+# must carry the new columns before the metric-actuals SP is (re)created (Fabric validates eagerly).
+# Rebuild data via Orchestrate_Build, then re-apply the Tabular Editor scheduling script + refresh.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V075__scheduling_chair_util_metrics.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.Aggregate_Site_Patient_Practitioner_Daily.Table.sql
+DEPLOY  Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

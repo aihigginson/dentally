@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V076 -- Retire immediate_forward_utilisation (-> Diary Fill forwards)
+# =====================================================================
+# Diary Fill and Immediate Forward Utilisation are the SAME metric (booked/scheduled hours
+# / available diary hours) -- Immediate Forward was just a hardcoded "next 7 days" snapshot.
+# Replaced by measuring Diary Fill over a forward date window on the report ('List Date
+# Unconstrained' heatmap axis + relative-date slicer), so it retires here (Is_Active=0).
+#
+# Catalog only re-seed (MERGE + post-seed UPDATEs are idempotent). The forward heatmap
+# itself is the bespoke [Diary Fill (Forward)] measure in TabularEditor_Scheduling.csx
+# (Tabular Editor re-apply, not a warehouse deploy).
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V076__retire_immediate_forward_utilisation.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

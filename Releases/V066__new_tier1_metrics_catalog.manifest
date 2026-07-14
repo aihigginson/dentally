@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V066 -- Catalog the 2 new Tier-1 metrics
+# =====================================================================
+# Adds to Config.Metric_Definitions (idempotent MERGE re-seed):
+#   open_courses_without_appt_value  (treatment, currency, below, point_in_time)
+#   immediate_forward_utilisation    (scheduling, percent,  above, point_in_time)
+# So they appear in the targets template (Generate_Targets_Template.py reads
+# Config.Metric_Definitions WHERE Is_Active=1) and are governed for glossary/RAG.
+# Deploy this BEFORE generating the Maple targets spreadsheet.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V066__new_tier1_metrics_catalog.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+
+TEST
