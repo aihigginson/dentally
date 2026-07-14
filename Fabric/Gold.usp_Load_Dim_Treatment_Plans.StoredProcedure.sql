@@ -51,9 +51,9 @@ BEGIN
             TRY_CAST(LEFT(NULLIF(TRIM(End_Date),   ''), 10) AS DATE)            AS End_Date,
             TRY_CAST(NULLIF(TRIM(Completed_At),'') AS datetime2(3))             AS Completed_Date,
             TRY_CAST(NULLIF(TRIM(Last_Completed_At),'') AS DATE)                AS Last_Completed_Date,
-            CAST(ISNULL(NHS_UDA_Value,0) AS DECIMAL(10,2))                      AS NHS_UDA_Value,
-            CAST(ISNULL(NHS_Completed_UDA_Value,0) AS DECIMAL(10,2))            AS NHS_Completed_UDA_Value,
-            CAST(ISNULL(Private_Treatment_Value,0) AS DECIMAL(12,2))            AS Private_Treatment_Value,
+            CAST(ISNULL(NHS_UDA_Value,0) AS DECIMAL(18,4))                      AS NHS_UDA_Value,
+            CAST(ISNULL(NHS_Completed_UDA_Value,0) AS DECIMAL(18,4))            AS NHS_Completed_UDA_Value,
+            CAST(ISNULL(Private_Treatment_Value,0) AS DECIMAL(18,4))            AS Private_Treatment_Value,
             TRY_CAST(NULLIF(TRIM(Created_At),'') AS datetime2(3))               AS Created_Date,
             TRY_CAST(NULLIF(TRIM(Updated_At),'') AS datetime2(3))               AS Updated_Date,
             CAST(1 AS INT)                                                       AS Treatment_Plan_Count

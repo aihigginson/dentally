@@ -45,10 +45,10 @@ BEGIN
             CAST(Account_ID AS INT)                                                  AS Account_ID,
             CAST(Patient_ID AS INT)                                                  AS Patient_ID,
             NULLIF(TRIM(Patient_Name),'')                                            AS Patient_Name,
-            CAST(ISNULL(Current_Balance,0) AS DECIMAL(12,2))                        AS Current_Balance,
-            CAST(ISNULL(Opening_Balance,0) AS DECIMAL(12,2))                        AS Opening_Balance,
-            CAST(ISNULL(Planned_NHS_Treatment_Value,0) AS DECIMAL(12,2))            AS Planned_NHS_Treatment_Value,
-            CAST(ISNULL(Planned_Private_Treatment_Value,0) AS DECIMAL(12,2))        AS Planned_Private_Treatment_Value,
+            CAST(ISNULL(Current_Balance,0) AS DECIMAL(18,4))                        AS Current_Balance,
+            CAST(ISNULL(Opening_Balance,0) AS DECIMAL(18,4))                        AS Opening_Balance,
+            CAST(ISNULL(Planned_NHS_Treatment_Value,0) AS DECIMAL(18,4))            AS Planned_NHS_Treatment_Value,
+            CAST(ISNULL(Planned_Private_Treatment_Value,0) AS DECIMAL(18,4))        AS Planned_Private_Treatment_Value,
             CAST(1 AS INT)                                                                                   AS Account_Count
         INTO #src
         FROM Silver.Accounts

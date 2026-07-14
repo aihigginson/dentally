@@ -1,0 +1,34 @@
+# =====================================================================
+# Release V085 -- Fix full-table churn in three dims (decimal hash-scale mismatch)
+# =====================================================================
+# Symptom: on a second identical Delta_Build_Nightly run, Dim_Patients (27,750),
+# Dim_Accounts (27,758) and Dim_Treatment_Plans (68,482) still UPDATE every row -- the
+# hash-gated incremental load never settles. (Facts settled fine.)
+#
+# Root cause (empirically confirmed on dev: 42,748/42,765 rows churn on Total_Paid alone):
+# the change-detection hash compares CAST(<col> AS VARCHAR(500)) of the target's STORED value
+# vs the source's recomputed value, but the #src cast scale does not match the table column:
+#     table  DECIMAL(18,4)  ->  '495.0000'
+#     #src   DECIMAL(12,2)  ->  '495.00'      (even 0.0000 vs 0.00)
+# So every row's hash mismatches every run; the UPDATE writes src->tgt (coerced back to 18,4)
+# and next run mismatches again. Permanent full-table rewrite = delta/cost drag, not a data error
+# (PBI formats to 2dp). Dev never "settled" for the same reason.
+#
+# Fix: align the #src casts to the stored type DECIMAL(18,4) so src and target tie. Non-lossy
+# (only makes src more faithful to source; storage unchanged), no table rebuild. 9 casts:
+#   * Dim_Patients:        Total_Paid, Total_Invoiced
+#   * Dim_Accounts:        Current_Balance, Opening_Balance, Planned_NHS/Private_Treatment_Value
+#   * Dim_Treatment_Plans: NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value
+# Fact_Invoices was checked and is CONSISTENT ((12,2) table + (12,2) src, 0 updates in prod) -- left as is.
+#
+# After deploy, run the build twice: the first run may write a settling update where the source has
+# >2dp; the second should show ~0 updates on all three dims.
+# Idempotent (hash-gated MERGE/UPDATE). No C#/catalog/schema change.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V085__dim_hash_decimal_scale_churn.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Accounts.StoredProcedure.sql
+DEPLOY  Fabric\Gold.usp_Load_Dim_Treatment_Plans.StoredProcedure.sql
+
+TEST
