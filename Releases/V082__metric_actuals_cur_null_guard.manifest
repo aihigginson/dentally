@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V082 -- Fact_Metric_Actuals: @cur NULL-guard (fk_Date 515 fix)
+# =====================================================================
+# Delta_Build_Nightly on PROD (real Maple data) failed at Gold.usp_Load_Fact_Metric_Actuals with
+# error 515: "Cannot insert the value NULL into column 'fk_Date'". Two independent NULL-fk_Date
+# sources in the SP, both guarded here at source (behaviour-neutral when the data is clean):
+#
+#   1. #agg (PRIMARY suspect): the daily-aggregate block reads
+#        SELECT ... INTO #agg FROM Gold.Aggregate_Site_Patient_Practitioner_Daily;   -- no filter
+#      and the aggregate defines [fk_Date] bigint NULL. Every daily rate metric (diary_fill,
+#      chair_utilisation, patient_tracked, dna_rate, cancellations, exam_ratio, rev/hour) stamps
+#      fk_Date straight from #agg, so a single unresolved-date aggregate row -> NULL insert -> 515.
+#      Fix: ... FROM Aggregate_Site_Patient_Practitioner_Daily WHERE fk_Date IS NOT NULL.
+#      (Deeper root: the aggregate load should resolve dates to -1, not NULL -- follow-up.)
+#
+#   2. @cur (backstop): current-state metrics (open_courses, retention, conversion, overdue,
+#      email/phone, days_until) stamp a shared anchor
+#        @cur = (SELECT MAX(fk_Date) FROM Fact_Metric_Actuals WHERE Metric='total_revenue').
+#      If total_revenue produced no rows (Fact_Invoice_Items.fk_Date_Invoice all unresolved),
+#      @cur is NULL. Fix: fall back to today's date key -- the correct sentinel for these
+#      date-blind metrics: @cur = ISNULL(<max>, Gold.fn_Get_Date_Key(CAST(SYSUTCDATETIME() AS DATE))).
+#
+# Dense dev T11 always had resolved dates + revenue, so neither tripped there.
+# No C# / catalog / schema change. Idempotent (DROP/CREATE SP).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V082__metric_actuals_cur_null_guard.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST
