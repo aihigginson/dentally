@@ -307,7 +307,7 @@
         .tgrid .actual { font-size: 10px; color: var(--text-3); display: block; margin-bottom: 3px; min-height: 12px; }
         .tgrid input { width: 84px; padding: 4px 6px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
         .tgrid td.na { background: repeating-linear-gradient(45deg, #f2f2f2, #f2f2f2 6px, #ececec 6px, #ececec 12px); color: #bbb; }
-        .roles-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.06); max-width: 640px; }
+        .roles-row { display: grid; grid-template-columns: minmax(180px, 300px) auto; gap: 16px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.06); max-width: 560px; }
         .role-input { width: 230px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
         .role-manage { max-width: 640px; margin: 4px 0 14px; }
         .role-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2f6; border: 1px solid #d7dee5; border-radius: 14px; padding: 3px 6px 3px 11px; margin: 3px 6px 3px 0; font-size: 12px; }
@@ -1335,7 +1335,7 @@
             const { practitioners } = await res.json();
             if (!practitioners.length) { list.textContent = 'No practitioners found.'; return; }
             list.innerHTML = practitioners.map(p =>
-                '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.06)">'
+                '<div class="roles-row">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#999;font-size:11px">' + escHtml(p.role || '') + '</span></span>'
                 + '<span style="white-space:nowrap"><input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
