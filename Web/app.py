@@ -884,7 +884,7 @@ def get_practitioner_pay():
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(
-                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct, p.Custom_Role "
+                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct, p.Custom_Role, pp.FTE "
                 f"FROM Gold.Dim_Practitioners p "
                 f"LEFT JOIN Input.Practitioner_Pay pp "
                 f"  ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = p.Practitioner_ID "
@@ -894,7 +894,8 @@ def get_practitioner_pay():
             )
             practitioners = [
                 {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'dentally_role': r[3],
-                 'associate_pct': float(r[4]) if r[4] is not None else None, 'role': r[5] or r[3]}
+                 'associate_pct': float(r[4]) if r[4] is not None else None, 'role': r[5] or r[3],
+                 'fte': float(r[6]) if r[6] is not None else None}
                 for r in cur.fetchall()
             ]
         conn.close()
@@ -922,7 +923,7 @@ def save_practitioner_pay():
 
         rows    = request.get_json(force=True) or []
         allowed = set(tids)
-        # (tenant_id, practitioner_id, pct-or-None), only for the caller's tenant(s).
+        # (tenant_id, practitioner_id, pct-or-None, fte-or-None), only for the caller's tenant(s).
         valid = []
         for r in rows:
             try:
@@ -931,29 +932,36 @@ def save_practitioner_pay():
                 continue
             if tid not in allowed:
                 continue
-            pct = r.get('associate_pct')
-            if pct in (None, ''):
-                valid.append((tid, pid, None))
-            else:
+            pct = r.get('associate_pct'); pctf = None
+            if pct not in (None, ''):
                 try:
                     pctf = float(pct)
                 except (TypeError, ValueError):
                     continue
-                if 0 <= pctf <= 100:
-                    valid.append((tid, pid, pctf))
+                if not (0 <= pctf <= 100):
+                    continue
+            fte = r.get('fte'); ftef = None
+            if fte not in (None, ''):
+                try:
+                    ftef = float(fte)
+                except (TypeError, ValueError):
+                    continue
+                if not (0 <= ftef <= 2):
+                    continue
+            valid.append((tid, pid, pctf, ftef))
 
         if valid:
             cur.fast_executemany = True
             cur.executemany(
                 "DELETE FROM Input.Practitioner_Pay WHERE Tenant_ID = ? AND Practitioner_ID = ?",
-                [(t, p) for t, p, _ in valid],
+                [(t, p) for t, p, _, _ in valid],
             )
-            inserts = [(t, p, v) for t, p, v in valid if v is not None]
+            inserts = [(t, p, pc, ft) for t, p, pc, ft in valid if pc is not None or ft is not None]
             if inserts:
                 cur.executemany(
                     "INSERT INTO Input.Practitioner_Pay "
-                    "(Tenant_ID, Practitioner_ID, Associate_Pct, DW_Created_At, DW_Updated_At) "
-                    "VALUES (?, ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    "(Tenant_ID, Practitioner_ID, Associate_Pct, FTE, DW_Created_At, DW_Updated_At) "
+                    "VALUES (?, ?, ?, ?, GETUTCDATE(), GETUTCDATE())",
                     inserts,
                 )
         conn.close()
@@ -1101,11 +1109,11 @@ def get_variances():
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage variances'}), 403
         cur.execute(
-            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type "
+            "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Long_Description "
             "FROM Config.Metric_Definitions WHERE Is_Active = 1 AND ISNULL(Has_Target, 1) = 1 "
             "ORDER BY Display_Order")
         metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2],
-                    'format_type': r[3], 'range_type': r[4]} for r in cur.fetchall()]
+                    'format_type': r[3], 'range_type': r[4], 'definition': r[5]} for r in cur.fetchall()]
         tenants = []
         if tids:
             ph = ','.join(['?'] * len(tids))
@@ -1173,10 +1181,8 @@ def save_variances():
 
 @app.route('/api/target-grid', methods=['GET'])
 def get_target_grid():
-    """The target grid for an FY: metric catalogue x (Practice + roles), current target values +
-    per-metric variance (AppDB), and the current ACTUAL per cell (Fact_Metric_Actuals aggregated to
-    Practice / Custom_Role) for the actual-above-entry display. Actuals are indicative: cumulative =
-    SUM(num), rate = SUM(num)/SUM(den) over the FY; point_in_time is approximated by SUM(num)."""
+    """The target grid for an FY: metric catalogue (with definition, per-metric sample and the
+    FTE_Scaled flag) x (Practice + roles), current target values + per-metric variance (AppDB)."""
     upn, err = _auth()
     if err:
         return err
@@ -1196,11 +1202,12 @@ def get_target_grid():
 
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
-            "ISNULL(Supports_Practitioner, 0) "
+            "ISNULL(Supports_Practitioner, 0), Long_Description, Sample_Value, ISNULL(FTE_Scaled, 0) "
             "FROM Config.Metric_Definitions WHERE Is_Active = 1 AND ISNULL(Has_Target, 1) = 1 "
             "ORDER BY Display_Order")
         metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2], 'format_type': r[3],
-                    'range_type': r[4], 'target_type': r[5], 'splits_by_role': bool(r[6])}
+                    'range_type': r[4], 'target_type': r[5], 'splits_by_role': bool(r[6]),
+                    'definition': r[7], 'sample': r[8], 'fte_scaled': bool(r[9])}
                    for r in cur.fetchall()]
 
         tenants, roles_by_tenant = {}, {}

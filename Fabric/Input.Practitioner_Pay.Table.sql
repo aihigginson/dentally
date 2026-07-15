@@ -15,6 +15,7 @@ CREATE TABLE [Input].[Practitioner_Pay] (
     [Tenant_ID]           INT           NOT NULL,
     [Practitioner_ID]     INT           NOT NULL,
     [Associate_Pct]       DECIMAL(6,3)  NOT NULL,
+    [FTE] [DECIMAL](4,2) NULL,
     [DW_Created_At]       DATETIME2(3)  NOT NULL,
     [DW_Updated_At]       DATETIME2(3)  NOT NULL
 )

@@ -322,6 +322,20 @@
         .var-input::-webkit-outer-spin-button, .var-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .tgrid tr.section-row td { background: var(--navy); color: #fff; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 5px 8px; position: sticky; left: 0; }
         .tgrid td.sample { color: var(--text-3); font-size: 11px; text-align: left; white-space: nowrap; }
+        /* £ / % sit OUTSIDE the input so the box holds a plain number */
+        .tgrid td.tcell { white-space: nowrap; }
+        .tgrid td.tcell .unit { color: var(--text-3); font-size: 12px; }
+        .tgrid td.tcell .unit.pre { margin-right: 3px; }
+        .tgrid td.tcell .unit.suf { margin-left: 3px; }
+        .tgrid td.tcell input, .tgrid td.tcell.cur input { width: 78px; }
+        /* Practice column highlighted; role columns de-emphasised */
+        .tgrid th.col-practice { background: #e4eefb; color: var(--navy); }
+        .tgrid td.col-practice { background: #f2f8ff; }
+        .tgrid td.col-practice input { border-color: #9dc0e6; font-weight: 600; }
+        .tgrid th.col-role { color: var(--text-3); font-weight: 500; }
+        .tgrid td.col-role input { color: #666; border-color: #dcdcdc; background: #fcfcfc; }
+        .fte-badge { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; color: #7a5b00;
+            background: #fff3d6; border: 1px solid #f0dca0; border-radius: 3px; padding: 0 3px; vertical-align: middle; letter-spacing: .02em; }
         .settings-save-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
         .var-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 16px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; max-width: 560px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
@@ -1348,15 +1362,21 @@
             if (!res.ok) throw new Error('status ' + res.status);
             const { practitioners } = await res.json();
             if (!practitioners.length) { list.textContent = 'No practitioners found.'; return; }
+            const numStyle = 'padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px';
             list.innerHTML = practitioners.map(p =>
                 '<div class="roles-row">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#999;font-size:11px">' + escHtml(p.role || '')
                 + (p.dentally_role && p.dentally_role !== p.role ? ' <span style="color:#aaa">· Dentally: ' + escHtml(p.dentally_role) + '</span>' : '') + '</span></span>'
-                + '<span style="white-space:nowrap"><input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
+                + '<span style="white-space:nowrap;color:#666;font-size:12px">'
+                + 'FTE <input type="number" min="0" max="2" step="0.1" class="fte-input"'
+                + ' value="' + (p.fte != null ? p.fte : '') + '" placeholder="1.0"'
+                + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"'
+                + ' style="width:52px;' + numStyle + '">'
+                + ' &nbsp;&nbsp;Pay <input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
                 + ' value="' + (p.associate_pct != null ? p.associate_pct : '') + '"'
                 + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"'
-                + ' style="width:64px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px"> %</span>'
+                + ' style="width:56px;' + numStyle + '"> %</span>'
                 + '</div>').join('');
             saveBtn.style.display = '';
         } catch (e) {
@@ -1367,10 +1387,12 @@
     async function savePractitionerPay() {
         const saveBtn = document.getElementById('assoc-pay-save');
         const msg = document.getElementById('assoc-pay-msg');
-        const rows = [...document.querySelectorAll('.assoc-pct-input')].map(i => ({
-            tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid,
-            associate_pct: i.value === '' ? null : +i.value,
-        }));
+        const byKey = {};
+        const _row = i => { const k = i.dataset.tid + '|' + i.dataset.pid;
+            return byKey[k] || (byKey[k] = { tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid }); };
+        document.querySelectorAll('.assoc-pct-input').forEach(i => { _row(i).associate_pct = i.value === '' ? null : +i.value; });
+        document.querySelectorAll('.fte-input').forEach(i => { _row(i).fte = i.value === '' ? null : +i.value; });
+        const rows = Object.values(byKey);
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/practitioner-pay', {
@@ -1420,10 +1442,28 @@
     }
     function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
     function _sampleVal(m) {
+        if (m.sample) return 'e.g. ' + m.sample;      // per-metric example from Config.Metric_Definitions
         const f = (m.format_type || '').toLowerCase();
-        if (f.includes('percent')) return 'e.g. 55.0%';
+        if (f.includes('percent')) return 'e.g. 55%';
         if (f.includes('currency')) return 'e.g. £250,000';
         return 'e.g. 1,200';
+    }
+    const _SEC_LABELS = { revenue: 'Revenue', patients: 'Patients', treatment: 'Clinical',
+                          scheduling: 'Scheduling', nhs: 'NHS', home: 'Home' };
+    function _secLabel(s) {
+        const k = (s || 'other').toLowerCase();
+        return _SEC_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
+    }
+    // Group metrics under one header per section (metrics can be non-contiguous by Display_Order,
+    // e.g. the Clinical/Treatment ones — this keeps a single section block, in first-seen order).
+    function _groupBySection(metrics) {
+        const order = [], bySec = {};
+        for (const m of metrics) {
+            const sec = m.section || 'other';
+            if (!(sec in bySec)) { bySec[sec] = []; order.push(sec); }
+            bySec[sec].push(m);
+        }
+        return order.map(sec => ({ section: sec, metrics: bySec[sec] }));
     }
     let _dirty = false;
     function markDirty() { _dirty = true; }
@@ -1509,17 +1549,19 @@
             const { metrics, variances, tenants } = await res.json();
             _varTenants = tenants || [];
             if (!metrics.length) { list.textContent = 'No metrics.'; return; }
-            let html = '', lastSec = null;
-            for (const m of metrics) {
-                const sec = m.section || 'Other';
-                if (sec !== lastSec) { html += '<div class="var-section-head">' + escHtml(sec) + '</div>'; lastSec = sec; }
-                let cur = '';
-                for (const k in variances) { if (k.endsWith('|' + m.key)) { cur = variances[k]; break; } }
-                const unit = ((m.format_type || '').toLowerCase().includes('percent') || m.range_type === 'within') ? 'pp' : '%';
-                html += '<div class="roles-row"><span style="font-size:13px">' + escHtml(m.display_name) + '</span>'
-                    + '<span style="white-space:nowrap"><input type="number" min="0" step="0.5" class="var-input"'
-                    + ' style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px"'
-                    + ' value="' + (cur !== '' && cur != null ? cur : '') + '" data-metric="' + escHtml(m.key) + '"> ' + unit + '</span></div>';
+            let html = '';
+            for (const grp of _groupBySection(metrics)) {
+                html += '<div class="var-section-head">' + escHtml(_secLabel(grp.section)) + '</div>';
+                for (const m of grp.metrics) {
+                    let cur = '';
+                    for (const k in variances) { if (k.endsWith('|' + m.key)) { cur = variances[k]; break; } }
+                    const unit = ((m.format_type || '').toLowerCase().includes('percent') || m.range_type === 'within') ? 'pp' : '%';
+                    const defAttr = m.definition ? ' title="' + escHtml(m.definition) + '"' : '';
+                    html += '<div class="roles-row"><span style="font-size:13px"' + defAttr + '>' + escHtml(m.display_name) + '</span>'
+                        + '<span style="white-space:nowrap"><input type="number" min="0" step="0.5" class="var-input"'
+                        + ' style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px"'
+                        + ' value="' + (cur !== '' && cur != null ? cur : '') + '" data-metric="' + escHtml(m.key) + '"> ' + unit + '</span></div>';
+                }
             }
             list.innerHTML = html;
             saveBtn.style.display = '';
@@ -1566,22 +1608,49 @@
     function renderTargetGrid(data, t) {
         const levels = t.levels || ['Practice'];
         const ncol = levels.length + 2;
-        let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>' + levels.map(l => '<th>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
-        let lastSec = null;
-        for (const m of data.metrics) {
-            const sec = m.section || 'Other';
-            if (sec !== lastSec) { html += '<tr class="section-row"><td colspan="' + ncol + '">' + escHtml(sec) + '</td></tr>'; lastSec = sec; }
-            html += '<tr><td class="metric">' + escHtml(m.display_name) + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
-            for (const lvl of levels) {
-                const canEdit = (lvl === 'Practice') || m.splits_by_role;
-                if (!canEdit) { html += '<td class="na">&mdash;</td>'; continue; }
-                const tgt = t.targets[m.key + '|' + lvl];
-                html += '<td><input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
-                    + '" data-level="' + escHtml(lvl) + '" value="' + (tgt != null ? tgt : '') + '"></td>';
+        const colCls = l => (l === 'Practice' ? ' class="col-practice"' : ' class="col-role"');
+        let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
+            + levels.map(l => '<th' + colCls(l) + '>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
+        for (const grp of _groupBySection(data.metrics)) {
+            html += '<tr class="section-row"><td colspan="' + ncol + '">' + escHtml(_secLabel(grp.section)) + '</td></tr>';
+            for (const m of grp.metrics) {
+                const fmt = (m.format_type || '').toLowerCase();
+                const pre = fmt.includes('currency') ? '<span class="unit pre">£</span>' : '';
+                const suf = fmt.includes('percent') ? '<span class="unit suf">%</span>' : '';
+                const cur = fmt.includes('currency') ? ' cur' : '';
+                const badge = m.fte_scaled ? '<span class="fte-badge" title="Full-time-equivalent target — each practitioner&#39;s target = this &times; their FTE (set on Finance)">&times;FTE</span>' : '';
+                const defAttr = m.definition ? ' title="' + escHtml(m.definition) + '"' : '';
+                html += '<tr><td class="metric"' + defAttr + '>' + escHtml(m.display_name) + badge
+                    + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
+                for (const lvl of levels) {
+                    const lvlCls = (lvl === 'Practice') ? ' col-practice' : ' col-role';
+                    const canEdit = (lvl === 'Practice') || m.splits_by_role;
+                    if (!canEdit) { html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue; }
+                    const tgt = t.targets[m.key + '|' + lvl];
+                    html += '<td class="tcell' + cur + lvlCls + '">'
+                        + pre + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
+                        + '" data-level="' + escHtml(lvl) + '"' + (m.fte_scaled ? ' data-fte="1"' : '')
+                        + ' value="' + (tgt != null ? tgt : '') + '">' + suf + '</td>';
+                }
+                html += '</tr>';
             }
-            html += '</tr>';
         }
         document.getElementById('targets-grid').innerHTML = html + '</tbody></table>';
+        // Blank role cells default to the Practice value (shown as a placeholder), except FTE-scaled metrics.
+        const grid = document.getElementById('targets-grid');
+        grid.querySelectorAll('input[data-level="Practice"]').forEach(p => {
+            _applyPracticePlaceholders(p.dataset.metric);
+            p.addEventListener('input', () => _applyPracticePlaceholders(p.dataset.metric));
+        });
+    }
+    function _applyPracticePlaceholders(metricKey) {
+        const grid = document.getElementById('targets-grid');
+        const prac = grid.querySelector('input[data-metric="' + metricKey + '"][data-level="Practice"]');
+        if (!prac) return;
+        grid.querySelectorAll('input[data-metric="' + metricKey + '"]').forEach(inp => {
+            if (inp.dataset.level === 'Practice' || inp.dataset.fte === '1') return;
+            inp.placeholder = prac.value !== '' ? prac.value : '';
+        });
     }
     async function saveTargetGrid() {
         const saveBtn = document.getElementById('targets-save'), msg = document.getElementById('targets-msg');
@@ -1614,6 +1683,8 @@
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';
             });
+            document.querySelectorAll('#targets-grid input[data-level="Practice"]')
+                .forEach(p => _applyPracticePlaceholders(p.dataset.metric));
             markDirty();
             msg.style.color = '#0b3d5c'; msg.textContent = 'Copied from ' + _fyLabel(src) + ' — review, then Save.';
             setTimeout(() => msg.textContent = '', 6000);
