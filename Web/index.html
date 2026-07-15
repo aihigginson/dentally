@@ -1798,6 +1798,8 @@
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
     settingsOverlay.addEventListener('input', markDirty);
     settingsOverlay.addEventListener('change', markDirty);
+    // Catch an accidental refresh / tab-close / navigate-away while there are unsaved Settings edits.
+    window.addEventListener('beforeunload', e => { if (_dirty) { e.preventDefault(); e.returnValue = ''; } });
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && settingsOverlay.classList.contains('open')) closeSettings();
