@@ -1,0 +1,38 @@
+# =====================================================================
+# Release V094 -- Target model consolidated cutover (dependency-ordered)
+# =====================================================================
+# Replays the whole target-model change set (V086-V093) in strict DEPENDENCY order for a fresh
+# environment, instead of historical manifest order. Needed because Deploy.ps1 runs the CURRENT file
+# content: the Sync SP (V086) references the NEW Input.Targets columns (FY/Target_Level) that only
+# arrive with the V089 reshape, so a straight replay fails "Invalid column name 'FY'".
+#
+# Order: Input/Fact tables + column migrations (schema)  ->  SPs (compile against final schema)
+#        ->  data seeds (Metric_Definitions MERGE, Process_Config/Dependency).
+# Idempotent: table DDL is DROP/CREATE, migrations are guarded (skip if applied), data files re-seed.
+# NB retires the old Fact_Targets/Fact_Effective_Targets processes (Process_Config) -- breaking any
+# old target measures is expected at this cutover.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V094__target_model_prod_cutover.manifest -SkipTests
+# =====================================================================
+
+# -- schema: Input + Fact tables --
+DEPLOY   Fabric\Input.Practitioner_Role.Table.sql
+DEPLOY   Fabric\Input.Metric_Variance.Table.sql
+DEPLOY   Fabric\Input.Targets.Table.sql
+DEPLOY   Fabric\Input.Practitioner_Pay.Table.sql
+DEPLOY   Fabric\Gold.Fact_Daily_Targets.Table.sql
+
+# -- schema: column migrations (guarded) --
+MIGRATE  Migrations\V087__dim_practitioner_custom_role.sql
+MIGRATE  Migrations\V091__metric_sample_value.sql
+
+# -- stored procedures (compile against the final schema above) --
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql
+
+# -- data seeds --
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+TEST
