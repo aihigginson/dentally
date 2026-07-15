@@ -1,0 +1,11 @@
+# =====================================================================
+# Release V093 -- Cut the Revenue per Patient metric
+# =====================================================================
+# Flags revenue_per_patient Is_Active = 0 (removed from the product), same pattern as the other
+# cut metrics. Data.sql reseed, no migration.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V093__cut_revenue_per_patient.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

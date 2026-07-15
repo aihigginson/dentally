@@ -1,11 +1,23 @@
 # Target Model — Development / Build Plan
 
-Status: **IN PROGRESS — 2026-07-14 (dev only, not on prod).** Done: Phase 0 spike (AppDB both pipes);
-V086 Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB (copy pipe); V087 Dim_Practitioner.Custom_Role
-(keystone, COALESCE); V088 Input.Metric_Variance + sync. **NEXT = the big coordinated one:** reshape
-Input.Targets (new FY/Metric/Target_Level shape) + extend sync + rewrite the 3-fact chain
-(Fact_Targets -> Fact_Daily_Targets -> Fact_Effective_Targets) to Practice+Custom_Role together (do it as
-ONE change or dev's build breaks). Then measures, then app, then wire sync into Orchestrate_Build + prod.
+Status: **IN PROGRESS — 2026-07-14 (dev only, NOT on prod). Data layer + app backend DONE; frontend + measures next.**
+
+DONE on dev: Phase 0 spike (AppDB, both pipes); V086 Input.Practitioner_Role + Meta.usp_Sync_Input_From_AppDB;
+V087 Dim_Practitioner.Custom_Role (keystone COALESCE); V088 Input.Metric_Variance + sync; V089 Input.Targets
+reshaped (FY/Metric/Target_Level) + Fact_Daily_Targets rewritten (Target_Level grain, verified: cumulative
+prorates+sums to annual, rate/point carry annual, role-level targets, NHS from contracts); V090 retired
+obsolete Fact_Targets/Fact_Effective_Targets from orchestration. App backend (dev branch only, WIP, NOT prod):
+_appdb_conn + /api/roles + /api/variances + /api/target-grid (GET/POST) in Web/app.py (compiles, 19 tests pass).
+
+**RESUME HERE (morning): 2 user setup steps first, then I build the frontend live.**
+ 1. Grant the APP SP a user in AppDB: `CREATE USER [<app AZURE_CLIENT_ID SP>] FROM EXTERNAL PROVIDER; ALTER ROLE db_owner ADD MEMBER [...];`
+    (Also the deploy SP `analytically-deploy-dev` if not done -- its direct login went flaky mid-session.)
+ 2. Set APPDB_SERVER / APPDB_DB on the dev Container App (values in Web/.env.example).
+Then: (a) live-verify the 3 endpoints; (b) BUILD THE FRONTEND -- Settings section + sub-nav (Roles drag board /
+Targets grid actual-above-entry+copy-from-FY / Variances) in Web/index.html. Remaining after: rewrite tDaily/tEff
+measures onto Fact_Daily_Targets (USER's Tabular Editor); cutover (wire sync into Orchestrate_Build, delete dead
+Fact_Targets/Effective/usp_Load_Targets files, drop old target PBI views) then batch-deploy to prod.
+Also: drop Fabric capacity F4 -> F2 once settled. AppDB item id 4c31e989-...; dev workspace 22e235e2-...
 Implements the agreed design in
 `target-model-redesign.md` (do not relitigate design decisions here — this is the *how*).
 Backend = **Fabric SQL Database** (option A from the 2026-07-14 discussion). Deferred until prod is stable.
@@ -126,3 +138,14 @@ collapse Supports_Site/Supports_Practitioner + the measure-shape zoo.
 3. **Migration** — confirm per-practitioner targets are dropped (design says yes); surface the dropped set to the
    owner so they re-enter at role level.
 4. **One SQL DB per env** (dev + prod), consuming F2 CU (trivial for CRUD) — accept, or split capacity later.
+
+## Downstream / not-yet-built (flagged 2026-07-15)
+- **FTE-scaling of role targets.** `Config.Metric_Definitions.FTE_Scaled` (Total/NHS/Private Revenue,
+  New Patients, Net Patient Growth) + `Input.Practitioner_Pay.FTE` are captured. Still TODO: the target
+  fact/measure must compute a practitioner's target = role target x their FTE (role total = role target
+  x SUM(FTE in role)). DAX/warehouse (Fact_Daily_Targets) side. Frontend already exempts these from the
+  Practice copy-across and badges them `x FTE`.
+- **cancellation_rebook** metric added to the catalogue (Scheduling, % rebooked after cancellation) so a
+  target can be set. Its measure + Fact_Metric_Actuals num/den still need building (ties to Rebooked_Status
+  / Pending_At, V025).
+- Open decision: exact FTE_Scaled metric set (Open Courses Value in/out?).

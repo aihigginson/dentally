@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V091 -- Config.Metric_Definitions.Sample_Value (per-metric target-grid example)
+# =====================================================================
+# Adds a per-metric Sample_Value (a realistic formatted example, e.g. New Patients '1,200' vs
+# Active Patients '6,000') shown beside each target box, plus surfaces the existing Long_Description
+# as the metric definition in the Settings target grid. ALTER (not table rebuild); Data.sql carries a
+# trailing UPDATE so a reseed keeps the samples.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V091__metric_sample_value.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V091__metric_sample_value.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

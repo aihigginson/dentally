@@ -93,6 +93,8 @@ USING (VALUES
         'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
     ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
         'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
+    ('cancellation_rebook',        'Cancellation Rebook',                'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
+        'Of appointments cancelled in the period, the percentage that were successfully rebooked into a future slot -- recovering the chair time and revenue that a cancellation would otherwise lose. The counter-measure to Cancellation Frequency and Short Notice Cancellation Rate: cancellations happen, but how many do you win back? Higher is better.'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
@@ -124,10 +126,8 @@ WHEN NOT MATCHED THEN INSERT (
     src.[Supports_Site], src.[Supports_Practitioner], src.[Is_Active], src.[Display_Order], src.[Range_Type], src.[Target_Type], src.[Long_Description]
 );
 GO
-
 -- ── Post-seed adjustments (2026-07-13) ──────────────────────────────────────
 -- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
-
 -- Cut metrics: removed from the product (dead-end / superseded).
 --   revenue_per_dentist_hour      = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
 --   acceptance_rate               = dead end on real data (Accepted_At NULL on all plans)
@@ -139,18 +139,72 @@ GO
 --                       real recall-record status). The old single metric counted completed/historical
 --                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook');
-
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
-
 -- NHS Revenue target is derived from the NHS CONTRACT (UDA target x rate), not the
 -- manually-entered targets spreadsheet.
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] = 'nhs_revenue';
-
 -- Exam Ratio target is only meaningful for Dentists -> only generate Dentist practitioner rows.
 UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
     WHERE [Metric_Key] = 'exam_ratio';
+GO
+-- Per-metric sample value (a realistic example shown beside each target box).
+UPDATE Config.Metric_Definitions SET Sample_Value = CASE Metric_Key
+    WHEN 'total_revenue' THEN '£600,000'
+    WHEN 'nhs_revenue' THEN '£150,000'
+    WHEN 'private_revenue' THEN '£450,000'
+    WHEN 'revenue_per_patient' THEN '£220'
+    WHEN 'revenue_per_clinical_hour' THEN '£160'
+    WHEN 'revenue_per_dentist_hour' THEN '£220'
+    WHEN 'deposit_ratio' THEN '10%'
+    WHEN 'discounts' THEN '3%'
+    WHEN 'outstanding_invoices' THEN '£15,000'
+    WHEN 'net_patient_growth' THEN '300'
+    WHEN 'new_patients' THEN '1,200'
+    WHEN 'active_patients' THEN '6,000'
+    WHEN 'recalls_overdue_not_sent' THEN '5%'
+    WHEN 'retention_outlook' THEN '80%'
+    WHEN 'dentist_retention_outlook' THEN '80%'
+    WHEN 'hygiene_retention_outlook' THEN '75%'
+    WHEN 'dentist_recall_conversion' THEN '70%'
+    WHEN 'hygiene_recall_conversion' THEN '65%'
+    WHEN 'lapsed_patients' THEN '150'
+    WHEN 'lapsed_deactivated' THEN '100'
+    WHEN 'lapsed_calculated' THEN '50'
+    WHEN 'overdue_recalls' THEN '150'
+    WHEN 'email_details_rate' THEN '95%'
+    WHEN 'phone_details_rate' THEN '97%'
+    WHEN 'acceptance_rate' THEN '75%'
+    WHEN 'open_courses' THEN '300'
+    WHEN 'open_courses_without_appt' THEN '200'
+    WHEN 'open_courses_without_appt_value' THEN '£120,000'
+    WHEN 'exam_ratio' THEN '55%'
+    WHEN 'avg_plan_value' THEN '£850'
+    WHEN 'diary_fill' THEN '85%'
+    WHEN 'chair_utilisation' THEN '80%'
+    WHEN 'dna_rate' THEN '3%'
+    WHEN 'days_until_30min_free' THEN '2'
+    WHEN 'days_until_1hr_free' THEN '5'
+    WHEN 'book_before_you_leave' THEN '70%'
+    WHEN 'cancellation_frequency' THEN '8%'
+    WHEN 'short_notice_cancellation_rate' THEN '4%'
+    WHEN 'immediate_forward_utilisation' THEN '60%'
+    WHEN 'patient_tracked_in_surgery' THEN '90%'
+    WHEN 'open_courses_value' THEN '£300,000'
+    WHEN 'nhs_uda_completion_rate' THEN '95%'
+    WHEN 'cancellation_rebook' THEN '60%'
+    ELSE Sample_Value END;
+GO
+UPDATE Config.Metric_Definitions SET FTE_Scaled = CASE WHEN Metric_Key IN (
+        'total_revenue','nhs_revenue','private_revenue',
+        'open_courses','open_courses_without_appt','open_courses_without_appt_value','open_courses_value'
+    ) THEN 1 ELSE 0 END;
+GO
+-- Practice-only targets (no per-role split): headcount flow + diary-stability rates.
+UPDATE Config.Metric_Definitions SET Supports_Practitioner = 0
+    WHERE Metric_Key IN ('new_patients','lapsed_patients','dna_rate','cancellation_frequency',
+                         'short_notice_cancellation_rate','patient_tracked_in_surgery','cancellation_rebook');
 GO
