@@ -138,3 +138,14 @@ collapse Supports_Site/Supports_Practitioner + the measure-shape zoo.
 3. **Migration** — confirm per-practitioner targets are dropped (design says yes); surface the dropped set to the
    owner so they re-enter at role level.
 4. **One SQL DB per env** (dev + prod), consuming F2 CU (trivial for CRUD) — accept, or split capacity later.
+
+## Downstream / not-yet-built (flagged 2026-07-15)
+- **FTE-scaling of role targets.** `Config.Metric_Definitions.FTE_Scaled` (Total/NHS/Private Revenue,
+  New Patients, Net Patient Growth) + `Input.Practitioner_Pay.FTE` are captured. Still TODO: the target
+  fact/measure must compute a practitioner's target = role target x their FTE (role total = role target
+  x SUM(FTE in role)). DAX/warehouse (Fact_Daily_Targets) side. Frontend already exempts these from the
+  Practice copy-across and badges them `x FTE`.
+- **cancellation_rebook** metric added to the catalogue (Scheduling, % rebooked after cancellation) so a
+  target can be set. Its measure + Fact_Metric_Actuals num/den still need building (ties to Rebooked_Status
+  / Pending_At, V025).
+- Open decision: exact FTE_Scaled metric set (Open Courses Value in/out?).
