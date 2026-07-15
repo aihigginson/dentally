@@ -314,6 +314,16 @@
         .role-chip button { border: none; background: none; color: #999; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
         .role-add { display: inline-flex; gap: 6px; margin-top: 8px; }
         .role-add input { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 220px; }
+        .role-chip.inuse button { display: none; }
+        .role-select { width: 230px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        /* no misleading up/down spinners on target/variance number inputs */
+        .tgrid input[type=number], .var-input { -moz-appearance: textfield; appearance: textfield; }
+        .tgrid input[type=number]::-webkit-outer-spin-button, .tgrid input[type=number]::-webkit-inner-spin-button,
+        .var-input::-webkit-outer-spin-button, .var-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .tgrid tr.section-row td { background: var(--navy); color: #fff; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 5px 8px; position: sticky; left: 0; }
+        .tgrid td.sample { color: var(--text-3); font-size: 11px; text-align: left; white-space: nowrap; }
+        .settings-save-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+        .var-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 16px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; max-width: 560px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
 
         /* ── Targets section ── */
@@ -600,6 +610,7 @@
                 <div class="defs-group">Associate pay (% of production)</div>
                 <div class="defs-item">
                     <div class="defs-item-desc">Each fee-earner's share of their own production &mdash; used for practitioner contribution / P&amp;L. Leave blank if not an associate.</div>
+                    <div class="settings-save-bar"><button id="assoc-pay-save-top" class="settings-save" style="margin-top:0">Save</button></div>
                     <div id="assoc-pay-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="assoc-pay-save" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#0b3d5c;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save</button>
                     <span id="assoc-pay-msg" style="margin-left:10px;font-size:12px"></span>
@@ -608,6 +619,7 @@
 
             <div class="settings-pane" id="stab-roles">
                 <div class="defs-item">
+                    <div class="settings-save-bar"><button id="roles-save-top" class="settings-save" style="margin-top:0">Save</button></div>
                     <div class="defs-group" style="padding-left:0">Your roles</div>
                     <div class="defs-item-desc">The roles for this practice. Add one to make it available as a target column and in the dropdowns below; remove one you no longer use (practitioners keep their current assignment).</div>
                     <datalist id="roles-datalist"></datalist>
@@ -627,7 +639,8 @@
 
             <div class="settings-pane" id="stab-targets">
                 <div class="defs-item">
-                    <div class="defs-item-desc">Set a target per metric for the Practice and each role. The current actual is shown above each box; blank = no target (uncoloured).</div>
+                    <div class="defs-item-desc">Set a target per metric for the Practice and each role. Blank = no target (uncoloured). Copy is only available onto a completely blank year.</div>
+                    <div class="settings-save-bar"><button id="targets-save-top" class="settings-save" style="margin-top:0">Save targets</button></div>
                     <div class="targets-controls">
                         <label>Year
                             <select id="targets-fy"></select>
@@ -646,6 +659,7 @@
             <div class="settings-pane" id="stab-variances">
                 <div class="defs-item">
                     <div class="defs-item-desc">The tolerance band per metric &mdash; how far from target still counts as on-track (percentage points for % metrics; relative % for counts / &pound;).</div>
+                    <div class="settings-save-bar"><button id="variances-save-top" class="settings-save" style="margin-top:0">Save</button></div>
                     <div id="variances-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="variances-save" class="settings-save" style="display:none">Save</button>
                     <span id="variances-msg" class="settings-msg"></span>
@@ -1337,7 +1351,8 @@
             list.innerHTML = practitioners.map(p =>
                 '<div class="roles-row">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
-                + ' <span style="color:#999;font-size:11px">' + escHtml(p.role || '') + '</span></span>'
+                + ' <span style="color:#999;font-size:11px">' + escHtml(p.role || '')
+                + (p.dentally_role && p.dentally_role !== p.role ? ' <span style="color:#aaa">· Dentally: ' + escHtml(p.dentally_role) + '</span>' : '') + '</span></span>'
                 + '<span style="white-space:nowrap"><input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
                 + ' value="' + (p.associate_pct != null ? p.associate_pct : '') + '"'
                 + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"'
@@ -1372,8 +1387,12 @@
         }
     }
 
-    function openSettings() { settingsOverlay.classList.add('open'); showSettingsTab('finance'); }
-    function closeSettings() { settingsOverlay.classList.remove('open'); }
+    function openSettings() { clearDirty(); settingsOverlay.classList.add('open'); showSettingsTab('finance'); }
+    function closeSettings() {
+        if (_dirty && !confirm('You have unsaved changes. Close without saving?')) return;
+        clearDirty();
+        settingsOverlay.classList.remove('open');
+    }
 
     document.getElementById('settings-toggle').addEventListener('click', openSettings);
     document.getElementById('settings-close').addEventListener('click', closeSettings);
@@ -1400,24 +1419,48 @@
         return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
     }
     function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
+    function _sampleVal(m) {
+        const f = (m.format_type || '').toLowerCase();
+        if (f.includes('percent')) return 'e.g. 55.0%';
+        if (f.includes('currency')) return 'e.g. £250,000';
+        return 'e.g. 1,200';
+    }
+    let _dirty = false;
+    function markDirty() { _dirty = true; }
+    function clearDirty() { _dirty = false; }
 
     // Roles ------------------------------------------------------------------
-    let _roleList = [], _rolesTenant = null;
+    let _roleList = [], _rolesTenant = null, _rolesInUse = new Set();
 
     function renderRoleChips() {
         const el = document.getElementById('roles-chips');
         el.innerHTML = _roleList.length
-            ? _roleList.map(r => '<span class="role-chip">' + escHtml(r) + '<button data-role="' + escHtml(r) + '" title="Remove">&times;</button></span>').join('')
+            ? _roleList.map(r => {
+                const used = _rolesInUse.has(r);
+                return '<span class="role-chip' + (used ? ' inuse' : '') + '"' + (used ? ' title="In use — reassign practitioners first"' : '') + '>'
+                    + escHtml(r) + (used ? '' : '<button data-role="' + escHtml(r) + '" title="Remove">&times;</button>') + '</span>';
+              }).join('')
             : '<span style="color:#999;font-size:12px">No roles yet &mdash; add one below.</span>';
         el.querySelectorAll('.role-chip button').forEach(b => b.addEventListener('click', () => removeRole(b.dataset.role)));
-        document.getElementById('roles-datalist').innerHTML = _roleList.map(r => '<option value="' + escHtml(r) + '">').join('');
+    }
+    function _roleOptions(sel) {
+        const opts = _roleList.slice();
+        if (sel && !opts.includes(sel)) opts.push(sel);
+        return opts.sort().map(r => '<option value="' + escHtml(r) + '"' + (r === sel ? ' selected' : '') + '>' + escHtml(r) + '</option>').join('');
+    }
+    function _recomputeInUse() {
+        _rolesInUse = new Set([...document.querySelectorAll('#roles-list .role-select')].map(s => s.value).filter(Boolean));
+        renderRoleChips();
     }
     function addRole() {
         const inp = document.getElementById('role-add-input'), name = inp.value.trim();
-        if (name && !_roleList.some(r => r.toLowerCase() === name.toLowerCase())) { _roleList.push(name); _roleList.sort(); renderRoleChips(); }
+        if (name && !_roleList.some(r => r.toLowerCase() === name.toLowerCase())) { _roleList.push(name); _roleList.sort(); renderRoleChips(); markDirty(); }
         inp.value = '';
     }
-    function removeRole(name) { _roleList = _roleList.filter(r => r !== name); renderRoleChips(); }
+    function removeRole(name) {
+        if (_rolesInUse.has(name)) { alert('“' + name + '” is assigned to a practitioner — reassign them first.'); return; }
+        _roleList = _roleList.filter(r => r !== name); renderRoleChips(); markDirty();
+    }
 
     async function loadRoles() {
         const list = document.getElementById('roles-list'), saveBtn = document.getElementById('roles-save');
@@ -1425,22 +1468,25 @@
         try {
             const res = await authFetch('/api/roles');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { practitioners, roles, tenants } = await res.json();
+            const { practitioners, roles, in_use, tenants } = await res.json();
             _roleList = (roles || []).slice();
+            _rolesInUse = new Set(in_use || []);
             _rolesTenant = (tenants && tenants[0]) ? tenants[0].id : (practitioners[0] ? practitioners[0].tenant_id : null);
             renderRoleChips();
             if (!practitioners.length) { list.textContent = 'No practitioners found.'; saveBtn.style.display = ''; return; }
             list.innerHTML = practitioners.map(p =>
                 '<div class="roles-row"><span style="font-size:13px">' + escHtml(p.name)
-                + ' <span style="color:#999;font-size:11px">' + escHtml(p.dentally_role || '') + '</span></span>'
-                + '<input class="role-input" list="roles-datalist" value="' + escHtml(p.custom_role || '') + '"'
-                + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"></div>').join('');
+                + (p.dentally_role ? ' <span style="color:#aaa;font-size:11px">Dentally: ' + escHtml(p.dentally_role) + '</span>' : '') + '</span>'
+                + '<select class="role-select" data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '">'
+                + _roleOptions(p.custom_role || p.dentally_role || '') + '</select></div>').join('');
+            document.querySelectorAll('#roles-list .role-select').forEach(s => s.addEventListener('change', () => { _recomputeInUse(); markDirty(); }));
+            _recomputeInUse();
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load practitioners.'; }
     }
     async function saveRoles() {
         const saveBtn = document.getElementById('roles-save'), msg = document.getElementById('roles-msg');
-        const assignments = [...document.querySelectorAll('#roles-list .role-input')]
+        const assignments = [...document.querySelectorAll('#roles-list .role-select')]
             .map(i => ({ tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid, custom_role: i.value.trim() }))
             .filter(r => r.custom_role);
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
@@ -1448,7 +1494,7 @@
             const res = await authFetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tenant_id: _rolesTenant, roles: _roleList, assignments }) });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 5000); }
     }
@@ -1463,16 +1509,19 @@
             const { metrics, variances, tenants } = await res.json();
             _varTenants = tenants || [];
             if (!metrics.length) { list.textContent = 'No metrics.'; return; }
-            list.innerHTML = metrics.map(m => {
+            let html = '', lastSec = null;
+            for (const m of metrics) {
+                const sec = m.section || 'Other';
+                if (sec !== lastSec) { html += '<div class="var-section-head">' + escHtml(sec) + '</div>'; lastSec = sec; }
                 let cur = '';
                 for (const k in variances) { if (k.endsWith('|' + m.key)) { cur = variances[k]; break; } }
                 const unit = ((m.format_type || '').toLowerCase().includes('percent') || m.range_type === 'within') ? 'pp' : '%';
-                return '<div class="roles-row"><span style="font-size:13px">' + escHtml(m.display_name)
-                    + ' <span style="color:#999;font-size:11px">' + escHtml(m.section || '') + '</span></span>'
+                html += '<div class="roles-row"><span style="font-size:13px">' + escHtml(m.display_name) + '</span>'
                     + '<span style="white-space:nowrap"><input type="number" min="0" step="0.5" class="var-input"'
                     + ' style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px"'
                     + ' value="' + (cur !== '' && cur != null ? cur : '') + '" data-metric="' + escHtml(m.key) + '"> ' + unit + '</span></div>';
-            }).join('');
+            }
+            list.innerHTML = html;
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load metrics.'; }
     }
@@ -1487,7 +1536,7 @@
         try {
             const res = await authFetch('/api/variances', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
     }
@@ -1508,14 +1557,21 @@
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
             renderTargetGrid(data, t);
+            const hasTargets = Object.keys(t.targets || {}).length > 0;   // copy only onto a blank year
+            document.getElementById('targets-copy-fy').disabled = hasTargets;
+            document.getElementById('targets-copy-btn').disabled = hasTargets;
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
     function renderTargetGrid(data, t) {
         const levels = t.levels || ['Practice'];
-        let html = '<table class="tgrid"><thead><tr><th>Metric</th>' + levels.map(l => '<th>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
+        const ncol = levels.length + 2;
+        let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>' + levels.map(l => '<th>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
+        let lastSec = null;
         for (const m of data.metrics) {
-            html += '<tr><td class="metric">' + escHtml(m.display_name) + '</td>';
+            const sec = m.section || 'Other';
+            if (sec !== lastSec) { html += '<tr class="section-row"><td colspan="' + ncol + '">' + escHtml(sec) + '</td></tr>'; lastSec = sec; }
+            html += '<tr><td class="metric">' + escHtml(m.display_name) + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
             for (const lvl of levels) {
                 const canEdit = (lvl === 'Practice') || m.splits_by_role;
                 if (!canEdit) { html += '<td class="na">&mdash;</td>'; continue; }
@@ -1538,7 +1594,7 @@
         try {
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
     }
@@ -1546,6 +1602,9 @@
         const src = +document.getElementById('targets-copy-fy').value;
         if (!src) return;
         const msg = document.getElementById('targets-msg');
+        if ([...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '')) {
+            msg.style.color = '#b3261e'; msg.textContent = 'Copy only onto a blank year.'; return;
+        }
         try {
             const res = await authFetch('/api/target-grid?fy=' + src);
             if (!res.ok) throw new Error('status ' + res.status);
@@ -1555,19 +1614,29 @@
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';
             });
+            markDirty();
             msg.style.color = '#0b3d5c'; msg.textContent = 'Copied from ' + _fyLabel(src) + ' — review, then Save.';
             setTimeout(() => msg.textContent = '', 6000);
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Copy failed.'; }
     }
 
-    document.querySelectorAll('.settings-tab').forEach(b => b.addEventListener('click', () => showSettingsTab(b.dataset.stab)));
+    document.querySelectorAll('.settings-tab').forEach(b => b.addEventListener('click', () => {
+        if (_dirty && !confirm('Discard unsaved changes?')) return;
+        clearDirty(); showSettingsTab(b.dataset.stab);
+    }));
     document.getElementById('roles-save').addEventListener('click', saveRoles);
+    document.getElementById('roles-save-top').addEventListener('click', saveRoles);
     document.getElementById('role-add-btn').addEventListener('click', addRole);
     document.getElementById('role-add-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRole(); } });
     document.getElementById('variances-save').addEventListener('click', saveVariances);
+    document.getElementById('variances-save-top').addEventListener('click', saveVariances);
     document.getElementById('targets-save').addEventListener('click', saveTargetGrid);
+    document.getElementById('targets-save-top').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
+    document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
+    settingsOverlay.addEventListener('input', markDirty);
+    settingsOverlay.addEventListener('change', markDirty);
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && settingsOverlay.classList.contains('open')) closeSettings();

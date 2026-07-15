@@ -884,7 +884,7 @@ def get_practitioner_pay():
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(
-                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct "
+                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct, p.Custom_Role "
                 f"FROM Gold.Dim_Practitioners p "
                 f"LEFT JOIN Input.Practitioner_Pay pp "
                 f"  ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = p.Practitioner_ID "
@@ -893,8 +893,8 @@ def get_practitioner_pay():
                 tids,
             )
             practitioners = [
-                {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'role': r[3],
-                 'associate_pct': float(r[4]) if r[4] is not None else None}
+                {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'dentally_role': r[3],
+                 'associate_pct': float(r[4]) if r[4] is not None else None, 'role': r[5] or r[3]}
                 for r in cur.fetchall()
             ]
         conn.close()
@@ -1016,10 +1016,15 @@ def get_roles():
                 ov = overrides.get((p['tenant_id'], p['practitioner_id']))
                 if ov:
                     p['custom_role'] = ov
-        # Canonical list = curated roles + any role in use + the Dentally defaults (nothing disappears).
-        role_set |= {p['custom_role'] for p in practitioners if p['custom_role']} | dentally_roles
+        # Canonical list = curated roles + any role actually IN USE (an unused/removed role does NOT
+        # reappear via the Dentally defaults). dentally_roles kept only to bootstrap an empty list.
+        in_use = {p['custom_role'] for p in practitioners if p['custom_role']}
+        role_set |= in_use
+        if not role_set:
+            role_set = dentally_roles
         roles = sorted(r for r in role_set if r)
-        return jsonify({'practitioners': practitioners, 'roles': roles, 'tenants': tenants})
+        return jsonify({'practitioners': practitioners, 'roles': roles,
+                        'in_use': sorted(r for r in in_use if r), 'tenants': tenants})
     except Exception as e:
         return _server_error(e, 'get_roles')
 
