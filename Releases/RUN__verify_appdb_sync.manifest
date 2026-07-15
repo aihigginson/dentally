@@ -1,0 +1,12 @@
+# =====================================================================
+# ONE-OFF RUNNER (not a release) -- verify the AppDB sync -> Fact_Daily_Targets flow on dev.
+# Runs the sync, then the two consumers, so we can eyeball Fact_Daily_Targets / Dim_Practitioners.
+# EXEC-only: nothing logged to Migrate.Deploy_Log; safe to re-run.
+# Run: Deploy Warehouse workflow, manifest=RUN__verify_appdb_sync.manifest, target=dev
+# =====================================================================
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Meta.usp_Sync_Input_From_AppDB @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Practitioners @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST
