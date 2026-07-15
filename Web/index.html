@@ -1606,9 +1606,7 @@
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
             renderTargetGrid(data, t);
-            const hasTargets = Object.keys(t.targets || {}).length > 0;   // copy only onto a blank year
-            document.getElementById('targets-copy-fy').disabled = hasTargets;
-            document.getElementById('targets-copy-btn').disabled = hasTargets;
+            _refreshCopyEnabled();   // copy only onto a blank year (live: re-enables if all boxes cleared)
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
@@ -1651,6 +1649,11 @@
             _applyPracticePlaceholders(p.dataset.metric);
             p.addEventListener('input', () => _applyPracticePlaceholders(p.dataset.metric));
         });
+    }
+    function _refreshCopyEnabled() {
+        const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '');
+        document.getElementById('targets-copy-fy').disabled = anyVal;
+        document.getElementById('targets-copy-btn').disabled = anyVal;
     }
     function _applyPracticePlaceholders(metricKey) {
         const grid = document.getElementById('targets-grid');
@@ -1718,6 +1721,10 @@
         const b = e.target.closest('.def-btn'); if (!b) return;
         const row = document.querySelector('#targets-grid .def-row[data-def="' + b.dataset.def + '"]');
         if (row) { row.hidden = !row.hidden; b.classList.toggle('on', !row.hidden); }
+    });
+    // Re-enable Copy the moment every target box is cleared (blank year again).
+    document.getElementById('targets-grid').addEventListener('input', e => {
+        if (e.target.matches('input[data-metric]')) _refreshCopyEnabled();
     });
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
