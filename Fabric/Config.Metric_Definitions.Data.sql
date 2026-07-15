@@ -139,7 +139,7 @@ GO
 --                       real recall-record status). The old single metric counted completed/historical
 --                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook');
+    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
