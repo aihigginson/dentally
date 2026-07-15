@@ -1651,9 +1651,12 @@
         });
     }
     function _refreshCopyEnabled() {
+        // Copy is allowed only onto a BLANK year; the button also needs a source year chosen, so it's
+        // only ever clickable when a copy will actually happen (no silent no-op / no guard surprise).
         const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '');
+        const src = document.getElementById('targets-copy-fy').value;
         document.getElementById('targets-copy-fy').disabled = anyVal;
-        document.getElementById('targets-copy-btn').disabled = anyVal;
+        document.getElementById('targets-copy-btn').disabled = anyVal || !src;
     }
     function _applyPracticePlaceholders(metricKey) {
         const grid = document.getElementById('targets-grid');
@@ -1698,6 +1701,7 @@
             document.querySelectorAll('#targets-grid input[data-level="Practice"]')
                 .forEach(p => _applyPracticePlaceholders(p.dataset.metric));
             markDirty();
+            _refreshCopyEnabled();   // year is now populated -> Copy disables (until cleared again)
             msg.style.color = '#0b3d5c'; msg.textContent = 'Copied from ' + _fyLabel(src) + ' — review, then Save.';
             setTimeout(() => msg.textContent = '', 6000);
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Copy failed.'; }
@@ -1726,6 +1730,7 @@
     document.getElementById('targets-grid').addEventListener('input', e => {
         if (e.target.matches('input[data-metric]')) _refreshCopyEnabled();
     });
+    document.getElementById('targets-copy-fy').addEventListener('change', _refreshCopyEnabled);
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
     settingsOverlay.addEventListener('input', markDirty);
