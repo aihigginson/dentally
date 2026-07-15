@@ -322,6 +322,13 @@ DECLARE @Msg        nvarchar(500);
     --  columns moved to DAX.)
 
 
+    -- ---- INPUT SYNC (AppDB -> WH_Dentally.Input.*; must precede Gold dims/facts that read Input.*) ----
+    SET @Step = 'Sync_Input_From_AppDB'; SET @Start = SYSUTCDATETIME();
+    SET @Process_Code = 'META_SYNC_INPUT'
+    EXEC Audit.ETL_Run_Process @Process_Code ,@Parent_Run_UUID
+    IF @Mode='TEST' PRINT @Step + ' completed in '
+    + CAST(DATEDIFF(MILLISECOND, @Start, SYSUTCDATETIME()) AS nvarchar) + ' ms';
+
     -- ---- DIMENSIONS (load before facts) ----
 
     SET @Step = 'Dim_Date';           SET @Start = SYSUTCDATETIME();
