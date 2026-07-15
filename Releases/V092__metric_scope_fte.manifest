@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V092 -- Metric catalogue: targeting scope + FTE set + cancellation_rebook
+# =====================================================================
+# Re-seeds Config.Metric_Definitions (MERGE + post-seed UPDATEs). Columns already exist (V091),
+# so this is a Data.sql redeploy, no migration:
+#   - Practice-only (Supports_Practitioner=0): new_patients, lapsed_patients, dna_rate,
+#     cancellation_frequency, short_notice_cancellation_rate, patient_tracked_in_surgery,
+#     cancellation_rebook.
+#   - FTE_Scaled = revenue (total/nhs/private) + ALL open-courses metrics; dropped new_patients
+#     and net_patient_growth.
+#   - cancellation_rebook metric + per-metric Sample_Value (from V091) reapplied.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V092__metric_scope_fte.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

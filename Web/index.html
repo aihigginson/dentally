@@ -322,12 +322,19 @@
         .var-input::-webkit-outer-spin-button, .var-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .tgrid tr.section-row td { background: var(--navy); color: #fff; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 5px 8px; position: sticky; left: 0; }
         .tgrid td.sample { color: var(--text-3); font-size: 11px; text-align: left; white-space: nowrap; }
-        /* £ / % sit OUTSIDE the input so the box holds a plain number */
-        .tgrid td.tcell { white-space: nowrap; }
-        .tgrid td.tcell .unit { color: var(--text-3); font-size: 12px; }
-        .tgrid td.tcell .unit.pre { margin-right: 3px; }
-        .tgrid td.tcell .unit.suf { margin-left: 3px; }
-        .tgrid td.tcell input, .tgrid td.tcell.cur input { width: 78px; }
+        /* £ / % sit OUTSIDE the input; fixed-width gutters keep every input box aligned */
+        .tgrid td.tcell { white-space: nowrap; text-align: center; }
+        .tgrid td.tcell .unit { display: inline-block; color: var(--text-3); font-size: 12px; }
+        .tgrid td.tcell .unit.pre { width: 10px; text-align: right; margin-right: 3px; }
+        .tgrid td.tcell .unit.suf { width: 12px; text-align: left; margin-left: 3px; }
+        .tgrid td.tcell input { width: 78px; }
+        .def-btn { display: inline-block; width: 16px; height: 16px; margin-left: 6px; padding: 0; border: 1px solid #cfd8e0;
+            background: #fff; color: var(--navy); border-radius: 50%; font: italic 700 10px/14px Georgia, serif; text-align: center;
+            cursor: pointer; vertical-align: middle; }
+        .def-btn:hover { background: #eef5fb; }
+        .def-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+        .tgrid tr.def-row td { background: #f7fafd; color: var(--text-2); font-size: 11px; line-height: 1.45; font-weight: 400;
+            text-align: left; white-space: normal; padding: 7px 12px; position: static; }
         /* Practice column highlighted; role columns de-emphasised */
         .tgrid th.col-practice { background: #e4eefb; color: var(--navy); }
         .tgrid td.col-practice { background: #f2f8ff; }
@@ -1615,24 +1622,26 @@
             html += '<tr class="section-row"><td colspan="' + ncol + '">' + escHtml(_secLabel(grp.section)) + '</td></tr>';
             for (const m of grp.metrics) {
                 const fmt = (m.format_type || '').toLowerCase();
-                const pre = fmt.includes('currency') ? '<span class="unit pre">£</span>' : '';
-                const suf = fmt.includes('percent') ? '<span class="unit suf">%</span>' : '';
-                const cur = fmt.includes('currency') ? ' cur' : '';
+                // gutters always present (empty when N/A) so every input box lines up
+                const pre = '<span class="unit pre">' + (fmt.includes('currency') ? '£' : '') + '</span>';
+                const suf = '<span class="unit suf">' + (fmt.includes('percent') ? '%' : '') + '</span>';
                 const badge = m.fte_scaled ? '<span class="fte-badge" title="Full-time-equivalent target — each practitioner&#39;s target = this &times; their FTE (set on Finance)">&times;FTE</span>' : '';
-                const defAttr = m.definition ? ' title="' + escHtml(m.definition) + '"' : '';
-                html += '<tr><td class="metric"' + defAttr + '>' + escHtml(m.display_name) + badge
+                const defBtn = m.definition ? '<button type="button" class="def-btn" data-def="' + escHtml(m.key) + '" title="Show definition">i</button>' : '';
+                html += '<tr><td class="metric">' + escHtml(m.display_name) + badge + defBtn
                     + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
                 for (const lvl of levels) {
                     const lvlCls = (lvl === 'Practice') ? ' col-practice' : ' col-role';
                     const canEdit = (lvl === 'Practice') || m.splits_by_role;
                     if (!canEdit) { html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue; }
                     const tgt = t.targets[m.key + '|' + lvl];
-                    html += '<td class="tcell' + cur + lvlCls + '">'
+                    html += '<td class="tcell' + lvlCls + '">'
                         + pre + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
                         + '" data-level="' + escHtml(lvl) + '"' + (m.fte_scaled ? ' data-fte="1"' : '')
                         + ' value="' + (tgt != null ? tgt : '') + '">' + suf + '</td>';
                 }
                 html += '</tr>';
+                if (m.definition) html += '<tr class="def-row" data-def="' + escHtml(m.key) + '" hidden><td colspan="'
+                    + ncol + '">' + escHtml(m.definition) + '</td></tr>';
             }
         }
         document.getElementById('targets-grid').innerHTML = html + '</tbody></table>';
@@ -1704,6 +1713,12 @@
     document.getElementById('targets-save').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-save-top').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
+    // Definition on demand: the ⓘ button toggles a collapsible definition row (kept out of the way otherwise).
+    document.getElementById('targets-grid').addEventListener('click', e => {
+        const b = e.target.closest('.def-btn'); if (!b) return;
+        const row = document.querySelector('#targets-grid .def-row[data-def="' + b.dataset.def + '"]');
+        if (row) { row.hidden = !row.hidden; b.classList.toggle('on', !row.hidden); }
+    });
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
     settingsOverlay.addEventListener('input', markDirty);
