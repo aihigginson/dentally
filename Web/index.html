@@ -352,6 +352,7 @@
         .fte-badge { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; color: #7a5b00;
             background: #fff3d6; border: 1px solid #f0dca0; border-radius: 3px; padding: 0 3px; vertical-align: middle; letter-spacing: .02em; }
         .settings-save-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+        .settings-save:disabled, .settings-btn:disabled, .targets-save-btn:disabled { opacity: .45; cursor: default; }
         .var-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 16px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; max-width: 560px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
 
@@ -1420,7 +1421,7 @@
         } catch (e) {
             msg.style.color = '#b3261e'; msg.textContent = 'Save failed.';
         } finally {
-            saveBtn.disabled = false;
+            _syncSaveButtons();
             setTimeout(() => { msg.textContent = ''; }, 4000);
         }
     }
@@ -1482,8 +1483,12 @@
         return order.map(sec => ({ section: sec, metrics: bySec[sec] }));
     }
     let _dirty = false;
-    function markDirty() { _dirty = true; }
-    function clearDirty() { _dirty = false; }
+    const _SAVE_BTN_IDS = ['targets-save','targets-save-top','roles-save','roles-save-top',
+                           'variances-save','variances-save-top','assoc-pay-save','assoc-pay-save-top'];
+    // Save buttons grey out while there are no unsaved changes (feedback that a save landed).
+    function _syncSaveButtons() { _SAVE_BTN_IDS.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !_dirty; }); }
+    function markDirty() { _dirty = true; _syncSaveButtons(); }
+    function clearDirty() { _dirty = false; _syncSaveButtons(); }
 
     // Roles ------------------------------------------------------------------
     let _roleList = [], _rolesTenant = null, _rolesInUse = new Set();
@@ -1559,7 +1564,7 @@
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 5000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
     }
 
     // Variances --------------------------------------------------------------
@@ -1603,10 +1608,43 @@
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
 
     // Targets grid -----------------------------------------------------------
+    // Draft persistence: unsaved target edits are mirrored to localStorage on every keystroke, so a
+    // token-expiry redirect, accidental refresh or crash can't lose them -- they're restored (with a
+    // banner) when the grid reloads, and cleared on a successful Save.
+    let _tgtFy = null, _tgtTid = null;
+    function _draftKey() { return (_tgtTid != null && _tgtFy != null) ? ('tgtDraft:' + _tgtTid + ':' + _tgtFy) : null; }
+    function _saveDraft() {
+        const k = _draftKey(); if (!k) return;
+        const vals = {};
+        document.querySelectorAll('#targets-grid input[data-metric]').forEach(i => {
+            if (i.value !== '') vals[i.dataset.metric + '|' + i.dataset.level] = i.value;
+        });
+        try { Object.keys(vals).length ? localStorage.setItem(k, JSON.stringify({ ts: Date.now(), vals })) : localStorage.removeItem(k); } catch (e) {}
+    }
+    function _clearDraft() { const k = _draftKey(); if (k) { try { localStorage.removeItem(k); } catch (e) {} } }
+    function _restoreDraft() {
+        const k = _draftKey(); if (!k) return;
+        let d = null; try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+        if (!d || !d.vals) return;
+        let n = 0;
+        document.querySelectorAll('#targets-grid input[data-metric]').forEach(i => {
+            const v = d.vals[i.dataset.metric + '|' + i.dataset.level];
+            if (v != null && i.value !== v) { i.value = v; n++; }
+        });
+        if (!n) return;
+        document.querySelectorAll('#targets-grid input[data-level="Practice"]').forEach(p => _applyPracticePlaceholders(p.dataset.metric));
+        markDirty(); _refreshCopyEnabled();
+        const msg = document.getElementById('targets-msg');
+        msg.style.color = '#b3261e';
+        msg.innerHTML = 'Restored ' + n + ' unsaved value(s) from ' + new Date(d.ts).toLocaleString()
+            + '. <b>Save</b> to keep them, or <a href="#" id="tgt-discard-draft">discard</a>.';
+        const dc = document.getElementById('tgt-discard-draft');
+        if (dc) dc.addEventListener('click', ev => { ev.preventDefault(); _clearDraft(); loadTargetGrid(_tgtFy); });
+    }
     async function loadTargetGrid(fy) {
         const grid = document.getElementById('targets-grid'), saveBtn = document.getElementById('targets-save');
         grid.textContent = 'Loading…'; saveBtn.style.display = 'none';
@@ -1621,8 +1659,10 @@
                 + (data.available_fys || []).filter(y => y !== data.fy).map(y => '<option value="' + y + '">' + _fyLabel(y) + '</option>').join('');
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
+            _tgtTid = t.id; _tgtFy = data.fy;
             renderTargetGrid(data, t);
             _refreshCopyEnabled();   // copy only onto a blank year (live: re-enables if all boxes cleared)
+            _restoreDraft();         // bring back any unsaved edits stashed before a redirect/refresh
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
@@ -1727,9 +1767,9 @@
         try {
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
             if (!res.ok) throw new Error('status ' + res.status);
-            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            _clearDraft(); clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
     async function copyFromFY() {
         const src = +document.getElementById('targets-copy-fy').value;
@@ -1795,7 +1835,7 @@
     });
     // Re-enable Copy the moment every target box is cleared (blank year again).
     document.getElementById('targets-grid').addEventListener('input', e => {
-        if (e.target.matches('input[data-metric]')) _refreshCopyEnabled();
+        if (e.target.matches('input[data-metric]')) { _refreshCopyEnabled(); _saveDraft(); }
     });
     document.getElementById('targets-copy-fy').addEventListener('change', _refreshCopyEnabled);
     document.getElementById('targets-clear-btn').addEventListener('click', clearTargetGrid);
