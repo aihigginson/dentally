@@ -996,22 +996,30 @@ def get_roles():
                  'dentally_role': r[3], 'custom_role': r[3]}
                 for r in cur.fetchall()
             ]
-        conn.close()
-        # Overlay the owner overrides from AppDB (current role = override if set, else Dentally role).
-        if tids and practitioners:
-            ac = _appdb_conn(); acur = ac.cursor()
+        tenants = []
+        if tids:
             ph = ','.join(['?'] * len(tids))
-            acur.execute(
-                f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role "
-                f"WHERE Tenant_ID IN ({ph})", tids)
+            cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
+            tenants = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
+        dentally_roles = {p['dentally_role'] for p in practitioners if p['dentally_role']}
+        conn.close()
+        # AppDB: overlay overrides + read the curated role list.
+        role_set = set()
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
+            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
             overrides = {(r[0], r[1]): r[2] for r in acur.fetchall()}
+            acur.execute(f"SELECT Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
+            role_set = {r[0] for r in acur.fetchall()}
             ac.close()
             for p in practitioners:
                 ov = overrides.get((p['tenant_id'], p['practitioner_id']))
                 if ov:
                     p['custom_role'] = ov
-        roles = sorted({p['custom_role'] for p in practitioners if p['custom_role']})
-        return jsonify({'practitioners': practitioners, 'roles': roles})
+        # Canonical list = curated roles + any role in use + the Dentally defaults (nothing disappears).
+        role_set |= {p['custom_role'] for p in practitioners if p['custom_role']} | dentally_roles
+        roles = sorted(r for r in role_set if r)
+        return jsonify({'practitioners': practitioners, 'roles': roles, 'tenants': tenants})
     except Exception as e:
         return _server_error(e, 'get_roles')
 
@@ -1031,10 +1039,11 @@ def save_roles():
             return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             return jsonify({'error': 'Only a practice admin can manage roles'}), 403
-        rows    = request.get_json(force=True) or []
+        body    = request.get_json(force=True) or {}
         allowed = set(tids)
-        valid   = []
-        for r in rows:
+        # practitioner assignments
+        valid = []
+        for r in (body.get('assignments') or []):
             try:
                 tid = int(r['tenant_id']); pid = int(r['practitioner_id'])
             except (KeyError, TypeError, ValueError):
@@ -1042,8 +1051,16 @@ def save_roles():
             role = (r.get('custom_role') or '').strip()
             if tid in allowed and role:
                 valid.append((tid, pid, role))
+        # curated role list (per the primary tenant)
+        try:
+            rtid = int(body.get('tenant_id'))
+        except (TypeError, ValueError):
+            rtid = None
+        role_names = sorted({str(x).strip() for x in (body.get('roles') or []) if str(x).strip()})
+
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         if valid:
-            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.fast_executemany = True
             acur.executemany(
                 "DELETE FROM Input.Practitioner_Role WHERE Tenant_ID = ? AND Practitioner_ID = ?",
                 [(t, p) for t, p, _ in valid])
@@ -1051,7 +1068,14 @@ def save_roles():
                 "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, Updated_At, Updated_By) "
                 "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
                 [(t, p, role, upn) for t, p, role in valid])
-            ac.close()
+        if rtid in allowed:
+            acur.execute("DELETE FROM Input.Roles WHERE Tenant_ID = ?", rtid)
+            if role_names:
+                acur.fast_executemany = True
+                acur.executemany(
+                    "INSERT INTO Input.Roles (Tenant_ID, Role_Name, Updated_At, Updated_By) VALUES (?, ?, SYSUTCDATETIME(), ?)",
+                    [(rtid, n, upn) for n in role_names])
+        ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_roles')
@@ -1174,44 +1198,18 @@ def get_target_grid():
                     'range_type': r[4], 'target_type': r[5], 'splits_by_role': bool(r[6])}
                    for r in cur.fetchall()]
 
-        tenants, roles_by_tenant, pract_act, role_act = {}, {}, {}, {}
+        tenants, roles_by_tenant = {}, {}
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
             tenants = {r[0]: {'id': r[0], 'name': r[1], 'levels': ['Practice'],
-                              'targets': {}, 'variances': {}, 'actuals': {}} for r in cur.fetchall()}
+                              'targets': {}, 'variances': {}} for r in cur.fetchall()}
             cur.execute(
                 f"SELECT DISTINCT Tenant_ID, Custom_Role FROM Gold.Dim_Practitioners "
                 f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 AND Custom_Role IS NOT NULL", tids)
             for r in cur.fetchall():
                 roles_by_tenant.setdefault(r[0], set()).add(r[1])
-            # Practice-level actuals (global grain -1/-1) over the FY
-            cur.execute(
-                f"SELECT fma.Tenant_ID, fma.Metric, SUM(fma.Numerator), SUM(fma.Denominator) "
-                f"FROM Gold.Fact_Metric_Actuals fma "
-                f"JOIN Gold.Dim_Date d ON d.pk_Date = fma.fk_Date AND d.Financial_Year = ? "
-                f"WHERE fma.Tenant_ID IN ({ph}) AND fma.fk_Practice_Site = -1 AND fma.fk_Practitioner = -1 "
-                f"GROUP BY fma.Tenant_ID, fma.Metric", [fy] + tids)
-            for r in cur.fetchall():
-                pract_act[(r[0], r[1])] = (r[2], r[3])
-            # Role-level actuals (practitioner grain -> Custom_Role) over the FY
-            cur.execute(
-                f"SELECT fma.Tenant_ID, fma.Metric, dp.Custom_Role, SUM(fma.Numerator), SUM(fma.Denominator) "
-                f"FROM Gold.Fact_Metric_Actuals fma "
-                f"JOIN Gold.Dim_Date d ON d.pk_Date = fma.fk_Date AND d.Financial_Year = ? "
-                f"JOIN Gold.Dim_Practitioners dp ON dp.pk_Practitioner = fma.fk_Practitioner AND dp.Tenant_ID = fma.Tenant_ID "
-                f"WHERE fma.Tenant_ID IN ({ph}) AND fma.fk_Practitioner <> -1 AND dp.Custom_Role IS NOT NULL "
-                f"GROUP BY fma.Tenant_ID, fma.Metric, dp.Custom_Role", [fy] + tids)
-            for r in cur.fetchall():
-                role_act[(r[0], r[1], r[2])] = (r[3], r[4])
         conn.close()
-
-        def resolve(num, den, tt):
-            if num is None:
-                return None
-            if tt == 'rate':
-                return float(num) / float(den) if den else None
-            return float(num)   # cumulative + point_in_time (approx)
 
         available_fys = []
         if tids:
@@ -1228,24 +1226,13 @@ def get_target_grid():
                     tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
             acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
             available_fys = [r[0] for r in acur.fetchall()]
+            acur.execute(f"SELECT Tenant_ID, Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                roles_by_tenant.setdefault(r[0], set()).add(r[1])
             ac.close()
 
         for tid, t in tenants.items():
-            roles = roles_by_tenant.get(tid, set())
-            t['levels'] = ['Practice'] + sorted(roles)
-            for m in metrics:
-                pa = pract_act.get((tid, m['key']))
-                if pa:
-                    v = resolve(pa[0], pa[1], m['target_type'])
-                    if v is not None:
-                        t['actuals'][f"{m['key']}|Practice"] = v
-                if m['splits_by_role']:
-                    for role in roles:
-                        ra = role_act.get((tid, m['key'], role))
-                        if ra:
-                            v = resolve(ra[0], ra[1], m['target_type'])
-                            if v is not None:
-                                t['actuals'][f"{m['key']}|{role}"] = v
+            t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
         return jsonify({'fy': fy, 'available_fys': available_fys,
                         'metrics': metrics, 'tenants': list(tenants.values())})

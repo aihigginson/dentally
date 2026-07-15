@@ -49,3 +49,13 @@ CREATE TABLE Input.Metric_Variance (
     CONSTRAINT PK_Input_Metric_Variance PRIMARY KEY (Tenant_ID, Metric)
 );
 GO
+
+IF OBJECT_ID('Input.Roles') IS NULL
+CREATE TABLE Input.Roles (
+    Tenant_ID   INT           NOT NULL,
+    Role_Name   VARCHAR(100)  NOT NULL,
+    Updated_At  DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Roles_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By  VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Roles PRIMARY KEY (Tenant_ID, Role_Name)
+);
+GO

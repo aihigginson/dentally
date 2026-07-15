@@ -291,19 +291,29 @@
         .settings-btn { margin-top: 0; padding: 6px 12px; font-size: 12px; }
         .settings-save:disabled, .settings-btn:disabled { opacity: .6; cursor: default; }
         .settings-msg { margin-left: 10px; font-size: 12px; }
-        .defs-panel.wide { width: 1080px; }
-        .targets-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0; font-size: 12px; }
-        .targets-controls select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; margin-left: 4px; }
+        /* Settings uses a full-screen panel (admin area with a wide target grid) */
+        #settings-overlay .defs-panel { width: 100vw; max-width: 100vw; }
+        #settings-overlay .defs-body { padding-bottom: 40px; }
+        #settings-overlay .settings-pane { max-width: 1500px; margin: 0 auto; padding: 0 24px; }
+        #settings-overlay .settings-tabs { padding-left: 24px; }
+        .targets-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; }
+        .targets-controls select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; margin-left: 4px; }
         .targets-copy { display: inline-flex; align-items: center; gap: 6px; }
-        .tgrid { border-collapse: collapse; font-size: 12px; }
-        .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; vertical-align: top; }
+        #targets-grid { overflow-x: auto; width: 100%; margin-top: 6px; }
+        .tgrid { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+        .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 5px 8px; text-align: center; vertical-align: top; }
         .tgrid th { background: #f4f6f8; font-weight: 600; }
-        .tgrid td.metric { text-align: left; white-space: nowrap; font-weight: 600; background: #fafbfc; position: sticky; left: 0; }
-        .tgrid .actual { font-size: 10px; color: var(--text-3); display: block; margin-bottom: 2px; min-height: 12px; }
-        .tgrid input { width: 78px; padding: 3px 5px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
-        .tgrid input:disabled { background: #f0f0f0; border-color: #eee; }
-        .roles-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,.06); }
-        .role-input { width: 190px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .tgrid td.metric { text-align: left; white-space: nowrap; font-weight: 600; background: #fafbfc; position: sticky; left: 0; z-index: 1; }
+        .tgrid .actual { font-size: 10px; color: var(--text-3); display: block; margin-bottom: 3px; min-height: 12px; }
+        .tgrid input { width: 84px; padding: 4px 6px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
+        .tgrid td.na { background: repeating-linear-gradient(45deg, #f2f2f2, #f2f2f2 6px, #ececec 6px, #ececec 12px); color: #bbb; }
+        .roles-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.06); max-width: 640px; }
+        .role-input { width: 230px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .role-manage { max-width: 640px; margin: 4px 0 14px; }
+        .role-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2f6; border: 1px solid #d7dee5; border-radius: 14px; padding: 3px 6px 3px 11px; margin: 3px 6px 3px 0; font-size: 12px; }
+        .role-chip button { border: none; background: none; color: #999; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+        .role-add { display: inline-flex; gap: 6px; margin-top: 8px; }
+        .role-add input { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 220px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
 
         /* ── Targets section ── */
@@ -574,13 +584,13 @@
         </div>
         <div class="defs-body">
             <div class="settings-tabs">
-                <button class="settings-tab active" data-stab="general">General</button>
+                <button class="settings-tab active" data-stab="finance">Finance</button>
                 <button class="settings-tab" data-stab="roles">Roles</button>
                 <button class="settings-tab" data-stab="targets">Targets</button>
                 <button class="settings-tab" data-stab="variances">Variances</button>
             </div>
 
-            <div class="settings-pane active" id="stab-general">
+            <div class="settings-pane active" id="stab-finance">
                 <div class="defs-group">Xero &mdash; accounting integration</div>
                 <div class="defs-item">
                     <div class="defs-item-name">Connection <span class="defs-badge" id="xero-status-badge" style="display:none"></span></div>
@@ -598,10 +608,19 @@
 
             <div class="settings-pane" id="stab-roles">
                 <div class="defs-item">
-                    <div class="defs-item-desc">Assign each practitioner a role. Roles drive the target columns, the Role filter and how actuals group. Type a new name to create a role (e.g. &ldquo;Specialist Implantologist&rdquo;).</div>
+                    <div class="defs-group" style="padding-left:0">Your roles</div>
+                    <div class="defs-item-desc">The roles for this practice. Add one to make it available as a target column and in the dropdowns below; remove one you no longer use (practitioners keep their current assignment).</div>
                     <datalist id="roles-datalist"></datalist>
+                    <div class="role-manage" id="roles-chips">Loading&hellip;</div>
+                    <div class="role-add">
+                        <input id="role-add-input" placeholder="New role name (e.g. Specialist Implantologist)">
+                        <button id="role-add-btn" class="settings-btn">Add role</button>
+                    </div>
+
+                    <div class="defs-group" style="padding-left:0;margin-top:20px">Assign practitioners</div>
+                    <div class="defs-item-desc">Give each practitioner their role. Actuals group by this, and each is judged against their role's target.</div>
                     <div id="roles-list" style="margin-top:10px">Loading&hellip;</div>
-                    <button id="roles-save" class="settings-save" style="display:none">Save</button>
+                    <button id="roles-save" class="settings-save" style="display:none">Save assignments</button>
                     <span id="roles-msg" class="settings-msg"></span>
                 </div>
             </div>
@@ -1353,7 +1372,7 @@
         }
     }
 
-    function openSettings() { settingsOverlay.classList.add('open'); showSettingsTab('general'); }
+    function openSettings() { settingsOverlay.classList.add('open'); showSettingsTab('finance'); }
     function closeSettings() { settingsOverlay.classList.remove('open'); }
 
     document.getElementById('settings-toggle').addEventListener('click', openSettings);
@@ -1368,8 +1387,7 @@
     function showSettingsTab(name) {
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.stab === name));
         document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
-        document.querySelector('.defs-panel').classList.toggle('wide', name === 'targets');
-        if (name === 'general')   { loadXeroStatus(); loadPractitionerPay(); }
+        if (name === 'finance')   { loadXeroStatus(); loadPractitionerPay(); }
         else if (name === 'roles')     loadRoles();
         else if (name === 'variances') loadVariances();
         else if (name === 'targets')   loadTargetGrid();
@@ -1384,15 +1402,34 @@
     function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
 
     // Roles ------------------------------------------------------------------
+    let _roleList = [], _rolesTenant = null;
+
+    function renderRoleChips() {
+        const el = document.getElementById('roles-chips');
+        el.innerHTML = _roleList.length
+            ? _roleList.map(r => '<span class="role-chip">' + escHtml(r) + '<button data-role="' + escHtml(r) + '" title="Remove">&times;</button></span>').join('')
+            : '<span style="color:#999;font-size:12px">No roles yet &mdash; add one below.</span>';
+        el.querySelectorAll('.role-chip button').forEach(b => b.addEventListener('click', () => removeRole(b.dataset.role)));
+        document.getElementById('roles-datalist').innerHTML = _roleList.map(r => '<option value="' + escHtml(r) + '">').join('');
+    }
+    function addRole() {
+        const inp = document.getElementById('role-add-input'), name = inp.value.trim();
+        if (name && !_roleList.some(r => r.toLowerCase() === name.toLowerCase())) { _roleList.push(name); _roleList.sort(); renderRoleChips(); }
+        inp.value = '';
+    }
+    function removeRole(name) { _roleList = _roleList.filter(r => r !== name); renderRoleChips(); }
+
     async function loadRoles() {
         const list = document.getElementById('roles-list'), saveBtn = document.getElementById('roles-save');
         list.textContent = 'Loading…'; saveBtn.style.display = 'none';
         try {
             const res = await authFetch('/api/roles');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { practitioners, roles } = await res.json();
-            if (!practitioners.length) { list.textContent = 'No practitioners found.'; return; }
-            document.getElementById('roles-datalist').innerHTML = roles.map(r => '<option value="' + escHtml(r) + '">').join('');
+            const { practitioners, roles, tenants } = await res.json();
+            _roleList = (roles || []).slice();
+            _rolesTenant = (tenants && tenants[0]) ? tenants[0].id : (practitioners[0] ? practitioners[0].tenant_id : null);
+            renderRoleChips();
+            if (!practitioners.length) { list.textContent = 'No practitioners found.'; saveBtn.style.display = ''; return; }
             list.innerHTML = practitioners.map(p =>
                 '<div class="roles-row"><span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#999;font-size:11px">' + escHtml(p.dentally_role || '') + '</span></span>'
@@ -1403,12 +1440,13 @@
     }
     async function saveRoles() {
         const saveBtn = document.getElementById('roles-save'), msg = document.getElementById('roles-msg');
-        const rows = [...document.querySelectorAll('#roles-list .role-input')]
+        const assignments = [...document.querySelectorAll('#roles-list .role-input')]
             .map(i => ({ tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid, custom_role: i.value.trim() }))
             .filter(r => r.custom_role);
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
-            const res = await authFetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
+            const res = await authFetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: _rolesTenant, roles: _roleList, assignments }) });
             if (!res.ok) throw new Error('status ' + res.status);
             msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
@@ -1479,13 +1517,11 @@
         for (const m of data.metrics) {
             html += '<tr><td class="metric">' + escHtml(m.display_name) + '</td>';
             for (const lvl of levels) {
-                const key = m.key + '|' + lvl;
                 const canEdit = (lvl === 'Practice') || m.splits_by_role;
-                const tgt = t.targets[key], act = t.actuals[key];
-                const actStr = (act != null) ? _fmtVal(act, m.format_type) : '';
-                html += '<td><span class="actual">' + (actStr ? 'now ' + escHtml(actStr) : '') + '</span>'
-                    + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '"'
-                    + (canEdit ? '' : ' disabled') + ' value="' + (tgt != null ? tgt : '') + '"></td>';
+                if (!canEdit) { html += '<td class="na">&mdash;</td>'; continue; }
+                const tgt = t.targets[m.key + '|' + lvl];
+                html += '<td><input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
+                    + '" data-level="' + escHtml(lvl) + '" value="' + (tgt != null ? tgt : '') + '"></td>';
             }
             html += '</tr>';
         }
@@ -1526,6 +1562,8 @@
 
     document.querySelectorAll('.settings-tab').forEach(b => b.addEventListener('click', () => showSettingsTab(b.dataset.stab)));
     document.getElementById('roles-save').addEventListener('click', saveRoles);
+    document.getElementById('role-add-btn').addEventListener('click', addRole);
+    document.getElementById('role-add-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRole(); } });
     document.getElementById('variances-save').addEventListener('click', saveVariances);
     document.getElementById('targets-save').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
