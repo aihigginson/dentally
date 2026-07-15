@@ -1077,6 +1077,11 @@ def get_variances():
             "ORDER BY Display_Order")
         metrics = [{'key': r[0], 'display_name': r[1], 'section': r[2],
                     'format_type': r[3], 'range_type': r[4]} for r in cur.fetchall()]
+        tenants = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
+            tenants = [{'id': r[0], 'name': r[1]} for r in cur.fetchall()]
         conn.close()
         variances = {}
         if tids:
@@ -1087,7 +1092,7 @@ def get_variances():
             for r in acur.fetchall():
                 variances[f"{r[0]}|{r[1]}"] = float(r[2]) if r[2] is not None else None
             ac.close()
-        return jsonify({'metrics': metrics, 'variances': variances})
+        return jsonify({'metrics': metrics, 'variances': variances, 'tenants': tenants})
     except Exception as e:
         return _server_error(e, 'get_variances')
 

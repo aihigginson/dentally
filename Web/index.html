@@ -281,6 +281,29 @@
         .defs-item-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 7px; }
         .defs-badge { font-size: 10px; font-weight: 600; color: var(--navy); background: #EBF3F9; border-radius: 4px; padding: 1px 6px; }
         .defs-item-desc { font-size: 12px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+        /* Settings sub-nav + target-model screens */
+        .settings-tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 1; }
+        .settings-tab { border: none; background: none; padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; }
+        .settings-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
+        .settings-pane { display: none; }
+        .settings-pane.active { display: block; }
+        .settings-save, .settings-btn { margin-top: 12px; padding: 8px 16px; border: none; border-radius: 4px; background: #0b3d5c; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .settings-btn { margin-top: 0; padding: 6px 12px; font-size: 12px; }
+        .settings-save:disabled, .settings-btn:disabled { opacity: .6; cursor: default; }
+        .settings-msg { margin-left: 10px; font-size: 12px; }
+        .defs-panel.wide { width: 1080px; }
+        .targets-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0; font-size: 12px; }
+        .targets-controls select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; margin-left: 4px; }
+        .targets-copy { display: inline-flex; align-items: center; gap: 6px; }
+        .tgrid { border-collapse: collapse; font-size: 12px; }
+        .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; vertical-align: top; }
+        .tgrid th { background: #f4f6f8; font-weight: 600; }
+        .tgrid td.metric { text-align: left; white-space: nowrap; font-weight: 600; background: #fafbfc; position: sticky; left: 0; }
+        .tgrid .actual { font-size: 10px; color: var(--text-3); display: block; margin-bottom: 2px; min-height: 12px; }
+        .tgrid input { width: 78px; padding: 3px 5px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
+        .tgrid input:disabled { background: #f0f0f0; border-color: #eee; }
+        .roles-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,.06); }
+        .role-input { width: 190px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
 
         /* ── Targets section ── */
@@ -550,18 +573,64 @@
             <button class="defs-close" id="settings-close" title="Close" aria-label="Close">&times;</button>
         </div>
         <div class="defs-body">
-            <div class="defs-group">Xero &mdash; accounting integration</div>
-            <div class="defs-item">
-                <div class="defs-item-name">Connection <span class="defs-badge" id="xero-status-badge" style="display:none"></span></div>
-                <div class="defs-item-desc" id="xero-status-desc">Checking&hellip;</div>
-                <button id="xero-connect-btn" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#13b5ea;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Xero</button>
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-stab="general">General</button>
+                <button class="settings-tab" data-stab="roles">Roles</button>
+                <button class="settings-tab" data-stab="targets">Targets</button>
+                <button class="settings-tab" data-stab="variances">Variances</button>
             </div>
-            <div class="defs-group">Associate pay (% of production)</div>
-            <div class="defs-item">
-                <div class="defs-item-desc">Each fee-earner's share of their own production &mdash; used for practitioner contribution / P&amp;L. Leave blank if not an associate.</div>
-                <div id="assoc-pay-list" style="margin-top:10px">Loading&hellip;</div>
-                <button id="assoc-pay-save" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#0b3d5c;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save</button>
-                <span id="assoc-pay-msg" style="margin-left:10px;font-size:12px"></span>
+
+            <div class="settings-pane active" id="stab-general">
+                <div class="defs-group">Xero &mdash; accounting integration</div>
+                <div class="defs-item">
+                    <div class="defs-item-name">Connection <span class="defs-badge" id="xero-status-badge" style="display:none"></span></div>
+                    <div class="defs-item-desc" id="xero-status-desc">Checking&hellip;</div>
+                    <button id="xero-connect-btn" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#13b5ea;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Xero</button>
+                </div>
+                <div class="defs-group">Associate pay (% of production)</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">Each fee-earner's share of their own production &mdash; used for practitioner contribution / P&amp;L. Leave blank if not an associate.</div>
+                    <div id="assoc-pay-list" style="margin-top:10px">Loading&hellip;</div>
+                    <button id="assoc-pay-save" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#0b3d5c;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+                    <span id="assoc-pay-msg" style="margin-left:10px;font-size:12px"></span>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-roles">
+                <div class="defs-item">
+                    <div class="defs-item-desc">Assign each practitioner a role. Roles drive the target columns, the Role filter and how actuals group. Type a new name to create a role (e.g. &ldquo;Specialist Implantologist&rdquo;).</div>
+                    <datalist id="roles-datalist"></datalist>
+                    <div id="roles-list" style="margin-top:10px">Loading&hellip;</div>
+                    <button id="roles-save" class="settings-save" style="display:none">Save</button>
+                    <span id="roles-msg" class="settings-msg"></span>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-targets">
+                <div class="defs-item">
+                    <div class="defs-item-desc">Set a target per metric for the Practice and each role. The current actual is shown above each box; blank = no target (uncoloured).</div>
+                    <div class="targets-controls">
+                        <label>Year
+                            <select id="targets-fy"></select>
+                        </label>
+                        <span class="targets-copy">
+                            <select id="targets-copy-fy"><option value="">Copy from&hellip;</option></select>
+                            <button id="targets-copy-btn" class="settings-btn">Copy</button>
+                        </span>
+                    </div>
+                    <div id="targets-grid" style="overflow-x:auto;margin-top:6px">Loading&hellip;</div>
+                    <button id="targets-save" class="settings-save" style="display:none">Save targets</button>
+                    <span id="targets-msg" class="settings-msg"></span>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-variances">
+                <div class="defs-item">
+                    <div class="defs-item-desc">The tolerance band per metric &mdash; how far from target still counts as on-track (percentage points for % metrics; relative % for counts / &pound;).</div>
+                    <div id="variances-list" style="margin-top:10px">Loading&hellip;</div>
+                    <button id="variances-save" class="settings-save" style="display:none">Save</button>
+                    <span id="variances-msg" class="settings-msg"></span>
+                </div>
             </div>
         </div>
     </aside>
@@ -1284,7 +1353,7 @@
         }
     }
 
-    function openSettings() { settingsOverlay.classList.add('open'); loadXeroStatus(); loadPractitionerPay(); }
+    function openSettings() { settingsOverlay.classList.add('open'); showSettingsTab('general'); }
     function closeSettings() { settingsOverlay.classList.remove('open'); }
 
     document.getElementById('settings-toggle').addEventListener('click', openSettings);
@@ -1292,6 +1361,176 @@
     settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
     document.getElementById('xero-connect-btn').addEventListener('click', connectXero);
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
+
+    // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
+    let _varTenants = [];
+
+    function showSettingsTab(name) {
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.stab === name));
+        document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
+        document.querySelector('.defs-panel').classList.toggle('wide', name === 'targets');
+        if (name === 'general')   { loadXeroStatus(); loadPractitionerPay(); }
+        else if (name === 'roles')     loadRoles();
+        else if (name === 'variances') loadVariances();
+        else if (name === 'targets')   loadTargetGrid();
+    }
+
+    function _fmtVal(v, fmt) {
+        if (v == null || isNaN(v)) return '';
+        if ((fmt || '').toLowerCase().includes('percent')) return (v * 100).toFixed(1) + '%';
+        if ((fmt || '').toLowerCase().includes('currency')) return '£' + Math.round(v).toLocaleString();
+        return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
+    }
+    function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
+
+    // Roles ------------------------------------------------------------------
+    async function loadRoles() {
+        const list = document.getElementById('roles-list'), saveBtn = document.getElementById('roles-save');
+        list.textContent = 'Loading…'; saveBtn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/roles');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const { practitioners, roles } = await res.json();
+            if (!practitioners.length) { list.textContent = 'No practitioners found.'; return; }
+            document.getElementById('roles-datalist').innerHTML = roles.map(r => '<option value="' + escHtml(r) + '">').join('');
+            list.innerHTML = practitioners.map(p =>
+                '<div class="roles-row"><span style="font-size:13px">' + escHtml(p.name)
+                + ' <span style="color:#999;font-size:11px">' + escHtml(p.dentally_role || '') + '</span></span>'
+                + '<input class="role-input" list="roles-datalist" value="' + escHtml(p.custom_role || '') + '"'
+                + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"></div>').join('');
+            saveBtn.style.display = '';
+        } catch (e) { list.textContent = 'Could not load practitioners.'; }
+    }
+    async function saveRoles() {
+        const saveBtn = document.getElementById('roles-save'), msg = document.getElementById('roles-msg');
+        const rows = [...document.querySelectorAll('#roles-list .role-input')]
+            .map(i => ({ tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid, custom_role: i.value.trim() }))
+            .filter(r => r.custom_role);
+        saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 5000); }
+    }
+
+    // Variances --------------------------------------------------------------
+    async function loadVariances() {
+        const list = document.getElementById('variances-list'), saveBtn = document.getElementById('variances-save');
+        list.textContent = 'Loading…'; saveBtn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/variances');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const { metrics, variances, tenants } = await res.json();
+            _varTenants = tenants || [];
+            if (!metrics.length) { list.textContent = 'No metrics.'; return; }
+            list.innerHTML = metrics.map(m => {
+                let cur = '';
+                for (const k in variances) { if (k.endsWith('|' + m.key)) { cur = variances[k]; break; } }
+                const unit = ((m.format_type || '').toLowerCase().includes('percent') || m.range_type === 'within') ? 'pp' : '%';
+                return '<div class="roles-row"><span style="font-size:13px">' + escHtml(m.display_name)
+                    + ' <span style="color:#999;font-size:11px">' + escHtml(m.section || '') + '</span></span>'
+                    + '<span style="white-space:nowrap"><input type="number" min="0" step="0.5" class="var-input"'
+                    + ' style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px"'
+                    + ' value="' + (cur !== '' && cur != null ? cur : '') + '" data-metric="' + escHtml(m.key) + '"> ' + unit + '</span></div>';
+            }).join('');
+            saveBtn.style.display = '';
+        } catch (e) { list.textContent = 'Could not load metrics.'; }
+    }
+    async function saveVariances() {
+        const saveBtn = document.getElementById('variances-save'), msg = document.getElementById('variances-msg');
+        const rows = [];
+        document.querySelectorAll('#variances-list .var-input').forEach(i => {
+            const v = i.value === '' ? null : +i.value;
+            _varTenants.forEach(t => rows.push({ tenant_id: t.id, metric: i.dataset.metric, variance: v }));
+        });
+        saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/variances', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+    }
+
+    // Targets grid -----------------------------------------------------------
+    async function loadTargetGrid(fy) {
+        const grid = document.getElementById('targets-grid'), saveBtn = document.getElementById('targets-save');
+        grid.textContent = 'Loading…'; saveBtn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/target-grid' + (fy ? '?fy=' + fy : ''));
+            if (!res.ok) throw new Error('status ' + res.status);
+            const data = await res.json();
+            const years = new Set([data.fy - 1, data.fy, data.fy + 1, ...(data.available_fys || [])]);
+            document.getElementById('targets-fy').innerHTML = [...years].sort((a, b) => a - b)
+                .map(y => '<option value="' + y + '"' + (y === data.fy ? ' selected' : '') + '>' + _fyLabel(y) + '</option>').join('');
+            document.getElementById('targets-copy-fy').innerHTML = '<option value="">Copy from…</option>'
+                + (data.available_fys || []).filter(y => y !== data.fy).map(y => '<option value="' + y + '">' + _fyLabel(y) + '</option>').join('');
+            const t = (data.tenants || [])[0];
+            if (!t) { grid.textContent = 'No practice found.'; return; }
+            renderTargetGrid(data, t);
+            saveBtn.style.display = '';
+        } catch (e) { grid.textContent = 'Could not load targets.'; }
+    }
+    function renderTargetGrid(data, t) {
+        const levels = t.levels || ['Practice'];
+        let html = '<table class="tgrid"><thead><tr><th>Metric</th>' + levels.map(l => '<th>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
+        for (const m of data.metrics) {
+            html += '<tr><td class="metric">' + escHtml(m.display_name) + '</td>';
+            for (const lvl of levels) {
+                const key = m.key + '|' + lvl;
+                const canEdit = (lvl === 'Practice') || m.splits_by_role;
+                const tgt = t.targets[key], act = t.actuals[key];
+                const actStr = (act != null) ? _fmtVal(act, m.format_type) : '';
+                html += '<td><span class="actual">' + (actStr ? 'now ' + escHtml(actStr) : '') + '</span>'
+                    + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '"'
+                    + (canEdit ? '' : ' disabled') + ' value="' + (tgt != null ? tgt : '') + '"></td>';
+            }
+            html += '</tr>';
+        }
+        document.getElementById('targets-grid').innerHTML = html + '</tbody></table>';
+    }
+    async function saveTargetGrid() {
+        const saveBtn = document.getElementById('targets-save'), msg = document.getElementById('targets-msg');
+        const fy = +document.getElementById('targets-fy').value;
+        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => ({
+            tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
+            value: i.value === '' ? null : +i.value,
+        }));
+        saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+    }
+    async function copyFromFY() {
+        const src = +document.getElementById('targets-copy-fy').value;
+        if (!src) return;
+        const msg = document.getElementById('targets-msg');
+        try {
+            const res = await authFetch('/api/target-grid?fy=' + src);
+            if (!res.ok) throw new Error('status ' + res.status);
+            const data = await res.json(); const t = (data.tenants || [])[0]; if (!t) return;
+            document.querySelectorAll('#targets-grid input').forEach(i => {
+                if (i.disabled) return;
+                const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
+                i.value = (v != null) ? v : '';
+            });
+            msg.style.color = '#0b3d5c'; msg.textContent = 'Copied from ' + _fyLabel(src) + ' — review, then Save.';
+            setTimeout(() => msg.textContent = '', 6000);
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Copy failed.'; }
+    }
+
+    document.querySelectorAll('.settings-tab').forEach(b => b.addEventListener('click', () => showSettingsTab(b.dataset.stab)));
+    document.getElementById('roles-save').addEventListener('click', saveRoles);
+    document.getElementById('variances-save').addEventListener('click', saveVariances);
+    document.getElementById('targets-save').addEventListener('click', saveTargetGrid);
+    document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
+    document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
+
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && settingsOverlay.classList.contains('open')) closeSettings();
     });
