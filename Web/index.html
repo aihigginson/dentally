@@ -1499,15 +1499,22 @@
         _rolesInUse = new Set([...document.querySelectorAll('#roles-list .role-select')].map(s => s.value).filter(Boolean));
         renderRoleChips();
     }
+    // Rebuild every practitioner dropdown from the current role list, preserving each selection.
+    function _refreshRoleSelects() {
+        document.querySelectorAll('#roles-list .role-select').forEach(s => {
+            const cur = s.value;
+            s.innerHTML = _roleOptions(cur);
+            s.value = cur;
+        });
+    }
     function addRole() {
         const inp = document.getElementById('role-add-input'), name = inp.value.trim();
-        if (name && !_roleList.some(r => r.toLowerCase() === name.toLowerCase())) { _roleList.push(name); _roleList.sort(); renderRoleChips(); markDirty(); }
+        if (name && !_roleList.some(r => r.toLowerCase() === name.toLowerCase())) { _roleList.push(name); _roleList.sort(); renderRoleChips(); _refreshRoleSelects(); markDirty(); }
         inp.value = '';
     }
     function removeRole(name) {
         if (_rolesInUse.has(name)) { alert('“' + name + '” is assigned to a practitioner — reassign them first.'); return; }
-        _roleList = _roleList.filter(r => r !== name); renderRoleChips(); markDirty();
-    }
+        _roleList = _roleList.filter(r => r !== name); renderRoleChips(); _refreshRoleSelects(); markDirty(); }
 
     async function loadRoles() {
         const list = document.getElementById('roles-list'), saveBtn = document.getElementById('roles-save');
