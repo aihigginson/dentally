@@ -335,6 +335,14 @@
         .def-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
         .tgrid tr.def-row td { background: #f7fafd; color: var(--text-2); font-size: 11px; line-height: 1.45; font-weight: 400;
             text-align: left; white-space: normal; padding: 7px 12px; position: static; }
+        /* Orphan role column: role deleted but its targets remain -> click x to delete them */
+        .tgrid th.col-orphan { background: #fdecea; color: #8a2b23; font-weight: 600; }
+        .tgrid td.col-orphan { background: #fef6f5; }
+        .tgrid th.col-orphan .orphan-x { margin-left: 6px; padding: 0; width: 15px; height: 15px; line-height: 13px;
+            font-size: 11px; border: 1px solid #e0a9a3; background: #fff; color: #b3261e; border-radius: 50%;
+            cursor: pointer; vertical-align: middle; }
+        .tgrid th.col-orphan .orphan-x:hover { background: #b3261e; color: #fff; }
+        .tgrid th.col-orphan.removing { text-decoration: line-through; opacity: .55; }
         /* Practice column highlighted; role columns de-emphasised */
         .tgrid th.col-practice { background: #e4eefb; color: var(--navy); }
         .tgrid td.col-practice { background: #f2f8ff; }
@@ -1620,10 +1628,21 @@
     }
     function renderTargetGrid(data, t) {
         const levels = t.levels || ['Practice'];
-        const ncol = levels.length + 2;
+        // Orphan levels: roles that still have targets for this FY but are no longer active roles.
+        const activeSet = new Set(levels);
+        const orphanSet = new Set();
+        for (const k in (t.targets || {})) {
+            const lvl = k.slice(k.indexOf('|') + 1);
+            if (lvl && lvl !== 'Practice' && !activeSet.has(lvl)) orphanSet.add(lvl);
+        }
+        const orphans = [...orphanSet].sort();
+        const ncol = levels.length + orphans.length + 2;
         const colCls = l => (l === 'Practice' ? ' class="col-practice"' : ' class="col-role"');
         let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
-            + levels.map(l => '<th' + colCls(l) + '>' + escHtml(l) + '</th>').join('') + '</tr></thead><tbody>';
+            + levels.map(l => '<th' + colCls(l) + '>' + escHtml(l) + '</th>').join('')
+            + orphans.map(l => '<th class="col-role col-orphan" title="Removed role — click × to delete its targets">'
+                + escHtml(l) + '<button type="button" class="orphan-x" data-orphan="' + escHtml(l) + '" title="Delete this role&#39;s targets">&times;</button></th>').join('')
+            + '</tr></thead><tbody>';
         for (const grp of _groupBySection(data.metrics)) {
             html += '<tr class="section-row"><td colspan="' + ncol + '">' + escHtml(_secLabel(grp.section)) + '</td></tr>';
             for (const m of grp.metrics) {
@@ -1644,6 +1663,12 @@
                         + pre + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
                         + '" data-level="' + escHtml(lvl) + '"' + (m.fte_scaled ? ' data-fte="1"' : '')
                         + ' value="' + (tgt != null ? tgt : '') + '">' + suf + '</td>';
+                }
+                for (const lvl of orphans) {   // only the cells that actually carry an orphaned target
+                    const otgt = t.targets[m.key + '|' + lvl];
+                    if (otgt == null) { html += '<td class="col-orphan"></td>'; continue; }
+                    html += '<td class="tcell col-orphan">' + pre + '<input type="number" step="any" data-tid="' + t.id
+                        + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '" value="' + otgt + '">' + suf + '</td>';
                 }
                 html += '</tr>';
                 if (m.definition) html += '<tr class="def-row" data-def="' + escHtml(m.key) + '" hidden><td colspan="'
@@ -1746,9 +1771,22 @@
     document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
     // Definition on demand: the ⓘ button toggles a collapsible definition row (kept out of the way otherwise).
     document.getElementById('targets-grid').addEventListener('click', e => {
-        const b = e.target.closest('.def-btn'); if (!b) return;
-        const row = document.querySelector('#targets-grid .def-row[data-def="' + b.dataset.def + '"]');
-        if (row) { row.hidden = !row.hidden; b.classList.toggle('on', !row.hidden); }
+        const b = e.target.closest('.def-btn');
+        if (b) {
+            const row = document.querySelector('#targets-grid .def-row[data-def="' + b.dataset.def + '"]');
+            if (row) { row.hidden = !row.hidden; b.classList.toggle('on', !row.hidden); }
+            return;
+        }
+        const ox = e.target.closest('.orphan-x');
+        if (ox) {   // delete a removed role's leftover targets (blanks the column; committed on Save)
+            const lvl = ox.dataset.orphan;
+            document.querySelectorAll('#targets-grid input').forEach(i => { if (i.dataset.level === lvl) i.value = ''; });
+            const th = ox.closest('th'); if (th) th.classList.add('removing');
+            markDirty(); _refreshCopyEnabled();
+            const msg = document.getElementById('targets-msg');
+            msg.style.color = '#b3261e'; msg.textContent = 'Role “' + lvl + '” targets removed — Save to confirm.';
+            setTimeout(() => msg.textContent = '', 6000);
+        }
     });
     // Re-enable Copy the moment every target box is cleared (blank year again).
     document.getElementById('targets-grid').addEventListener('input', e => {
