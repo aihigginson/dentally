@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V096 -- Gold.Dim_Practitioners.FTE (per-practitioner FTE for FTE-scaled target measures)
+# =====================================================================
+# Adds FTE (from Input.Practitioner_Pay, default 1.0) to Dim_Practitioners so List Practitioners[FTE]
+# exists for the measure-side FTE scaling (role target x SUM(FTE)). Guarded ALTER + SP rewrite + one
+# dim load (first run updates every practitioner once as FTE joins the change-hash; stable after).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V096__dim_practitioner_fte.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V096__dim_practitioner_fte.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Practitioners @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

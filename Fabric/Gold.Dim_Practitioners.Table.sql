@@ -19,6 +19,7 @@ CREATE TABLE [Gold].[Dim_Practitioners](
 	[Mobile_Phone] [VARCHAR](50) NULL,
 	[Role] [VARCHAR](100) NULL,
 	[Custom_Role] [varchar](100) NULL,
+	[FTE] [DECIMAL](4,2) NULL,
 	[Permission_Level] [int] NULL,
 	[Active] [bit] NULL,
 	[Colour] [VARCHAR](50) NULL,

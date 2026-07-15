@@ -56,6 +56,7 @@ BEGIN
             NULLIF(TRIM(User_Mobile_Phone),'')                              AS Mobile_Phone,
             NULLIF(TRIM(User_Role),'')                                      AS Role,
             COALESCE((SELECT ipr.Custom_Role FROM Input.Practitioner_Role ipr WHERE ipr.Tenant_ID = Silver.Practitioners.Tenant_ID AND ipr.Practitioner_ID = CAST(Silver.Practitioners.Practitioner_ID AS INT)), NULLIF(TRIM(User_Role),'')) AS Custom_Role,
+            CAST(ISNULL((SELECT pp.FTE FROM Input.Practitioner_Pay pp WHERE pp.Tenant_ID = Silver.Practitioners.Tenant_ID AND pp.Practitioner_ID = CAST(Silver.Practitioners.Practitioner_ID AS INT)), 1.0) AS DECIMAL(4,2)) AS FTE,
             CAST(User_Permission_Level AS INT)                              AS Permission_Level,
             CAST(ISNULL(Practitioner_Active,1) AS BIT)                      AS Active,
             NULLIF(TRIM(Practitioner_Colour),'')                            AS Colour,
@@ -92,6 +93,7 @@ BEGIN
             Mobile_Phone            = src.Mobile_Phone,
             Role                    = src.Role,
             Custom_Role             = src.Custom_Role,
+            FTE                     = src.FTE,
             Permission_Level        = src.Permission_Level,
             Active                  = src.Active,
             Colour                  = src.Colour,
@@ -117,6 +119,7 @@ BEGIN
            ISNULL(CAST(tgt.[Mobile_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Role] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Custom_Role] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[FTE] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Permission_Level] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Active] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Colour] AS VARCHAR(500)), ''),
@@ -140,6 +143,7 @@ BEGIN
            ISNULL(CAST(src.[Mobile_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Role] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Custom_Role] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[FTE] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Permission_Level] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Active] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Colour] AS VARCHAR(500)), ''),
@@ -160,7 +164,7 @@ BEGIN
             pk_Practitioner,
             Tenant_ID,
             Practitioner_ID, User_ID, Title, First_Name, Middle_Name, Last_Name, Full_Name,
-            Email, Mobile_Phone, Role, Custom_Role, Permission_Level, Active, Colour, GDC_Number, NHS_Number,
+            Email, Mobile_Phone, Role, Custom_Role, FTE, Permission_Level, Active, Colour, GDC_Number, NHS_Number,
             Site_ID, Default_Contract_ID, Contract_Targets_String, Image_URL,
             Last_Login_Date, Created_Date, Updated_Date, Practitioner_Count, DW_Created_At, DW_Updated_At
         )
@@ -168,7 +172,7 @@ BEGIN
             @pk_Practitioner_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Practitioner_ID),
             src.Tenant_ID,
             src.Practitioner_ID, src.User_ID, src.Title, src.First_Name, src.Middle_Name, src.Last_Name, src.Full_Name,
-            src.Email, src.Mobile_Phone, src.Role, src.Custom_Role, src.Permission_Level, src.Active, src.Colour, src.GDC_Number, src.NHS_Number,
+            src.Email, src.Mobile_Phone, src.Role, src.Custom_Role, src.FTE, src.Permission_Level, src.Active, src.Colour, src.GDC_Number, src.NHS_Number,
             src.Site_ID, src.Default_Contract_ID, src.Contract_Targets_String, src.Image_URL,
             src.Last_Login_Date, src.Created_Date, src.Updated_Date, src.Practitioner_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
