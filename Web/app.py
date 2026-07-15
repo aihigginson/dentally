@@ -1210,17 +1210,19 @@ def get_target_grid():
                     'definition': r[7], 'sample': r[8], 'fte_scaled': bool(r[9])}
                    for r in cur.fetchall()]
 
-        tenants, roles_by_tenant = {}, {}
+        tenants, roles_by_tenant, prac_roles = {}, {}, {}
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
             tenants = {r[0]: {'id': r[0], 'name': r[1], 'levels': ['Practice'],
                               'targets': {}, 'variances': {}} for r in cur.fetchall()}
+            # Base = Dentally role per active practitioner; overlaid below with the LIVE AppDB override
+            # (same as the Roles screen) so reassigned/removed roles show immediately, not after the
+            # nightly Dim_Practitioners.Custom_Role refresh.
             cur.execute(
-                f"SELECT DISTINCT Tenant_ID, Custom_Role FROM Gold.Dim_Practitioners "
-                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 AND Custom_Role IS NOT NULL", tids)
-            for r in cur.fetchall():
-                roles_by_tenant.setdefault(r[0], set()).add(r[1])
+                f"SELECT Tenant_ID, Practitioner_ID, Role FROM Gold.Dim_Practitioners "
+                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0", tids)
+            prac_roles = {(r[0], r[1]): r[2] for r in cur.fetchall()}
         conn.close()
 
         available_fys = []
@@ -1238,6 +1240,14 @@ def get_target_grid():
                     tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
             acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
             available_fys = [r[0] for r in acur.fetchall()]
+            # Overlay the live per-practitioner role override, then the effective in-use roles become columns.
+            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                if (r[0], r[1]) in prac_roles and r[2]:
+                    prac_roles[(r[0], r[1])] = r[2]
+            for (tid_, pid_), role_ in prac_roles.items():
+                if role_:
+                    roles_by_tenant.setdefault(tid_, set()).add(role_)
             acur.execute(f"SELECT Tenant_ID, Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
             for r in acur.fetchall():
                 roles_by_tenant.setdefault(r[0], set()).add(r[1])
