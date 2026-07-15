@@ -3,7 +3,7 @@
 // Per-KPI Target / vs-Target / BG blocks (~40 lines each) are generated from
 // per-KPI specs via the builder functions below. DAX is functionally identical to
 // the previous hand-written version (DAX ignores whitespace). Value measures stay
-// bespoke. All targets come from '_Effective Targets'.
+// bespoke. All targets come from '_Daily Targets' (Fact_Daily_Targets), resolved by Target_Level.
 //
 // NOTE: Tabular Editor's C# has no string interpolation (dollar-prefixed strings),
 // so templates are verbatim @"..." with {b}/{key} placeholders filled via .Replace().
@@ -29,66 +29,47 @@ Action<string,string,string> add = (name, dax, fmt) => {
     if (fmt != "") m.FormatString = fmt;
 };
 
-// ── Target builders ──────────────────────────────────────────────────────────
-Func<string,string> tEff = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key     = [_Target FY Key]
-RETURN CALCULATE(
-    MAX('_Effective Targets'[Effective Target]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
-    '_Effective Targets'[Metric]           = ""{key}"",
-    '_Effective Targets'[Period Value]     = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)").Replace("{key}", key);
+// ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
+// lvl: practitioner in context -> Custom Role; role -> that role; else Practice. RunRate/tDaily
+// variants sum the daily-apportioned fact over the selected period (proration is inherent).
+Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
 
-Func<string,string> tEffRunRate = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key     = [_Target FY Key]
-VAR full_target = CALCULATE(
-    MAX('_Effective Targets'[Effective Target]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
-    '_Effective Targets'[Metric]           = ""{key}"",
-    '_Effective Targets'[Period Value]     = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site)
-RETURN IF(ISBLANK(full_target), BLANK(), full_target * [_Period Run Rate])").Replace("{key}", key);
+Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR base_t = CALCULATE(
+    MAX('_Daily Targets'[Annual Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
+
+Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR base_t = CALCULATE(
+    SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
-// tEffAdd / tEffRunRateAdd: like tEff / tEffRunRate but also filter fk Practitioner -- for
-// ADDITIVE metrics whose target follows the actual's real grain (blank where no entered target).
-Func<string,string> tEffAdd = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac   = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR fy_key     = [_Target FY Key]
-RETURN CALCULATE(
-    MAX('_Effective Targets'[Effective Target]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
-    '_Effective Targets'[Metric]           = ""{key}"",
-    '_Effective Targets'[Period Value]     = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site,
-    '_Effective Targets'[fk Practitioner]  = sel_prac)").Replace("{key}", key);
+Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR base_t = CALCULATE(
+    MAX('_Daily Targets'[Annual Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
-Func<string,string> tEffRunRateAdd = key => (@"VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac   = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR fy_key     = [_Target FY Key]
-VAR full_target = CALCULATE(
-    MAX('_Effective Targets'[Effective Target]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]),
-    '_Effective Targets'[Metric]           = ""{key}"",
-    '_Effective Targets'[Period Value]     = fy_key,
-    '_Effective Targets'[fk Practice Site] = sel_site,
-    '_Effective Targets'[fk Practitioner]  = sel_prac)
-RETURN IF(ISBLANK(full_target), BLANK(), full_target * [_Period Run Rate])").Replace("{key}", key);
-
-// tDaily: cumulative-metric target from '_Daily Targets' summed over the SELECTED period (TREATAS
-// List Date -> fk Date). Prorates correctly for ANY period (3M / YTD / 12M), unlike tEffRunRateAdd
-// (annual x run_rate) which only prorates FY-YTD and shows the full annual target on rolling periods.
-Func<string,string> tDaily = key => (@"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac    = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR run_rate    = [_Period Run Rate]
-VAR full_target = CALCULATE(
+Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric]           = ""{key}"",
-    '_Daily Targets'[fk Practice Site] = sel_site,
-    '_Daily Targets'[fk Practitioner]  = sel_prac)
-RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)").Replace("{key}", key);
+    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
+
+Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR base_t = CALCULATE(
+    SUM('_Daily Targets'[Daily Target Value]),
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
 Func<string,string> vPct = b => (@"VAR actual = [{b}]
@@ -151,12 +132,11 @@ RETURN IF(
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp"")))").Replace("{b}", b);
 
-// ── BG builders (target+band inline from _Effective) ─────────────────────────
+// ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -166,10 +146,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual), ""#E0E0E0"",
@@ -180,10 +159,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual), ""#E0E0E0"",
@@ -194,10 +172,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -207,10 +184,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherPpGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(actual),  ""#E0E0E0"",
@@ -221,10 +197,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
-VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR fy_key   = [_Target FY Key]
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Effective Targets'[Effective Variance]), TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Effective Targets'[Tenant ID]), '_Effective Targets'[Metric] = ""{key}"", '_Effective Targets'[Period Value] = fy_key, '_Effective Targets'[fk Practice Site] = sel_site, '_Effective Targets'[fk Practitioner] = -1)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
