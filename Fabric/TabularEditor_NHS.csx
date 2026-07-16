@@ -133,20 +133,12 @@ add("NHS UDA Completion Rate FY YTD",
 // ── Target and variance measures ─────────────────────────────────────────────
 
 add("NHS UDAs Target",
-    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant  = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR run_rate    = [_Period Run Rate]
-VAR target_rows = FILTER(
-    ALL('_Daily Targets'),
-    '_Daily Targets'[Metric]             = ""nhs_udas""
-    && '_Daily Targets'[fk Practitioner] = -1
-    && '_Daily Targets'[Tenant ID]       = sel_tenant
-    && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site))
-VAR full_target = CALCULATE(
+    @"VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    target_rows)
-RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
+    '_Daily Targets'[Metric]       = ""nhs_udas"",
+    '_Daily Targets'[Target Level] = ""Practice"")
+RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
 add("NHS UDAs vs Target",
@@ -161,20 +153,12 @@ RETURN IF(
     "");
 
 add("NHS UOAs Target",
-    @"VAR sel_site    = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant  = SELECTEDVALUE('List Practice Sites'[Tenant ID])
-VAR run_rate    = [_Period Run Rate]
-VAR target_rows = FILTER(
-    ALL('_Daily Targets'),
-    '_Daily Targets'[Metric]             = ""nhs_uoas""
-    && '_Daily Targets'[fk Practitioner] = -1
-    && '_Daily Targets'[Tenant ID]       = sel_tenant
-    && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site))
-VAR full_target = CALCULATE(
+    @"VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    target_rows)
-RETURN IF(ISBLANK(full_target), BLANK(), full_target * run_rate)",
+    '_Daily Targets'[Metric]       = ""nhs_uoas"",
+    '_Daily Targets'[Target Level] = ""Practice"")
+RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
 add("NHS UOAs vs Target",
@@ -376,16 +360,11 @@ CALCULATE(
 add("NHS UDAs BG",
     @"VAR actual     = [NHS UDAs]
 VAR target     = [NHS UDAs Target]
-VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR band       = CALCULATE(
     MAX('_Daily Targets'[Variance]),
-    FILTER(
-        ALL('_Daily Targets'),
-        '_Daily Targets'[Metric]             = ""nhs_udas""
-        && '_Daily Targets'[fk Practitioner] = -1
-        && '_Daily Targets'[Tenant ID]       = sel_tenant
-        && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site)))
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric]       = ""nhs_udas"",
+    '_Daily Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -398,16 +377,11 @@ RETURN SWITCH(TRUE(),
 add("NHS UOAs BG",
     @"VAR actual     = [NHS UOAs]
 VAR target     = [NHS UOAs Target]
-VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])
 VAR band       = CALCULATE(
     MAX('_Daily Targets'[Variance]),
-    FILTER(
-        ALL('_Daily Targets'),
-        '_Daily Targets'[Metric]             = ""nhs_uoas""
-        && '_Daily Targets'[fk Practitioner] = -1
-        && '_Daily Targets'[Tenant ID]       = sel_tenant
-        && (sel_site = -1 || '_Daily Targets'[fk Practice Site] = sel_site)))
+    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
+    '_Daily Targets'[Metric]       = ""nhs_uoas"",
+    '_Daily Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
