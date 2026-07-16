@@ -1,5 +1,6 @@
-DROP TABLE IF EXISTS [Security].[Application_Users]
-GO
+-- IDEMPOTENT CREATE (never DROP/CREATE): the Team screen now writes these rows, so a warehouse
+-- redeploy must NOT wipe them. Add columns via guarded ALTER, never by recreating the table.
+IF OBJECT_ID('Security.Application_Users') IS NULL
 CREATE TABLE [Security].[Application_Users](
 	[User_UPN]               [varchar](255) NOT NULL,
 	[Client_ID]              [int]          NOT NULL,
