@@ -1,7 +1,7 @@
 // TabularEditor_KillDeadSpiders.csx
-// One-off: removes the retired Spider measures (NHS / Scheduling / Treatment / general
-// PractitionerSpider) that never got off the ground. The Revenue spider (SpiderRevenue,
-// "Spider Rev *") is kept. Run once in Tabular Editor, then save.
+// One-off: removes the retired spider measures (PractitionerSpider + NHS/Scheduling/Treatment)
+// that never got off the ground. The Revenue spider (SpiderRevenue) is KEPT -- it is the one the
+// report actually uses. Run once in Tabular Editor, then save.
 var t = Model.Tables["_Measures"];
 var kill = new System.Collections.Generic.HashSet<string> {
     "Spider Avg Chair Utilisation",
