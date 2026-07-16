@@ -1,0 +1,13 @@
+# =====================================================================
+# Release V098 -- Add FTE acronym + regenerate PBI Gold views
+# =====================================================================
+# The PBI views were stale after the target-model schema changes (Fact_Daily_Targets new grain;
+# Dim_Practitioners.Custom_Role/FTE) -> the semantic model couldn't find the new columns. Adds FTE
+# to dbo.CapitaliseSnakeCase (so the column is 'FTE' not 'Fte') and re-runs Meta.usp_Create_Gold_Views.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V098__gold_views_refresh_fte.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\dbo.CapitaliseSnakeCase.UserDefinedFunction.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
