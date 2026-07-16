@@ -59,3 +59,17 @@ CREATE TABLE Input.Roles (
     CONSTRAINT PK_Input_Roles PRIMARY KEY (Tenant_ID, Role_Name)
 );
 GO
+
+-- Per-practitioner associate pay share (% of production) + FTE. FTE feeds Dim_Practitioners.FTE
+-- (target scaling); Associate_Pct feeds practitioner P&L. Either may be null. One row/practitioner.
+IF OBJECT_ID('Input.Practitioner_Pay') IS NULL
+CREATE TABLE Input.Practitioner_Pay (
+    Tenant_ID        INT           NOT NULL,
+    Practitioner_ID  BIGINT        NOT NULL,   -- Dentally practitioner id (business key)
+    Associate_Pct    DECIMAL(6,3)  NULL,
+    FTE              DECIMAL(4,2)  NULL,
+    Updated_At       DATETIME2(3)  NOT NULL CONSTRAINT DF_Practitioner_Pay_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By       VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Practitioner_Pay PRIMARY KEY (Tenant_ID, Practitioner_ID)
+);
+GO

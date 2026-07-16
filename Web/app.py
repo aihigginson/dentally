@@ -898,21 +898,34 @@ def get_practitioner_pay():
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(
-                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct, p.Custom_Role, pp.FTE "
+                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, p.Custom_Role "
                 f"FROM Gold.Dim_Practitioners p "
-                f"LEFT JOIN Input.Practitioner_Pay pp "
-                f"  ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = p.Practitioner_ID "
                 f"WHERE p.Tenant_ID IN ({ph}) AND p.Active = 1 AND p.pk_Practitioner > 0 "
                 f"ORDER BY p.Full_Name",
                 tids,
             )
             practitioners = [
                 {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'dentally_role': r[3],
-                 'associate_pct': float(r[4]) if r[4] is not None else None, 'role': r[5] or r[3],
-                 'fte': float(r[6]) if r[6] is not None else None}
+                 'role': r[4] or r[3], 'associate_pct': None, 'fte': None}
                 for r in cur.fetchall()
             ]
         conn.close()
+        # Associate_Pct / FTE are owner inputs -> live in AppDB (source of truth; survive WH
+        # redeploys, synced into WH each build). Overlay them onto the warehouse practitioner list.
+        if practitioners:
+            ac = _appdb_conn(); acur = ac.cursor(); aph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Practitioner_ID, Associate_Pct, FTE "
+                f"FROM Input.Practitioner_Pay WHERE Tenant_ID IN ({aph})",
+                tids,
+            )
+            pay = {(row[0], int(row[1])): row for row in acur.fetchall()}
+            ac.close()
+            for p in practitioners:
+                row = pay.get((p['tenant_id'], int(p['practitioner_id'])))
+                if row:
+                    p['associate_pct'] = float(row[2]) if row[2] is not None else None
+                    p['fte'] = float(row[3]) if row[3] is not None else None
         return jsonify({'practitioners': practitioners})
     except Exception as e:
         return _server_error(e, 'get_practitioner_pay')
@@ -925,7 +938,7 @@ def save_practitioner_pay():
     if err:
         return err
     try:
-        conn = _fabric_conn(autocommit=True)
+        conn = _fabric_conn()
         cur  = conn.cursor()
         _, client_id, tids, maintain = _get_user_info(cur, upn)
         if client_id is None:
@@ -964,21 +977,23 @@ def save_practitioner_pay():
                     continue
             valid.append((tid, pid, pctf, ftef))
 
+        conn.close()
+        # Write to AppDB (source of truth; survives WH redeploys, synced into WH each build).
         if valid:
-            cur.fast_executemany = True
-            cur.executemany(
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.executemany(
                 "DELETE FROM Input.Practitioner_Pay WHERE Tenant_ID = ? AND Practitioner_ID = ?",
                 [(t, p) for t, p, _, _ in valid],
             )
-            inserts = [(t, p, pc, ft) for t, p, pc, ft in valid if pc is not None or ft is not None]
+            inserts = [(t, p, pc, ft, upn) for t, p, pc, ft in valid if pc is not None or ft is not None]
             if inserts:
-                cur.executemany(
+                acur.executemany(
                     "INSERT INTO Input.Practitioner_Pay "
-                    "(Tenant_ID, Practitioner_ID, Associate_Pct, FTE, DW_Created_At, DW_Updated_At) "
-                    "VALUES (?, ?, ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    "(Tenant_ID, Practitioner_ID, Associate_Pct, FTE, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)",
                     inserts,
                 )
-        conn.close()
+            ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_practitioner_pay')
