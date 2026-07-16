@@ -1759,10 +1759,18 @@
     async function saveTargetGrid() {
         const saveBtn = document.getElementById('targets-save'), msg = document.getElementById('targets-msg');
         const fy = +document.getElementById('targets-fy').value;
-        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => ({
-            tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
-            value: i.value === '' ? null : +i.value,
-        }));
+        // A blank role cell materialises the Practice value it's showing as a placeholder into a REAL
+        // row (Option A: one-time fill on save, no ongoing derivation -> a complete set of target rows).
+        // Only non-FTE role cells carry a placeholder; orphan (removed-role) cells are excluded so their
+        // x-delete still blanks them.
+        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => {
+            const isOrphan = !!i.closest('[data-ocol]');
+            const raw = i.value !== '' ? i.value : (isOrphan ? '' : i.placeholder);
+            return {
+                tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
+                value: (raw === '' || raw == null) ? null : +raw,
+            };
+        });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
