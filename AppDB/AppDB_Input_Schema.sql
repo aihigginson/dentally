@@ -18,10 +18,15 @@ CREATE TABLE Input.Practitioner_Role (
     Tenant_ID        INT           NOT NULL,
     Practitioner_ID  BIGINT        NOT NULL,   -- Dentally practitioner id (business key)
     Custom_Role      VARCHAR(100)  NOT NULL,
+    FTE              DECIMAL(4,2)  NULL,        -- full-time equivalent (feeds FTE-scaled targets); owner-set on the Roles screen
     Updated_At       DATETIME2(3)  NOT NULL CONSTRAINT DF_Practitioner_Role_Updated_At DEFAULT SYSUTCDATETIME(),
     Updated_By       VARCHAR(256)  NULL,
     CONSTRAINT PK_Input_Practitioner_Role PRIMARY KEY (Tenant_ID, Practitioner_ID)
 );
+GO
+-- FTE moved here from Practitioner_Pay after the initial release: add it to an already-provisioned table.
+IF COL_LENGTH('Input.Practitioner_Role','FTE') IS NULL
+    ALTER TABLE Input.Practitioner_Role ADD FTE DECIMAL(4,2) NULL;
 GO
 
 -- Sparse target grid: one row per (FY, Metric, Target_Level). Target_Level = 'Practice' or a Custom_Role.

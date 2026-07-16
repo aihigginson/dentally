@@ -1030,7 +1030,7 @@ def get_roles():
             )
             practitioners = [
                 {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2],
-                 'dentally_role': r[3], 'custom_role': r[3]}
+                 'dentally_role': r[3], 'custom_role': r[3], 'fte': None}
                 for r in cur.fetchall()
             ]
         tenants = []
@@ -1044,15 +1044,16 @@ def get_roles():
         role_set = set()
         if tids:
             ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
-            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
-            overrides = {(r[0], r[1]): r[2] for r in acur.fetchall()}
+            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role, FTE FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
+            overrides = {(r[0], r[1]): (r[2], r[3]) for r in acur.fetchall()}
             acur.execute(f"SELECT Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
             role_set = {r[0] for r in acur.fetchall()}
             ac.close()
             for p in practitioners:
                 ov = overrides.get((p['tenant_id'], p['practitioner_id']))
                 if ov:
-                    p['custom_role'] = ov
+                    if ov[0]:            p['custom_role'] = ov[0]
+                    if ov[1] is not None: p['fte'] = float(ov[1])
         # Canonical list = curated roles + any role actually IN USE (an unused/removed role does NOT
         # reappear via the Dentally defaults). dentally_roles kept only to bootstrap an empty list.
         in_use = {p['custom_role'] for p in practitioners if p['custom_role']}
@@ -1091,8 +1092,17 @@ def save_roles():
             except (KeyError, TypeError, ValueError):
                 continue
             role = (r.get('custom_role') or '').strip()
+            fte = r.get('fte'); ftef = None
+            if fte not in (None, ''):
+                try:
+                    ftef = float(fte)
+                except (TypeError, ValueError):
+                    ftef = None
+                else:
+                    if not (0 <= ftef <= 2):
+                        ftef = None
             if tid in allowed and role:
-                valid.append((tid, pid, role))
+                valid.append((tid, pid, role, ftef))
         # curated role list (per the primary tenant)
         try:
             rtid = int(body.get('tenant_id'))
@@ -1105,11 +1115,11 @@ def save_roles():
             acur.fast_executemany = True
             acur.executemany(
                 "DELETE FROM Input.Practitioner_Role WHERE Tenant_ID = ? AND Practitioner_ID = ?",
-                [(t, p) for t, p, _ in valid])
+                [(t, p) for t, p, _, _ in valid])
             acur.executemany(
-                "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, Updated_At, Updated_By) "
-                "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
-                [(t, p, role, upn) for t, p, role in valid])
+                "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, FTE, Updated_At, Updated_By) "
+                "VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, role, fte, upn) for t, p, role, fte in valid])
         if rtid in allowed:
             acur.execute("DELETE FROM Input.Roles WHERE Tenant_ID = ?", rtid)
             if role_names:

@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V100 -- FTE moves from Practitioner_Pay to Practitioner_Role (Roles screen)
+# =====================================================================
+# FTE is a per-practitioner allocation like the role, so it now lives with Custom_Role in
+# Input.Practitioner_Role and is edited on the Roles screen (not the Finance/Associate-Pay screen).
+# Deploy in sequence AFTER V099. Idempotent: table DDL DROP/CREATE (sync target), SPs CREATE.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V100__fte_moves_to_role.manifest -SkipTests
+#
+# Warehouse changes:
+#   * Input.Practitioner_Role -> +FTE column (recreate; it is a sync target, repopulated from AppDB).
+#   * Meta.usp_Sync_Input_From_AppDB -> Practitioner_Role copy now carries FTE.
+#   * Gold.usp_Load_Dim_Practitioners -> FTE sourced from Input.Practitioner_Role (was Practitioner_Pay).
+#     Practitioner_Pay.FTE is left in place but unused (Finance screen keeps Associate_Pct only).
+#
+# OUT-OF-BAND (do first / alongside):
+#   1. PROD AppDB: re-run AppDB\AppDB_Input_Schema.sql -- the guarded ALTER adds FTE to
+#      Input.Practitioner_Role on an already-provisioned DB. Allow a few minutes for OneLake
+#      mirroring before the sync (the new COLUMN mirrors like a new table did).
+#   2. APP: the Roles screen now has the FTE input; the Finance screen drops it (rides the app PR).
+#   3. If FTE was already entered on the Finance screen into Practitioner_Pay, migrate it once:
+#        UPDATE r SET r.FTE = pp.FTE FROM Input.Practitioner_Role r
+#        JOIN Input.Practitioner_Pay pp ON pp.Tenant_ID=r.Tenant_ID AND pp.Practitioner_ID=r.Practitioner_ID
+#        WHERE pp.FTE IS NOT NULL;   -- run in AppDB, then it syncs through on the next build.
+# =====================================================================
+
+DEPLOY   Fabric\Input.Practitioner_Role.Table.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+
+TEST
