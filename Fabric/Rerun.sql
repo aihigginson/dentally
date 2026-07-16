@@ -10,9 +10,9 @@
  SET  @Tenant_ID    = 14
   EXEC [Audit].[usp_Load_Bronze] @Tenant_ID = @Tenant_ID, @Full_Refresh = @Full_Refresh, @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
  */
- -- DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT; 
- EXEC [Audit].[usp_Load_All] @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
-SELECT * FROM  Audit.Process_Execution_Log order by Start_Time; 
+ -- Silver+Gold are driven by the Orchestrate_Build notebook (metadata DAG); usp_Load_All is retired.
+ -- To re-run just the failed jobs (dependency-aware): EXEC Audit.usp_Rerun_Failed_Jobs;
+SELECT * FROM  Audit.Process_Execution_Log order by Start_Time;
  
 
  --EXEC Meta.usp_Create_Gold_Views
