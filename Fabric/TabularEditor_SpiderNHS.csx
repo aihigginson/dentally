@@ -55,7 +55,7 @@ add("Spider NHS Tgt UDA Completion",
     @"0.0%");
 
 add("Spider NHS Tgt Revenue",
-    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""nhs_revenue""), '_Targets'[Target Value])",
+    @"MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""nhs_revenue"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])",
     @"£#,##0");
 
 add("Spider NHS Tgt Rev Per Hour",

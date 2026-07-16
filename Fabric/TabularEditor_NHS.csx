@@ -172,7 +172,7 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
-// Target lookup: '_Targets' is related to 'List Date' via [fk Date], and the annual
+// Target lookup: nhs_uda_completion_rate target now from '_Daily Targets' (Fact_Daily_Targets),
 // rows carry fk Date = -1, so the page's Period (FY) slicer empties the table through
 // that relationship. REMOVEFILTERS the date/site/practitioner so it can't, and KEEP RLS
 // for the tenant (don't depend on SELECTEDVALUE('List Practice Sites'[Tenant ID]),
@@ -181,12 +181,12 @@ RETURN IF(
 add("NHS UDA Completion Rate Target",
     @"DIVIDE(
     CALCULATE(
-        MAX('_Targets'[Target Value]),
+        MAX('_Daily Targets'[Annual Target Value]),
         REMOVEFILTERS('List Date'),
         REMOVEFILTERS('List Practice Sites'),
         REMOVEFILTERS('List Practitioners'),
-        '_Targets'[Metric]           = ""nhs_uda_completion_rate"",
-        '_Targets'[fk Practice Site] = -1),
+        '_Daily Targets'[Metric]           = ""nhs_uda_completion_rate"",
+        '_Daily Targets'[Target Level] = ""Practice""),
     100)",
     "#,##0.0%");
 
@@ -394,17 +394,17 @@ RETURN SWITCH(TRUE(),
 // NHS UDA delivery is a 'within' metric (Config.Metric_Definitions Range_Type='within'),
 // NOT higher-is-better: 95% is the target, the NHS doesn't penalise 95%+, and you don't
 // want to overshoot (>100% is unpaid work). So colour by DEVIATION from target in either
-// direction (same as exam_ratio's bgWithinPp), with the band = '_Targets'[Variance] (pp).
+// direction (same as exam_ratio's bgWithinPp), with the band = '_Daily Targets'[Variance] (pp).
 add("NHS UDA Completion Rate BG",
     @"VAR actual = [NHS UDA Completion Rate]
 VAR target = [NHS UDA Completion Rate Target]
 VAR band   = CALCULATE(
-    MAX('_Targets'[Variance]),
+    MAX('_Daily Targets'[Variance]),
     REMOVEFILTERS('List Date'),
     REMOVEFILTERS('List Practice Sites'),
     REMOVEFILTERS('List Practitioners'),
-    '_Targets'[Metric]           = ""nhs_uda_completion_rate"",
-    '_Targets'[fk Practice Site] = -1)
+    '_Daily Targets'[Metric]           = ""nhs_uda_completion_rate"",
+    '_Daily Targets'[Target Level] = ""Practice"")
 VAR dev    = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",

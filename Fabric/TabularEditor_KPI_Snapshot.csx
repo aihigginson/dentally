@@ -32,8 +32,8 @@ add("Open Courses Value Trend",
 
 add("Open Courses Value Target",
     @"MAXX(
-    FILTER( '_Targets', '_Targets'[Metric] = ""open_courses_value"" ),
-    '_Targets'[Target Value])",
+    FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ),
+    '_Daily Targets'[Annual Target Value])",
     "£#,##0");
 
 add("Open Courses Value vs Target",
@@ -49,8 +49,8 @@ RETURN IF(
 
 add("Open Courses Value BG",
     @"VAR actual = [Open Courses Value]
-VAR target = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""open_courses_value"" ), '_Targets'[Target Value] )
-VAR band   = MAXX( FILTER( '_Targets', '_Targets'[Metric] = ""open_courses_value"" ), '_Targets'[Variance] )
+VAR target = MAXX( FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ), '_Daily Targets'[Annual Target Value] )
+VAR band   = MAXX( FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ), '_Daily Targets'[Variance] )
 VAR pct    = DIVIDE( actual - target, ABS( target ) ) * 100
 RETURN SWITCH( TRUE(),
     ISBLANK( target ), ""#FFFFFF"",

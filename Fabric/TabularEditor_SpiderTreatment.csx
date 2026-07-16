@@ -37,7 +37,7 @@ add("Spider Tx Open Courses Value",
 
 // Lower-is-better: fewer open courses = better
 add("Spider Tx Open Courses",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""open_courses"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IFERROR(DIVIDE(tgt, [Open Courses]), 2)",
     @"0.00");
 
@@ -52,12 +52,12 @@ add("Spider Tx Tgt Rev Per Hour",
     @"£#,##0");
 
 add("Spider Tx Tgt Open Courses Value",
-    @"MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses_value""), '_Targets'[Target Value])",
+    @"MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])",
     @"£#,##0");
 
 // Inverted sentinel
 add("Spider Tx Tgt Open Courses",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""open_courses""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""open_courses"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IF(ISBLANK(tgt), BLANK(), 1)",
     @"0.00");
 

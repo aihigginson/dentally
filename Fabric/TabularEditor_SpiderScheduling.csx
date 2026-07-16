@@ -39,13 +39,13 @@ RETURN IF(ISBLANK(r), BLANK(), 1 - r)",
 
 // Lower-is-better: fewer cancellations = better
 add("Spider Sch Cancellation Freq",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""cancellation_frequency"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IFERROR(DIVIDE(tgt, [Cancellation Frequency]), 2)",
     @"0.00");
 
 // Lower-is-better: dummy until Short Notice Cancellation Rate has real data
 add("Spider Sch Short Notice Cancel",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IFERROR(DIVIDE(tgt, [Short Notice Cancellation Rate]), 2)",
     @"0.00");
 
@@ -55,7 +55,7 @@ add("Spider Sch BBYL",
 
 // Lower-is-better: fewer days wait is better
 add("Spider Sch Days Next 30 Min",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""days_until_30min_free""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""days_until_30min_free"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IFERROR(DIVIDE(tgt, [Days Until Next 30 Minute Free]), 2)",
     @"0.00");
 
@@ -72,12 +72,12 @@ RETURN IF(ISBLANK(r), BLANK(), 1 - r)",
 
 // Inverted sentinels
 add("Spider Sch Tgt Cancellation Freq",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""cancellation_frequency""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""cancellation_frequency"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IF(ISBLANK(tgt), BLANK(), 1)",
     @"0.00");
 
 add("Spider Sch Tgt Short Notice Cancel",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""short_notice_cancellation_rate""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""short_notice_cancellation_rate"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IF(ISBLANK(tgt), BLANK(), 1)",
     @"0.00");
 
@@ -86,7 +86,7 @@ add("Spider Sch Tgt BBYL",
     @"0.0%");
 
 add("Spider Sch Tgt Days Next 30 Min",
-    @"VAR tgt = MAXX(FILTER('_Targets', '_Targets'[Metric] = ""days_until_30min_free""), '_Targets'[Target Value])
+    @"VAR tgt = MAXX(FILTER('_Daily Targets', '_Daily Targets'[Metric] = ""days_until_30min_free"" && '_Daily Targets'[Target Level] = ""Practice""), '_Daily Targets'[Annual Target Value])
 RETURN IF(ISBLANK(tgt), BLANK(), 1)",
     @"0.00");
 
