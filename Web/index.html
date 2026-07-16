@@ -524,9 +524,6 @@
         <label for="f-role">Role</label>
         <select class="filter-select" id="f-role">
             <option value="all">All roles</option>
-            <option value="Dentist">Dentist</option>
-            <option value="Hygienist">Hygienist</option>
-            <option value="Therapist">Therapist</option>
         </select>
     </div>
     <div class="filter-sep"></div>
@@ -2269,6 +2266,13 @@
                         o.value = s.id; o.textContent = s.name;
                         selSite.appendChild(o);
                     });
+                    // Seed the Role dropdown from the tenant's curated Custom_Role values
+                    // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
+                    (data.roles || []).forEach(role => {
+                        const o = document.createElement('option');
+                        o.value = role; o.textContent = role;
+                        selRole.appendChild(o);
+                    });
                 }
                 if (myDataLock) {
                     // Single-report "My Data": the practitioner list is just this user.
@@ -2281,7 +2285,7 @@
                     applyFilters();
                     return;
                 }
-                selPract.options[0].textContent = ROLE_ALL_LABEL[role] || 'All practitioners';
+                selPract.options[0].textContent = role !== 'all' ? (ROLE_ALL_LABEL[role] || ('All ' + role + 's')) : 'All practitioners';
                 while (selPract.options.length > 1) selPract.remove(1);
                 data.practitioners.forEach(p => {
                     const o = document.createElement('option');
@@ -2310,7 +2314,7 @@
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
         }
         if (filterState.role !== 'all') {
-            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Custom Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
         }
         if (filterState.pract !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });

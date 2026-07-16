@@ -453,7 +453,7 @@ def filters():
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
         excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
-        role_clause   = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        role_clause   = "AND LOWER(Custom_Role) = LOWER(?) " if role_filter != 'all' else ""
         pract_params  = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
             f"SELECT MIN(Practitioner_ID) AS Practitioner_ID, Full_Name "
@@ -468,13 +468,27 @@ def filters():
             pract_params,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
+
+        # Role dropdown options = the curated Custom_Role values actually in use by clinical
+        # practitioners. This is the SAME column the practitioner filter and the embedded report
+        # now key off, so the dropdown, the practitioner list and the report always agree.
+        cur.execute(
+            f"SELECT DISTINCT Custom_Role "
+            f"FROM   Gold.Dim_Practitioners "
+            f"WHERE  Tenant_ID IN ({placeholders}) AND pk_Practitioner > 0 AND Active = 1 "
+            f"{excl_clause}"
+            f"AND    NULLIF(LTRIM(RTRIM(Custom_Role)), '') IS NOT NULL "
+            f"ORDER BY Custom_Role",
+            tids,
+        )
+        roles = [r[0] for r in cur.fetchall()]
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners})
+        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.
         app.logger.exception("filters failed: %s", e)
-        return jsonify({'sites': [], 'practitioners': []})
+        return jsonify({'sites': [], 'practitioners': [], 'roles': []})
 
 
 # ── Connect Xero (self-serve OAuth onboarding) ───────────────────────────────
