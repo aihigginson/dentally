@@ -352,6 +352,7 @@
         .fte-badge { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; color: #7a5b00;
             background: #fff3d6; border: 1px solid #f0dca0; border-radius: 3px; padding: 0 3px; vertical-align: middle; letter-spacing: .02em; }
         .settings-save-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+        .settings-save:disabled, .settings-btn:disabled, .targets-save-btn:disabled { opacity: .45; cursor: default; }
         .var-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 16px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; max-width: 560px; }
         .defs-loading { padding: 30px 18px; color: var(--text-3); font-size: 13px; }
 
@@ -523,9 +524,6 @@
         <label for="f-role">Role</label>
         <select class="filter-select" id="f-role">
             <option value="all">All roles</option>
-            <option value="Dentist">Dentist</option>
-            <option value="Hygienist">Hygienist</option>
-            <option value="Therapist">Therapist</option>
         </select>
     </div>
     <div class="filter-sep"></div>
@@ -1385,11 +1383,7 @@
                 + ' <span style="color:#999;font-size:11px">' + escHtml(p.role || '')
                 + (p.dentally_role && p.dentally_role !== p.role ? ' <span style="color:#aaa">· Dentally: ' + escHtml(p.dentally_role) + '</span>' : '') + '</span></span>'
                 + '<span style="white-space:nowrap;color:#666;font-size:12px">'
-                + 'FTE <input type="number" min="0" max="2" step="0.1" class="fte-input"'
-                + ' value="' + (p.fte != null ? p.fte : '') + '" placeholder="1.0"'
-                + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"'
-                + ' style="width:52px;' + numStyle + '">'
-                + ' &nbsp;&nbsp;Pay <input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
+                + 'Pay <input type="number" min="0" max="100" step="0.5" class="assoc-pct-input"'
                 + ' value="' + (p.associate_pct != null ? p.associate_pct : '') + '"'
                 + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '"'
                 + ' style="width:56px;' + numStyle + '"> %</span>'
@@ -1407,7 +1401,6 @@
         const _row = i => { const k = i.dataset.tid + '|' + i.dataset.pid;
             return byKey[k] || (byKey[k] = { tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid }); };
         document.querySelectorAll('.assoc-pct-input').forEach(i => { _row(i).associate_pct = i.value === '' ? null : +i.value; });
-        document.querySelectorAll('.fte-input').forEach(i => { _row(i).fte = i.value === '' ? null : +i.value; });
         const rows = Object.values(byKey);
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
@@ -1420,7 +1413,7 @@
         } catch (e) {
             msg.style.color = '#b3261e'; msg.textContent = 'Save failed.';
         } finally {
-            saveBtn.disabled = false;
+            _syncSaveButtons();
             setTimeout(() => { msg.textContent = ''; }, 4000);
         }
     }
@@ -1482,8 +1475,12 @@
         return order.map(sec => ({ section: sec, metrics: bySec[sec] }));
     }
     let _dirty = false;
-    function markDirty() { _dirty = true; }
-    function clearDirty() { _dirty = false; }
+    const _SAVE_BTN_IDS = ['targets-save','targets-save-top','roles-save','roles-save-top',
+                           'variances-save','variances-save-top','assoc-pay-save','assoc-pay-save-top'];
+    // Save buttons grey out while there are no unsaved changes (feedback that a save landed).
+    function _syncSaveButtons() { _SAVE_BTN_IDS.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !_dirty; }); }
+    function markDirty() { _dirty = true; _syncSaveButtons(); }
+    function clearDirty() { _dirty = false; _syncSaveButtons(); }
 
     // Roles ------------------------------------------------------------------
     let _roleList = [], _rolesTenant = null, _rolesInUse = new Set();
@@ -1537,21 +1534,34 @@
             _rolesTenant = (tenants && tenants[0]) ? tenants[0].id : (practitioners[0] ? practitioners[0].tenant_id : null);
             renderRoleChips();
             if (!practitioners.length) { list.textContent = 'No practitioners found.'; saveBtn.style.display = ''; return; }
+            const fteStyle = 'width:64px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px;margin-right:10px';
             list.innerHTML = practitioners.map(p =>
                 '<div class="roles-row"><span style="font-size:13px">' + escHtml(p.name)
                 + (p.dentally_role ? ' <span style="color:#aaa;font-size:11px">Dentally: ' + escHtml(p.dentally_role) + '</span>' : '') + '</span>'
+                + '<span style="white-space:nowrap">'
+                + '<span style="color:#666;font-size:12px">FTE </span>'
+                + '<input type="number" min="0" max="2" step="0.05" class="role-fte-input" placeholder="1.0"'
+                + ' value="' + (p.fte != null ? p.fte : '') + '"'
+                + ' data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '" style="' + fteStyle + '">'
                 + '<select class="role-select" data-tid="' + p.tenant_id + '" data-pid="' + p.practitioner_id + '">'
-                + _roleOptions(p.custom_role || p.dentally_role || '') + '</select></div>').join('');
+                + _roleOptions(p.custom_role || p.dentally_role || '') + '</select></span></div>').join('');
             document.querySelectorAll('#roles-list .role-select').forEach(s => s.addEventListener('change', () => { _recomputeInUse(); markDirty(); }));
+            document.querySelectorAll('#roles-list .role-fte-input').forEach(i => i.addEventListener('input', markDirty));
             _recomputeInUse();
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load practitioners.'; }
     }
     async function saveRoles() {
         const saveBtn = document.getElementById('roles-save'), msg = document.getElementById('roles-msg');
-        const assignments = [...document.querySelectorAll('#roles-list .role-select')]
-            .map(i => ({ tenant_id: +i.dataset.tid, practitioner_id: +i.dataset.pid, custom_role: i.value.trim() }))
-            .filter(r => r.custom_role);
+        const byKey = {};
+        const _k = i => i.dataset.tid + '|' + i.dataset.pid;
+        document.querySelectorAll('#roles-list .role-select').forEach(s => {
+            byKey[_k(s)] = { tenant_id: +s.dataset.tid, practitioner_id: +s.dataset.pid, custom_role: s.value.trim() };
+        });
+        document.querySelectorAll('#roles-list .role-fte-input').forEach(i => {
+            const row = byKey[_k(i)]; if (row) row.fte = i.value === '' ? null : +i.value;
+        });
+        const assignments = Object.values(byKey).filter(r => r.custom_role);
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1559,7 +1569,7 @@
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 5000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
     }
 
     // Variances --------------------------------------------------------------
@@ -1603,10 +1613,43 @@
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
 
     // Targets grid -----------------------------------------------------------
+    // Draft persistence: unsaved target edits are mirrored to localStorage on every keystroke, so a
+    // token-expiry redirect, accidental refresh or crash can't lose them -- they're restored (with a
+    // banner) when the grid reloads, and cleared on a successful Save.
+    let _tgtFy = null, _tgtTid = null;
+    function _draftKey() { return (_tgtTid != null && _tgtFy != null) ? ('tgtDraft:' + _tgtTid + ':' + _tgtFy) : null; }
+    function _saveDraft() {
+        const k = _draftKey(); if (!k) return;
+        const vals = {};
+        document.querySelectorAll('#targets-grid input[data-metric]').forEach(i => {
+            if (i.value !== '') vals[i.dataset.metric + '|' + i.dataset.level] = i.value;
+        });
+        try { Object.keys(vals).length ? localStorage.setItem(k, JSON.stringify({ ts: Date.now(), vals })) : localStorage.removeItem(k); } catch (e) {}
+    }
+    function _clearDraft() { const k = _draftKey(); if (k) { try { localStorage.removeItem(k); } catch (e) {} } }
+    function _restoreDraft() {
+        const k = _draftKey(); if (!k) return;
+        let d = null; try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+        if (!d || !d.vals) return;
+        let n = 0;
+        document.querySelectorAll('#targets-grid input[data-metric]').forEach(i => {
+            const v = d.vals[i.dataset.metric + '|' + i.dataset.level];
+            if (v != null && i.value !== v) { i.value = v; n++; }
+        });
+        if (!n) return;
+        document.querySelectorAll('#targets-grid input[data-level="Practice"]').forEach(p => _applyPracticePlaceholders(p.dataset.metric));
+        markDirty(); _refreshCopyEnabled();
+        const msg = document.getElementById('targets-msg');
+        msg.style.color = '#b3261e';
+        msg.innerHTML = 'Restored ' + n + ' unsaved value(s) from ' + new Date(d.ts).toLocaleString()
+            + '. <b>Save</b> to keep them, or <a href="#" id="tgt-discard-draft">discard</a>.';
+        const dc = document.getElementById('tgt-discard-draft');
+        if (dc) dc.addEventListener('click', ev => { ev.preventDefault(); _clearDraft(); loadTargetGrid(_tgtFy); });
+    }
     async function loadTargetGrid(fy) {
         const grid = document.getElementById('targets-grid'), saveBtn = document.getElementById('targets-save');
         grid.textContent = 'Loading…'; saveBtn.style.display = 'none';
@@ -1621,8 +1664,10 @@
                 + (data.available_fys || []).filter(y => y !== data.fy).map(y => '<option value="' + y + '">' + _fyLabel(y) + '</option>').join('');
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
+            _tgtTid = t.id; _tgtFy = data.fy;
             renderTargetGrid(data, t);
             _refreshCopyEnabled();   // copy only onto a blank year (live: re-enables if all boxes cleared)
+            _restoreDraft();         // bring back any unsaved edits stashed before a redirect/refresh
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
@@ -1719,17 +1764,25 @@
     async function saveTargetGrid() {
         const saveBtn = document.getElementById('targets-save'), msg = document.getElementById('targets-msg');
         const fy = +document.getElementById('targets-fy').value;
-        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => ({
-            tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
-            value: i.value === '' ? null : +i.value,
-        }));
+        // A blank role cell materialises the Practice value it's showing as a placeholder into a REAL
+        // row (Option A: one-time fill on save, no ongoing derivation -> a complete set of target rows).
+        // Only non-FTE role cells carry a placeholder; orphan (removed-role) cells are excluded so their
+        // x-delete still blanks them.
+        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => {
+            const isOrphan = !!i.closest('[data-ocol]');
+            const raw = i.value !== '' ? i.value : (isOrphan ? '' : i.placeholder);
+            return {
+                tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
+                value: (raw === '' || raw == null) ? null : +raw,
+            };
+        });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
             if (!res.ok) throw new Error('status ' + res.status);
-            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            _clearDraft(); clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
-        finally { saveBtn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
     async function copyFromFY() {
         const src = +document.getElementById('targets-copy-fy').value;
@@ -1795,7 +1848,7 @@
     });
     // Re-enable Copy the moment every target box is cleared (blank year again).
     document.getElementById('targets-grid').addEventListener('input', e => {
-        if (e.target.matches('input[data-metric]')) _refreshCopyEnabled();
+        if (e.target.matches('input[data-metric]')) { _refreshCopyEnabled(); _saveDraft(); }
     });
     document.getElementById('targets-copy-fy').addEventListener('change', _refreshCopyEnabled);
     document.getElementById('targets-clear-btn').addEventListener('click', clearTargetGrid);
@@ -2221,6 +2274,13 @@
                         o.value = s.id; o.textContent = s.name;
                         selSite.appendChild(o);
                     });
+                    // Seed the Role dropdown from the tenant's curated Custom_Role values
+                    // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
+                    (data.roles || []).forEach(role => {
+                        const o = document.createElement('option');
+                        o.value = role; o.textContent = role;
+                        selRole.appendChild(o);
+                    });
                 }
                 if (myDataLock) {
                     // Single-report "My Data": the practitioner list is just this user.
@@ -2233,7 +2293,7 @@
                     applyFilters();
                     return;
                 }
-                selPract.options[0].textContent = ROLE_ALL_LABEL[role] || 'All practitioners';
+                selPract.options[0].textContent = role !== 'all' ? (ROLE_ALL_LABEL[role] || ('All ' + role + 's')) : 'All practitioners';
                 while (selPract.options.length > 1) selPract.remove(1);
                 data.practitioners.forEach(p => {
                     const o = document.createElement('option');
@@ -2262,7 +2322,7 @@
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
         }
         if (filterState.role !== 'all') {
-            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Custom Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
         }
         if (filterState.pract !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });

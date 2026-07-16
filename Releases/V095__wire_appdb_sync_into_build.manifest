@@ -1,0 +1,12 @@
+# =====================================================================
+# Release V095 -- Wire Meta.usp_Sync_Input_From_AppDB into the nightly build
+# =====================================================================
+# Adds META_SYNC_INPUT to Process_Config so Orchestrate_Build (the metadata DAG) runs the AppDB->
+# WH_Dentally.Input.* sync -- it has no prereqs, so it lands in wave 0, before the Gold dims/facts
+# that read Input.*, and Fact_Daily_Targets then populates. (usp_Load_All is defunct -- removed.)
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V095__wire_appdb_sync_into_build.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+
+TEST

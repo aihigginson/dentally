@@ -453,7 +453,7 @@ def filters():
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
         excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
-        role_clause   = "AND LOWER(Role) = LOWER(?) " if role_filter != 'all' else ""
+        role_clause   = "AND LOWER(Custom_Role) = LOWER(?) " if role_filter != 'all' else ""
         pract_params  = list(tids) + ([role_filter] if role_filter != 'all' else [])
         cur.execute(
             f"SELECT MIN(Practitioner_ID) AS Practitioner_ID, Full_Name "
@@ -468,13 +468,27 @@ def filters():
             pract_params,
         )
         practitioners = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
+
+        # Role dropdown options = the curated Custom_Role values actually in use by clinical
+        # practitioners. This is the SAME column the practitioner filter and the embedded report
+        # now key off, so the dropdown, the practitioner list and the report always agree.
+        cur.execute(
+            f"SELECT DISTINCT Custom_Role "
+            f"FROM   Gold.Dim_Practitioners "
+            f"WHERE  Tenant_ID IN ({placeholders}) AND pk_Practitioner > 0 AND Active = 1 "
+            f"{excl_clause}"
+            f"AND    NULLIF(LTRIM(RTRIM(Custom_Role)), '') IS NOT NULL "
+            f"ORDER BY Custom_Role",
+            tids,
+        )
+        roles = [r[0] for r in cur.fetchall()]
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners})
+        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.
         app.logger.exception("filters failed: %s", e)
-        return jsonify({'sites': [], 'practitioners': []})
+        return jsonify({'sites': [], 'practitioners': [], 'roles': []})
 
 
 # ── Connect Xero (self-serve OAuth onboarding) ───────────────────────────────
@@ -884,21 +898,34 @@ def get_practitioner_pay():
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(
-                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, pp.Associate_Pct, p.Custom_Role, pp.FTE "
+                f"SELECT p.Tenant_ID, p.Practitioner_ID, p.Full_Name, p.Role, p.Custom_Role "
                 f"FROM Gold.Dim_Practitioners p "
-                f"LEFT JOIN Input.Practitioner_Pay pp "
-                f"  ON pp.Tenant_ID = p.Tenant_ID AND pp.Practitioner_ID = p.Practitioner_ID "
                 f"WHERE p.Tenant_ID IN ({ph}) AND p.Active = 1 AND p.pk_Practitioner > 0 "
                 f"ORDER BY p.Full_Name",
                 tids,
             )
             practitioners = [
                 {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2], 'dentally_role': r[3],
-                 'associate_pct': float(r[4]) if r[4] is not None else None, 'role': r[5] or r[3],
-                 'fte': float(r[6]) if r[6] is not None else None}
+                 'role': r[4] or r[3], 'associate_pct': None, 'fte': None}
                 for r in cur.fetchall()
             ]
         conn.close()
+        # Associate_Pct / FTE are owner inputs -> live in AppDB (source of truth; survive WH
+        # redeploys, synced into WH each build). Overlay them onto the warehouse practitioner list.
+        if practitioners:
+            ac = _appdb_conn(); acur = ac.cursor(); aph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Practitioner_ID, Associate_Pct, FTE "
+                f"FROM Input.Practitioner_Pay WHERE Tenant_ID IN ({aph})",
+                tids,
+            )
+            pay = {(row[0], int(row[1])): row for row in acur.fetchall()}
+            ac.close()
+            for p in practitioners:
+                row = pay.get((p['tenant_id'], int(p['practitioner_id'])))
+                if row:
+                    p['associate_pct'] = float(row[2]) if row[2] is not None else None
+                    p['fte'] = float(row[3]) if row[3] is not None else None
         return jsonify({'practitioners': practitioners})
     except Exception as e:
         return _server_error(e, 'get_practitioner_pay')
@@ -911,7 +938,7 @@ def save_practitioner_pay():
     if err:
         return err
     try:
-        conn = _fabric_conn(autocommit=True)
+        conn = _fabric_conn()
         cur  = conn.cursor()
         _, client_id, tids, maintain = _get_user_info(cur, upn)
         if client_id is None:
@@ -950,21 +977,23 @@ def save_practitioner_pay():
                     continue
             valid.append((tid, pid, pctf, ftef))
 
+        conn.close()
+        # Write to AppDB (source of truth; survives WH redeploys, synced into WH each build).
         if valid:
-            cur.fast_executemany = True
-            cur.executemany(
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
+            acur.executemany(
                 "DELETE FROM Input.Practitioner_Pay WHERE Tenant_ID = ? AND Practitioner_ID = ?",
                 [(t, p) for t, p, _, _ in valid],
             )
-            inserts = [(t, p, pc, ft) for t, p, pc, ft in valid if pc is not None or ft is not None]
+            inserts = [(t, p, pc, ft, upn) for t, p, pc, ft in valid if pc is not None or ft is not None]
             if inserts:
-                cur.executemany(
+                acur.executemany(
                     "INSERT INTO Input.Practitioner_Pay "
-                    "(Tenant_ID, Practitioner_ID, Associate_Pct, FTE, DW_Created_At, DW_Updated_At) "
-                    "VALUES (?, ?, ?, ?, GETUTCDATE(), GETUTCDATE())",
+                    "(Tenant_ID, Practitioner_ID, Associate_Pct, FTE, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)",
                     inserts,
                 )
-        conn.close()
+            ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_practitioner_pay')
@@ -1001,7 +1030,7 @@ def get_roles():
             )
             practitioners = [
                 {'tenant_id': r[0], 'practitioner_id': r[1], 'name': r[2],
-                 'dentally_role': r[3], 'custom_role': r[3]}
+                 'dentally_role': r[3], 'custom_role': r[3], 'fte': None}
                 for r in cur.fetchall()
             ]
         tenants = []
@@ -1015,15 +1044,16 @@ def get_roles():
         role_set = set()
         if tids:
             ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
-            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
-            overrides = {(r[0], r[1]): r[2] for r in acur.fetchall()}
+            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role, FTE FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
+            overrides = {(r[0], r[1]): (r[2], r[3]) for r in acur.fetchall()}
             acur.execute(f"SELECT Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
             role_set = {r[0] for r in acur.fetchall()}
             ac.close()
             for p in practitioners:
                 ov = overrides.get((p['tenant_id'], p['practitioner_id']))
                 if ov:
-                    p['custom_role'] = ov
+                    if ov[0]:            p['custom_role'] = ov[0]
+                    if ov[1] is not None: p['fte'] = float(ov[1])
         # Canonical list = curated roles + any role actually IN USE (an unused/removed role does NOT
         # reappear via the Dentally defaults). dentally_roles kept only to bootstrap an empty list.
         in_use = {p['custom_role'] for p in practitioners if p['custom_role']}
@@ -1062,8 +1092,17 @@ def save_roles():
             except (KeyError, TypeError, ValueError):
                 continue
             role = (r.get('custom_role') or '').strip()
+            fte = r.get('fte'); ftef = None
+            if fte not in (None, ''):
+                try:
+                    ftef = float(fte)
+                except (TypeError, ValueError):
+                    ftef = None
+                else:
+                    if not (0 <= ftef <= 2):
+                        ftef = None
             if tid in allowed and role:
-                valid.append((tid, pid, role))
+                valid.append((tid, pid, role, ftef))
         # curated role list (per the primary tenant)
         try:
             rtid = int(body.get('tenant_id'))
@@ -1076,11 +1115,11 @@ def save_roles():
             acur.fast_executemany = True
             acur.executemany(
                 "DELETE FROM Input.Practitioner_Role WHERE Tenant_ID = ? AND Practitioner_ID = ?",
-                [(t, p) for t, p, _ in valid])
+                [(t, p) for t, p, _, _ in valid])
             acur.executemany(
-                "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, Updated_At, Updated_By) "
-                "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
-                [(t, p, role, upn) for t, p, role in valid])
+                "INSERT INTO Input.Practitioner_Role (Tenant_ID, Practitioner_ID, Custom_Role, FTE, Updated_At, Updated_By) "
+                "VALUES (?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, role, fte, upn) for t, p, role, fte in valid])
         if rtid in allowed:
             acur.execute("DELETE FROM Input.Roles WHERE Tenant_ID = ?", rtid)
             if role_names:

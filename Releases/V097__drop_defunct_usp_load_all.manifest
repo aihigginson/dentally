@@ -1,0 +1,11 @@
+# =====================================================================
+# Release V097 -- Drop the defunct Audit.usp_Load_All orchestrator
+# =====================================================================
+# usp_Load_All (the old hand-sequenced Silver+Gold driver) is retired -- Orchestrate_Build runs the
+# metadata DAG instead. File removed from the repo; this drops it from the warehouse.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V097__drop_defunct_usp_load_all.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V097__drop_defunct_usp_load_all.sql
+
+TEST

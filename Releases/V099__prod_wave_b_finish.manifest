@@ -1,0 +1,38 @@
+# =====================================================================
+# Release V099 -- Wave-B finish (FTE-scaled targets + Metric_Actuals + RI, end to end)
+# =====================================================================
+# Warehouse half of the wave-B cutover. Deploy in sequence AFTER V095-V098 are on the target env.
+# Idempotent: table DDL is DROP/CREATE, SPs are CREATE, the RI data file is a full DELETE+INSERT reseed.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V099__prod_wave_b_finish.manifest -SkipTests
+#   (or the Deploy Warehouse action, target=prod)
+#
+# Bundled warehouse changes (this session):
+#   * Input.Practitioner_Pay.Associate_Pct -> NULLABLE. FTE-only rows are now valid. The WH table is
+#     now a SYNC TARGET fed from AppDB, so recreate-empty is safe -- the next build's sync repopulates it.
+#   * Meta.usp_Sync_Input_From_AppDB -> also copies Practitioner_Pay (Associate_Pct + FTE) from AppDB,
+#     which feeds Dim_Practitioners.FTE and therefore the FTE-scaled targets.
+#   * Gold.usp_Load_Fact_Metric_Actuals -> NULL fk_Date guard (V082/V083): @cur falls back to
+#     fn_Get_Date_Key(today), so the current-state metrics (exam_ratio / retention / overdue) load
+#     instead of the whole SP aborting on "NULL into fk_Date".
+#   * Audit.RI_Check_Config -> drops the 2 invalid Fact_Daily_Targets rows (fk_Practice_Site /
+#     fk_Practitioner do not exist on it -- it keys on Target_Level) that failed the post-build RI gate.
+#
+# OUT-OF-BAND (NOT warehouse -- required for the feature to work on prod):
+#   1. PROD AppDB: run AppDB\AppDB_Input_Schema.sql (idempotent; creates Input.Practitioner_Pay).
+#      Allow a few minutes for OneLake mirroring before the first build's sync reads it.
+#   2. APP: merge the dev->main PR (app.py + index.html: Role filter -> Custom Role; pay -> AppDB).
+#   3. MODEL: apply Fabric\PBI_Dentally.csx in Tabular Editor to the PROD model; publish; refresh.
+#   4. Owner types roles / targets / FTE into the PROD app, then run Orchestrate_Build.
+# =====================================================================
+
+# -- schema: table (Associate_Pct nullable; now a sync target) --
+DEPLOY   Fabric\Input.Practitioner_Pay.Table.sql
+
+# -- stored procedures --
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+# -- data seed: RI config (invalid Fact_Daily_Targets rows removed) --
+DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
+
+TEST
