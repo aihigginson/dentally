@@ -404,37 +404,13 @@ add("Open Courses Value Trend",
 )",
     "£#,##0");
 
-add("Open Courses Value Target",
-    @"MAXX(
-    FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ),
-    '_Daily Targets'[Annual Target Value])",
-    "£#,##0");
+// Target / vs Target / BG for "Open Courses Value" are owned by the Clinical block above
+// (kpi("Open Courses Value", ...) -> target-model, FTE-aware, off _Daily Targets). Defining
+// them here too created DUPLICATE measure names in the amalgamated file (both blocks share the
+// "Clinical KPIs" folder), which poisoned resolution of [Open Courses Value] / [Average Plan
+// Value]. KPI_Snapshot keeps ONLY the historical Trend series.
 
-add("Open Courses Value vs Target",
-    @"VAR actual = [Open Courses Value]
-VAR target = [Open Courses Value Target]
-VAR pct    = DIVIDE( actual - target, ABS( target ) ) * 100
-RETURN IF(
-    ISBLANK( target ), BLANK(),
-    IF( pct >= 0,
-        ""▲ "" & FORMAT( pct,      ""0.0"" ) & ""%"",
-        ""▼ "" & FORMAT( ABS(pct), ""0.0"" ) & ""%"" ))",
-    "");
-
-add("Open Courses Value BG",
-    @"VAR actual = [Open Courses Value]
-VAR target = MAXX( FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ), '_Daily Targets'[Annual Target Value] )
-VAR band   = MAXX( FILTER( '_Daily Targets', '_Daily Targets'[Metric] = ""open_courses_value"" && '_Daily Targets'[Target Level] = ""Practice"" ), '_Daily Targets'[Variance] )
-VAR pct    = DIVIDE( actual - target, ABS( target ) ) * 100
-RETURN SWITCH( TRUE(),
-    ISBLANK( target ), ""#FFFFFF"",
-    pct >= band,       ""#1a7f3c"",
-    pct >= 0,          ""#6abf7b"",
-    pct >= -band,      ""#f4a261"",
-                       ""#c0392b"" )",
-    "");
-
-Info("Clinical KPI measures created.");
+Info("Clinical KPI snapshot Trend created.");
 }
 
 // ===================== MetricActuals =====================
