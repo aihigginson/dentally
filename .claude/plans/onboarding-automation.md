@@ -106,3 +106,26 @@ closes pre-OAuth spam. Residual = **capacity/cost**, managed not gated:
   kicks `Ingest_Dentally`. (This spike stops at "pending trial captured".)
 - **External login identity** — the app is MSAL/Azure AD; a self-serve practice email needs Azure AD
   External Identities / B2C so the principal can actually sign in post-onboarding.
+
+## Auto-provision step (BUILT + proven on dev, 2026-07-17)
+`Audit.usp_Provision_Tenant` (@Practice_Name, @Principal_Email, @Paid_From, @Dentally_Practice_ID,
+@Access_From, @Tenant_ID OUT) — the DB core of provisioning:
+- allocates a new id (Tenant_ID == Client_ID, MAX+1 across both tables) — real practices are 100+,
+- writes the access chain: `Security.Clients`, `Audit.Tenants` (API creds NULL -- token lives in KV),
+  `Security.Application_Users` (principal on the **Full** profile + Maintain_Targets),
+- writes the trial billing: `Billing.Account_Billing` (`Paid_From` = access + 30d) + `Security.Access_Log`,
+- **idempotent on the principal email** (a re-run returns the existing tenant, no duplicates).
+Proven: provisioned a throwaway practice -> full chain created -> re-run returned same tenant -> cleaned up.
+
+### Remaining glue (the orchestrator + the first-pull)
+1. **Orchestrator** (Fabric notebook or script, runs on the evening cadence): read KV
+   `onboarding-pending-<env>` -> for each `pending_provision`: `EXEC Audit.usp_Provision_Tenant` ->
+   move its `oauth` token into KV `dentally-tokens-<env>[<Tenant_ID>]` ({token, base_url, name, oauth})
+   -> set the pending record `status='provisioned'` + the allocated `tenant_id`.
+2. **Initial ingest** — the one genuinely hard bit: the first Dentally pull is **multi-hour**, so it
+   **can't ride Orchestrate_Build's 1-hour ingest cell** (per DENTALLY_ONBOARDING). Options: trigger a
+   **standalone Fabric notebook job via the REST API** (no child timeout), or a **capped initial pull**
+   (recent slice) then backfill. Decision needed. After the first pull, nightly incrementals ride
+   Orchestrate normally.
+3. **Token refresh** — Dentally OAuth tokens expire; `Ingest_Dentally` must refresh via the stored
+   `oauth.refresh_token` and persist back to KV (mirrors how Ingest_Xero refreshes).
