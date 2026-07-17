@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Start your Analytically trial</title>
+    <style>
+        :root { --navy:#0b3d5c; --navy-dark:#082c43; --teal:#13b5a6; --bg:#f4f7f9; --line:#e2e8ee; --muted:#5b6b78; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif; background:var(--bg); color:var(--navy); }
+        header { background:var(--navy); color:#fff; padding:16px 24px; font-weight:700; font-size:18px; letter-spacing:.2px; }
+        .wrap { max-width:560px; margin:40px auto; padding:0 20px; }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(10,40,60,.06); }
+        h1 { font-size:22px; margin:0 0 6px; }
+        .sub { color:var(--muted); font-size:14px; margin:0 0 22px; }
+        label { display:block; font-size:13px; font-weight:600; margin:14px 0 6px; }
+        input[type=text], input[type=email] { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:7px; font-size:15px; }
+        input:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(19,181,166,.15); }
+        .btn { margin-top:20px; width:100%; padding:12px 16px; border:none; border-radius:7px; background:var(--navy); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+        .btn:hover { background:var(--navy-dark); }
+        .btn:disabled { opacity:.55; cursor:default; }
+        .btn.dentally { background:var(--teal); }
+        .link { background:none; border:none; color:var(--navy); font-size:13px; text-decoration:underline; cursor:pointer; padding:8px 0 0; }
+        .msg { font-size:13px; margin-top:12px; min-height:18px; }
+        .msg.err { color:#b3261e; }
+        .msg.ok  { color:#1a7f4b; }
+        .warn { margin-top:18px; background:#fff8e6; border:1px solid #f2d99a; border-radius:8px; padding:14px; font-size:13px; line-height:1.5; }
+        .warn strong { display:block; margin-bottom:4px; }
+        .attest { display:flex; gap:10px; align-items:flex-start; margin-top:16px; font-size:13px; line-height:1.45; }
+        .attest input { margin-top:2px; }
+        .step { display:none; }
+        .step.active { display:block; }
+        .done { text-align:center; padding:10px 0; }
+        .done .tick { font-size:40px; color:var(--teal); }
+        .foot { color:var(--muted); font-size:12px; text-align:center; margin-top:18px; }
+        code.em { background:var(--bg); padding:1px 6px; border-radius:4px; font-weight:600; }
+    </style>
+</head>
+<body>
+    <header>Analytically</header>
+    <div class="wrap">
+        <div class="card">
+            <!-- Step 1: practice + principal email -->
+            <div class="step active" id="step-details">
+                <h1>Start your 30-day trial</h1>
+                <p class="sub">Connect your practice's Dentally and we'll build your analytics — free for 30 days, no card needed.</p>
+                <label for="practice">Practice name</label>
+                <input type="text" id="practice" placeholder="e.g. Maple Dental" autocomplete="organization">
+                <label for="email">Your work email (the practice's principal)</label>
+                <input type="email" id="email" placeholder="you@yourpractice.co.uk" autocomplete="email">
+                <button class="btn" id="btn-send">Email me a verification code</button>
+                <div class="msg" id="msg-details"></div>
+            </div>
+
+            <!-- Step 2: code challenge/response -->
+            <div class="step" id="step-code">
+                <h1>Check your inbox</h1>
+                <p class="sub">We've emailed a 6-digit code to <code class="em" id="email-echo"></code>. Enter it below.</p>
+                <label for="code">Verification code</label>
+                <input type="text" id="code" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+                <button class="btn" id="btn-verify">Verify</button>
+                <button class="link" id="btn-back">&larr; Use a different email</button>
+                <div class="msg" id="msg-code"></div>
+            </div>
+
+            <!-- Step 3: attestation + connect -->
+            <div class="step" id="step-connect">
+                <h1>Connect Dentally</h1>
+                <p class="sub">You'll be taken to Dentally to authorise the connection, then brought back here.</p>
+                <div class="warn">
+                    <strong>Before you connect</strong>
+                    The email you verified (<code class="em" id="email-echo2"></code>) will be the principal account for this practice.
+                    You must have <strong>appropriate access within Dentally</strong> to authorise this connection.
+                </div>
+                <label class="attest">
+                    <input type="checkbox" id="attest">
+                    <span>I confirm I have appropriate Dentally access and that I am <strong>authorised to share this practice's data</strong> with Analytically for the purpose of providing the service.</span>
+                </label>
+                <button class="btn dentally" id="btn-connect" disabled>Connect Dentally</button>
+                <div class="msg" id="msg-connect"></div>
+            </div>
+
+            <!-- Done -->
+            <div class="step" id="step-done">
+                <div class="done">
+                    <div class="tick">&#10003;</div>
+                    <h1>You're all set</h1>
+                    <p class="sub">Your Dentally is connected and your 30-day trial has started. We're preparing your data now — it can take a few hours on the first run, and we'll email you the moment it's ready to explore.</p>
+                </div>
+            </div>
+        </div>
+        <div class="foot">Questions? <a href="mailto:sales@analytically.info">sales@analytically.info</a></div>
+    </div>
+
+    <script>
+        var challengeTok = null, verifiedTok = null;
+        function $(id){ return document.getElementById(id); }
+        function show(step){ ['step-details','step-code','step-connect','step-done'].forEach(function(s){ $(s).classList.toggle('active', s === step); }); }
+        function msg(id, text, ok){ var m = $(id); m.textContent = text || ''; m.className = 'msg' + (text ? (ok ? ' ok' : ' err') : ''); }
+
+        // If Dentally redirected back to /onboarding?status=..., show the outcome.
+        (function () {
+            var p = new URLSearchParams(location.search).get('status');
+            if (p === 'connected') { show('step-done'); }
+            else if (p === 'error') { show('step-connect'); msg('msg-connect', 'That didn’t complete — please try connecting again.', false); }
+        })();
+
+        $('btn-send').addEventListener('click', async function () {
+            var practice = $('practice').value.trim(), email = $('email').value.trim();
+            if (!practice || email.indexOf('@') < 0) { msg('msg-details', 'Enter your practice name and a valid work email.', false); return; }
+            this.disabled = true; msg('msg-details', 'Sending…', true);
+            try {
+                var r = await fetch('/api/onboarding/challenge', { method:'POST', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({ practice_name: practice, email: email }) });
+                var j = await r.json();
+                if (!r.ok) throw new Error(j.error || 'Could not send the code.');
+                challengeTok = j.challenge;
+                $('email-echo').textContent = email; $('email-echo2').textContent = email;
+                msg('msg-details', ''); show('step-code');
+            } catch (e) { msg('msg-details', e.message, false); }
+            finally { this.disabled = false; }
+        });
+
+        $('btn-back').addEventListener('click', function () { show('step-details'); });
+
+        $('btn-verify').addEventListener('click', async function () {
+            var code = $('code').value.trim();
+            if (code.length < 6) { msg('msg-code', 'Enter the 6-digit code.', false); return; }
+            this.disabled = true; msg('msg-code', 'Checking…', true);
+            try {
+                var r = await fetch('/api/onboarding/verify', { method:'POST', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({ challenge: challengeTok, code: code }) });
+                var j = await r.json();
+                if (!r.ok) throw new Error(j.error || 'Could not verify the code.');
+                verifiedTok = j.verified;
+                msg('msg-code', ''); show('step-connect');
+            } catch (e) { msg('msg-code', e.message, false); }
+            finally { this.disabled = false; }
+        });
+
+        $('attest').addEventListener('change', function () { $('btn-connect').disabled = !this.checked; });
+
+        $('btn-connect').addEventListener('click', async function () {
+            if (!$('attest').checked || !verifiedTok) return;
+            this.disabled = true; msg('msg-connect', 'Redirecting to Dentally…', true);
+            try {
+                var url = '/api/onboarding/dentally/connect?attested=1&verified=' + encodeURIComponent(verifiedTok);
+                var r = await fetch(url);
+                var j = await r.json();
+                if (!r.ok || !j.authorize_url) throw new Error(j.error || 'Could not start the connection.');
+                location.href = j.authorize_url;   // top-level navigation to Dentally consent
+            } catch (e) { this.disabled = false; msg('msg-connect', e.message, false); }
+        });
+    </script>
+</body>
+</html>

@@ -12,6 +12,8 @@ import hmac
 import hashlib
 import json
 import time
+import secrets
+from datetime import datetime, timedelta
 from urllib.parse import urlencode, quote
 from dotenv import load_dotenv
 import jwt
@@ -713,6 +715,199 @@ def xero_callback():
     except Exception as e:
         app.logger.exception("xero callback failed: %s", e)
         return redirect('/?xero=error')
+
+
+# ── Guided onboarding: public 30-day trial (pre-account, OUTSIDE the app) ──────
+# A NEW practice has no app login yet, so onboarding is PUBLIC (no _auth) and lives outside the
+# authed app: the marketing site's "Get started" links to /onboarding (served here). Flow:
+#   1. principal enters practice name + their work email  ->  we email a 6-digit code (challenge)
+#   2. they enter the code (response)  ->  email verified; that address is taken as the PRINCIPAL
+#   3. they attest they have appropriate Dentally access + the authority to share the data
+#   4. Connect Dentally (OAuth, on Dentally's domain)  ->  callback captures the token
+#   5. we record a PENDING TRIAL (token + details + Paid_From = +TRIAL_DAYS) for the evening run
+# Auto-provision needs no human step because completing OAuth requires a real Dentally token; the
+# email challenge + attestation cover authenticity + authority. STATELESS: each step hands the next a
+# short-lived HMAC-signed token (no server session store).
+#
+# CONFIRM/CONFIGURE: Dentally partner-app creds (KV dentally-client-id / dentally-client-secret) +
+# redirect URI https://<host>/api/onboarding/dentally/callback; an email provider (see _send_email).
+# All overridable via env so nothing is hard-coded to a guess.
+DENTALLY_ENV       = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
+DENTALLY_AUTHORIZE = os.environ.get('DENTALLY_AUTHORIZE', 'https://api.dentally.co/oauth/authorize')
+DENTALLY_TOKEN_URL = os.environ.get('DENTALLY_TOKEN_URL', 'https://api.dentally.co/oauth/token')
+DENTALLY_API_BASE  = os.environ.get('DENTALLY_API_BASE',  'https://api.dentally.co/v1')
+DENTALLY_UA        = os.environ.get('DENTALLY_USER_AGENT', 'Analytically/1.0 (onboarding)')  # Dentally 403s without a User-Agent
+DENTALLY_SCOPES    = os.environ.get('DENTALLY_SCOPES',
+    'user:read patient:read appointment:read practitioner:read site:read '
+    'treatment:read payment_plan:read contract:read invoice:read')  # confirm the exact set with Dentally
+TRIAL_DAYS         = int(os.environ.get('ONBOARDING_TRIAL_DAYS', '30'))
+_dentally_app_creds = {}
+
+
+def _dentally_client():
+    """Dentally partner-app id/secret from Key Vault, cached in-process."""
+    if not _dentally_app_creds:
+        _dentally_app_creds['id']     = _kv_get('dentally-client-id')
+        _dentally_app_creds['secret'] = _kv_get('dentally-client-secret')
+    return _dentally_app_creds['id'], _dentally_app_creds['secret']
+
+
+def _onboarding_redirect_uri():
+    # Must EXACTLY match a redirect URI registered on the Dentally app.
+    return f'https://{request.host}/api/onboarding/dentally/callback'
+
+
+def _code_hmac(code, email):
+    return hmac.new(_state_key(), f'{email}:{code}'.encode(), hashlib.sha256).hexdigest()
+
+
+def _send_email(to, subject, body):
+    """Send a transactional email. Uses an env-configured SMTP provider if present; otherwise (dev)
+    logs the body so the flow is testable without a provider wired. Returns True if actually sent."""
+    host = os.environ.get('ONBOARDING_SMTP_HOST')
+    if host:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = os.environ.get('ONBOARDING_FROM', 'noreply@analytically.info')
+        msg['To'] = to
+        with smtplib.SMTP(host, int(os.environ.get('ONBOARDING_SMTP_PORT', '587'))) as s:
+            s.starttls()
+            user = os.environ.get('ONBOARDING_SMTP_USER')
+            if user:
+                s.login(user, os.environ.get('ONBOARDING_SMTP_PASS', ''))
+            s.sendmail(msg['From'], [to], msg.as_string())
+        return True
+    app.logger.warning("onboarding email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
+    return False
+
+
+@app.route('/onboarding')
+def onboarding_page():
+    """Public, unauthenticated onboarding page -- the guided trial dialogue, served outside the app shell."""
+    return send_from_directory('.', 'onboarding.html')
+
+
+@app.route('/api/onboarding/challenge', methods=['POST'])
+def onboarding_challenge():
+    """Step 1: email a 6-digit code to the principal's address. Returns a signed challenge token that
+    carries the email + an HMAC of the code (never the code itself) for the stateless verify step."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    practice = (data.get('practice_name') or '').strip()
+    if '@' not in email or not practice:
+        return jsonify({'error': 'Enter your practice name and a valid work email.'}), 400
+    code = f'{secrets.randbelow(1000000):06d}'
+    _send_email(email, 'Your Analytically verification code',
+                f'Your Analytically verification code is {code}. It expires in 15 minutes.')
+    challenge = _sign_state({'t': 'chal', 'email': email, 'practice': practice,
+                             'code_h': _code_hmac(code, email), 'ts': time.time()})
+    return jsonify({'challenge': challenge, 'sent': True})
+
+
+@app.route('/api/onboarding/verify', methods=['POST'])
+def onboarding_verify():
+    """Step 2: check the code against the signed challenge; issue a 'verified principal' token. The
+    verified email is taken as the practice PRINCIPAL (its owner/admin account)."""
+    data = request.get_json(silent=True) or {}
+    payload = _verify_state(data.get('challenge', ''), max_age=900)
+    code = (data.get('code') or '').strip()
+    if not payload or payload.get('t') != 'chal':
+        return jsonify({'error': 'This step expired -- please start again.'}), 400
+    if not hmac.compare_digest(payload.get('code_h', ''), _code_hmac(code, payload['email'])):
+        return jsonify({'error': 'That code is not right.'}), 400
+    verified = _sign_state({'t': 'verified', 'email': payload['email'],
+                            'practice': payload['practice'], 'ts': time.time()})
+    return jsonify({'verified': verified, 'email': payload['email']})
+
+
+@app.route('/api/onboarding/dentally/connect')
+def onboarding_connect():
+    """Step 4: with a verified principal + the authority attestation, return the Dentally authorize URL."""
+    payload = _verify_state(request.args.get('verified', ''), max_age=1800)
+    if not payload or payload.get('t') != 'verified':
+        return jsonify({'error': 'Please verify your email first.'}), 400
+    if request.args.get('attested') != '1':
+        return jsonify({'error': 'You must confirm you are authorised to share the data.'}), 400
+    cid, _secret = _dentally_client()
+    if not cid:
+        return jsonify({'error': 'Dentally app not configured'}), 500
+    state = _sign_state({'t': 'onb', 'email': payload['email'], 'practice': payload['practice'],
+                         'attested': True, 'ts': time.time(), 'nonce': uuid.uuid4().hex})
+    params = urlencode({
+        'response_type': 'code',
+        'client_id':     cid,
+        'redirect_uri':  _onboarding_redirect_uri(),
+        'scope':         DENTALLY_SCOPES,
+        'state':         state,
+    }, quote_via=quote)
+    return jsonify({'authorize_url': DENTALLY_AUTHORIZE + '?' + params})
+
+
+@app.route('/api/onboarding/dentally/callback')
+def onboarding_callback():
+    """Step 5: exchange the code, identify the practice, and record a PENDING TRIAL (token + details
+    + Paid_From = +TRIAL_DAYS) keyed by the Dentally practice id (idempotent -- a re-connect updates
+    in place). The evening onboarding run provisions the tenant + pulls; that step is the next layer."""
+    if request.args.get('error'):
+        return redirect('/onboarding?status=error')
+    code  = request.args.get('code')
+    state = _verify_state(request.args.get('state', ''), max_age=1800)
+    if not code or not state or state.get('t') != 'onb':
+        return redirect('/onboarding?status=error')
+    try:
+        cid, csecret = _dentally_client()
+        tr = requests.post(DENTALLY_TOKEN_URL, headers={
+            'User-Agent':   DENTALLY_UA,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }, data={
+            'grant_type':    'authorization_code',
+            'code':          code,
+            'redirect_uri':  _onboarding_redirect_uri(),
+            'client_id':     cid,
+            'client_secret': csecret,
+        }, timeout=30)
+        tr.raise_for_status()
+        tokens = tr.json()
+
+        practice_id, practice_name = None, state.get('practice')
+        try:
+            pr = requests.get(DENTALLY_API_BASE + '/practices', headers={
+                'Authorization': 'Bearer ' + tokens['access_token'],
+                'User-Agent':    DENTALLY_UA,
+            }, timeout=30)
+            if pr.ok:
+                body = pr.json()
+                practices = body.get('practices') or ([body['practice']] if body.get('practice') else [])
+                if practices:
+                    practice_id   = practices[0].get('id')
+                    practice_name = practices[0].get('name') or practice_name
+        except Exception:
+            pass
+
+        # Idempotent per Dentally practice; keep the full OAuth set + the trial's Paid_From.
+        key = f'dentally:{practice_id}' if practice_id else f'email:{state["email"]}'
+        paid_from = (datetime.utcnow().date() + timedelta(days=TRIAL_DAYS)).isoformat()
+        pending_secret = f'onboarding-pending-{DENTALLY_ENV}'
+        store = _kv_json(pending_secret)
+        store[key] = {
+            'principal_email':      state['email'],
+            'practice_name':        practice_name,
+            'dentally_practice_id': practice_id,
+            'attested':             True,
+            'paid_from':            paid_from,
+            'created_at':           datetime.utcnow().isoformat() + 'Z',
+            'status':               'pending_provision',
+            'oauth':                tokens,
+        }
+        _kv_set(pending_secret, json.dumps(store))
+        app.logger.info("onboarding captured: practice=%s id=%s principal=%s paid_from=%s",
+                        practice_name, practice_id, state['email'], paid_from)
+        return redirect('/onboarding?status=connected')
+    except Exception as e:
+        app.logger.exception("onboarding callback failed: %s", e)
+        return redirect('/onboarding?status=error')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
