@@ -1,0 +1,61 @@
+# =====================================================================
+# Release V101 -- Subscriptions & billing (prod cutover, dependency-ordered)
+# =====================================================================
+# The owner self-serves per-user subscription PROFILES (Full / Clinician / Front Office / No access) on
+# the Subscriptions screen; each profile has a monthly price; a month-end rollup snapshots usage into
+# invoice lines, shown on the Invoices tab. Billing is driven off Access_Log HISTORY (not a live
+# snapshot): highest-priced profile held during the month, pro-rata the first part-month at sign-up,
+# full months thereafter, our own @analytically.info logins excluded, and a per-account Paid_From gate
+# (Maple = free forever via 2100-01-01).
+#
+# All tables are IDEMPOTENT CREATE (IF OBJECT_ID IS NULL) / guarded ALTER, so auth rows + billing
+# history SURVIVE redeploys -- nothing here wipes Security.Application_Users or the logs. SPs are CREATE.
+# Deploy AFTER V100.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V101__subscriptions_billing.manifest -SkipTests
+#   (or the Deploy Warehouse action, target=prod)
+#
+# PRE-REQUISITE (do BEFORE this manifest so the sync SPs resolve their AppDB refs):
+#   * PROD AppDB: run AppDB\AppDB_Input_Schema.sql (idempotent) -- adds Input.Application_Users +
+#     Input.Access_Log (source of truth for the Subscriptions screen). Allow a few minutes for OneLake
+#     mirroring before the first sync reads them.
+#
+# OUT-OF-BAND (after the manifest -- required for the feature to work on prod):
+#   1. APP: merge the dev->main PR (app.py + index.html: Subscriptions + Invoices tabs, /api/team,
+#      /api/invoices; AppDB-backed fast save).
+#   2. FABRIC PIPELINES (see below): create "Sync Subscriptions" (frequent) + "Generate Invoices" (monthly).
+#   3. Owner opens the prod Subscriptions screen and assigns profiles. Maple needs NO action -- the
+#      Account_Billing seed sets Paid_From = 2100-01-01 (free forever), so the rollup yields nothing.
+#
+# FABRIC PIPELINES (two, both a single Script activity against WH_Dentally):
+#   A. "Sync Subscriptions" -- lands profile changes without waiting for the nightly build.
+#        DECLARE @i BIGINT,@u BIGINT,@d BIGINT;
+#        EXEC Meta.usp_Sync_Access_From_AppDB @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+#      Schedule: daily for now (F2, one connection); tighten to every 8 min at go-live (keeps the app's
+#      "changes can take up to 10 minutes" promise true).
+#   B. "Generate Invoices" -- month-end billing rollup.
+#        EXEC Billing.usp_Generate_Invoice_Lines;   -- no arg = the month that just ended
+#      Schedule: monthly, 1st of the month ~02:00, AFTER the overnight sync so the warehouse reflects
+#      month-end subscriptions. Idempotent per month (safe to re-run).
+#   NB the nightly Orchestrate_Build already carries the FULL Input sync (V095); pipeline A is only the
+#   fast access-only sync so subscription edits land in minutes, not overnight.
+# =====================================================================
+
+# -- schema: tables (idempotent create; the Billing schema bootstraps in Profile_Pricing) --
+DEPLOY   Fabric\Billing.Profile_Pricing.Table.sql
+DEPLOY   Fabric\Billing.Invoice_Line.Table.sql
+DEPLOY   Fabric\Billing.Account_Billing.Table.sql
+DEPLOY   Fabric\Security.Access_Log.Table.sql
+DEPLOY   Fabric\Security.Application_Users.Table.sql
+
+# -- stored procedures (compile against the final schema above) --
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Access_From_AppDB.StoredProcedure.sql
+
+# -- data seeds (order: pricing -> account dates -> owner auth rows -> owner Access_Log backfill) --
+DEPLOY   Fabric\Billing.Profile_Pricing.Data.sql
+DEPLOY   Fabric\Billing.Account_Billing.Data.sql
+DEPLOY   Fabric\Security.Application_Users.Data.sql
+DEPLOY   Fabric\Security.Access_Log.Data.sql
+
+TEST
