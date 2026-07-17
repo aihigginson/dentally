@@ -762,8 +762,28 @@ def _code_hmac(code, email):
 
 
 def _send_email(to, subject, body):
-    """Send a transactional email. Uses an env-configured SMTP provider if present; otherwise (dev)
-    logs the body so the flow is testable without a provider wired. Returns True if actually sent."""
+    """Send a transactional email. Prefers Azure Communication Services -- keyless via ACS_ENDPOINT +
+    managed identity, else a connection string in Key Vault ('acs-connection-string'). Falls back to
+    SMTP (ONBOARDING_SMTP_*); otherwise (dev) logs the body so the flow is testable. Returns True if sent.
+    Sender must be an address on the domain connected to the ACS resource (set ONBOARDING_FROM)."""
+    sender   = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
+    reply_to = os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+    endpoint = os.environ.get('ACS_ENDPOINT')
+    acs_conn = _kv_get('acs-connection-string') or os.environ.get('ACS_CONNECTION_STRING')
+    if endpoint or acs_conn:
+        from azure.communication.email import EmailClient
+        if endpoint:
+            from azure.identity import DefaultAzureCredential
+            client = EmailClient(endpoint, DefaultAzureCredential())
+        else:
+            client = EmailClient.from_connection_string(acs_conn)
+        client.begin_send({
+            'senderAddress': sender,
+            'recipients': {'to': [{'address': to}]},
+            'replyTo':     [{'address': reply_to}],
+            'content':     {'subject': subject, 'plainText': body},
+        }).result()
+        return True
     host = os.environ.get('ONBOARDING_SMTP_HOST')
     if host:
         import smtplib
