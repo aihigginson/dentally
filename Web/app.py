@@ -1059,7 +1059,12 @@ def get_team():
                 f"           GROUP BY Tenant_ID, User_ID) dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID "
                 f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 AND NULLIF(LTRIM(RTRIM(u.Email)),'') IS NOT NULL "
                 f"  AND ISNULL(sp.act, 1) = 1 "
-                f"ORDER BY u.Full_Name", tids)
+                f"ORDER BY CASE "
+                f"           WHEN LOWER(u.Role) LIKE '%dentist%'          THEN 1 "
+                f"           WHEN LOWER(u.Role) LIKE '%hygien%'           THEN 2 "
+                f"           WHEN LOWER(u.Role) LIKE '%practice manager%' THEN 3 "
+                f"           WHEN LOWER(u.Role) LIKE '%nurse%'            THEN 4 "
+                f"           ELSE 5 END, u.Full_Name", tids)
             roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3],
                        'site_id': r[4], 'practitioner': r[5]} for r in cur.fetchall()]
             cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
