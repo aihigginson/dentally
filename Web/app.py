@@ -1091,6 +1091,44 @@ def get_team():
         return _server_error(e, 'get_team')
 
 
+@app.route('/api/invoices', methods=['GET'])
+def get_invoices():
+    """Billing history for the caller's practice: Billing.Invoice_Line grouped by month (each line is a
+    subscribed user; the first part-month at sign-up is pro-rated). Read-only, owner-only. DEV generates
+    real lines but issues no payment request; free-forever / trial months simply have no lines."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can view invoices'}), 403
+        plabels = {k: v['label'] for k, v in _PROFILES.items()}
+        months, by_month, order = [], {}, []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT Year_Month, Display_Name, User_UPN, Profile_Key, Value "
+                f"FROM Billing.Invoice_Line WHERE Tenant_ID IN ({ph}) "
+                f"ORDER BY Year_Month DESC, Value DESC, Display_Name", tids)
+            for ym, name, email, pk, val in cur.fetchall():
+                if ym not in by_month:
+                    by_month[ym] = {'year_month': ym, 'total': 0.0, 'lines': []}
+                    order.append(ym)
+                by_month[ym]['lines'].append({'name': name or email, 'email': email,
+                                              'profile': plabels.get(pk, pk), 'value': float(val or 0)})
+                by_month[ym]['total'] += float(val or 0)
+            months = [by_month[y] for y in order]
+        conn.close()
+        return jsonify({'months': months})
+    except Exception as e:
+        return _server_error(e, 'get_invoices')
+
+
 @app.route('/api/team', methods=['POST'])
 def save_team():
     """Assign a subscription profile (+ My Data practitioner) per user. Writes Security.Application_Users
