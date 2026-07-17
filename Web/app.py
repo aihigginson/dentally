@@ -757,10 +757,10 @@ _ACCESS_COLUMNS = [
 # Subscription profiles: preset module flags + Maintain_Targets. Billing basis = the assigned
 # profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
 _PROFILES = {
-    'full':         {'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True},
-    'clinician':    {'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False},
-    'front_office': {'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False},
-    'no_access':    {'modules': set(), 'maintain_targets': False},
+    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True},
+    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False},
+    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False},
+    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False},
 }
 _ALL_MODULE_COLS = [c for _, c in _ACCESS_COLUMNS]
 
@@ -1035,9 +1035,7 @@ def get_team():
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
-        cur.execute("SELECT Profile_Key, Display_Name, Monthly_Price FROM Config.Access_Profile ORDER BY Display_Order")
-        profiles   = [{'key': r[0], 'name': r[1], 'price': float(r[2])} for r in cur.fetchall()]
-        price_by   = {p['key']: p['price'] for p in profiles}
+        profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
         people, practitioners = [], []
         if tids:
             ph = ','.join(['?'] * len(tids))
@@ -1048,12 +1046,12 @@ def get_team():
             roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3], 'site_id': r[4]}
                       for r in cur.fetchall()]
             cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                        + ", Practitioner_Full_Name FROM Security.Application_Users")
+                        + ", Practitioner_Full_Name, Profile_Key FROM Security.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in cur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'practitioner': r[1 + n]}
+                au[r[0]] = {'enabled': enabled, 'practitioner': r[1 + n], 'profile_key': r[2 + n]}
             cur.execute(
                 f"SELECT DISTINCT Full_Name FROM Gold.Dim_Practitioners "
                 f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
@@ -1061,15 +1059,12 @@ def get_team():
             practitioners = [r[0] for r in cur.fetchall()]
             for m in roster:
                 a = au.get((m['email'] or '').lower())
-                m['profile']      = _derive_profile(a['enabled']) if a else 'no_access'
+                m['profile']      = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['practitioner'] = a['practitioner'] if a else None
                 m['is_self']      = (m['email'] or '').lower() == (upn or '').lower()
-                m['cost']         = price_by.get(m['profile'], 0.0)
                 people.append(m)
         conn.close()
-        total = sum(p['cost'] for p in people if not p['is_self'])
-        return jsonify({'people': people, 'profiles': profiles,
-                        'practitioners': practitioners, 'monthly_total': total})
+        return jsonify({'people': people, 'profiles': profiles, 'practitioners': practitioners})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -1118,9 +1113,9 @@ def save_team():
             cur.execute("DELETE FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             cur.execute(
                 "INSERT INTO Security.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
-                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name) VALUES (?, ?, ?, ?, "
-                + ", ".join(['?'] * n) + ", ?)",
-                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac])
+                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key) VALUES (?, ?, ?, ?, "
+                + ", ".join(['?'] * n) + ", ?, ?)",
+                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile])
             if cur_profile.get(email.lower()) != profile:
                 cur.execute(
                     "INSERT INTO Security.Access_Log (Tenant_ID, User_UPN, Profile_Key, Effective_At, Changed_By) "

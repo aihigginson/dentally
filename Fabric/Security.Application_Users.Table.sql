@@ -22,3 +22,9 @@ CREATE TABLE [Security].[Application_Users](
 	[Practitioner_Full_Name] [varchar](255) NULL
 )
 GO
+-- Profile_Key: the subscription profile assigned via the Team screen (billing basis). Added after
+-- the initial release; guarded ALTER for already-provisioned tables.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+              WHERE TABLE_SCHEMA = 'Security' AND TABLE_NAME = 'Application_Users' AND COLUMN_NAME = 'Profile_Key')
+    ALTER TABLE [Security].[Application_Users] ADD [Profile_Key] [varchar](50) NULL;
+GO
