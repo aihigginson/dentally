@@ -129,3 +129,35 @@ Proven: provisioned a throwaway practice -> full chain created -> re-run returne
    Orchestrate normally.
 3. **Token refresh** — Dentally OAuth tokens expire; `Ingest_Dentally` must refresh via the stored
    `oauth.refresh_token` and persist back to KV (mirrors how Ingest_Xero refreshes).
+
+## External login identity (investigated 2026-07-18) — mostly already solved
+**Headline: the app is already a MULTI-TENANT Azure AD app**, so most practices need NO new identity
+infrastructure. Evidence in `Web/`:
+- Frontend MSAL `authority: …/common`, scopes `['openid','profile','email']` (basic OIDC — **user-
+  consentable, no admin consent** needed for a new org).
+- Backend `_validate_id_token`: JWKS from `/common`, checks signature + `audience=CLIENT_ID` + expiry
+  but **`verify_iss=False`** → a token from **any** Azure AD tenant is accepted.
+- Authorization is the `Security.Application_Users` allowlist, **fail-closed** (unprovisioned UPN → 403).
+
+**So:**
+1. **M365 / Azure-AD practices** (a large share of UK dental) — the principal's work email *is* an Azure
+   AD identity. They can **sign in today** via `/common`; auto-provision writes `Application_Users.User_UPN
+   = their email` and they're straight in. **Zero new identity infra.**
+2. **Personal Microsoft accounts** (outlook.com/hotmail) — covered too if the app registration allows
+   personal accounts (the model already contains `aihigginson@outlook.com`, which implies it does).
+3. **The only gap = non-Microsoft emails** (Google Workspace, other) — not Azure AD, so `/common` can't
+   authenticate them. Those need a CIAM: **Microsoft Entra External ID** (successor to Azure AD B2C) — a
+   separate external tenant where anyone signs up with email+password or Google, issuing tokens the app
+   trusts (issuer is already skipped; just add its authority to the frontend, validate its audience, and
+   ensure the email claim matches the provisioned `User_UPN`).
+
+**Recommendation (phased):**
+- **v1 (now, ~no new infra):** lean on the existing multi-tenant Azure AD. Onboarding already verifies the
+  principal's email; sign-in copy = "use your Microsoft 365 account." Optionally detect at onboarding
+  whether the email is Microsoft-backed and message accordingly. Launch M365-first — it covers a big slice.
+- **v2 (later):** add **Entra External ID** as a second sign-in path for non-Microsoft practices.
+
+**Confirm:** app registration "supported account types" = multi-tenant (+ personal if wanted); and that
+`preferred_username` (the claim mapped to the UPN) equals the provisioned `User_UPN` for a normal M365 user
+(it does). Note: because issuer isn't verified, the `Application_Users` allowlist is the *only* gate — so
+provisioning the exact UPN is critical, and de-provisioning removes access. That's already the design.
