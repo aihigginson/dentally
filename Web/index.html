@@ -1651,7 +1651,7 @@
     }
     async function saveTeam() {
         const accepted = await showConfirm(
-            'Changing the subscriptions will impact your monthly charges. Anyone who has had access for any part of the month will be billed for the whole month. Are you sure?',
+            'Changing the subscriptions will impact your monthly charges. Anyone who has had access for any part of the month will be billed for the whole month. Changes can take up to 10 minutes to take effect. Are you sure?',
             'Yes, I accept the cost implications', 'No, Revert to previous subscriptions');
         if (!accepted) { loadTeam(); return; }   // revert to the previously-saved subscriptions
         const msg = document.getElementById('team-msg');

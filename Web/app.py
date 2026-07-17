@@ -1067,19 +1067,25 @@ def get_team():
                 f"           ELSE 5 END, u.Full_Name", tids)
             roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3],
                        'site_id': r[4], 'practitioner': r[5]} for r in cur.fetchall()]
-            cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                        + ", Profile_Key FROM Security.Application_Users")
+            conn.close()
+            # Current subscription state comes from AppDB (source of truth -- reflects the owner's
+            # latest edits, which may not have synced to the warehouse auth copy yet).
+            ac = _appdb_conn(); acur = ac.cursor()
+            acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
+                         + ", Profile_Key FROM Input.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
-            for r in cur.fetchall():
+            for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
                 au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+            ac.close()
             for m in roster:
                 a = au.get((m['email'] or '').lower())
                 m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 people.append(m)
-        conn.close()
+        else:
+            conn.close()
         return jsonify({'people': people, 'profiles': profiles})
     except Exception as e:
         return _server_error(e, 'get_team')
@@ -1094,7 +1100,7 @@ def save_team():
     if err:
         return err
     try:
-        conn = _fabric_conn(autocommit=True)
+        conn = _fabric_conn()
         cur  = conn.cursor()
         _, client_id, tids, maintain = _get_user_info(cur, upn)
         if client_id is None:
@@ -1105,18 +1111,21 @@ def save_team():
         ph = ','.join(['?'] * len(tids)) if tids else 'NULL'
         cur.execute(f"SELECT Tenant_ID, Client_ID FROM Audit.Tenants WHERE Tenant_ID IN ({ph})", tids)
         client_by_tenant = {r[0]: r[1] for r in cur.fetchall()}
-        n = len(_ALL_MODULE_COLS)
-        cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Security.Application_Users")
-        cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
-                       for r in cur.fetchall()}
-        # Deduce each user's My Data practitioner from their OWN linked practitioner record -- no prompt.
-        # Kept as a separate stored field (Practitioner_Full_Name) so it can be overridden in SQL for
-        # impersonation testing without changing who the user is.
+        # Deduce each user's My Data practitioner from their OWN linked record -- no prompt. Kept as a
+        # separate stored field so it can be overridden in SQL for impersonation testing.
         cur.execute(
             f"SELECT LOWER(u.Email), MAX(dp.Full_Name) FROM Gold.Dim_Users u "
             f"JOIN Gold.Dim_Practitioners dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID AND dp.pk_Practitioner > 0 "
             f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 GROUP BY LOWER(u.Email)", tids)
         deduced_prac = {r[0]: r[1] for r in cur.fetchall()}
+        conn.close()
+        # Write to AppDB (fast OLTP). Meta.usp_Sync_Input_From_AppDB upserts it into the warehouse,
+        # which auth reads -- so access lands after the async sync (the UI warns "up to 10 minutes").
+        n = len(_ALL_MODULE_COLS)
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Input.Application_Users")
+        cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
+                       for r in acur.fetchall()}
         for r in (request.get_json(force=True) or []):
             try:
                 tid = int(r['tenant_id'])
@@ -1134,18 +1143,17 @@ def save_team():
             preset  = _PROFILES[profile]
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
             prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
-            cur.execute("DELETE FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
-            cur.execute(
-                "INSERT INTO Security.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
-                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key) VALUES (?, ?, ?, ?, "
-                + ", ".join(['?'] * n) + ", ?, ?)",
-                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile])
+            acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
+            acur.execute(
+                "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
+                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
+                + ", ".join(['?'] * n) + ", ?, ?, ?)",
+                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile, upn])
             if cur_profile.get(email.lower()) != profile:
-                cur.execute(
-                    "INSERT INTO Security.Access_Log (Tenant_ID, User_UPN, Profile_Key, Effective_At, Changed_By) "
-                    "VALUES (?, ?, ?, SYSUTCDATETIME(), ?)",
+                acur.execute(
+                    "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
                     [tid, email, profile, upn])
-        conn.close()
+        ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_team')
