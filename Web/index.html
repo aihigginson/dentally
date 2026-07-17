@@ -625,7 +625,7 @@
                 <button class="settings-tab" data-stab="roles">Roles</button>
                 <button class="settings-tab" data-stab="targets">Targets</button>
                 <button class="settings-tab" data-stab="variances">Variances</button>
-                <button class="settings-tab" data-stab="team">Team</button>
+                <button class="settings-tab" data-stab="team">Subscriptions</button>
             </div>
 
             <div class="settings-pane active" id="stab-finance">
@@ -697,7 +697,7 @@
 
             <div class="settings-pane" id="stab-team">
                 <div class="defs-item">
-                    <div class="defs-item-desc">Subscribe your team to Analytically. Pick each person's package. Clinician gives them their own data &mdash; choose which practitioner they are. Your own row is locked to Full.</div>
+                    <div class="defs-item-desc">Subscribe your active staff to Analytically &mdash; pick each person's package. Clinician scopes them to their own data (deduced from their record). Your own row is locked to Full.</div>
                     <div class="settings-save-bar"><button id="team-save-top" class="settings-save" style="margin-top:0">Save</button></div>
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
@@ -1585,38 +1585,39 @@
         finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
     }
 
-    // Team --------------------------------------------------------------------
-    let _teamProfiles = [], _teamPractitioners = [];
+    // Subscriptions -----------------------------------------------------------
+    let _teamProfiles = [];
     const _STD_PROFILES = ['full', 'clinician', 'front_office', 'no_access'];
+    function _pracNote(profile, prac) {
+        if (profile !== 'clinician') return '';
+        return prac ? 'My Data: ' + escHtml(prac) : 'no practitioner linked';
+    }
     async function loadTeam() {
         const list = document.getElementById('team-list'), saveBtn = document.getElementById('team-save');
         list.textContent = 'Loading…'; saveBtn.style.display = 'none';
         try {
             const res = await authFetch('/api/team');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { people, profiles, practitioners } = await res.json();
-            _teamProfiles = profiles || []; _teamPractitioners = practitioners || [];
-            if (!people.length) { list.textContent = 'No users found.'; return; }
+            const { people, profiles } = await res.json();
+            _teamProfiles = profiles || [];
+            if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
-            const pracOpts = cur => '<option value="">&mdash; choose practitioner &mdash;</option>'
-                + _teamPractitioners.map(nm => '<option value="' + escHtml(nm) + '"' + (nm === cur ? ' selected' : '') + '>' + escHtml(nm) + '</option>').join('');
             list.innerHTML = people.map(p =>
-                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '">'
+                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
                 + '<span style="white-space:nowrap">'
                 + (p.is_self
                     ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
-                      + '<select class="team-prac" style="margin-left:8px;' + (p.profile === 'clinician' ? '' : 'display:none') + '">' + pracOpts(p.practitioner) + '</select>')
+                      + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
                 + '</span></div>').join('');
             list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
-                const prac = s.closest('.roles-row').querySelector('.team-prac');
-                if (prac) prac.style.display = (s.value === 'clinician') ? '' : 'none';
+                const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
+                if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }
                 markDirty();
             }));
-            list.querySelectorAll('.team-prac').forEach(s => s.addEventListener('change', markDirty));
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load the team.'; }
     }
@@ -1625,8 +1626,7 @@
         const rows = [...document.querySelectorAll('#team-list .roles-row')]
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
-                         profile: r.querySelector('.team-profile').value,
-                         practitioner: (r.querySelector('.team-prac') || {}).value || null }));
+                         profile: r.querySelector('.team-profile').value }));
         msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/team', { method: 'POST', headers: { 'Content-Type': 'application/json' },

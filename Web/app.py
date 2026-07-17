@@ -1036,35 +1036,46 @@ def get_team():
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
         profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
-        people, practitioners = [], []
+        people = []
         if tids:
             ph = ','.join(['?'] * len(tids))
+            # ACTIVE staff only. A user's active flag comes from their linked practitioner
+            # (Dim_Practitioners.User_ID = Dim_Users.bk_User_ID) -- exclude users whose practitioner is
+            # inactive (departed clinicians). Non-practitioners (front office) have no such flag, so are
+            # kept. That same link gives the DEDUCED My Data practitioner (no prompt needed).
+            # Active flag lives on the PRACTITIONER record (Dentally embeds the user inside it).
+            # Silver.Practitioners keeps every staff role (front office included) -- unlike
+            # Gold.Dim_Practitioners which is clinical-only -- so join it for Practitioner_Active and
+            # drop anyone whose practitioner record is inactive (departed). Users with no practitioner
+            # record (act NULL) are kept. Dim_Practitioners still gives the deduced My Data name.
             cur.execute(
-                f"SELECT Tenant_ID, Email, Full_Name, Role, Site_ID FROM Gold.Dim_Users "
-                f"WHERE Tenant_ID IN ({ph}) AND Is_Current = 1 AND NULLIF(LTRIM(RTRIM(Email)),'') IS NOT NULL "
-                f"ORDER BY Full_Name", tids)
-            roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3], 'site_id': r[4]}
-                      for r in cur.fetchall()]
+                f"SELECT u.Tenant_ID, u.Email, u.Full_Name, u.Role, u.Site_ID, dp.practitioner "
+                f"FROM Gold.Dim_Users u "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Practitioner_Active) AS act "
+                f"           FROM Silver.Practitioners GROUP BY Tenant_ID, User_ID) sp "
+                f"           ON sp.Tenant_ID = u.Tenant_ID AND sp.User_ID = u.bk_User_ID "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Full_Name) AS practitioner "
+                f"           FROM Gold.Dim_Practitioners WHERE pk_Practitioner > 0 AND User_ID IS NOT NULL "
+                f"           GROUP BY Tenant_ID, User_ID) dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID "
+                f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 AND NULLIF(LTRIM(RTRIM(u.Email)),'') IS NOT NULL "
+                f"  AND ISNULL(sp.act, 1) = 1 "
+                f"ORDER BY u.Full_Name", tids)
+            roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3],
+                       'site_id': r[4], 'practitioner': r[5]} for r in cur.fetchall()]
             cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                        + ", Practitioner_Full_Name, Profile_Key FROM Security.Application_Users")
+                        + ", Profile_Key FROM Security.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in cur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'practitioner': r[1 + n], 'profile_key': r[2 + n]}
-            cur.execute(
-                f"SELECT DISTINCT Full_Name FROM Gold.Dim_Practitioners "
-                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
-                f"AND NULLIF(LTRIM(RTRIM(Full_Name)),'') IS NOT NULL ORDER BY Full_Name", tids)
-            practitioners = [r[0] for r in cur.fetchall()]
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
             for m in roster:
                 a = au.get((m['email'] or '').lower())
-                m['profile']      = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
-                m['practitioner'] = a['practitioner'] if a else None
-                m['is_self']      = (m['email'] or '').lower() == (upn or '').lower()
+                m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
+                m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 people.append(m)
         conn.close()
-        return jsonify({'people': people, 'profiles': profiles, 'practitioners': practitioners})
+        return jsonify({'people': people, 'profiles': profiles})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -1093,6 +1104,14 @@ def save_team():
         cur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Security.Application_Users")
         cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
                        for r in cur.fetchall()}
+        # Deduce each user's My Data practitioner from their OWN linked practitioner record -- no prompt.
+        # Kept as a separate stored field (Practitioner_Full_Name) so it can be overridden in SQL for
+        # impersonation testing without changing who the user is.
+        cur.execute(
+            f"SELECT LOWER(u.Email), MAX(dp.Full_Name) FROM Gold.Dim_Users u "
+            f"JOIN Gold.Dim_Practitioners dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID AND dp.pk_Practitioner > 0 "
+            f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 GROUP BY LOWER(u.Email)", tids)
+        deduced_prac = {r[0]: r[1] for r in cur.fetchall()}
         for r in (request.get_json(force=True) or []):
             try:
                 tid = int(r['tenant_id'])
@@ -1109,7 +1128,7 @@ def save_team():
                 continue
             preset  = _PROFILES[profile]
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
-            prac    = ((r.get('practitioner') or '').strip() or None) if 'Access_My_Data' in preset['modules'] else None
+            prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
             cur.execute("DELETE FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             cur.execute(
                 "INSERT INTO Security.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
