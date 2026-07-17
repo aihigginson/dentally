@@ -287,6 +287,11 @@
         .settings-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
         .settings-pane { display: none; }
         .settings-pane.active { display: block; }
+        .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 90; }
+        .confirm-overlay.open { display: flex; }
+        .confirm-box { background: #fff; border-radius: 8px; padding: 22px 24px; max-width: 440px; box-shadow: 0 10px 34px rgba(0,0,0,0.28); }
+        .confirm-box p { font-size: 13px; line-height: 1.55; margin: 0 0 18px; color: var(--text); }
+        .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
         .settings-save, .settings-btn { margin-top: 12px; padding: 8px 16px; border: none; border-radius: 4px; background: #0b3d5c; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
         .settings-btn { margin-top: 0; padding: 6px 12px; font-size: 12px; }
         .settings-save:disabled, .settings-btn:disabled { opacity: .6; cursor: default; }
@@ -625,6 +630,8 @@
                 <button class="settings-tab" data-stab="roles">Roles</button>
                 <button class="settings-tab" data-stab="targets">Targets</button>
                 <button class="settings-tab" data-stab="variances">Variances</button>
+                <button class="settings-tab" data-stab="team">Subscriptions</button>
+                <button class="settings-tab" data-stab="invoices">Invoices</button>
             </div>
 
             <div class="settings-pane active" id="stab-finance">
@@ -693,8 +700,35 @@
                     <span id="variances-msg" class="settings-msg"></span>
                 </div>
             </div>
+
+            <div class="settings-pane" id="stab-team">
+                <div class="defs-item">
+                    <div class="defs-item-desc">Subscribe your active staff to Analytically &mdash; pick each person's package. Clinician scopes them to their own data (deduced from their record). Your own row is locked to Full.</div>
+                    <div class="settings-save-bar"><button id="team-save-top" class="settings-save" style="margin-top:0">Save</button></div>
+                    <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
+                    <button id="team-save" class="settings-save" style="display:none">Save</button>
+                    <span id="team-msg" class="settings-msg"></span>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-invoices">
+                <div class="defs-item">
+                    <div class="defs-item-desc">Your monthly bill for Analytically. Each line is a subscribed user for that month; the first part-month at sign-up is pro-rated, and free / trial months show nothing to pay.</div>
+                    <div id="invoices-list" style="margin-top:10px">Loading&hellip;</div>
+                </div>
+            </div>
         </div>
     </aside>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+    <div class="confirm-box" role="alertdialog" aria-labelledby="confirm-msg">
+        <p id="confirm-msg"></p>
+        <div class="confirm-actions">
+            <button id="confirm-no" class="settings-btn">No</button>
+            <button id="confirm-yes" class="settings-save" style="margin-top:0">Yes</button>
+        </div>
+    </div>
 </div>
 
 <script src="/msal-browser.min.js"></script>
@@ -1441,6 +1475,8 @@
         else if (name === 'roles')     loadRoles();
         else if (name === 'variances') loadVariances();
         else if (name === 'targets')   loadTargetGrid();
+        else if (name === 'team')      loadTeam();
+        else if (name === 'invoices')  loadInvoices();
     }
 
     function _fmtVal(v, fmt) {
@@ -1476,7 +1512,8 @@
     }
     let _dirty = false;
     const _SAVE_BTN_IDS = ['targets-save','targets-save-top','roles-save','roles-save-top',
-                           'variances-save','variances-save-top','assoc-pay-save','assoc-pay-save-top'];
+                           'variances-save','variances-save-top','assoc-pay-save','assoc-pay-save-top',
+                           'team-save','team-save-top'];
     // Save buttons grey out while there are no unsaved changes (feedback that a save landed).
     function _syncSaveButtons() { _SAVE_BTN_IDS.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !_dirty; }); }
     function markDirty() { _dirty = true; _syncSaveButtons(); }
@@ -1570,6 +1607,102 @@
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Roles apply after the nightly build.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
+    }
+
+    // Generic confirm dialog with custom labels -> resolves true (yes) / false (no).
+    function showConfirm(message, yesLabel, noLabel) {
+        return new Promise(resolve => {
+            const ov = document.getElementById('confirm-overlay');
+            const yes = document.getElementById('confirm-yes'), no = document.getElementById('confirm-no');
+            document.getElementById('confirm-msg').textContent = message;
+            yes.textContent = yesLabel || 'Yes'; no.textContent = noLabel || 'No';
+            const done = v => { ov.classList.remove('open'); yes.onclick = null; no.onclick = null; resolve(v); };
+            yes.onclick = () => done(true); no.onclick = () => done(false);
+            ov.classList.add('open');
+        });
+    }
+
+    // Subscriptions -----------------------------------------------------------
+    let _teamProfiles = [];
+    const _STD_PROFILES = ['full', 'clinician', 'front_office', 'no_access'];
+    function _pracNote(profile, prac) {
+        if (profile !== 'clinician') return '';
+        return prac ? 'My Data: ' + escHtml(prac) : 'no practitioner linked';
+    }
+    async function loadTeam() {
+        const list = document.getElementById('team-list'), saveBtn = document.getElementById('team-save');
+        list.textContent = 'Loading…'; saveBtn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/team');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const { people, profiles } = await res.json();
+            _teamProfiles = profiles || [];
+            if (!people.length) { list.textContent = 'No active staff found.'; return; }
+            const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
+                + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
+            list.innerHTML = people.map(p =>
+                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '">'
+                + '<span style="font-size:13px">' + escHtml(p.name)
+                + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
+                + '<span style="white-space:nowrap">'
+                + (p.is_self
+                    ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
+                    : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
+                      + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
+                + '</span></div>').join('');
+            list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
+                const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
+                if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }
+                markDirty();
+            }));
+            saveBtn.style.display = '';
+        } catch (e) { list.textContent = 'Could not load the team.'; }
+    }
+    async function saveTeam() {
+        const accepted = await showConfirm(
+            'Changing the subscriptions will impact your monthly charges. Anyone who has had access for any part of the month will be billed for the whole month. Changes can take up to 10 minutes to take effect. Are you sure?',
+            'Yes, I accept the cost implications', 'No, Revert to previous subscriptions');
+        if (!accepted) { loadTeam(); return; }   // revert to the previously-saved subscriptions
+        const msg = document.getElementById('team-msg');
+        const rows = [...document.querySelectorAll('#team-list .roles-row')]
+            .filter(r => r.querySelector('.team-profile'))
+            .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
+                         profile: r.querySelector('.team-profile').value }));
+        msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/team', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rows) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Access applies on the users’ next sign-in.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
+    }
+
+    // Invoices (read-only billing history) -----------------------------------
+    function _ymLabel(ym) {
+        const y = Math.floor(ym / 100), mo = ym % 100;
+        return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1] + ' ' + y;
+    }
+    async function loadInvoices() {
+        const list = document.getElementById('invoices-list');
+        list.textContent = 'Loading…';
+        try {
+            const res = await authFetch('/api/invoices');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const { months } = await res.json();
+            if (!months || !months.length) { list.textContent = 'No invoices yet.'; return; }
+            list.innerHTML = months.map(m => {
+                const lines = m.lines.map(l =>
+                    '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 18px;font-size:12px;border-top:1px solid #f0f0f0">'
+                    + '<span>' + escHtml(l.name) + ' <span style="color:#aaa;font-size:11px">' + escHtml(l.profile) + '</span></span>'
+                    + '<span>£' + l.value.toFixed(2) + '</span></div>').join('');
+                return '<details style="border:1px solid #eee;border-radius:6px;margin-bottom:8px;padding:8px 12px">'
+                    + '<summary style="display:flex;justify-content:space-between;cursor:pointer;font-size:13px">'
+                    + '<span style="font-weight:600">' + _ymLabel(m.year_month) + '</span>'
+                    + '<span style="font-weight:600">£' + m.total.toFixed(2) + '</span></summary>'
+                    + '<div style="margin-top:6px">' + lines + '</div></details>';
+            }).join('');
+        } catch (e) { list.textContent = 'Could not load invoices.'; }
     }
 
     // Variances --------------------------------------------------------------
@@ -1815,6 +1948,8 @@
     }));
     document.getElementById('roles-save').addEventListener('click', saveRoles);
     document.getElementById('roles-save-top').addEventListener('click', saveRoles);
+    document.getElementById('team-save').addEventListener('click', saveTeam);
+    document.getElementById('team-save-top').addEventListener('click', saveTeam);
     document.getElementById('role-add-btn').addEventListener('click', addRole);
     document.getElementById('role-add-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRole(); } });
     document.getElementById('variances-save').addEventListener('click', saveVariances);

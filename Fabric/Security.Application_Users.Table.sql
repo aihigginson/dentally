@@ -1,5 +1,6 @@
-DROP TABLE IF EXISTS [Security].[Application_Users]
-GO
+-- IDEMPOTENT CREATE (never DROP/CREATE): the Team screen now writes these rows, so a warehouse
+-- redeploy must NOT wipe them. Add columns via guarded ALTER, never by recreating the table.
+IF OBJECT_ID('Security.Application_Users') IS NULL
 CREATE TABLE [Security].[Application_Users](
 	[User_UPN]               [varchar](255) NOT NULL,
 	[Client_ID]              [int]          NOT NULL,
@@ -20,4 +21,10 @@ CREATE TABLE [Security].[Application_Users](
 	-- Scopes a "My Data" view to a single practitioner (NULL for non-practitioner users).
 	[Practitioner_Full_Name] [varchar](255) NULL
 )
+GO
+-- Profile_Key: the subscription profile assigned via the Team screen (billing basis). Added after
+-- the initial release; guarded ALTER for already-provisioned tables.
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+              WHERE TABLE_SCHEMA = 'Security' AND TABLE_NAME = 'Application_Users' AND COLUMN_NAME = 'Profile_Key')
+    ALTER TABLE [Security].[Application_Users] ADD [Profile_Key] [varchar](50) NULL;
 GO

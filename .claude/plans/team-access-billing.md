@@ -94,3 +94,27 @@ locked ("You — full access"). Footer running total: "N subscribed · £X/month
 3. Frontend: Settings "Team" tab.
 4. Nightly: capture step in Orchestrate_Build + monthly rollup SP.
 5. Billing readout (view / `/api/billing`).
+
+## Subscriptions sync pipeline (10-min access propagation)
+
+The Subscriptions screen writes access to **AppDB** (fast); auth reads the **warehouse** copy, so a
+Fabric Data pipeline re-syncs it on a short schedule ("changes take up to 10 min").
+
+**SP:** `Meta.usp_Sync_Access_From_AppDB` — upserts ONLY `Application_Users` + `Access_Log`
+(AppDB -> WH.Security.*). ~1s. UPSERT (never wipes auth rows). Separate from the full
+`usp_Sync_Input_From_AppDB` (which the nightly build runs) so the 10-min job doesn't race the fact loads.
+
+**Create the pipeline (per environment: dev workspace, then prod workspace):**
+1. Workspace -> **New -> Data pipeline**, name `Sync Subscriptions`.
+2. Add a **Script** activity (Activities -> Script). Connection = the **WH_Dentally** warehouse.
+3. Script:
+   ```sql
+   DECLARE @i BIGINT, @u BIGINT, @d BIGINT;
+   EXEC Meta.usp_Sync_Access_From_AppDB @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+   ```
+4. **Schedule** (pipeline -> Schedule): repeat **every 10 minutes**, On.
+5. Save. (Auth is via the workspace/pipeline identity that already has WH access -- no secret.)
+
+**Notes:** worst-case propagation = schedule interval + OneLake mirror lag (AppDB->WH), hence "up to
+10 min". Negligible capacity (~1s). Idempotent; safe to overlap the nightly build. Drop the interval
+to 5 min if faster propagation is wanted.

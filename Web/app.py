@@ -754,6 +754,24 @@ _ACCESS_COLUMNS = [
     ('marketing',  'Access_Marketing'),
 ]
 
+# Subscription profiles: preset module flags + Maintain_Targets. Billing basis = the assigned
+# profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
+_PROFILES = {
+    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True},
+    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False},
+    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False},
+    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False},
+}
+_ALL_MODULE_COLS = [c for _, c in _ACCESS_COLUMNS]
+
+def _derive_profile(enabled_cols):
+    """Map a set of enabled Access_* columns to a profile key, else 'custom'."""
+    s = set(enabled_cols)
+    for key, p in _PROFILES.items():
+        if p['modules'] == s:
+            return key
+    return 'custom'
+
 
 def _get_user_access(cur, upn):
     """Returns ({section_key: bool}, practitioner_full_name). A missing row or a
@@ -997,6 +1015,186 @@ def save_practitioner_pay():
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_practitioner_pay')
+
+
+# ── Team / Access management (owner self-service subscription) ────────────────
+
+@app.route('/api/team', methods=['GET'])
+def get_team():
+    """Roster (Dim_Users, front office included) x each person's current subscription profile +
+    My Data practitioner, the profile catalogue (with price), the practitioner pick-list, and a
+    monthly-cost preview. Owner-only (Maintain_Targets). The caller's own row is flagged locked."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
+        profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
+        people = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            # ACTIVE staff only. A user's active flag comes from their linked practitioner
+            # (Dim_Practitioners.User_ID = Dim_Users.bk_User_ID) -- exclude users whose practitioner is
+            # inactive (departed clinicians). Non-practitioners (front office) have no such flag, so are
+            # kept. That same link gives the DEDUCED My Data practitioner (no prompt needed).
+            # Active flag lives on the PRACTITIONER record (Dentally embeds the user inside it).
+            # Silver.Practitioners keeps every staff role (front office included) -- unlike
+            # Gold.Dim_Practitioners which is clinical-only -- so join it for Practitioner_Active and
+            # drop anyone whose practitioner record is inactive (departed). Users with no practitioner
+            # record (act NULL) are kept. Dim_Practitioners still gives the deduced My Data name.
+            cur.execute(
+                f"SELECT u.Tenant_ID, u.Email, u.Full_Name, u.Role, u.Site_ID, dp.practitioner "
+                f"FROM Gold.Dim_Users u "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Practitioner_Active) AS act "
+                f"           FROM Silver.Practitioners GROUP BY Tenant_ID, User_ID) sp "
+                f"           ON sp.Tenant_ID = u.Tenant_ID AND sp.User_ID = u.bk_User_ID "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Full_Name) AS practitioner "
+                f"           FROM Gold.Dim_Practitioners WHERE pk_Practitioner > 0 AND User_ID IS NOT NULL "
+                f"           GROUP BY Tenant_ID, User_ID) dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID "
+                f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 AND NULLIF(LTRIM(RTRIM(u.Email)),'') IS NOT NULL "
+                f"  AND ISNULL(sp.act, 1) = 1 "
+                f"ORDER BY CASE "
+                f"           WHEN LOWER(u.Role) LIKE '%dentist%'          THEN 1 "
+                f"           WHEN LOWER(u.Role) LIKE '%hygien%'           THEN 2 "
+                f"           WHEN LOWER(u.Role) LIKE '%practice manager%' THEN 3 "
+                f"           WHEN LOWER(u.Role) LIKE '%nurse%'            THEN 4 "
+                f"           ELSE 5 END, u.Full_Name", tids)
+            roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3],
+                       'site_id': r[4], 'practitioner': r[5]} for r in cur.fetchall()]
+            conn.close()
+            # Current subscription state comes from AppDB (source of truth -- reflects the owner's
+            # latest edits, which may not have synced to the warehouse auth copy yet).
+            ac = _appdb_conn(); acur = ac.cursor()
+            acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
+                         + ", Profile_Key FROM Input.Application_Users")
+            n = len(_ALL_MODULE_COLS)
+            au = {}
+            for r in acur.fetchall():
+                enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+            ac.close()
+            for m in roster:
+                a = au.get((m['email'] or '').lower())
+                m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
+                m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
+                people.append(m)
+        else:
+            conn.close()
+        return jsonify({'people': people, 'profiles': profiles})
+    except Exception as e:
+        return _server_error(e, 'get_team')
+
+
+@app.route('/api/invoices', methods=['GET'])
+def get_invoices():
+    """Billing history for the caller's practice: Billing.Invoice_Line grouped by month (each line is a
+    subscribed user; the first part-month at sign-up is pro-rated). Read-only, owner-only. DEV generates
+    real lines but issues no payment request; free-forever / trial months simply have no lines."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can view invoices'}), 403
+        plabels = {k: v['label'] for k, v in _PROFILES.items()}
+        months, by_month, order = [], {}, []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT Year_Month, Display_Name, User_UPN, Profile_Key, Value "
+                f"FROM Billing.Invoice_Line WHERE Tenant_ID IN ({ph}) "
+                f"ORDER BY Year_Month DESC, Value DESC, Display_Name", tids)
+            for ym, name, email, pk, val in cur.fetchall():
+                if ym not in by_month:
+                    by_month[ym] = {'year_month': ym, 'total': 0.0, 'lines': []}
+                    order.append(ym)
+                by_month[ym]['lines'].append({'name': name or email, 'email': email,
+                                              'profile': plabels.get(pk, pk), 'value': float(val or 0)})
+                by_month[ym]['total'] += float(val or 0)
+            months = [by_month[y] for y in order]
+        conn.close()
+        return jsonify({'months': months})
+    except Exception as e:
+        return _server_error(e, 'get_invoices')
+
+
+@app.route('/api/team', methods=['POST'])
+def save_team():
+    """Assign a subscription profile (+ My Data practitioner) per user. Writes Security.Application_Users
+    (provisions the row: User_UPN=email, Client_ID=tenant client, preset module flags) and appends any
+    profile CHANGE to Security.Access_Log. Never touches the caller's own row (self = full access)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
+        allowed = set(tids)
+        ph = ','.join(['?'] * len(tids)) if tids else 'NULL'
+        cur.execute(f"SELECT Tenant_ID, Client_ID FROM Audit.Tenants WHERE Tenant_ID IN ({ph})", tids)
+        client_by_tenant = {r[0]: r[1] for r in cur.fetchall()}
+        # Deduce each user's My Data practitioner from their OWN linked record -- no prompt. Kept as a
+        # separate stored field so it can be overridden in SQL for impersonation testing.
+        cur.execute(
+            f"SELECT LOWER(u.Email), MAX(dp.Full_Name) FROM Gold.Dim_Users u "
+            f"JOIN Gold.Dim_Practitioners dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID AND dp.pk_Practitioner > 0 "
+            f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 GROUP BY LOWER(u.Email)", tids)
+        deduced_prac = {r[0]: r[1] for r in cur.fetchall()}
+        conn.close()
+        # Write to AppDB (fast OLTP). Meta.usp_Sync_Input_From_AppDB upserts it into the warehouse,
+        # which auth reads -- so access lands after the async sync (the UI warns "up to 10 minutes").
+        n = len(_ALL_MODULE_COLS)
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Input.Application_Users")
+        cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
+                       for r in acur.fetchall()}
+        for r in (request.get_json(force=True) or []):
+            try:
+                tid = int(r['tenant_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            email   = (r.get('email') or '').strip()
+            profile = (r.get('profile') or 'no_access').strip()
+            if tid not in allowed or not email or profile not in _PROFILES:
+                continue
+            if email.lower() == (upn or '').lower():
+                continue  # never change your own row
+            cid = client_by_tenant.get(tid)
+            if cid is None:
+                continue
+            preset  = _PROFILES[profile]
+            flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
+            prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
+            acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
+            acur.execute(
+                "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
+                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
+                + ", ".join(['?'] * n) + ", ?, ?, ?)",
+                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile, upn])
+            if cur_profile.get(email.lower()) != profile:
+                acur.execute(
+                    "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
+                    [tid, email, profile, upn])
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_team')
 
 
 # ── Target model: owner-curated Inputs in the AppDB Fabric SQL Database ────────
