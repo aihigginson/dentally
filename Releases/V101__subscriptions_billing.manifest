@@ -7,6 +7,9 @@
 # snapshot): highest-priced profile held during the month, pro-rata the first part-month at sign-up,
 # full months thereafter, our own @analytically.info logins excluded, and a per-account Paid_From gate
 # (Maple = free forever via 2100-01-01).
+# A per-tenant AFFILIATE (referral partner, Billing.Affiliate <- Account_Billing.Affiliate_ID) earns a %
+# of every invoiced line, for life -- recorded ON the invoice lines (never shown to the customer) for a
+# "reverse invoice" payout: SUM(Affiliate_Commission_Value) by Affiliate_ID across all their tenants.
 #
 # All tables are IDEMPOTENT CREATE (IF OBJECT_ID IS NULL) / guarded ALTER, so auth rows + billing
 # history SURVIVE redeploys -- nothing here wipes Security.Application_Users or the logs. SPs are CREATE.
@@ -27,6 +30,8 @@
 #      set/enable the prod schedule.
 #   3. Owner opens the prod Subscriptions screen and assigns profiles. Maple needs NO action -- the
 #      Account_Billing seed sets Paid_From = 2100-01-01 (free forever), so the rollup yields nothing.
+#   4. AFFILIATES (per deal, vendor-managed in SQL): add the partner to Billing.Affiliate and link the
+#      tenant via Account_Billing.Affiliate_ID. The rollup then records commission per invoice line.
 #
 # FABRIC PIPELINES (two, both a single Script activity against WH_Dentally). BUILD ON DEV and promote
 # dev->prod via the Fabric deployment pipeline (same as AppDB); set/enable the schedule on the prod stage.
@@ -47,6 +52,7 @@
 DEPLOY   Fabric\Billing.Profile_Pricing.Table.sql
 DEPLOY   Fabric\Billing.Invoice_Line.Table.sql
 DEPLOY   Fabric\Billing.Account_Billing.Table.sql
+DEPLOY   Fabric\Billing.Affiliate.Table.sql
 DEPLOY   Fabric\Security.Access_Log.Table.sql
 DEPLOY   Fabric\Security.Application_Users.Table.sql
 
