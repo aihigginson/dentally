@@ -287,6 +287,11 @@
         .settings-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
         .settings-pane { display: none; }
         .settings-pane.active { display: block; }
+        .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 90; }
+        .confirm-overlay.open { display: flex; }
+        .confirm-box { background: #fff; border-radius: 8px; padding: 22px 24px; max-width: 440px; box-shadow: 0 10px 34px rgba(0,0,0,0.28); }
+        .confirm-box p { font-size: 13px; line-height: 1.55; margin: 0 0 18px; color: var(--text); }
+        .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
         .settings-save, .settings-btn { margin-top: 12px; padding: 8px 16px; border: none; border-radius: 4px; background: #0b3d5c; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
         .settings-btn { margin-top: 0; padding: 6px 12px; font-size: 12px; }
         .settings-save:disabled, .settings-btn:disabled { opacity: .6; cursor: default; }
@@ -706,6 +711,16 @@
             </div>
         </div>
     </aside>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+    <div class="confirm-box" role="alertdialog" aria-labelledby="confirm-msg">
+        <p id="confirm-msg"></p>
+        <div class="confirm-actions">
+            <button id="confirm-no" class="settings-btn">No</button>
+            <button id="confirm-yes" class="settings-save" style="margin-top:0">Yes</button>
+        </div>
+    </div>
 </div>
 
 <script src="/msal-browser.min.js"></script>
@@ -1585,6 +1600,19 @@
         finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 5000); }
     }
 
+    // Generic confirm dialog with custom labels -> resolves true (yes) / false (no).
+    function showConfirm(message, yesLabel, noLabel) {
+        return new Promise(resolve => {
+            const ov = document.getElementById('confirm-overlay');
+            const yes = document.getElementById('confirm-yes'), no = document.getElementById('confirm-no');
+            document.getElementById('confirm-msg').textContent = message;
+            yes.textContent = yesLabel || 'Yes'; no.textContent = noLabel || 'No';
+            const done = v => { ov.classList.remove('open'); yes.onclick = null; no.onclick = null; resolve(v); };
+            yes.onclick = () => done(true); no.onclick = () => done(false);
+            ov.classList.add('open');
+        });
+    }
+
     // Subscriptions -----------------------------------------------------------
     let _teamProfiles = [];
     const _STD_PROFILES = ['full', 'clinician', 'front_office', 'no_access'];
@@ -1622,6 +1650,10 @@
         } catch (e) { list.textContent = 'Could not load the team.'; }
     }
     async function saveTeam() {
+        const accepted = await showConfirm(
+            'Changing the subscriptions will impact your monthly charges. Anyone who has had access for any part of the month will be billed for the whole month. Are you sure?',
+            'Yes, I accept the cost implications', 'No, Revert to previous subscriptions');
+        if (!accepted) { loadTeam(); return; }   // revert to the previously-saved subscriptions
         const msg = document.getElementById('team-msg');
         const rows = [...document.querySelectorAll('#team-list .roles-row')]
             .filter(r => r.querySelector('.team-profile'))
