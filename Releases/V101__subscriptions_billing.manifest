@@ -15,18 +15,21 @@
 #   (or the Deploy Warehouse action, target=prod)
 #
 # PRE-REQUISITE (do BEFORE this manifest so the sync SPs resolve their AppDB refs):
-#   * PROD AppDB: run AppDB\AppDB_Input_Schema.sql (idempotent) -- adds Input.Application_Users +
-#     Input.Access_Log (source of truth for the Subscriptions screen). Allow a few minutes for OneLake
-#     mirroring before the first sync reads them.
+#   * PROD AppDB: promote the AppDB dev->prod via the Fabric DEPLOYMENT PIPELINE, so
+#     Input.Application_Users + Input.Access_Log land on prod (they are already on dev;
+#     AppDB\AppDB_Input_Schema.sql is the schema of record, not something you run against prod).
+#     Allow a few minutes for OneLake mirroring before the first sync reads them.
 #
 # OUT-OF-BAND (after the manifest -- required for the feature to work on prod):
 #   1. APP: merge the dev->main PR (app.py + index.html: Subscriptions + Invoices tabs, /api/team,
 #      /api/invoices; AppDB-backed fast save).
-#   2. FABRIC PIPELINES (see below): create "Sync Subscriptions" (frequent) + "Generate Invoices" (monthly).
+#   2. FABRIC PIPELINES (see below): build on DEV, promote dev->prod via the deployment pipeline, then
+#      set/enable the prod schedule.
 #   3. Owner opens the prod Subscriptions screen and assigns profiles. Maple needs NO action -- the
 #      Account_Billing seed sets Paid_From = 2100-01-01 (free forever), so the rollup yields nothing.
 #
-# FABRIC PIPELINES (two, both a single Script activity against WH_Dentally):
+# FABRIC PIPELINES (two, both a single Script activity against WH_Dentally). BUILD ON DEV and promote
+# dev->prod via the Fabric deployment pipeline (same as AppDB); set/enable the schedule on the prod stage.
 #   A. "Sync Subscriptions" -- lands profile changes without waiting for the nightly build.
 #        DECLARE @i BIGINT,@u BIGINT,@d BIGINT;
 #        EXEC Meta.usp_Sync_Access_From_AppDB @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
