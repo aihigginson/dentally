@@ -34,6 +34,9 @@
         .done { text-align:center; padding:10px 0; }
         .done .tick { font-size:40px; color:var(--teal); }
         .foot { color:var(--muted); font-size:12px; text-align:center; margin-top:18px; }
+        .how { margin:16px 0 6px; background:#f4f7f9; border-radius:8px; padding:14px 16px; font-size:13px; }
+        .how-title { font-weight:700; margin-bottom:6px; }
+        .how ol { margin:0; padding-left:18px; line-height:1.6; }
         code.em { background:var(--bg); padding:1px 6px; border-radius:4px; font-weight:600; }
     </style>
 </head>
@@ -45,6 +48,14 @@
             <div class="step active" id="step-details">
                 <h1>Start your 30-day trial</h1>
                 <p class="sub">Connect your practice's Dentally and we'll build your analytics — free for 30 days, no card needed.</p>
+                <div class="how">
+                    <div class="how-title">How it works</div>
+                    <ol>
+                        <li>Verify your email, then authorise your Dentally connection.</li>
+                        <li>We build your practice's analytics &mdash; this takes <strong>up to 48 hours</strong>.</li>
+                        <li>After that it refreshes every night, so your data is <strong>always within ~24 hours</strong>.</li>
+                    </ol>
+                </div>
                 <label for="practice">Practice name</label>
                 <input type="text" id="practice" placeholder="Your practice name" autocomplete="organization">
                 <label for="email">Your work email (the practice's principal)</label>
