@@ -20,12 +20,12 @@
         .btn { margin-top:20px; width:100%; padding:12px 16px; border:none; border-radius:7px; background:var(--navy); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
         .btn:hover { background:var(--navy-dark); }
         .btn:disabled { opacity:.55; cursor:default; }
-        .btn.dentally { background:var(--teal); }
+        .btn.dentally { background:var(--navy); }
         .link { background:none; border:none; color:var(--navy); font-size:13px; text-decoration:underline; cursor:pointer; padding:8px 0 0; }
         .msg { font-size:13px; margin-top:12px; min-height:18px; }
         .msg.err { color:#b3261e; }
         .msg.ok  { color:#1a7f4b; }
-        .warn { margin-top:18px; background:#fff8e6; border:1px solid #f2d99a; border-radius:8px; padding:14px; font-size:13px; line-height:1.5; }
+        .warn { margin-top:18px; background:#eef4f7; border-left:3px solid var(--teal); border-radius:6px; padding:14px; font-size:13px; line-height:1.5; color:var(--navy); }
         .warn strong { display:block; margin-bottom:4px; }
         .attest { display:flex; gap:10px; align-items:flex-start; margin-top:16px; font-size:13px; line-height:1.45; }
         .attest input { margin-top:2px; }
@@ -46,9 +46,13 @@
                 <h1>Start your 30-day trial</h1>
                 <p class="sub">Connect your practice's Dentally and we'll build your analytics — free for 30 days, no card needed.</p>
                 <label for="practice">Practice name</label>
-                <input type="text" id="practice" placeholder="e.g. Maple Dental" autocomplete="organization">
+                <input type="text" id="practice" placeholder="Your practice name" autocomplete="organization">
                 <label for="email">Your work email (the practice's principal)</label>
                 <input type="email" id="email" placeholder="you@yourpractice.co.uk" autocomplete="email">
+                <div class="warn">
+                    <strong>This must be the practice's principal</strong>
+                    Use the owner/principal's work email &mdash; it becomes your admin login, and you'll confirm you're authorised to share the practice's data with us.
+                </div>
                 <button class="btn" id="btn-send">Email me a verification code</button>
                 <div class="msg" id="msg-details"></div>
             </div>

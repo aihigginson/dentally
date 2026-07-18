@@ -379,6 +379,20 @@ def me():
             prow = cur.fetchone()
             practice_name = prow[0] if prow else None
         access, practitioner_name = _get_user_access(cur, upn)
+        # Trial state for the app banner, from Billing.Account_Billing.Paid_From (billing start = trial end).
+        # Paid_From far future (>=2100) = free-forever (no banner); else days-left / expired.
+        trial = None
+        if tids:
+            cur.execute(f"SELECT MIN(Paid_From) FROM Billing.Account_Billing WHERE Tenant_ID IN ({placeholders})", tids)
+            prow2 = cur.fetchone()
+            pf = prow2[0] if prow2 else None
+            if pf is not None:
+                if getattr(pf, 'year', 0) >= 2100:
+                    trial = {'status': 'free_forever'}
+                else:
+                    days = (pf - datetime.utcnow().date()).days
+                    trial = {'status': 'active' if days > 0 else 'expired',
+                             'days_left': days, 'paid_from': pf.isoformat()}
         conn.close()
         return jsonify({
             'display_name':         display_name or upn,
@@ -389,6 +403,7 @@ def me():
             'access':               access,
             'practitioner_full_name': practitioner_name,
             'env':                  APP_ENV,
+            'trial':                trial,
         })
     except Exception as e:
         return _server_error(e, 'me')

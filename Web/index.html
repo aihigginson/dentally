@@ -478,6 +478,10 @@
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
             <span class="ctrl-label">Definitions</span>
         </button>
+        <a class="filter-toggle" id="contact-link" href="mailto:sales@analytically.info" title="Contact us" style="text-decoration:none">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <span class="ctrl-label">Contact us</span>
+        </a>
         <button class="filter-toggle" id="settings-toggle" title="Practice settings" style="display:none">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span class="ctrl-label">Settings</span>
@@ -999,6 +1003,30 @@
         } catch {}
     });
 
+    // Trial banner on the main app header: countdown while active, "ended" after expiry, nothing for
+    // free-forever/no-trial. Driven by /api/me { trial: {status, days_left} } (from Account_Billing.Paid_From).
+    function renderTrialStrip(trial) {
+        let strip = document.getElementById('trial-strip');
+        if (!trial || trial.status === 'free_forever') { if (strip) strip.remove(); return; }
+        if (!strip) {
+            strip = document.createElement('div');
+            strip.id = 'trial-strip';
+            strip.style.cssText = 'padding:7px 16px;font-size:13px;text-align:center;border-bottom:1px solid rgba(0,0,0,.08)';
+            const hdr = document.querySelector('header.header');
+            hdr.parentNode.insertBefore(strip, hdr.nextSibling);
+        }
+        const pay = '<a href="mailto:sales@analytically.info?subject=Set%20up%20paid%20subscription" style="color:inherit;font-weight:600">Set up a paid subscription</a>';
+        if (trial.status === 'expired') {
+            strip.style.background = '#fbeaea'; strip.style.color = '#8a1f1f';
+            strip.innerHTML = 'Your free trial has ended. ' + pay + ' to keep your analytics, or '
+                + '<a href="mailto:sales@analytically.info" style="color:inherit;font-weight:600">contact us</a>.';
+        } else {
+            const d = trial.days_left;
+            strip.style.background = '#eef4f7'; strip.style.color = '#0b3d5c';
+            strip.innerHTML = '⏳ Your free trial: <strong>' + d + ' day' + (d === 1 ? '' : 's') + ' left</strong>. ' + pay + '.';
+        }
+    }
+
     async function verifyAndLaunch() {
         const meRes = await authFetch('/api/me').catch(() => null);
         if (!meRes || !meRes.ok) return;
@@ -1014,6 +1042,7 @@
             const st = document.getElementById('settings-toggle');
             if (st) st.style.display = '';
         }
+        renderTrialStrip(data.trial);
 
         document.getElementById('auth-overlay').style.display = 'none';
 
