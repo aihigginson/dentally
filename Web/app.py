@@ -961,10 +961,12 @@ def _get_user_info(cur, upn):
     cur.execute(
         "SELECT t.Tenant_ID FROM Security.Application_Users a "
         "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
-        "WHERE LOWER(a.User_UPN) = LOWER(?)",
+        "WHERE LOWER(a.User_UPN) = LOWER(?) AND ISNULL(t.Is_Active, 1) = 1",
         upn,
     )
     tids = [r[0] for r in cur.fetchall()]
+    if not tids:
+        return None, None, [], False   # no ACTIVE tenant (e.g. cancelled subscription) -> fail closed
     return display_name, client_id, tids, maintain_targets
 
 
@@ -1442,6 +1444,39 @@ def save_team():
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_team')
+
+
+@app.route('/api/cancel', methods=['POST'])
+def cancel_subscription():
+    """Cancel the practice's subscription: IMMEDIATE revocation (Audit.Tenants.Is_Active=0 -> every user
+    on the tenant then fails closed in _get_user_info) + record the reason and Delete_By = +28 days on
+    Billing.Account_Billing. Owner-only. Data is purged by the offboarding job on/after Delete_By."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can cancel the subscription'}), 403
+        reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+        for tid in tids:
+            cur.execute("UPDATE Audit.Tenants SET Is_Active = 0 WHERE Tenant_ID = ?", tid)
+            cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Tenant_ID = ?", tid)
+            if cur.fetchone()[0]:
+                cur.execute("UPDATE Billing.Account_Billing SET Cancelled_At = SYSUTCDATETIME(), Cancel_Reason = ?, "
+                            "Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?", [reason, tid])
+            else:
+                cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
+                            "VALUES (?, SYSUTCDATETIME(), ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+        conn.close()
+        app.logger.info("subscription cancelled: tenant(s)=%s by=%s reason=%r", tids, upn, reason)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'cancel')
 
 
 # ── Target model: owner-curated Inputs in the AppDB Fabric SQL Database ────────

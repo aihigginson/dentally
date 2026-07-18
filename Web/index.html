@@ -712,6 +712,9 @@
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
                     <span id="team-msg" class="settings-msg"></span>
+                    <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eee">
+                        <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Cancel subscription</button>
+                    </div>
                 </div>
             </div>
 
@@ -1025,6 +1028,53 @@
             strip.style.background = '#eef4f7'; strip.style.color = '#0b3d5c';
             strip.innerHTML = '⏳ Your free trial: <strong>' + d + ' day' + (d === 1 ? '' : 's') + ' left</strong>. ' + pay + '.';
         }
+    }
+
+    // Cancel subscription modal -- reason prompt + immediate-revoke / 28-day-deletion warning.
+    function openCancel() {
+        let ov = document.getElementById('cancel-modal-overlay');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'cancel-modal-overlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,40,60,.5);display:flex;align-items:center;justify-content:center;z-index:2100';
+            ov.innerHTML = '<div id="cancel-modal-box" style="background:#fff;border-radius:12px;max-width:450px;width:92%;padding:24px 26px;box-shadow:0 10px 34px rgba(0,0,0,.25)">'
+                + '<div style="font-size:18px;font-weight:700;color:#8a1f1f;margin-bottom:10px">Cancel subscription</div>'
+                + '<div style="background:#fbeaea;border-left:3px solid #c0392b;border-radius:6px;padding:12px;font-size:13px;line-height:1.5;color:#7a1f1f;margin-bottom:14px">'
+                + 'This can’t be undone. <strong>Access ends immediately for everyone at your practice</strong>, and <strong>your data is deleted within 28 days</strong>.</div>'
+                + '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">Reason for leaving</label>'
+                + '<select id="cancel-reason-sel" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:8px">'
+                + '<option value="">Please choose…</option><option>Too expensive</option><option>Not using it enough</option>'
+                + '<option>Missing features I need</option><option>Too complicated</option><option>Switching to another product</option>'
+                + '<option>Closing or selling the practice</option><option>Other</option></select>'
+                + '<textarea id="cancel-reason-txt" rows="3" placeholder="Anything else you’d like to tell us? (optional)" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>'
+                + '<div id="cancel-msg" style="font-size:12px;min-height:16px;margin-top:6px"></div>'
+                + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'
+                + '<button id="cancel-keep" style="padding:9px 16px;border:1px solid #ccc;background:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Keep my subscription</button>'
+                + '<button id="cancel-confirm" style="padding:9px 16px;border:none;background:#c0392b;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Cancel subscription</button>'
+                + '</div></div>';
+            document.body.appendChild(ov);
+            ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'cancel-keep') ov.style.display = 'none'; });
+            ov.querySelector('#cancel-confirm').addEventListener('click', doCancel);
+        }
+        const m = ov.querySelector('#cancel-msg'); if (m) m.textContent = '';
+        ov.style.display = 'flex';
+    }
+    async function doCancel() {
+        const sel = document.getElementById('cancel-reason-sel').value;
+        const txt = document.getElementById('cancel-reason-txt').value.trim();
+        const msg = document.getElementById('cancel-msg');
+        if (!sel) { msg.style.color = '#b3261e'; msg.textContent = 'Please choose a reason.'; return; }
+        const reason = sel + (txt ? (' — ' + txt) : '');
+        const btn = document.getElementById('cancel-confirm'); btn.disabled = true;
+        msg.style.color = '#999'; msg.textContent = 'Cancelling…';
+        try {
+            const res = await authFetch('/api/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            document.getElementById('cancel-modal-box').innerHTML =
+                '<div style="text-align:center;padding:8px 0"><div style="font-size:17px;font-weight:700;color:#0b3d5c;margin-bottom:8px">Your subscription is cancelled</div>'
+                + '<div style="font-size:13px;color:#5b6b78;line-height:1.5">Access has ended and your data will be deleted within 28 days. If this was a mistake, email <a href="mailto:sales@analytically.info">sales@analytically.info</a> right away.</div></div>';
+            setTimeout(() => location.reload(), 4500);
+        } catch (e) { btn.disabled = false; msg.style.color = '#b3261e'; msg.textContent = 'Could not cancel — please try again or contact support.'; }
     }
 
     // Contact modal (Sales / Support / Security), opened from the header "Contact us" link.
@@ -1521,6 +1571,7 @@
     settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
     document.getElementById('xero-connect-btn').addEventListener('click', connectXero);
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
+    { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
 
     // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
