@@ -1682,6 +1682,7 @@
 
     // Subscriptions -----------------------------------------------------------
     let _teamProfiles = [];
+    let _teamBilling = { primary_email: '', invoice_email: '' };
     const _STD_PROFILES = ['full', 'clinician', 'front_office', 'no_access'];
     function _pracNote(profile, prac) {
         if (profile !== 'clinician') return '';
@@ -1693,8 +1694,9 @@
         try {
             const res = await authFetch('/api/team');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { people, profiles } = await res.json();
+            const { people, profiles, billing } = await res.json();
             _teamProfiles = profiles || [];
+            _teamBilling = billing || { primary_email: '', invoice_email: '' };
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
@@ -1707,12 +1709,20 @@
                     ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
                       + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
-                + '</span></div>').join('');
+                + '<label style="margin-left:12px;font-size:11px;color:#666" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
+                + '</span></div>').join('')
+                + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee">'
+                + '<div style="font-size:13px;font-weight:600;margin-bottom:3px">Invoice email</div>'
+                + '<div style="font-size:11px;color:#888;margin-bottom:6px">Where the monthly invoice is sent. Leave blank to use the primary account’s email, or enter another address (e.g. your accountant).</div>'
+                + '<input type="email" id="team-invoice-email" placeholder="' + escHtml(_teamBilling.primary_email || 'accounts@yourpractice.co.uk') + '" value="' + escHtml(_teamBilling.invoice_email || '') + '" style="width:100%;max-width:340px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">'
+                + '</div>';
             list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
                 const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
                 if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }
                 markDirty();
             }));
+            list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
+            const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load the team.'; }
     }
@@ -1726,10 +1736,13 @@
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
                          profile: r.querySelector('.team-profile').value }));
+        const _primEl = document.querySelector('#team-list .team-primary:checked');
+        const primary_email = _primEl ? _primEl.value : '';
+        const invoice_email = (document.getElementById('team-invoice-email') || {}).value || '';
         msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
             const res = await authFetch('/api/team', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(rows) });
+                body: JSON.stringify({ rows, primary_email, invoice_email }) });
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved. Access applies on the users’ next sign-in.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }

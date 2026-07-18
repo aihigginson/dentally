@@ -1267,6 +1267,7 @@ def get_team():
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
         profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
         people = []
+        billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
             ph = ','.join(['?'] * len(tids))
             # ACTIVE staff only. A user's active flag comes from their linked practitioner
@@ -1308,15 +1309,21 @@ def get_team():
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
                 au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+            bph = ','.join(['?'] * len(tids))
+            acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
+            bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
             ac.close()
+            b0 = bc.get(tids[0], {'primary': '', 'invoice': ''})
+            billing = {'primary_email': b0['primary'], 'invoice_email': b0['invoice']}
             for m in roster:
                 a = au.get((m['email'] or '').lower())
                 m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
+                m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
                 people.append(m)
         else:
             conn.close()
-        return jsonify({'people': people, 'profiles': profiles})
+        return jsonify({'people': people, 'profiles': profiles, 'billing': billing})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -1389,12 +1396,14 @@ def save_team():
         conn.close()
         # Write to AppDB (fast OLTP). Meta.usp_Sync_Input_From_AppDB upserts it into the warehouse,
         # which auth reads -- so access lands after the async sync (the UI warns "up to 10 minutes").
+        payload = request.get_json(force=True) or {}
+        rows = payload if isinstance(payload, list) else (payload.get('rows') or [])
         n = len(_ALL_MODULE_COLS)
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Input.Application_Users")
         cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
                        for r in acur.fetchall()}
-        for r in (request.get_json(force=True) or []):
+        for r in rows:
             try:
                 tid = int(r['tenant_id'])
             except (KeyError, TypeError, ValueError):
@@ -1421,6 +1430,14 @@ def save_team():
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
                     [tid, email, profile, upn])
+        # Billing contact (primary account + invoice email), per tenant -- only when the client sent it.
+        if isinstance(payload, dict) and ('primary_email' in payload or 'invoice_email' in payload):
+            primary_email = (payload.get('primary_email') or '').strip() or None
+            invoice_email = (payload.get('invoice_email') or '').strip() or None
+            for tid in allowed:
+                acur.execute("DELETE FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
+                acur.execute("INSERT INTO Input.Billing_Contact (Tenant_ID, Primary_Email, Invoice_Email, Updated_By) VALUES (?, ?, ?, ?)",
+                             [tid, primary_email, invoice_email, upn])
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:
