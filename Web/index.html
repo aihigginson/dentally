@@ -1751,8 +1751,15 @@
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
-            list.innerHTML = people.map(p =>
-                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '">'
+            const _priceOf = k => { const o = _teamProfiles.find(x => x.key === k); return o ? (o.price || 0) : 0; };
+            list.innerHTML =
+                '<div style="background:#f4f7f9;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.55">'
+                + _teamProfiles.filter(o => o.key !== 'no_access').map(o =>
+                    '<div><strong>' + escHtml(o.name) + '</strong> — ' + escHtml(o.desc || '')
+                    + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo</span></div>').join('')
+                + '</div>'
+                + people.map(p =>
+                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
                 + '<span style="white-space:nowrap">'
@@ -1760,20 +1767,35 @@
                     ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
                       + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
+                + '<span class="team-price" style="font-size:11px;color:#0b3d5c;margin-left:10px">£' + _priceOf(p.profile).toFixed(2) + '</span>'
                 + '<label style="margin-left:12px;font-size:11px;color:#666" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
                 + '</span></div>').join('')
+                + '<div id="team-total" style="margin-top:12px;font-size:13px;font-weight:700;color:#0b3d5c"></div>'
                 + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee">'
                 + '<div style="font-size:13px;font-weight:600;margin-bottom:3px">Invoice email</div>'
                 + '<div style="font-size:11px;color:#888;margin-bottom:6px">Where the monthly invoice is sent. Leave blank to use the primary account’s email, or enter another address (e.g. your accountant).</div>'
                 + '<input type="email" id="team-invoice-email" placeholder="' + escHtml(_teamBilling.primary_email || 'accounts@yourpractice.co.uk') + '" value="' + escHtml(_teamBilling.invoice_email || '') + '" style="width:100%;max-width:340px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">'
                 + '</div>';
+            const _recalcCharges = () => {
+                let t = 0;
+                list.querySelectorAll('.roles-row').forEach(row => {
+                    const sel = row.querySelector('.team-profile');
+                    const key = sel ? sel.value : row.dataset.profile;
+                    t += _priceOf(key);
+                    const ps = row.querySelector('.team-price'); if (ps) ps.textContent = '£' + _priceOf(key).toFixed(2);
+                });
+                const el = document.getElementById('team-total');
+                if (el) el.textContent = 'Estimated monthly charge: £' + t.toFixed(2);
+            };
             list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
                 const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
                 if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }
+                _recalcCharges();
                 markDirty();
             }));
             list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
             const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
+            _recalcCharges();
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load the team.'; }
     }

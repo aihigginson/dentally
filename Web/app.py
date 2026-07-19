@@ -989,10 +989,10 @@ _ACCESS_COLUMNS = [
 # Subscription profiles: preset module flags + Maintain_Targets. Billing basis = the assigned
 # profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
 _PROFILES = {
-    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True},
-    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False},
-    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False},
-    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False},
+    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True,  'desc': 'Every report and dashboard, plus the admin/settings tools.'},
+    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False, 'desc': 'Access to the clinician’s OWN data only.'},
+    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False, 'desc': 'Focuses on the tasks that help the practice run more efficiently.'},
+    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False, 'desc': 'No access to the app.'},
 }
 _ALL_MODULE_COLS = [c for _, c in _ACCESS_COLUMNS]
 
@@ -1267,7 +1267,12 @@ def get_team():
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
-        profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
+        _pym = datetime.utcnow().year * 100 + datetime.utcnow().month
+        cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
+                    "JOIN (SELECT Profile_Key, MAX(Year_Month) mym FROM Billing.Profile_Pricing "
+                    "WHERE Year_Month <= ? GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.mym = p.Year_Month", _pym)
+        _prices = {r[0]: float(r[1]) for r in cur.fetchall()}
+        profiles = [{'key': k, 'name': v['label'], 'desc': v.get('desc', ''), 'price': _prices.get(k, 0.0)} for k, v in _PROFILES.items()]
         people = []
         billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
