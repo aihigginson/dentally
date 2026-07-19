@@ -1,0 +1,38 @@
+# =====================================================================
+# Release V102 -- Billing polish + provisioning (everything since the V101/PR#63 prod cutover)
+# =====================================================================
+# Prod currently has the V101 base (subscriptions + billing engine). This brings the deltas built
+# since: affiliate commission, cancellation, the rewritten rollup, and the tenant-provisioning SP.
+# All idempotent (guarded ALTER / DROP-CREATE), so safe to (re)run. Deploy AFTER V101.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V102__billing_affiliate_cancel_provision.manifest -SkipTests
+#   (or the Deploy Warehouse action, target=prod)
+#
+# Bundled warehouse changes:
+#   * Billing.Account_Billing  -> +affiliate cols (Affiliate_ID/Commission_Pct) +cancel cols
+#     (Cancelled_At/Cancel_Reason/Delete_By). Guarded ALTERs.
+#   * Billing.Invoice_Line     -> +affiliate commission cols (recorded per line, hidden from the customer).
+#   * Billing.Affiliate        -> NEW master table (referral partners, multi-tenant).
+#   * Billing.usp_Generate_Invoice_Lines -> rewritten (Access-Log history, pro-rata, Paid_From gate,
+#     highest-priced profile, @analytically.info excluded, affiliate commission, SKIP cancelled tenants).
+#   * Audit.usp_Provision_Tenant -> NEW. Concierge/self-serve provisioning: allocate tenant, write the
+#     access chain (principal = Full + Maintain_Targets), 30-day trial billing (Account_Billing.Paid_From),
+#     Access_Log. Idempotent on the principal email.
+#
+# OUT-OF-BAND (not warehouse -- required for the full app on prod):
+#   1. PROD AppDB: promote dev->prod via the Fabric deployment pipeline so Input.Billing_Contact
+#      (per-tenant Primary_Email / Invoice_Email, set on the Subscriptions screen) lands on prod.
+#   2. APP: merge the dev->main PR (app.py + index.html: trial banner, Contact modal, primary/invoice
+#      email + Cancel on Subscriptions, _get_user_info Is_Active fail-closed, onboarding overview).
+#   3. Trial UX only shows for tenants with a near Paid_From; Maple stays free-forever (2100) on prod.
+# =====================================================================
+
+# -- schema: tables (idempotent create / guarded ALTER) --
+DEPLOY   Fabric\Billing.Account_Billing.Table.sql
+DEPLOY   Fabric\Billing.Invoice_Line.Table.sql
+DEPLOY   Fabric\Billing.Affiliate.Table.sql
+
+# -- stored procedures --
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Audit.usp_Provision_Tenant.StoredProcedure.sql
+
+TEST

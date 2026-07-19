@@ -12,3 +12,4 @@ PyJWT==2.13.0
 cryptography==48.0.1
 azure-identity==1.19.0
 azure-keyvault-secrets==4.9.0
+azure-communication-email==1.0.0

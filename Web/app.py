@@ -12,6 +12,8 @@ import hmac
 import hashlib
 import json
 import time
+import secrets
+from datetime import datetime, timedelta
 from urllib.parse import urlencode, quote
 from dotenv import load_dotenv
 import jwt
@@ -377,6 +379,20 @@ def me():
             prow = cur.fetchone()
             practice_name = prow[0] if prow else None
         access, practitioner_name = _get_user_access(cur, upn)
+        # Trial state for the app banner, from Billing.Account_Billing.Paid_From (billing start = trial end).
+        # Paid_From far future (>=2100) = free-forever (no banner); else days-left / expired.
+        trial = None
+        if tids:
+            cur.execute(f"SELECT MIN(Paid_From) FROM Billing.Account_Billing WHERE Tenant_ID IN ({placeholders})", tids)
+            prow2 = cur.fetchone()
+            pf = prow2[0] if prow2 else None
+            if pf is not None:
+                if getattr(pf, 'year', 0) >= 2100:
+                    trial = {'status': 'free_forever'}
+                else:
+                    days = (pf - datetime.utcnow().date()).days
+                    trial = {'status': 'active' if days > 0 else 'expired',
+                             'days_left': days, 'paid_from': pf.isoformat()}
         conn.close()
         return jsonify({
             'display_name':         display_name or upn,
@@ -387,6 +403,7 @@ def me():
             'access':               access,
             'practitioner_full_name': practitioner_name,
             'env':                  APP_ENV,
+            'trial':                trial,
         })
     except Exception as e:
         return _server_error(e, 'me')
@@ -715,6 +732,219 @@ def xero_callback():
         return redirect('/?xero=error')
 
 
+# ── Guided onboarding: public 30-day trial (pre-account, OUTSIDE the app) ──────
+# A NEW practice has no app login yet, so onboarding is PUBLIC (no _auth) and lives outside the
+# authed app: the marketing site's "Get started" links to /onboarding (served here). Flow:
+#   1. principal enters practice name + their work email  ->  we email a 6-digit code (challenge)
+#   2. they enter the code (response)  ->  email verified; that address is taken as the PRINCIPAL
+#   3. they attest they have appropriate Dentally access + the authority to share the data
+#   4. Connect Dentally (OAuth, on Dentally's domain)  ->  callback captures the token
+#   5. we record a PENDING TRIAL (token + details + Paid_From = +TRIAL_DAYS) for the evening run
+# Auto-provision needs no human step because completing OAuth requires a real Dentally token; the
+# email challenge + attestation cover authenticity + authority. STATELESS: each step hands the next a
+# short-lived HMAC-signed token (no server session store).
+#
+# CONFIRM/CONFIGURE: Dentally partner-app creds (KV dentally-client-id / dentally-client-secret) +
+# redirect URI https://<host>/api/onboarding/dentally/callback; an email provider (see _send_email).
+# All overridable via env so nothing is hard-coded to a guess.
+DENTALLY_ENV       = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
+DENTALLY_AUTHORIZE = os.environ.get('DENTALLY_AUTHORIZE', 'https://api.dentally.co/oauth/authorize')
+DENTALLY_TOKEN_URL = os.environ.get('DENTALLY_TOKEN_URL', 'https://api.dentally.co/oauth/token')
+DENTALLY_API_BASE  = os.environ.get('DENTALLY_API_BASE',  'https://api.dentally.co/v1')
+DENTALLY_UA        = os.environ.get('DENTALLY_USER_AGENT', 'Analytically/1.0 (onboarding)')  # Dentally 403s without a User-Agent
+DENTALLY_SCOPES    = os.environ.get('DENTALLY_SCOPES',
+    'user:read patient:read appointment:read practitioner:read site:read '
+    'treatment:read payment_plan:read contract:read invoice:read')  # confirm the exact set with Dentally
+TRIAL_DAYS         = int(os.environ.get('ONBOARDING_TRIAL_DAYS', '30'))
+_dentally_app_creds = {}
+
+
+def _dentally_client():
+    """Dentally partner-app id/secret from Key Vault, cached in-process."""
+    if not _dentally_app_creds:
+        _dentally_app_creds['id']     = _kv_get('dentally-client-id')
+        _dentally_app_creds['secret'] = _kv_get('dentally-client-secret')
+    return _dentally_app_creds['id'], _dentally_app_creds['secret']
+
+
+def _onboarding_redirect_uri():
+    # Must EXACTLY match a redirect URI registered on the Dentally app.
+    return f'https://{request.host}/api/onboarding/dentally/callback'
+
+
+def _code_hmac(code, email):
+    return hmac.new(_state_key(), f'{email}:{code}'.encode(), hashlib.sha256).hexdigest()
+
+
+def _send_email(to, subject, body):
+    """Send a transactional email. Prefers Azure Communication Services -- keyless via ACS_ENDPOINT +
+    managed identity, else a connection string in Key Vault ('acs-connection-string'). Falls back to
+    SMTP (ONBOARDING_SMTP_*); otherwise (dev) logs the body so the flow is testable. Returns True if sent.
+    Sender must be an address on the domain connected to the ACS resource (set ONBOARDING_FROM)."""
+    sender   = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
+    reply_to = os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+    endpoint = os.environ.get('ACS_ENDPOINT')
+    acs_conn = _kv_get('acs-connection-string') or os.environ.get('ACS_CONNECTION_STRING')
+    if endpoint or acs_conn:
+        from azure.communication.email import EmailClient
+        if endpoint:
+            from azure.identity import DefaultAzureCredential
+            client = EmailClient(endpoint, DefaultAzureCredential())
+        else:
+            client = EmailClient.from_connection_string(acs_conn)
+        client.begin_send({
+            'senderAddress': sender,
+            'recipients': {'to': [{'address': to}]},
+            'replyTo':     [{'address': reply_to}],
+            'content':     {'subject': subject, 'plainText': body},
+        }).result()
+        return True
+    host = os.environ.get('ONBOARDING_SMTP_HOST')
+    if host:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = os.environ.get('ONBOARDING_FROM', 'noreply@analytically.info')
+        msg['To'] = to
+        with smtplib.SMTP(host, int(os.environ.get('ONBOARDING_SMTP_PORT', '587'))) as s:
+            s.starttls()
+            user = os.environ.get('ONBOARDING_SMTP_USER')
+            if user:
+                s.login(user, os.environ.get('ONBOARDING_SMTP_PASS', ''))
+            s.sendmail(msg['From'], [to], msg.as_string())
+        return True
+    app.logger.warning("onboarding email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
+    return False
+
+
+@app.route('/onboarding')
+def onboarding_page():
+    """Public, unauthenticated onboarding page -- the guided trial dialogue, served outside the app shell."""
+    return send_from_directory('.', 'onboarding.html')
+
+
+@app.route('/api/onboarding/challenge', methods=['POST'])
+def onboarding_challenge():
+    """Step 1: email a 6-digit code to the principal's address. Returns a signed challenge token that
+    carries the email + an HMAC of the code (never the code itself) for the stateless verify step."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    practice = (data.get('practice_name') or '').strip()
+    if '@' not in email or not practice:
+        return jsonify({'error': 'Enter your practice name and a valid work email.'}), 400
+    code = f'{secrets.randbelow(1000000):06d}'
+    _send_email(email, 'Your Analytically verification code',
+                f'Your Analytically verification code is {code}. It expires in 15 minutes.')
+    challenge = _sign_state({'t': 'chal', 'email': email, 'practice': practice,
+                             'code_h': _code_hmac(code, email), 'ts': time.time()})
+    return jsonify({'challenge': challenge, 'sent': True})
+
+
+@app.route('/api/onboarding/verify', methods=['POST'])
+def onboarding_verify():
+    """Step 2: check the code against the signed challenge; issue a 'verified principal' token. The
+    verified email is taken as the practice PRINCIPAL (its owner/admin account)."""
+    data = request.get_json(silent=True) or {}
+    payload = _verify_state(data.get('challenge', ''), max_age=900)
+    code = (data.get('code') or '').strip()
+    if not payload or payload.get('t') != 'chal':
+        return jsonify({'error': 'This step expired -- please start again.'}), 400
+    if not hmac.compare_digest(payload.get('code_h', ''), _code_hmac(code, payload['email'])):
+        return jsonify({'error': 'That code is not right.'}), 400
+    verified = _sign_state({'t': 'verified', 'email': payload['email'],
+                            'practice': payload['practice'], 'ts': time.time()})
+    return jsonify({'verified': verified, 'email': payload['email']})
+
+
+@app.route('/api/onboarding/dentally/connect')
+def onboarding_connect():
+    """Step 4: with a verified principal + the authority attestation, return the Dentally authorize URL."""
+    payload = _verify_state(request.args.get('verified', ''), max_age=1800)
+    if not payload or payload.get('t') != 'verified':
+        return jsonify({'error': 'Please verify your email first.'}), 400
+    if request.args.get('attested') != '1':
+        return jsonify({'error': 'You must confirm you are authorised to share the data.'}), 400
+    cid, _secret = _dentally_client()
+    if not cid:
+        return jsonify({'error': 'Dentally app not configured'}), 500
+    state = _sign_state({'t': 'onb', 'email': payload['email'], 'practice': payload['practice'],
+                         'attested': True, 'ts': time.time(), 'nonce': uuid.uuid4().hex})
+    params = urlencode({
+        'response_type': 'code',
+        'client_id':     cid,
+        'redirect_uri':  _onboarding_redirect_uri(),
+        'scope':         DENTALLY_SCOPES,
+        'state':         state,
+    }, quote_via=quote)
+    return jsonify({'authorize_url': DENTALLY_AUTHORIZE + '?' + params})
+
+
+@app.route('/api/onboarding/dentally/callback')
+def onboarding_callback():
+    """Step 5: exchange the code, identify the practice, and record a PENDING TRIAL (token + details
+    + Paid_From = +TRIAL_DAYS) keyed by the Dentally practice id (idempotent -- a re-connect updates
+    in place). The evening onboarding run provisions the tenant + pulls; that step is the next layer."""
+    if request.args.get('error'):
+        return redirect('/onboarding?status=error')
+    code  = request.args.get('code')
+    state = _verify_state(request.args.get('state', ''), max_age=1800)
+    if not code or not state or state.get('t') != 'onb':
+        return redirect('/onboarding?status=error')
+    try:
+        cid, csecret = _dentally_client()
+        tr = requests.post(DENTALLY_TOKEN_URL, headers={
+            'User-Agent':   DENTALLY_UA,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }, data={
+            'grant_type':    'authorization_code',
+            'code':          code,
+            'redirect_uri':  _onboarding_redirect_uri(),
+            'client_id':     cid,
+            'client_secret': csecret,
+        }, timeout=30)
+        tr.raise_for_status()
+        tokens = tr.json()
+
+        practice_id, practice_name = None, state.get('practice')
+        try:
+            pr = requests.get(DENTALLY_API_BASE + '/practices', headers={
+                'Authorization': 'Bearer ' + tokens['access_token'],
+                'User-Agent':    DENTALLY_UA,
+            }, timeout=30)
+            if pr.ok:
+                body = pr.json()
+                practices = body.get('practices') or ([body['practice']] if body.get('practice') else [])
+                if practices:
+                    practice_id   = practices[0].get('id')
+                    practice_name = practices[0].get('name') or practice_name
+        except Exception:
+            pass
+
+        # Idempotent per Dentally practice; keep the full OAuth set + the trial's Paid_From.
+        key = f'dentally:{practice_id}' if practice_id else f'email:{state["email"]}'
+        paid_from = (datetime.utcnow().date() + timedelta(days=TRIAL_DAYS)).isoformat()
+        pending_secret = f'onboarding-pending-{DENTALLY_ENV}'
+        store = _kv_json(pending_secret)
+        store[key] = {
+            'principal_email':      state['email'],
+            'practice_name':        practice_name,
+            'dentally_practice_id': practice_id,
+            'attested':             True,
+            'paid_from':            paid_from,
+            'created_at':           datetime.utcnow().isoformat() + 'Z',
+            'status':               'pending_provision',
+            'oauth':                tokens,
+        }
+        _kv_set(pending_secret, json.dumps(store))
+        app.logger.info("onboarding captured: practice=%s id=%s principal=%s paid_from=%s",
+                        practice_name, practice_id, state['email'], paid_from)
+        return redirect('/onboarding?status=connected')
+    except Exception as e:
+        app.logger.exception("onboarding callback failed: %s", e)
+        return redirect('/onboarding?status=error')
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_info(cur, upn):
@@ -731,10 +961,12 @@ def _get_user_info(cur, upn):
     cur.execute(
         "SELECT t.Tenant_ID FROM Security.Application_Users a "
         "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
-        "WHERE LOWER(a.User_UPN) = LOWER(?)",
+        "WHERE LOWER(a.User_UPN) = LOWER(?) AND ISNULL(t.Is_Active, 1) = 1",
         upn,
     )
     tids = [r[0] for r in cur.fetchall()]
+    if not tids:
+        return None, None, [], False   # no ACTIVE tenant (e.g. cancelled subscription) -> fail closed
     return display_name, client_id, tids, maintain_targets
 
 
@@ -1037,6 +1269,7 @@ def get_team():
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
         profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
         people = []
+        billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
             ph = ','.join(['?'] * len(tids))
             # ACTIVE staff only. A user's active flag comes from their linked practitioner
@@ -1078,15 +1311,21 @@ def get_team():
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
                 au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+            bph = ','.join(['?'] * len(tids))
+            acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
+            bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
             ac.close()
+            b0 = bc.get(tids[0], {'primary': '', 'invoice': ''})
+            billing = {'primary_email': b0['primary'], 'invoice_email': b0['invoice']}
             for m in roster:
                 a = au.get((m['email'] or '').lower())
                 m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
+                m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
                 people.append(m)
         else:
             conn.close()
-        return jsonify({'people': people, 'profiles': profiles})
+        return jsonify({'people': people, 'profiles': profiles, 'billing': billing})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -1159,12 +1398,14 @@ def save_team():
         conn.close()
         # Write to AppDB (fast OLTP). Meta.usp_Sync_Input_From_AppDB upserts it into the warehouse,
         # which auth reads -- so access lands after the async sync (the UI warns "up to 10 minutes").
+        payload = request.get_json(force=True) or {}
+        rows = payload if isinstance(payload, list) else (payload.get('rows') or [])
         n = len(_ALL_MODULE_COLS)
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS) + " FROM Input.Application_Users")
         cur_profile = {r[0]: _derive_profile({_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]})
                        for r in acur.fetchall()}
-        for r in (request.get_json(force=True) or []):
+        for r in rows:
             try:
                 tid = int(r['tenant_id'])
             except (KeyError, TypeError, ValueError):
@@ -1191,10 +1432,51 @@ def save_team():
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
                     [tid, email, profile, upn])
+        # Billing contact (primary account + invoice email), per tenant -- only when the client sent it.
+        if isinstance(payload, dict) and ('primary_email' in payload or 'invoice_email' in payload):
+            primary_email = (payload.get('primary_email') or '').strip() or None
+            invoice_email = (payload.get('invoice_email') or '').strip() or None
+            for tid in allowed:
+                acur.execute("DELETE FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
+                acur.execute("INSERT INTO Input.Billing_Contact (Tenant_ID, Primary_Email, Invoice_Email, Updated_By) VALUES (?, ?, ?, ?)",
+                             [tid, primary_email, invoice_email, upn])
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_team')
+
+
+@app.route('/api/cancel', methods=['POST'])
+def cancel_subscription():
+    """Cancel the practice's subscription: IMMEDIATE revocation (Audit.Tenants.Is_Active=0 -> every user
+    on the tenant then fails closed in _get_user_info) + record the reason and Delete_By = +28 days on
+    Billing.Account_Billing. Owner-only. Data is purged by the offboarding job on/after Delete_By."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can cancel the subscription'}), 403
+        reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+        for tid in tids:
+            cur.execute("UPDATE Audit.Tenants SET Is_Active = 0 WHERE Tenant_ID = ?", tid)
+            cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Tenant_ID = ?", tid)
+            if cur.fetchone()[0]:
+                cur.execute("UPDATE Billing.Account_Billing SET Cancelled_At = SYSUTCDATETIME(), Cancel_Reason = ?, "
+                            "Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?", [reason, tid])
+            else:
+                cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
+                            "VALUES (?, SYSUTCDATETIME(), ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+        conn.close()
+        app.logger.info("subscription cancelled: tenant(s)=%s by=%s reason=%r", tids, upn, reason)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'cancel')
 
 
 # ── Target model: owner-curated Inputs in the AppDB Fabric SQL Database ────────

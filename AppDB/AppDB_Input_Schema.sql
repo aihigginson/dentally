@@ -109,3 +109,18 @@ CREATE TABLE Input.Practitioner_Pay (
     CONSTRAINT PK_Input_Practitioner_Pay PRIMARY KEY (Tenant_ID, Practitioner_ID)
 );
 GO
+
+-- Per-tenant billing contact, set on the Subscriptions screen. Primary_Email = the billing owner /
+-- primary account (a staff login); Invoice_Email = where the PDF invoice goes (may be an external
+-- address, e.g. the practice's accountant -- not necessarily a Dentally user). The invoice mailer
+-- reads this directly; kept in AppDB so the Subscriptions save stays instant.
+IF OBJECT_ID('Input.Billing_Contact') IS NULL
+CREATE TABLE Input.Billing_Contact (
+    Tenant_ID     INT           NOT NULL,
+    Primary_Email VARCHAR(255)  NULL,
+    Invoice_Email VARCHAR(255)  NULL,
+    Updated_At    DATETIME2(3)  NOT NULL CONSTRAINT DF_Billing_Contact_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By    VARCHAR(255)  NULL,
+    CONSTRAINT PK_Input_Billing_Contact PRIMARY KEY (Tenant_ID)
+);
+GO
