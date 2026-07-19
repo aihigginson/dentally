@@ -160,8 +160,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct >= band,     ""#1a7f3c"",
     pct >= 0,        ""#6abf7b"",
     pct >= -band,    ""#f4a261"",
@@ -185,8 +185,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
@@ -1215,8 +1215,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct >= band,     ""#1a7f3c"",
     pct >= 0,        ""#6abf7b"",
     pct >= -band,    ""#f4a261"",
@@ -1228,8 +1228,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
@@ -1253,8 +1253,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual),  ""#E0E0E0"",
     ISBLANK(target),  ""#FFFFFF"",
+    ISBLANK(actual),  ""#E0E0E0"",
     diff_pp >= band,  ""#1a7f3c"",
     diff_pp >= 0,     ""#6abf7b"",
     diff_pp >= -band, ""#f4a261"",
@@ -1625,15 +1625,15 @@ Func<string,string,string> bgHigherEffF = bgHigherRefF;
 
 // lower=better; grey=true adds the blank-actual grey row (e.g. Outstanding Invoices)
 Func<string,string,bool,string> bgLowerEffF = (b, key, grey) => {
-    var greyRow = grey ? @"ISBLANK(actual), ""#E0E0E0"",
-    " : "";
+    var greyRow = grey ? @"
+    ISBLANK(actual), ""#E0E0E0""," : "";
     return (@"VAR actual = [{b}]
 VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target = [{b} Target]
 VAR band   = {band}
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    {grey}ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(target), ""#FFFFFF"",{grey}
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
