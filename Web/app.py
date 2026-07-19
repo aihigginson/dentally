@@ -989,7 +989,7 @@ _ACCESS_COLUMNS = [
 # Subscription profiles: preset module flags + Maintain_Targets. Billing basis = the assigned
 # profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
 _PROFILES = {
-    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True,  'desc': 'Every report and dashboard, plus the admin/settings tools.'},
+    'full':         {'label': 'All reports',  'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True,  'desc': 'Every report and dashboard.'},
     'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False, 'desc': 'Access to the clinician’s OWN data only.'},
     'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False, 'desc': 'Focuses on the tasks that help the practice run more efficiently.'},
     'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False, 'desc': 'No access to the app.'},
@@ -1310,12 +1310,12 @@ def get_team():
             # latest edits, which may not have synced to the warehouse auth copy yet).
             ac = _appdb_conn(); acur = ac.cursor()
             acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                         + ", Profile_Key FROM Input.Application_Users")
+                         + ", Profile_Key, Maintain_Targets FROM Input.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n])}
             bph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
             bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
@@ -1327,6 +1327,7 @@ def get_team():
                 m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
+                m['is_admin'] = True if m['is_self'] else (a['admin'] if a else False)
                 people.append(m)
         else:
             conn.close()
@@ -1427,12 +1428,13 @@ def save_team():
             preset  = _PROFILES[profile]
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
             prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
+            admin   = 1 if r.get('admin') else 0   # Admin (Settings tab) is a per-user flag now, decoupled from the profile
             acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             acur.execute(
                 "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
                 + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
                 + ", ".join(['?'] * n) + ", ?, ?, ?)",
-                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile, upn])
+                [email, cid, (r.get('name') or email), admin] + flags + [prac, profile, upn])
             if cur_profile.get(email.lower()) != profile:
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",

@@ -1757,6 +1757,7 @@
                 + _teamProfiles.filter(o => o.key !== 'no_access').map(o =>
                     '<div><strong>' + escHtml(o.name) + '</strong> — ' + escHtml(o.desc || '')
                     + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo</span></div>').join('')
+                + '<div style="margin-top:6px;color:#888">Admin (the Settings tab) is a separate tick at no extra cost — at least one person needs it, and that’s always you.</div>'
                 + '</div>'
                 + people.map(p =>
                 '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
@@ -1764,10 +1765,11 @@
                 + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
                 + '<span style="white-space:nowrap">'
                 + (p.is_self
-                    ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
+                    ? '<span style="color:#999;font-size:12px">You &mdash; All reports + Admin</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
                       + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
                 + '<span class="team-price" style="font-size:11px;color:#0b3d5c;margin-left:10px">£' + _priceOf(p.profile).toFixed(2) + '</span>'
+                + (p.is_self ? '' : '<label style="margin-left:12px;font-size:11px;color:#666" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
                 + '<label style="margin-left:12px;font-size:11px;color:#666" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
                 + '</span></div>').join('')
                 + '<div id="team-total" style="margin-top:12px;font-size:13px;font-weight:700;color:#0b3d5c"></div>'
@@ -1794,6 +1796,7 @@
                 markDirty();
             }));
             list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
+            list.querySelectorAll('.team-admin').forEach(r => r.addEventListener('change', markDirty));
             const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
             _recalcCharges();
             saveBtn.style.display = '';
@@ -1808,7 +1811,8 @@
         const rows = [...document.querySelectorAll('#team-list .roles-row')]
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
-                         profile: r.querySelector('.team-profile').value }));
+                         profile: r.querySelector('.team-profile').value,
+                         admin: !!(r.querySelector('.team-admin') && r.querySelector('.team-admin').checked) }));
         const _primEl = document.querySelector('#team-list .team-primary:checked');
         const primary_email = _primEl ? _primEl.value : '';
         const invoice_email = (document.getElementById('team-invoice-email') || {}).value || '';
