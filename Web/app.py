@@ -841,10 +841,10 @@ def api_pricing():
         if _pricing_cache['data'] is not None and time.time() - _pricing_cache['ts'] < 600:
             return jsonify({'profiles': _pricing_cache['data']})
         conn = _fabric_conn(); cur = conn.cursor()
-        pym = datetime.utcnow().year * 100 + datetime.utcnow().month
         cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
-                    "JOIN (SELECT Profile_Key, MAX(Year_Month) mym FROM Billing.Profile_Pricing "
-                    "WHERE Year_Month <= ? GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.mym = p.Year_Month", pym)
+                    "JOIN (SELECT Profile_Key, MAX(Valid_From) vf FROM Billing.Profile_Pricing "
+                    "WHERE Valid_From <= CAST(SYSUTCDATETIME() AS DATE) AND (Valid_To IS NULL OR Valid_To >= CAST(SYSUTCDATETIME() AS DATE)) "
+                    "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
         prices = {r[0]: float(r[1]) for r in cur.fetchall()}
         conn.close()
         data = [{'key': k, 'name': _PROFILES[k]['label'], 'desc': _PROFILES[k].get('desc', ''), 'price': prices.get(k, 0.0)}
@@ -1298,10 +1298,10 @@ def get_team():
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
-        _pym = datetime.utcnow().year * 100 + datetime.utcnow().month
         cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
-                    "JOIN (SELECT Profile_Key, MAX(Year_Month) mym FROM Billing.Profile_Pricing "
-                    "WHERE Year_Month <= ? GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.mym = p.Year_Month", _pym)
+                    "JOIN (SELECT Profile_Key, MAX(Valid_From) vf FROM Billing.Profile_Pricing "
+                    "WHERE Valid_From <= CAST(SYSUTCDATETIME() AS DATE) AND (Valid_To IS NULL OR Valid_To >= CAST(SYSUTCDATETIME() AS DATE)) "
+                    "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
         _prices = {r[0]: float(r[1]) for r in cur.fetchall()}
         profiles = [{'key': k, 'name': v['label'], 'desc': v.get('desc', ''), 'price': _prices.get(k, 0.0)} for k, v in _PROFILES.items()]
         people = []
