@@ -108,7 +108,7 @@ Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -118,7 +118,7 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -127,17 +127,16 @@ Func<string,string> vPctGrey = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
@@ -1143,7 +1142,7 @@ Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -1153,7 +1152,7 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -1163,11 +1162,10 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
@@ -1193,11 +1191,10 @@ VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 VAR prefix  = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
-        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
 // ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
@@ -1596,17 +1593,16 @@ Func<string,string> vPctGrey = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
