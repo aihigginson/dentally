@@ -450,6 +450,9 @@ foreach (var m in t.Measures.Where(m => m.DisplayFolder == g).ToList()) m.Delete
 // Cumulative: sum over the date context.
 Func<string,string> dCum = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 RETURN
 CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
@@ -457,41 +460,50 @@ CALCULATE(
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""{key}"",
     '_Metric Actuals'[fk Practice Site] = sel_site,
-    '_Metric Actuals'[fk Practitioner]  = sel_prac
+    pracf
 )").Replace("{key}", key);
 
 // Rate over the date context: DIVIDE(sum num, sum den).
 Func<string,string> dRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
 // Snapshot stock: latest snapshot date in the selected period, then the value at it.
 Func<string,string> dSnap = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 VAR snap_fk = CALCULATE( MAX('_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     '_Metric Actuals'[fk Date] = snap_fk,
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
 
 // Current-state value: ONE row per grain, read date-blind (period-independent).
 Func<string,string> dCur = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
 
 // Current-state rate: date-blind DIVIDE. currate metrics are all practitioner-AGNOSTIC (stored at
 // fk Practitioner = -1 only), so pin to -1 and IGNORE the practitioner slicer -> shows the global
