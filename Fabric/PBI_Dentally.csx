@@ -548,9 +548,10 @@ var metrics = new[] {
     new[]{"Lapsed (Set Inactive)",            "lapsed_deactivated",             "cum",     "#,##0"},
     new[]{"Lapsed (Silently)",                "lapsed_calculated",              "cum",     "#,##0"},
     new[]{"Outstanding Invoices",             "outstanding_invoices",           "snap",    "£#,##0"},
-    // Overdue Recalls is practitioner-agnostic but 'cur' also serves practitioner-supporting metrics
-    // (days_until_*), so it is NOT retargeted here -- its bespoke measure in Patients.csx pins fk
-    // Practitioner = -1 (global, greyed) directly.
+    // Overdue Recalls now carries a per-practitioner grain (dentist/hygienist by Recall_Type) in
+    // Fact_Metric_Actuals, so retarget it here with the grain-aware 'cur' builder (was a bespoke
+    // fk Practitioner = -1 pin).
+    new[]{"Overdue Recalls",                  "overdue_recalls",                "cur",     "#,##0"},
     // Open Courses family now reads Gold.Fact_Treatment_Plans LIVE (via '_Treatment Plans' +
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
     // rules + 3-month recency band evaluate at query time (no row rebuild as courses age).
