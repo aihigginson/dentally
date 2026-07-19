@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Analytically — pricing</title>
+    <style>
+        :root { --navy:#0b3d5c; --navy-dark:#082c43; --teal:#13b5a6; --bg:#f4f7f9; --line:#e2e8ee; --muted:#5b6b78; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif; background:var(--bg); color:var(--navy); }
+        header { background:var(--navy); color:#fff; padding:16px 24px; font-weight:700; font-size:18px; }
+        .wrap { max-width:840px; margin:44px auto; padding:0 20px; }
+        h1 { font-size:26px; margin:0 0 6px; text-align:center; }
+        .sub { color:var(--muted); font-size:15px; margin:0 0 30px; text-align:center; }
+        .cards { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px 22px; width:240px; box-shadow:0 1px 3px rgba(10,40,60,.06); display:flex; flex-direction:column; }
+        .card h2 { font-size:18px; margin:0 0 8px; }
+        .card .desc { color:var(--muted); font-size:13px; line-height:1.5; flex:1; margin-bottom:16px; }
+        .price { font-size:30px; font-weight:800; color:var(--navy); }
+        .price span { font-size:14px; font-weight:600; color:var(--muted); }
+        .note { max-width:560px; margin:26px auto 0; background:#fff; border-radius:10px; padding:16px 18px; font-size:13px; line-height:1.6; color:var(--navy); }
+        .note strong { color:var(--navy); }
+        .cta-wrap { text-align:center; margin-top:30px; }
+        .cta { display:inline-block; background:var(--navy); color:#fff; text-decoration:none; padding:13px 26px; border-radius:8px; font-size:15px; font-weight:600; }
+        .cta:hover { background:var(--navy-dark); }
+        .foot { color:var(--muted); font-size:12px; text-align:center; margin-top:24px; }
+        .foot a { color:var(--navy); }
+    </style>
+</head>
+<body>
+    <header>Analytically</header>
+    <div class="wrap">
+        <h1>Simple, per-person pricing</h1>
+        <p class="sub">Pay only for the people who need each view. Every plan is billed monthly, per person.</p>
+        <div class="cards" id="cards">Loading…</div>
+        <div class="note">
+            <strong>Admin is free.</strong> The Settings/admin tab is a separate tick at no extra cost — a practice
+            manager can have every report without it, and at least one person on your team always has it.<br><br>
+            <strong>30 days free.</strong> Start a trial with no card needed; you only pay from day&nbsp;31.
+        </div>
+        <div class="cta-wrap"><a class="cta" href="/onboarding">Start your 30-day trial &rarr;</a></div>
+        <div class="foot">Questions about pricing? <a href="mailto:sales@analytically.info">sales@analytically.info</a></div>
+    </div>
+
+    <script>
+        (async function () {
+            const el = document.getElementById('cards');
+            try {
+                const res = await fetch('/api/pricing');
+                if (!res.ok) throw new Error('status ' + res.status);
+                const { profiles } = await res.json();
+                if (!profiles || !profiles.length) { el.textContent = 'Pricing is unavailable right now — please contact sales.'; return; }
+                el.innerHTML = profiles.map(p =>
+                    '<div class="card"><h2>' + esc(p.name) + '</h2>'
+                    + '<div class="desc">' + esc(p.desc || '') + '</div>'
+                    + '<div class="price">£' + (p.price || 0).toFixed(2) + '<span> /person /mo</span></div></div>').join('');
+            } catch (e) { el.textContent = 'Pricing is unavailable right now — please contact sales.'; }
+        })();
+        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+    </script>
+</body>
+</html>

@@ -824,6 +824,37 @@ def onboarding_page():
     return send_from_directory('.', 'onboarding.html')
 
 
+@app.route('/pricing')
+def pricing_page():
+    """Public pricing page (pre-account)."""
+    return send_from_directory('.', 'pricing.html')
+
+
+_pricing_cache = {'ts': 0.0, 'data': None}
+
+
+@app.route('/api/pricing')
+def api_pricing():
+    """Public current price list per reporting profile (Admin is a free flag, so not priced separately).
+    Cached in-process for 10 minutes so a public page never hammers / cold-starts the warehouse."""
+    try:
+        if _pricing_cache['data'] is not None and time.time() - _pricing_cache['ts'] < 600:
+            return jsonify({'profiles': _pricing_cache['data']})
+        conn = _fabric_conn(); cur = conn.cursor()
+        pym = datetime.utcnow().year * 100 + datetime.utcnow().month
+        cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
+                    "JOIN (SELECT Profile_Key, MAX(Year_Month) mym FROM Billing.Profile_Pricing "
+                    "WHERE Year_Month <= ? GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.mym = p.Year_Month", pym)
+        prices = {r[0]: float(r[1]) for r in cur.fetchall()}
+        conn.close()
+        data = [{'key': k, 'name': _PROFILES[k]['label'], 'desc': _PROFILES[k].get('desc', ''), 'price': prices.get(k, 0.0)}
+                for k in ('full', 'clinician', 'front_office') if k in _PROFILES]
+        _pricing_cache.update(ts=time.time(), data=data)
+        return jsonify({'profiles': data})
+    except Exception as e:
+        return _server_error(e, 'pricing')
+
+
 @app.route('/api/onboarding/challenge', methods=['POST'])
 def onboarding_challenge():
     """Step 1: email a 6-digit code to the principal's address. Returns a signed challenge token that
