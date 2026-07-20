@@ -1,0 +1,55 @@
+// =====================================================================
+// Dynamic Top-N + "Other" for the Revenue > By Category chart
+// Series = List Treatments[Standard Treatment Category]  (15+ values, truncates)
+// Value  = [Revenue]   (measure on _Invoice Items)
+// Goal: show the top 8 categories individually + everything else rolled into "Other",
+//       re-ranked LIVE as the user cross-filters (so it can't go stale like a static group).
+//
+// Apply in Tabular Editor against the shared semantic model (PBI Dentally), then publish.
+// Test in Desktop before we rewire the chart -- likely needs a tweak pass (N, tie handling).
+// =====================================================================
+
+// ---- 1) Calculated TABLE:  Category Bucket  (DISCONNECTED -- do NOT relate it to anything) ----
+// A one-column table = every real category + an "Other" row. The chart's Series will use this
+// column instead of the real dimension.
+Category Bucket =
+UNION (
+    SELECTCOLUMNS (
+        DISTINCT ( 'List Treatments'[Standard Treatment Category] ),
+        "Category", 'List Treatments'[Standard Treatment Category]
+    ),
+    ROW ( "Category", "Other" )
+)
+
+// ---- 2) MEASURE:  Revenue (Top N) ----
+Revenue (Top N) =
+VAR N          = 8
+VAR SelBucket  = SELECTEDVALUE ( 'Category Bucket'[Category] )
+// rank every category by its GRAND total over the visible period (remove the week axis so the
+// ranking is by overall size, not per-week), respecting slicers via ALLSELECTED
+VAR Ranked =
+    ADDCOLUMNS (
+        ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ),
+        "@Total", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) )
+    )
+VAR WithRank   = ADDCOLUMNS ( Ranked, "@Rank", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
+VAR TopNames   = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N ), "Cat", 'List Treatments'[Standard Treatment Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] >  N ), "Cat", 'List Treatments'[Standard Treatment Category] )
+RETURN
+SWITCH (
+    TRUE (),
+    ISBLANK ( SelBucket ), [Revenue],                                   // no bucket context -> plain total
+    SelBucket = "Other",                                                // the Other bar = sum of everything ranked > N
+        CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
+    // a real category bar: show its revenue ONLY if it ranks in the top N (else it belongs to Other -> blank)
+    CALCULATE (
+        [Revenue],
+        TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ),
+        KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) )
+    )
+)
+
+// ---- 3) Chart rewire (I do this in the report JSON once the two objects above exist) ----
+//   Series : List Treatments[Standard Treatment Category]  ->  Category Bucket[Category]
+//   Y      : [Revenue]                                     ->  [Revenue (Top N)]
+// Sort the Series by [Revenue (Top N)] desc so "Other" sits at the end.
