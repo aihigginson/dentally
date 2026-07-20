@@ -348,7 +348,9 @@ def embed_token():
             headers=headers, json=token_body, timeout=10,
         )
         r2.raise_for_status()
-        return jsonify({'token': r2.json()['token'], 'embedUrl': embed_url, 'reportId': report_id})
+        _tok = r2.json()
+        return jsonify({'token': _tok['token'], 'embedUrl': embed_url, 'reportId': report_id,
+                        'expiration': _tok.get('expiration')})
 
     except requests.HTTPError as e:
         app.logger.exception("embed-token upstream PBI error: %s | %s", e, getattr(e.response, 'text', ''))

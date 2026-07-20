@@ -2363,10 +2363,24 @@
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${res.status}`);
         }
-        const { token, embedUrl, reportId } = await res.json();
-        const entry = { token, embedUrl, reportId, expiry: Date.now() + 55 * 60 * 1000 };
+        const { token, embedUrl, reportId, expiration } = await res.json();
+        const entry = { token, embedUrl, reportId,
+            expiry: expiration ? Date.parse(expiration) : Date.now() + 55 * 60 * 1000 };
         tokenCache[reportName] = entry;
         return _buildConfig(entry);
+    }
+
+    // Force a fresh embed token (bypass cache) and update the cache. Used by the
+    // tokenExpired handler so a report left open past the token lifetime silently
+    // re-authorises instead of showing PBI's "Access token has expired" on every visual.
+    async function refreshEmbedToken(reportName) {
+        const res = await authFetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { token, embedUrl, reportId, expiration } = await res.json();
+        const entry = { token, embedUrl, reportId,
+            expiry: expiration ? Date.parse(expiration) : Date.now() + 55 * 60 * 1000 };
+        tokenCache[reportName] = entry;
+        return entry;
     }
 
     // Re-embed only on a genuine mobile/desktop breakpoint crossing (rotation,
@@ -2400,6 +2414,20 @@
         function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
         report.on('rendered', remove);
         report.on('error', remove);
+    }
+
+    // Friendly full-slot overlay shown when an embed token can't be refreshed (the app
+    // session has expired). Replaces PBI's alarming per-visual "Access token has expired".
+    function showSessionExpired(slot) {
+        if (slot.querySelector('.pbi-expired')) return;
+        if (getComputedStyle(slot).position === 'static') slot.style.position = 'relative';
+        const ov = document.createElement('div');
+        ov.className = 'pbi-expired';
+        ov.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#fff;z-index:5;text-align:center;padding:24px;';
+        ov.innerHTML = '<div style="font-size:15px;color:#1F2937;">Your session timed out.</div>'
+            + '<button style="background:#1A527A;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;">Refresh</button>';
+        ov.querySelector('button').addEventListener('click', () => location.reload());
+        slot.appendChild(ov);
     }
 
     // Standard event handlers attached to every embedded report. Must be called
@@ -2453,6 +2481,21 @@
             loadEmbedsInSection(target);
             if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
                 sectionSubnavData[target].report.setPage(page.name);
+        });
+        // PBI fires tokenExpired shortly before the embed token lapses. Silently mint a fresh
+        // one and hand it back so an idle/long-open report keeps working instead of every visual
+        // showing "Access token has expired". If the refresh fails (app session also died), show
+        // a friendly refresh prompt rather than the raw error.
+        r.on('tokenExpired', async () => {
+            _devLog('[tokenExpired] refreshing embed token for', sectionKey);
+            try {
+                const entry = await refreshEmbedToken(SECTION_REPORT[sectionKey]);
+                await r.setAccessToken(entry.token);
+            } catch (e) {
+                _devLog('[tokenExpired] refresh failed', e);
+                const slot = document.getElementById('embed-' + sectionKey);
+                if (slot) showSessionExpired(slot);
+            }
         });
     }
 
