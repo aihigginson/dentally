@@ -110,7 +110,7 @@
         "legend": [
           {
             "show": true,
-            "position": "Top",
+            "position": "Right",
             "showTitle": false,
             "labelColor": {
               "solid": {
@@ -191,7 +191,7 @@
         "legend": [
           {
             "show": true,
-            "position": "Top",
+            "position": "Right",
             "showTitle": false,
             "labelColor": {
               "solid": {
@@ -1125,7 +1125,7 @@
         "legend": [
           {
             "show": true,
-            "position": "Top",
+            "position": "Bottom",
             "showTitle": false,
             "labelColor": {
               "solid": {
@@ -1206,7 +1206,7 @@
         "legend": [
           {
             "show": true,
-            "position": "Top",
+            "position": "Bottom",
             "showTitle": false,
             "labelColor": {
               "solid": {
@@ -1287,7 +1287,7 @@
         "legend": [
           {
             "show": true,
-            "position": "Top",
+            "position": "Bottom",
             "showTitle": false,
             "labelColor": {
               "solid": {
