@@ -57,7 +57,7 @@
                 "title": [{
                     "show":       true,
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   10,
                     "fontBold":   false,
                     "alignment":  "Left"
@@ -76,13 +76,13 @@
                     "position":   "Top",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8
                 }],
                 "categoryAxis": [{
                     "show":          true,
                     "labelColor":    { "solid": { "color": "#6B7280" } },
-                    "fontFamily":    "Segoe UI",
+                    "fontFamily":    "Arial",
                     "fontSize":      9,
                     "gridlineShow":  false,
                     "axisStyle":     "showTitleOnly",
@@ -92,7 +92,7 @@
                 "valueAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           9,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -104,7 +104,7 @@
                 "dataLabels": [{
                     "show":       false,
                     "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8
                 }]
             }
@@ -118,13 +118,13 @@
                     "position":   "Top",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8
                 }],
                 "categoryAxis": [{
                     "show":          true,
                     "labelColor":    { "solid": { "color": "#6B7280" } },
-                    "fontFamily":    "Segoe UI",
+                    "fontFamily":    "Arial",
                     "fontSize":      9,
                     "gridlineShow":  false,
                     "axisStyle":     "showTitleOnly",
@@ -134,7 +134,7 @@
                 "valueAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           9,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -146,7 +146,7 @@
                 "dataLabels": [{
                     "show":       false,
                     "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8
                 }]
             }
@@ -160,13 +160,13 @@
                     "position":   "Top",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "categoryAxis": [{
                     "show":          true,
                     "labelColor":    { "solid": { "color": "#6B7280" } },
-                    "fontFamily":    "Segoe UI",
+                    "fontFamily":    "Arial",
                     "fontSize":      10,
                     "gridlineShow":  false,
                     "axisStyle":     "showTitleOnly",
@@ -176,7 +176,7 @@
                 "valueAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           10,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -203,20 +203,20 @@
                     "position":   "Top",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "categoryAxis": [{
                     "show":          true,
                     "labelColor":    { "solid": { "color": "#6B7280" } },
-                    "fontFamily":    "Segoe UI",
+                    "fontFamily":    "Arial",
                     "fontSize":      10,
                     "gridlineShow":  false
                 }],
                 "valueAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           10,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -234,13 +234,13 @@
                     "position":   "Top",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "categoryAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           10,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -249,7 +249,7 @@
                 "valueAxis": [{
                     "show":               true,
                     "labelColor":         { "solid": { "color": "#6B7280" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           10,
                     "gridlineShow":       true,
                     "gridlineColor":      { "solid": { "color": "#E4E8EE" } },
@@ -266,13 +266,13 @@
                     "position":   "Right",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "dataLabels": [{
                     "show":       true,
                     "color":      { "solid": { "color": "#FFFFFF" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "labelStyle": "percent"
                 }],
@@ -287,7 +287,7 @@
                     "position":   "Right",
                     "showTitle":  false,
                     "labelColor": { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "dataLabels": [{ "show": false }],
@@ -312,7 +312,7 @@
                 }],
                 "value": [{
                     "fontSize":             9,
-                    "fontFamily":           "Segoe UI Semibold",
+                    "fontFamily":           "Arial",
                     "color":                { "solid": { "color": "#1A527A" } },
                     "horizontalAlignment":  "center",
                     "labelDisplayUnits":    0
@@ -320,7 +320,7 @@
                 "label": [{
                     "show":       true,
                     "fontSize":   9,
-                    "fontFamily": "Segoe UI Semibold",
+                    "fontFamily": "Arial",
                     "color":      { "solid": { "color": "#1A527A" } },
                     "position":   "aboveValue"
                 }],
@@ -331,7 +331,7 @@
                 "divider":    [{ "show": false }],
                 "dropShadow": [{ "show": false }],
                 "referenceLabelTitle":  [{ "show": false }],
-                "referenceLabelValue":  [{ "show": true, "fontSize": 8, "fontFamily": "Segoe UI", "color": { "solid": { "color": "#1A527A" } } }],
+                "referenceLabelValue":  [{ "show": true, "fontSize": 8, "fontFamily": "Arial", "color": { "solid": { "color": "#1A527A" } } }],
                 "referenceLabelLayout": [{ "show": false }]
             }
         },
@@ -347,7 +347,7 @@
                 "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "labels": [{
                     "color":        { "solid": { "color": "#1A527A" } },
-                    "fontFamily":   "Segoe UI",
+                    "fontFamily":   "Arial",
                     "fontSize":     22,
                     "fontBold":     true,
                     "displayUnits": 0
@@ -355,7 +355,7 @@
                 "categoryLabels": [{
                     "show":       true,
                     "color":      { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "wordWrap": [{ "show": false }]
@@ -366,20 +366,20 @@
             "*": {
                 "dataLabels": [{
                     "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   10,
                     "fontBold":   true
                 }],
                 "categoryLabels": [{
                     "show":       true,
                     "color":      { "solid": { "color": "#6B7280" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8
                 }],
                 "cardTitle": [{
                     "show":       true,
                     "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   false
                 }],
@@ -404,7 +404,7 @@
                 "border": [{ "show": false }],
                 "padding": [{ "top": 10, "right": 14, "bottom": 10, "left": 14 }],
                 "indicator": [{
-                    "fontFamily":   "Segoe UI",
+                    "fontFamily":   "Arial",
                     "fontSize":     22,
                     "fontBold":     true,
                     "displayUnits": 0
@@ -413,7 +413,7 @@
                 "goals": [{
                     "show":        true,
                     "labelColor":  { "solid": { "color": "#6B7280" } },
-                    "fontFamily":  "Segoe UI",
+                    "fontFamily":  "Arial",
                     "fontSize":    9
                 }]
             }
@@ -423,7 +423,7 @@
             "*": {
                 "dataLabels": [{
                     "color":      { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9
                 }],
                 "gauge": [{
@@ -443,7 +443,7 @@
                     "show":       true,
                     "fontColor":  { "solid": { "color": "#6B7280" } },
                     "background": { "solid": { "color": "#FFFFFF" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   8,
                     "fontBold":   false,
                     "outline":    "BottomOnly"
@@ -453,7 +453,7 @@
                     "background":         { "solid": { "color": "#FFFFFF" } },
                     "selectedFontColor":  { "solid": { "color": "#1A527A" } },
                     "selectedBackground": { "solid": { "color": "#EBF3F9" } },
-                    "fontFamily":         "Segoe UI",
+                    "fontFamily":         "Arial",
                     "fontSize":           8,
                     "outline":            "None"
                 }],
@@ -470,7 +470,7 @@
                 "columnHeaders": [{
                     "backColor":  { "solid": { "color": "#F0F4F8" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   true,
                     "alignment":  "Left",
@@ -480,14 +480,14 @@
                     "backColor":           { "solid": { "color": "#FFFFFF" } },
                     "alternatingRowColor": { "solid": { "color": "#FFFFFF" } },
                     "fontColor":           { "solid": { "color": "#1A527A" } },
-                    "fontFamily":          "Segoe UI",
+                    "fontFamily":          "Arial",
                     "fontSize":            9,
                     "outline":             "None"
                 }],
                 "total": [{
                     "backColor":  { "solid": { "color": "#EEF2F7" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   true
                 }],
@@ -509,7 +509,7 @@
                 "columnHeaders": [{
                     "backColor":  { "solid": { "color": "#F0F4F8" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   true,
                     "alignment":  "Left",
@@ -518,7 +518,7 @@
                 "rowHeaders": [{
                     "backColor":  { "solid": { "color": "#FFFFFF" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "outline":    "None"
                 }],
@@ -526,14 +526,14 @@
                     "backColor":           { "solid": { "color": "#FFFFFF" } },
                     "alternatingRowColor": { "solid": { "color": "#FFFFFF" } },
                     "fontColor":           { "solid": { "color": "#1A527A" } },
-                    "fontFamily":          "Segoe UI",
+                    "fontFamily":          "Arial",
                     "fontSize":            9,
                     "outline":             "None"
                 }],
                 "subTotals": [{
                     "backColor":  { "solid": { "color": "#EEF2F7" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   false,
                     "rowSubtotals": true,
@@ -542,7 +542,7 @@
                 "total": [{
                     "backColor":  { "solid": { "color": "#E4E8EE" } },
                     "fontColor":  { "solid": { "color": "#1A527A" } },
-                    "fontFamily": "Segoe UI",
+                    "fontFamily": "Arial",
                     "fontSize":   9,
                     "fontBold":   true
                 }],
