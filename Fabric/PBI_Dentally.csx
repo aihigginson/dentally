@@ -40,14 +40,6 @@ var jc = jmTable.AddMeasure("Journey Count", "COUNTROWS('_Appointment Journey')"
 jc.DisplayFolder = jmFolder;
 jc.FormatString  = "#,##0";
 
-Info(
-    "Appointment Journey: retired the old dynamic measures; added [Journey Count] = " +
-    "COUNTROWS('_Appointment Journey').\n" +
-    "MANUAL (step 4): (1) import PBI.[_Appointment Journey]; (2) point the Deneb Alluvial " +
-    "at its columns Booking / Appointment Reason / Delay / Next Appointment / Current State " +
-    "+ the [Journey Count] measure (NO bk Appointment ID); (3) put '_Appointment Journey'[Mode] " +
-    "on the slicer and DELETE the old disconnected 'Journey Filter' table; (4) publish."
-);
 }
 
 // ===================== Clinical =====================
@@ -307,7 +299,6 @@ kpi("Exam Ratio",                       "#,##0.0%", tEff100("exam_ratio"),      
 kpi("Open Courses Value",               "£#,##0",   tEffAdd("open_courses_value"),         vPctGrey("Open Courses Value"),                  bgHigherEffGrey("Open Courses Value", "open_courses_value"));
 kpi("Average Plan Value",               "£#,##0",   tEff("avg_plan_value"),             vPct("Average Plan Value"),                      bgHigherEff("Average Plan Value", "avg_plan_value"));
 
-Info("Clinical KPI measures created (data-driven).");
 }
 
 // ===================== Finance =====================
@@ -366,8 +357,6 @@ add("Net Profit", @"[Total Revenue (PL)] - [Total Costs]",     CUR);
 add("EBITDA Margin %", @"DIVIDE([EBITDA], [Total Revenue (PL)])",     PCT);
 add("Net Margin %",    @"DIVIDE([Net Profit], [Total Revenue (PL)])", PCT);
 
-Info("Finance KPIs created: Total Revenue, Cost of Sales, Operating Expenses, Operating Costs, "
-   + "Depreciation & Interest, Total Costs, EBITDA, Net Profit, EBITDA Margin %, Net Margin %.");
 }
 
 // ===================== KPI_Snapshot =====================
@@ -409,7 +398,6 @@ add("Open Courses Value Trend",
 // "Clinical KPIs" folder), which poisoned resolution of [Open Courses Value] / [Average Plan
 // Value]. KPI_Snapshot keeps ONLY the historical Trend series.
 
-Info("Clinical KPI snapshot Trend created.");
 }
 
 // ===================== MetricActuals =====================
@@ -571,7 +559,7 @@ foreach (var m in metrics) {
     string dax = build(shape, key);
     if (MODE == "apply") {
         var meas = t.Measures.FirstOrDefault(x => x.Name == name);
-        if (meas == null) { Warning("measure not found, skipped: " + name); missing++; continue; }
+        if (meas == null) { missing++; continue; }
         meas.Expression = dax; applied++;
     } else {
         var nu = t.AddMeasure(name + " New",   dax);                                 nu.DisplayFolder = g; nu.FormatString = fmt;
@@ -580,10 +568,6 @@ foreach (var m in metrics) {
     }
 }
 
-if (MODE == "apply")
-    Info("APPLY: " + applied + " card measures retargeted onto '_Metric Actuals', " + missing + " not found; compare harness removed.");
-else
-    Info("COMPARE: " + made + " measures created in '" + g + "'. Set MODE=\"apply\" to switch the cards over.");
 }
 
 // ===================== NHS =====================
@@ -1004,7 +988,6 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")",
     "");
 
-Info("NHS KPI measures created.");
 }
 
 // ===================== PatientCohorts =====================
@@ -1061,7 +1044,6 @@ add("Patients Phone Not Captured",
     '_Appointments'[Is Arrived] = TRUE())",
     "#,##0");
 
-Info("Patient Cohort measures created.");
 }
 
 // ===================== Patients =====================
@@ -1512,7 +1494,6 @@ kpi("Overdue Recalls",          "#,##0",    tEffAdd("overdue_recalls"),         
 kpi("Email Details Rate",       "#,##0.0%", tEff100("email_details_rate"),       vPpP("Email Details Rate"),         bgHigherPp("Email Details Rate", "email_details_rate"));
 kpi("Phone Details Rate",       "#,##0.0%", tEff100("phone_details_rate"),       vPpP("Phone Details Rate"),         bgHigherPp("Phone Details Rate", "phone_details_rate"));
 
-Info("Patients KPI measures created (data-driven).");
 }
 
 // ===================== Revenue =====================
@@ -1784,7 +1765,6 @@ kpi("DNA Revenue Lost",          "£#,##0", tRate("dna_revenue_lost"),          
 kpi("Deposit Value",             "0.0%",   tRate100("deposit_ratio"),           vPp("Deposit Value"),              bgHigherPpF("Deposit Value", "deposit_ratio"));
 kpi("Discounts",                 "0.0%",   tRate100("discounts"),               vPp("Discounts"),                  bgLowerPpF("Discounts", "discounts"));
 
-Info("Revenue KPI measures created (data-driven).");
 }
 
 // ===================== Scheduling =====================
@@ -2027,7 +2007,6 @@ kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancel
 // Diary Fill (Forward) is a bespoke heatmap measure (its own unconstrained date axis), so it has
 // no data-driven KPI triple here -- colour the heatmap by value, or vs the [Diary Fill Target].
 
-Info("Scheduling KPI measures created (data-driven).");
 }
 
 // ===================== Shared =====================
@@ -2099,7 +2078,6 @@ VAR cur_fy   = ""FY "" & fy_year & ""-"" & RIGHT("""" & (fy_year + 1), 2)
 RETURN IF(selected <> """", selected, cur_fy)",
     "");
 
-Info("Period helper measures created. Run this script once before any tab script.");
 }
 
 // ===================== SpiderRevenue =====================
@@ -2300,10 +2278,11 @@ add("Spider Rev Avg Deposit Value",
 {
     var bucketDax = @"UNION (
     SELECTCOLUMNS ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), ""Category"", 'List Treatments'[Standard Treatment Category] ),
-    ROW ( ""Category"", ""Other"" )
+    ROW ( ""Category"", ""zzOther"" )
 )";
-    if (!Model.Tables.Any(x => x.Name == "Category Bucket"))
-        Model.AddCalculatedTable("Category Bucket", bucketDax);
+    var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
+    if (bucketTbl != null) bucketTbl.Delete();
+    Model.AddCalculatedTable("Category Bucket", bucketDax);
 
     var mt = Model.Tables["_Measures"];
     var topDax = @"VAR N = 8
@@ -2315,12 +2294,11 @@ VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N ), ""Cat"", 'Lis
 RETURN
 SWITCH ( TRUE (),
     NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
-    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
+    SelBucket = ""zzOther"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
     CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
 )";
     var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
     if (rm == null) rm = mt.AddMeasure("Revenue (Top N)", topDax); else rm.Expression = topDax;
     rm.FormatString = "£#,##0";
     rm.DisplayFolder = "Revenue KPIs";
-    Info("Top-N: 'Category Bucket' table + [Revenue (Top N)] ensured.");
 }
