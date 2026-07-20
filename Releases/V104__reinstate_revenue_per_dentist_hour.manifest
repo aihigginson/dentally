@@ -1,0 +1,33 @@
+# =====================================================================
+# Release V104 -- re-instate Revenue per Dentist Hour
+# =====================================================================
+# Revenue per Clinical Hour blends every clinical role, so at practice level the hygienist
+# mix (their hours AND their lower revenue-per-hour) tilts the number down. Revenue per
+# Dentist Hour gives the dentist-only view: same revenue-over-worked-hours structure as
+# Clinical Hour, but restricted to practitioners whose DENTALLY role is 'Dentist' on BOTH
+# sides -- dentist revenue over dentist worked hours -- so hygiene time and revenue are
+# excluded. Primarily a practice-level KPI (drill to a single dentist == that dentist's
+# Clinical Hour).
+#
+# The metric was cut on 2026-07-13; its catalog row still existed but deactivated.
+#   * Config.Metric_Definitions.Data.sql -- re-activate (drop from the Is_Active=0 list),
+#     set Supports_Site = 0 (global + practitioner grain only, like Clinical Hour), and
+#     align the description to Dentist-role-only. Sample value (£220) already present.
+#   * Gold.usp_Load_Fact_Metric_Actuals -- new revenue_per_dentist_hour block: #wdd
+#     (dentist worked hours) + #revd (dentist invoice revenue), both filtered to
+#     LOWER(Dim_Practitioners.Role) = 'dentist'. Num/Den on separate rows at site -1,
+#     global + per-practitioner, mirroring the Clinical Hour block; dRate divides them.
+#
+# PBI side (run PBI_Dentally.csx in Tabular Editor, MODE=apply, then publish/refresh):
+# added to the metrics array (shape 'rate'), a base measure, and the kpi() triple, so the
+# grain-aware dRate retarget drives the card + target/vs/background.
+#
+# Reload rides the next Orchestrate_Build. Idempotent (DROP/CREATE SP + MERGE seed).
+# Deploy AFTER V103.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V104__reinstate_revenue_per_dentist_hour.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST

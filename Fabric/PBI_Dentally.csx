@@ -541,6 +541,7 @@ var metrics = new[] {
     new[]{"Patient Tracked in Surgery",       "patient_tracked_in_surgery",     "rate",    "#,##0.0%"},
     new[]{"Average Plan Value",               "avg_plan_value",                 "rate",    "£#,##0"},
     new[]{"Revenue Per Clinical Hour",        "revenue_per_clinical_hour",      "rate",    "£#,##0"},
+    new[]{"Revenue Per Dentist Hour",         "revenue_per_dentist_hour",       "rate",    "£#,##0"},
     new[]{"Discounts",                        "discounts",                      "rate",    "0.0%"},
     new[]{"Deposit Value",                    "deposit_ratio",                  "rate",    "0.0%"},
     new[]{"Active Patients",                  "active_patients",                "snap",    "#,##0"},
@@ -1723,6 +1724,24 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
 
+// Revenue Per Dentist Hour: as Clinical Hour but restricted to the Dentally Role 'Dentist' on
+// BOTH sides -- dentist revenue over dentist worked hours -- so hygiene time and revenue don't
+// tilt the practice-level rate. (Apply mode retargets this onto '_Metric Actuals' via dRate.)
+add("Revenue Per Dentist Hour",
+    @"VAR by_prac_day =
+SUMMARIZE(
+    FILTER(
+        'Aggregate Site Patient Practitioner Daily',
+        RELATED('List Practitioners'[Role]) = ""dentist""
+    ),
+    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
+    'Aggregate Site Patient Practitioner Daily'[fk Date],
+    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+VAR dentist_rev  = CALCULATE([Total Revenue], KEEPFILTERS('List Practitioners'[Role] = ""dentist""))
+RETURN DIVIDE(dentist_rev, total_worked)",
+    "£#,##0");
+
 add("DNA Revenue Lost",
     @"VAR dna_count =
     CALCULATE(
@@ -1760,6 +1779,7 @@ kpi("Private Revenue",           "£#,##0", tCumFTE("private_revenue"),         
 kpi("Outstanding Invoices",      "£#,##0", tRate("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tRate("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tRate("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));
+kpi("Revenue Per Dentist Hour",  "£#,##0", tRate("revenue_per_dentist_hour"),   vPct("Revenue Per Dentist Hour"),  bgHigherEffF("Revenue Per Dentist Hour", "revenue_per_dentist_hour"));
 kpi("DNA Revenue Lost",          "£#,##0", tRate("dna_revenue_lost"),           vPct("DNA Revenue Lost"),          bgLowerEffF("DNA Revenue Lost", "dna_revenue_lost", false));
 kpi("Deposit Value",             "0.0%",   tRate100("deposit_ratio"),           vPp("Deposit Value"),              bgHigherPpF("Deposit Value", "deposit_ratio"));
 kpi("Discounts",                 "0.0%",   tRate100("discounts"),               vPp("Discounts"),                  bgLowerPpF("Discounts", "discounts"));

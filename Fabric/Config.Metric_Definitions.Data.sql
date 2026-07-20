@@ -20,8 +20,8 @@ USING (VALUES
         'Total revenue in the period divided by the number of active patients — the average value each patient relationship produces. Lets you compare productivity independently of how big the patient base is.'),
     ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',
         'Revenue earned for each hour of scheduled clinical chair time, counting all clinical roles (dentists, hygienists, therapists, orthodontists and specialists). Measures how productively clinical time is used. Revenue per Dentist Hour is the dentist-only equivalent.'),
-    ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist and orthodontist time only',        1, 1, 1, 15, 'above', 'rate',
-        'Revenue earned for each hour of scheduled dentist (and orthodontist) chair time only, excluding hygiene and therapy time. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
+    ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist time only (Dentally role Dentist)',  0, 1, 1, 15, 'above', 'rate',
+        'Revenue earned for each hour of scheduled dentist chair time only (practitioners whose Dentally role is Dentist), excluding hygiene and therapy time and revenue. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
     ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Deposits collected as a percentage of revenue',                           1, 1, 1, 16, 'above', 'point_in_time',
         'The value of deposits taken on treatment plans as a percentage of revenue in the period — money collected up front (e.g. for lab or private work) relative to total income. A higher ratio means more treatment is secured with a deposit before work begins.'),
     ('discounts',                  'Discounts',                          'revenue',    'percent', 'Total discounts applied to invoices (invoice header minus items sum)',    1, 1, 1, 17, 'below', 'rate',
@@ -129,7 +129,7 @@ GO
 -- ── Post-seed adjustments (2026-07-13) ──────────────────────────────────────
 -- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
 -- Cut metrics: removed from the product (dead-end / superseded).
---   revenue_per_dentist_hour      = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
+--   (revenue_per_dentist_hour re-instated 2026-07-20 -- Revenue per Clinical Hour filtered to Dentally role Dentist.)
 --   acceptance_rate               = dead end on real data (Accepted_At NULL on all plans)
 --   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
 --   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
@@ -139,7 +139,7 @@ GO
 --                       real recall-record status). The old single metric counted completed/historical
 --                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
+    WHERE [Metric_Key] IN ('acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
