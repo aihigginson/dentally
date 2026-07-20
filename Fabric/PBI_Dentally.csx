@@ -2277,12 +2277,20 @@ add("Spider Rev Avg Deposit Value",
 // re-ranked live under cross-filter. Chart wires to Category Bucket[Category] + [Revenue (Top N)].
 {
     var bucketDax = @"UNION (
-    SELECTCOLUMNS ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), ""Category"", 'List Treatments'[Standard Treatment Category] ),
-    ROW ( ""Category"", ""zzOther"" )
+    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
+    ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
 )";
     var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
-    if (bucketTbl != null) bucketTbl.Delete();
-    Model.AddCalculatedTable("Category Bucket", bucketDax);
+    // Rebuild only if it's the OLD shape (materialised columns, but no 'Sort Order'); never delete a
+    // freshly-created (not-yet-refreshed) table, so the sort can be applied on the next pass.
+    if (bucketTbl != null && bucketTbl.Columns.Count > 0 && !bucketTbl.Columns.Any(c => c.Name == "Sort Order")) { bucketTbl.Delete(); bucketTbl = null; }
+    if (bucketTbl == null) bucketTbl = Model.AddCalculatedTable("Category Bucket", bucketDax);
+    // Keep "Other" last: sort Category by the hidden Sort Order column. Calc-table columns only
+    // materialise on refresh, so this takes effect once the model has been refreshed + the script re-run.
+    if (bucketTbl.Columns.Any(c => c.Name == "Sort Order")) {
+        bucketTbl.Columns["Category"].SortByColumn = bucketTbl.Columns["Sort Order"];
+        bucketTbl.Columns["Sort Order"].IsHidden = true;
+    }
 
     var mt = Model.Tables["_Measures"];
     var topDax = @"VAR N = 8
@@ -2294,7 +2302,7 @@ VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N ), ""Cat"", 'Lis
 RETURN
 SWITCH ( TRUE (),
     NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
-    SelBucket = ""zzOther"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
+    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
     CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
 )";
     var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
