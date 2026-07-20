@@ -2293,3 +2293,34 @@ add("Spider Rev Avg Deposit Value",
     @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Deposit Value])",
     @"0.00");
 }
+
+// ===================== Top-N + Other (Revenue by Category) =====================
+// One support table + measure so a many-category stacked chart shows top-8 + "Other",
+// re-ranked live under cross-filter. Chart wires to Category Bucket[Category] + [Revenue (Top N)].
+{
+    var bucketDax = @"UNION (
+    SELECTCOLUMNS ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), ""Category"", 'List Treatments'[Standard Treatment Category] ),
+    ROW ( ""Category"", ""Other"" )
+)";
+    if (!Model.Tables.Any(x => x.Name == "Category Bucket"))
+        Model.AddCalculatedTable("Category Bucket", bucketDax);
+
+    var mt = Model.Tables["_Measures"];
+    var topDax = @"VAR N = 8
+VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
+VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ), ""@Total"", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) ) )
+VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
+VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+RETURN
+SWITCH ( TRUE (),
+    ISBLANK ( SelBucket ), [Revenue],
+    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
+    CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
+)";
+    var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
+    if (rm == null) rm = mt.AddMeasure("Revenue (Top N)", topDax); else rm.Expression = topDax;
+    rm.FormatString = "£#,##0";
+    rm.DisplayFolder = "Revenue KPIs";
+    Info("Top-N: 'Category Bucket' table + [Revenue (Top N)] ensured.");
+}
