@@ -2314,7 +2314,7 @@ VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N ), ""Cat"", 'List
 VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
 RETURN
 SWITCH ( TRUE (),
-    ISBLANK ( SelBucket ), [Revenue],
+    NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
     SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
     CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
 )";
