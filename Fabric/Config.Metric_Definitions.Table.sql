@@ -7,7 +7,8 @@ DROP TABLE IF EXISTS [Config].[Metric_Definitions]
 GO
 CREATE TABLE [Config].[Metric_Definitions] (
     [Metric_Key]              VARCHAR(100)   NOT NULL,
-    [Display_Name]            VARCHAR(200)   NOT NULL,
+    [Display_Name]            VARCHAR(200)   NOT NULL,
+    [Card_Label]              VARCHAR(60)    NULL,   -- short label for KPI cards (falls back to Display_Name)
     [Section]                 VARCHAR(50)    NOT NULL,
     [Format_Type]             VARCHAR(20)    NOT NULL,
     [Description]             VARCHAR(500)   NULL,   -- short, one-line (tooltip / card)

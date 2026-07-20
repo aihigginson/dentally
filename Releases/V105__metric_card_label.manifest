@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V105 -- Config.Metric_Definitions.Card_Label (short KPI-card label)
+# =====================================================================
+# A short per-metric label for KPI cards (e.g. "Hygiene Retention Outlook" -> "Hygiene Retention",
+# "Open Courses Without Appointment Value" -> "Open Courses (No Appt)") so the PBIR report generator
+# can render compact tile labels while the full Display_Name stays everywhere else. NULL = use
+# Display_Name. ALTER (not table rebuild); Data.sql carries a matching UPDATE so a reseed keeps them.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V105__metric_card_label.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V105__metric_card_label.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST
