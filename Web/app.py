@@ -133,6 +133,7 @@ REPORTS = {
     'clinical':   os.environ.get('REPORT_ID_CLINICAL',  ''),
     'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
     'finance':    os.environ.get('REPORT_ID_FINANCE',   ''),
+    'my_data':    os.environ.get('REPORT_ID_MY_DATA',   ''),
 }
 app.logger.info("Reports loaded: %s", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
