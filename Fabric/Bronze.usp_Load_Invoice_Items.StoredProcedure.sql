@@ -36,7 +36,13 @@ BEGIN
             , LEFT(sundry_id,                    255)            AS Sundry_ID
             , LEFT(name,                         255)            AS Name
             , TRY_CAST(item_price              AS DECIMAL(18,4)) AS Item_Price
-            , CAST(TRY_CAST(nhs_charge         AS DECIMAL(18,4)) AS INT) AS NHS_Charge
+            -- Real Dentally sends nhs_charge as a boolean ('True'/'False'); the mock sent a numeric.
+            -- Map bool -> 1/0 (Silver treats it as a bit flag; NHS Revenue = NHS_Charge > 0), with a
+            -- numeric fallback so any numeric source still classifies. Was CAST(TRY_CAST(... DECIMAL) AS INT),
+            -- which nulled every real 'True'/'False' and blanked NHS Revenue.
+            , CASE WHEN LOWER(LTRIM(RTRIM(nhs_charge))) IN ('true','1')  THEN 1
+                   WHEN LOWER(LTRIM(RTRIM(nhs_charge))) IN ('false','0') THEN 0
+                   ELSE CAST(TRY_CAST(nhs_charge AS DECIMAL(18,4)) AS INT) END AS NHS_Charge
             , TRY_CAST(quantity                AS INT)           AS Quantity
             , TRY_CAST(total_price             AS DECIMAL(18,4)) AS Total_Price
             , LEFT(created_at,                   255)            AS Created_At
