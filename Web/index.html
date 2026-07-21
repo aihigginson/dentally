@@ -502,7 +502,8 @@
     <div class="nav-tab"        data-section="day_book">Day Book</div>
     <div class="nav-tab"        data-section="finance">Finance</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
-    <div class="nav-tab"        data-section="marketing">Marketing</div>
+    <!-- Marketing hidden for now (2026-07-21) — remove style to restore -->
+    <div class="nav-tab"        data-section="marketing" style="display:none">Marketing</div>
     <div class="nav-tab"        data-section="patient">Patient</div>
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
@@ -1209,7 +1210,6 @@
             { displayName: 'Debt',            name: '7f6e0ba3e2ead59a06c5' },
             { displayName: 'Discounts',       name: '2b3f398145d40b179050' },
             { displayName: 'Deposits',        name: '24208f3d007390977e6c' },
-            { displayName: 'Comparison',      name: 'c5967aa555b6d08669a5' },
         ],
         patient: [
             { displayName: 'Acquisition',   name: '146989b88eb26d71b830' },
@@ -1550,7 +1550,7 @@
                 body: JSON.stringify(rows),
             });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) {
             msg.style.color = '#b3261e'; msg.textContent = 'Save failed.';
         } finally {
