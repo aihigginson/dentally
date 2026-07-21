@@ -1,0 +1,43 @@
+-- =====================================================================
+-- Reingest_Appointments.sql  --  full re-pull of appointments (dev + prod patch)
+-- =====================================================================
+-- WHY: the original onboarding pull deliberately EXCLUDED cancelled appointments, so Bronze's
+-- cancellations only ever accreted incrementally and their real (GUID) cancellation reasons were
+-- dropped by the old int cast. After V106/V107/V108 the Bronze loads are shape-correct, but the
+-- historical cancelled rows + reasons aren't in init_stage (the list pull skips cancelled). A clean
+-- full re-pull is the fix.
+--
+-- HOW IT WORKS: the ingest computes its incremental window as updated_after = MAX(Bronze.<entity>
+-- .Updated_At). TRUNCATE-ing Bronze.Appointments resets that to the history_floor (2021-01-01), so
+-- the very next appointments ingest re-pulls ALL records (now including cancelled) and lands them
+-- through the fixed Bronze.usp_Load_Appointments (keeps the GUID reason as text). Slower, but clean
+-- and complete.
+--
+-- PRECONDITIONS
+--   * V106 + V107 + V108 deployed to this environment (Bronze loads fixed). Verify:
+--       SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+--       WHERE TABLE_SCHEMA='Bronze' AND TABLE_NAME='Appointments'
+--         AND COLUMN_NAME='Appointment_Cancellation_Reason_ID';   -- must be 'varchar'
+--
+-- RUNBOOK
+--   1. (optional) note the current row count for a sanity check afterwards:
+--        SELECT State, COUNT(*) FROM Bronze.Appointments GROUP BY State;   -- no 'Cancelled' today
+--   2. Run the TRUNCATE below.
+--   3. Trigger the appointments ingest (Ingest_Dentally / Orchestrate). It recomputes updated_after
+--      from the now-empty Bronze and does a full re-pull. This is heavier than a normal delta.
+--   4. Let the downstream build run (Silver -> Gold -> aggregates) and refresh the model.
+--
+-- VERIFY (after ingest + build)
+--   SELECT State, COUNT(*) FROM Bronze.Appointments GROUP BY State;              -- 'Cancelled' present
+--   SELECT COUNT(*) FROM Gold.Fact_Appointments WHERE fk_Cancellation_Reason <> -1;  -- >> 0
+--   SELECT dcr.Reason, COUNT(*) FROM Gold.Fact_Appointments f
+--     JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.pk_Cancellation_Reason = f.fk_Cancellation_Reason
+--    WHERE f.fk_Cancellation_Reason <> -1 GROUP BY dcr.Reason ORDER BY COUNT(*) DESC;
+--
+-- NOTE: destructive by design (empties Bronze.Appointments until the ingest completes). Everything
+-- downstream of appointments is stale in that window. Run at a quiet time; on prod, do it as part of
+-- a build so the re-pull flows straight through.
+-- =====================================================================
+
+TRUNCATE TABLE Bronze.Appointments;
+GO
