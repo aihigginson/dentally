@@ -2384,6 +2384,26 @@
         return entry;
     }
 
+    // Proactively renew the embed token ~2 min BEFORE it lapses, so visuals never hit an expired
+    // token. The reactive tokenExpired event alone let some visuals error first (PBI fires it late /
+    // not before a query). Keyed per section so a re-embed clears the prior timer.
+    const tokenRefreshTimers = {};
+    function scheduleTokenRefresh(sectionKey, r) {
+        const reportName = SECTION_REPORT[sectionKey];
+        const entry = reportName ? tokenCache[reportName] : null;
+        if (!entry || !entry.expiry) return;
+        clearTimeout(tokenRefreshTimers[sectionKey]);
+        const ms = Math.max(30000, entry.expiry - Date.now() - 120000);
+        tokenRefreshTimers[sectionKey] = setTimeout(async () => {
+            try {
+                const fresh = await refreshEmbedToken(reportName);
+                await r.setAccessToken(fresh.token);
+                _devLog('[token] proactively refreshed for', sectionKey);
+                scheduleTokenRefresh(sectionKey, r);
+            } catch (e) { _devLog('[token] proactive refresh failed', e); }
+        }, ms);
+    }
+
     // Re-embed only on a genuine mobile/desktop breakpoint crossing (rotation,
     // window resize across 768px). matchMedia fires once on the real change and
     // is immune to the content-overflow width blips that previously caused a
@@ -2492,12 +2512,18 @@
             try {
                 const entry = await refreshEmbedToken(SECTION_REPORT[sectionKey]);
                 await r.setAccessToken(entry.token);
+                // setAccessToken updates the token but does NOT re-render a visual that already
+                // errored ("Access token has expired"); refresh() re-queries and recovers them.
+                try { await r.refresh(); } catch (_) {}
+                scheduleTokenRefresh(sectionKey, r);
             } catch (e) {
                 _devLog('[tokenExpired] refresh failed', e);
                 const slot = document.getElementById('embed-' + sectionKey);
                 if (slot) showSessionExpired(slot);
             }
         });
+        // Proactive renewal so the token never actually lapses mid-session.
+        scheduleTokenRefresh(sectionKey, r);
     }
 
     async function loadEmbedsInSection(sectionKey) {
