@@ -40,7 +40,9 @@ BEGIN
               TRY_CAST(tenant_id                         AS INT)  AS Tenant_ID
             , TRY_CAST(id                                AS INT)  AS ID
             , LEFT(uuid,                                   255)   AS UUID
-            , TRY_CAST(appointment_cancellation_reason_id AS INT) AS Appointment_Cancellation_Reason_ID
+            -- Real Dentally cancellation_reason_id is a GUID; keep it as text (was TRY_CAST ... AS INT
+            -- which nulled every real GUID). Gold resolves fk_Cancellation_Reason via the string bk.
+            , LEFT(appointment_cancellation_reason_id, 50)       AS Appointment_Cancellation_Reason_ID
             , TRY_CAST(patient_id                        AS INT)  AS Patient_ID
             , LEFT(patient_name,                           255)   AS Patient_Name
             , LEFT(patient_image_url,                      255)   AS Patient_Image_Url

@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Bronze].[Appointments]
 GO
 CREATE TABLE [Bronze].[Appointments](
 	[ID] [int] NULL,
-	[Appointment_Cancellation_Reason_ID] [int] NULL,
+	[Appointment_Cancellation_Reason_ID] [varchar](50) NULL,
 	[Arrived_At] [VARCHAR](255) NULL,
 	[Booked_Via_API] [VARCHAR](255) NULL,
 	[Cancelled_At] [VARCHAR](255) NULL,
