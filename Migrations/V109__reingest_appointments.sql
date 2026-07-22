@@ -1,4 +1,4 @@
--- V108b__reingest_appointments.sql
+-- V109__reingest_appointments.sql
 -- Data backfill for the cancellation_reason_id GUID fix (V108). The original onboarding pull EXCLUDED
 -- cancelled appointments and the old int cast dropped their GUID reasons, so existing tenants have
 -- cancellations with NO reason. Force a full appointments re-pull for any tenant still in that
@@ -8,7 +8,8 @@
 --
 -- GUARDED + IDEMPOTENT: only deletes tenants whose cancellations currently resolve to ZERO reasons.
 -- A tenant that already has reasons (already patched, e.g. dev) is skipped -> safe no-op there.
--- MIGRATE = tracked, runs once per environment.
+-- MIGRATE = tracked, runs once per environment. Separate from V108 only because the migrate runner
+-- requires a numeric Vnnn filename; deploy V109 right after V108.
 --
 -- *** REQUIRES the appointments ingest to run AFTER this deploy *** (build_Ingest_Dentally with the
 -- affected tenant(s); the warehouse manifest can't trigger a Fabric notebook). Until it runs, the

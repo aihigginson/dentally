@@ -1,0 +1,19 @@
+# =====================================================================
+# Release V109 -- appointments re-ingest backfill (pairs with V108 cancellation_reason_id GUID fix)
+# =====================================================================
+# Deploy IMMEDIATELY AFTER V108. Forces a full appointments re-pull for any tenant still in the
+# pre-fix state (cancellations present but ZERO resolved reasons), by deleting that tenant's Bronze
+# appointments -> resets the per-tenant watermark (bronze_watermark = MAX(Updated_At) WHERE Tenant_ID)
+# -> the next ingest cold-pulls the full history incl cancelled appointments + GUID reasons through
+# the V108-fixed load. Guarded/idempotent: a no-op where already fixed (dev).
+#
+# *** After deploying, you MUST trigger build_Ingest_Dentally for the affected tenant(s) *** -- the
+# warehouse manifest cannot run a Fabric notebook. Until the ingest completes, the deleted tenants
+# have no Bronze appointments (appointment-derived facts stale). Deploy in a maintenance window.
+# Verified on dev (Maple): 0 -> 31,256 cancelled, 45 -> 21,059 resolved cancellation reasons.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V109__reingest_appointments.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V109__reingest_appointments.sql
+
+TEST
