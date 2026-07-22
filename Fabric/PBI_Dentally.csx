@@ -1057,11 +1057,13 @@ add("Patients Phone Not Captured",
 // Patients Booked: distinct patients with an appointment in the period. Drives the My Data
 // "Patients by Plan" donut (grouped by List Patients[Standard Payment Plan]). Keyed off the
 // appointment fact so it respects the practitioner ON the appointment AND the date filter -- a
-// roster count off the patient dim does neither. Counts ALL appointments in range (attendance
-// not filtered -- includes DNAs and cancellations). One plan per patient, so the plan buckets
-// sum to the total.
+// roster count off the patient dim does neither. Attendance is NOT filtered (attended + DNA both
+// count), but cancelled appointments ARE excluded (Is Cancelled). One plan per patient, so the
+// plan buckets sum to the total.
 add("Patients Booked",
-    @"DISTINCTCOUNT('_Appointments'[fk Patient])",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Appointments'[fk Patient]),
+    '_Appointments'[Is Cancelled] = FALSE())",
     "#,##0");
 
 // Patient KPI measures — data-driven generation.
