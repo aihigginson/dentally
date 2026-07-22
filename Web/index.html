@@ -95,7 +95,9 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
         body.dev-mode .header { background: #6B21A8; }
-        body.dev-mode .nav-tab.active, body.dev-mode .nav-tab:hover { color: #6B21A8; border-bottom-color: #6B21A8; }
+        body.dev-mode .nav-tab.active { color: #fff; background: #6B21A8; border-bottom-color: transparent; }
+        body.dev-mode .nav-tab:hover  { color: #6B21A8; background: #f1e8fb; }
+        body.dev-mode .nav-tab.active:hover { color: #fff; background: #6B21A8; }
         .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
@@ -132,10 +134,12 @@
         .nav-tab {
             padding: 13px 18px; font-size: 13px; font-weight: 500; color: var(--text-2);
             cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
-            white-space: nowrap; user-select: none; transition: color 0.12s, border-color 0.12s;
+            white-space: nowrap; user-select: none; transition: color 0.12s, background 0.12s;
+            border-radius: 6px 6px 0 0;
         }
-        .nav-tab:hover  { color: var(--navy); }
-        .nav-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
+        .nav-tab:hover  { color: var(--navy); background: var(--surface-2, #f1f5f9); }
+        .nav-tab.active { color: #fff; background: var(--navy); border-bottom-color: transparent; font-weight: 600; }
+        .nav-tab.active:hover { color: #fff; background: var(--navy); }
 
         /* ── Filter toggle button ── */
         .filter-toggle {
@@ -2404,6 +2408,46 @@
         }, ms);
     }
 
+    // Recover a report whose embed token expired: mint a fresh one, hand it to the embed via
+    // setAccessToken, then refresh() so any visual that already errored ("Access token has
+    // expired") re-queries and re-renders. Falls back to the friendly session-timeout overlay
+    // if the app session itself is dead. 20s cooldown so a failing refresh (or one error event
+    // per visual) can't loop refresh -> error -> refresh.
+    async function recoverEmbedToken(r, sectionKey, reason) {
+        const now = Date.now();
+        if (r.__tokenRecoverAt && now - r.__tokenRecoverAt < 20000) return false;
+        r.__tokenRecoverAt = now;
+        try {
+            const entry = await refreshEmbedToken(SECTION_REPORT[sectionKey]);
+            await r.setAccessToken(entry.token);
+            try { await r.refresh(); } catch (_) {}
+            scheduleTokenRefresh(sectionKey, r);
+            _devLog('[token] recovered via', reason, 'for', sectionKey);
+            return true;
+        } catch (e) {
+            _devLog('[token] recovery failed via', reason, e);
+            const slot = document.getElementById('embed-' + sectionKey);
+            if (slot) showSessionExpired(slot);
+            return false;
+        }
+    }
+
+    // Background tabs and sleeping laptops throttle setTimeout, so the proactive refresh can miss
+    // its window and the token lapses unnoticed. When the tab regains focus, catch any token that's
+    // expired or within 3 min of it and refresh at once (and reschedule the proactive timer, which
+    // may itself have been throttled).
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        Object.keys(embeddedReports).forEach(sectionKey => {
+            const r = embeddedReports[sectionKey];
+            const reportName = SECTION_REPORT[sectionKey];
+            const entry = (r && reportName) ? tokenCache[reportName] : null;
+            if (!entry) return;
+            if (entry.expiry - Date.now() < 180000) recoverEmbedToken(r, sectionKey, 'visibility');
+            else scheduleTokenRefresh(sectionKey, r);
+        });
+    });
+
     // Re-embed only on a genuine mobile/desktop breakpoint crossing (rotation,
     // window resize across 768px). matchMedia fires once on the real change and
     // is immune to the content-overflow width blips that previously caused a
@@ -2507,19 +2551,21 @@
         // one and hand it back so an idle/long-open report keeps working instead of every visual
         // showing "Access token has expired". If the refresh fails (app session also died), show
         // a friendly refresh prompt rather than the raw error.
-        r.on('tokenExpired', async () => {
-            _devLog('[tokenExpired] refreshing embed token for', sectionKey);
-            try {
-                const entry = await refreshEmbedToken(SECTION_REPORT[sectionKey]);
-                await r.setAccessToken(entry.token);
-                // setAccessToken updates the token but does NOT re-render a visual that already
-                // errored ("Access token has expired"); refresh() re-queries and recovers them.
-                try { await r.refresh(); } catch (_) {}
-                scheduleTokenRefresh(sectionKey, r);
-            } catch (e) {
-                _devLog('[tokenExpired] refresh failed', e);
-                const slot = document.getElementById('embed-' + sectionKey);
-                if (slot) showSessionExpired(slot);
+        r.on('tokenExpired', () => {
+            _devLog('[tokenExpired] for', sectionKey);
+            recoverEmbedToken(r, sectionKey, 'tokenExpired');
+        });
+        // A visual can error with an expired token WITHOUT tokenExpired firing first (PBI fires it
+        // late, or not before a query runs) -- which is the raw "Access token has expired" the user
+        // still saw. Catch the error event and recover the same way, gated to token/auth errors so
+        // ordinary visual errors are left alone; recoverEmbedToken's cooldown stops any loop.
+        r.on('error', event => {
+            const d = event && event.detail;
+            const blob = d ? [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
+                .filter(Boolean).join(' ') : '';
+            if (/token|expired|401|403|unauthor/i.test(blob)) {
+                _devLog('[error->token recover]', sectionKey, d);
+                recoverEmbedToken(r, sectionKey, 'error');
             }
         });
         // Proactive renewal so the token never actually lapses mid-session.
