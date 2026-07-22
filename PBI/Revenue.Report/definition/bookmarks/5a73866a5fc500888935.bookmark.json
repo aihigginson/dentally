@@ -1,0 +1,105 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Deposits",
+  "name": "5a73866a5fc500888935",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "45d512a640162d50a944",
+      "ac8e94c4e406705e3499",
+      "f9e62a7305b3b2d2c389",
+      "53ec7ac726d70d7be6c1",
+      "f336885ec4a16aec6ae2",
+      "2291c66f67b0093c5ce8",
+      "553a234395511b50b112",
+      "35da7ab5d003a991bd8d",
+      "75b829ab6ee608ddc022"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "1731a006301e70a5cd87",
+    "sections": {
+      "1731a006301e70a5cd87": {
+        "visualContainers": {
+          "45d512a640162d50a944": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "ac8e94c4e406705e3499": {
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "f9e62a7305b3b2d2c389": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "53ec7ac726d70d7be6c1": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "f336885ec4a16aec6ae2": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "2291c66f67b0093c5ce8": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "553a234395511b50b112": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "35da7ab5d003a991bd8d": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {}
+            }
+          },
+          "75b829ab6ee608ddc022": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Other KPIs",
+  "name": "ccb8f0f314e1cf41ac72",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "68933061c9095cb7c7be",
+      "69f0de85e049d0e70200",
+      "d5e411ce2b001d65d34e",
+      "428e44f43a455533d4b8",
+      "4d89cbe3690b7d9e21ed",
+      "fe0d6aaf08c303609304",
+      "16c628af05cc9aac9ee2",
+      "d1bdea034a6ca3100284"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "146989b88eb26d71b830",
+    "sections": {
+      "146989b88eb26d71b830": {
+        "visualContainers": {
+          "68933061c9095cb7c7be": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "69f0de85e049d0e70200": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "d5e411ce2b001d65d34e": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "428e44f43a455533d4b8": {
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "4d89cbe3690b7d9e21ed": {
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "fe0d6aaf08c303609304": {
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "16c628af05cc9aac9ee2": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {}
+            }
+          },
+          "d1bdea034a6ca3100284": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

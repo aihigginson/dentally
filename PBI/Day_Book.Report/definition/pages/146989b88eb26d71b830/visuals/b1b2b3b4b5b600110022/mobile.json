@@ -1,0 +1,53 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
+  "position": {
+    "x": 4,
+    "y": 34,
+    "z": 0,
+    "height": 408,
+    "width": 320,
+    "tabOrder": 0
+  },
+  "objects": {
+    "layout": [
+      {
+        "properties": {
+          "orientation": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          },
+          "style": {
+            "expr": {
+              "Literal": {
+                "Value": "'Table'"
+              }
+            }
+          },
+          "rowCount": {
+            "expr": {
+              "Literal": {
+                "Value": "8L"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "fillCustom": [],
+    "shapeCustomRectangle": [],
+    "referenceLabelLayout": [],
+    "value": [],
+    "label": [],
+    "divider": [],
+    "padding": [],
+    "cardCalloutArea": [],
+    "outline": [],
+    "referenceLabel": [],
+    "referenceLabelTitle": [],
+    "referenceLabelValue": [],
+    "border": []
+  }
+}

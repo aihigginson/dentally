@@ -27,6 +27,9 @@ Screenshot *.png
 # (deploy-site.yml), never committed — keeps the Trust page in sync with source.
 Website/docs/
 
-# Power BI reports are managed through the Fabric pipeline, not Git
-# (and PBI Dentally.pbix exceeds GitHub's 100MB limit). Never repackage a .pbix.
+# PBIR thin-report definitions (*.pbip + *.Report/) ARE tracked -- plain-text JSON,
+# small and diffable. Keep the binary .pbix out (the "PBI Dentally.pbix" model carries
+# cached data > GitHub's 100MB limit; never repackage a .pbix) and the per-user .pbi
+# cache/localSettings (machine-specific, not shareable).
 PBI/*.pbix
+PBI/**/.pbi/

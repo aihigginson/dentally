@@ -1,0 +1,28 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/reportExtension/1.0.0/schema.json",
+  "name": "extension",
+  "entities": [
+    {
+      "name": "_Measures",
+      "measures": [
+        {
+          "name": "Total Revenue Card Label",
+          "dataType": "Double",
+          "expression": "\n  [Total Revenue vs Target] & UNICHAR(13) & UNICHAR(10) & FORMAT([Total Revenue Target], \"£#,##0,,\"\"M\"\"\")",
+          "references": {
+            "measures": [
+              {
+                "entity": "_Measures",
+                "name": "Total Revenue vs Target"
+              },
+              {
+                "entity": "_Measures",
+                "name": "Total Revenue Target"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

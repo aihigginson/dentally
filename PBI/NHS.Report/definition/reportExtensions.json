@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/reportExtension/1.0.0/schema.json",
+  "name": "extension",
+  "entities": [
+    {
+      "name": "Application Users",
+      "measures": [
+        {
+          "name": "Diag NHS Rows",
+          "dataType": "Double",
+          "expression": "COUNTROWS('_NHS Claims')"
+        },
+        {
+          "name": "Diag Who Am I",
+          "dataType": "Double",
+          "expression": "USERPRINCIPALNAME()"
+        },
+        {
+          "name": "Diag NHS UDA All",
+          "dataType": "Double",
+          "expression": "SUM('_NHS Claims'[Awarded UDA])            -- no FY filter, everything"
+        },
+        {
+          "name": "Diag NHS Tenants",
+          "dataType": "Double",
+          "expression": "CONCATENATEX(VALUES('_NHS Claims'[Tenant ID]), FORMAT([Tenant ID],\"0\"), \",\")"
+        },
+        {
+          "name": "Diag Invoice Rows",
+          "dataType": "Double",
+          "expression": "COUNTROWS('_Invoice Items')"
+        }
+      ]
+    }
+  ]
+}

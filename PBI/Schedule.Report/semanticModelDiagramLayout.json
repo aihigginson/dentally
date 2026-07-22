@@ -1,0 +1,243 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 635.64868247665243,
+            "y": 1036.1789811633503
+          },
+          "nodeIndex": "_Appointments",
+          "nodeLineageTag": "e989637f-e59c-47df-b07e-fcf9b59b934a",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 50,
+            "y": 1032.509674533854
+          },
+          "nodeIndex": "_Contracts",
+          "nodeLineageTag": "a6a08368-ae67-445f-9d63-ae380bee038b",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 731.745711344852,
+            "y": 309.73231019630475
+          },
+          "nodeIndex": "_Invoice Items",
+          "nodeLineageTag": "66ca4d65-f572-4111-af5e-a37296188157",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 617.31738874851123,
+            "y": 1752.4239824558085
+          },
+          "nodeIndex": "_Practitioner Diaries",
+          "nodeLineageTag": "4647b0f6-a55b-4a9c-82e0-8d9209c1b58c",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1642.1190244332317,
+            "y": 1362.5669920534701
+          },
+          "nodeIndex": "_Recalls",
+          "nodeLineageTag": "cfc215dc-7a70-4941-ac1d-c26cca85e8b0",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1622.4843342334411,
+            "y": 633.66991640676451
+          },
+          "nodeIndex": "_Treatment Appointments",
+          "nodeLineageTag": "9cd0e8da-9ecd-4ac7-9284-af4a572859d5",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1505.6000377395712,
+            "y": 998.10028703392356
+          },
+          "nodeIndex": "_Treatment Plan Items",
+          "nodeLineageTag": "14ee4f4f-a86a-4d75-8642-9141b76a39ef",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2171.8884767421823,
+            "y": 987.21199122790426
+          },
+          "nodeIndex": "Application Users",
+          "nodeLineageTag": "1c2aed09-f006-4d68-b01b-c06713f825b6",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 915.38362486798394,
+            "y": -50
+          },
+          "nodeIndex": "List Accounts",
+          "nodeLineageTag": "0bf5240c-9518-4f83-a6a0-b88a3006ccd0",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 339.91707529854887,
+            "y": 1397.8489161675091
+          },
+          "nodeIndex": "List Date Start",
+          "nodeLineageTag": "93f1d74f-fcff-4306-981a-7c05049059ce",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1211.4178927221187,
+            "y": 1146.264765886126
+          },
+          "nodeIndex": "List Patients",
+          "nodeLineageTag": "cf89c9ad-1403-4838-bb44-c8df64d7cd06",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 924.94328769545655,
+            "y": 803.00882061424556
+          },
+          "nodeIndex": "List Payment Plans",
+          "nodeLineageTag": "7e971f5d-1b17-4cfb-833c-b2576f9a299b",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 343.86457395081572,
+            "y": 1032.07810024039
+          },
+          "nodeIndex": "List Practice Sites",
+          "nodeLineageTag": "69b56ee5-6755-4c80-bb1c-74d055c2faf6",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 879.19004043844961,
+            "y": 1395.5851753677709
+          },
+          "nodeIndex": "List Practitioners",
+          "nodeLineageTag": "05a1c3c2-5941-4a27-b53b-b2625b92d364",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1192.6051033169242,
+            "y": 438.6015247948294
+          },
+          "nodeIndex": "List Treatment Plans",
+          "nodeLineageTag": "3f56510e-3c18-4034-8f73-a5900e50628f",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1937.8884767421823,
+            "y": 1039.6181232576944
+          },
+          "nodeIndex": "List Treatments",
+          "nodeLineageTag": "66ad7626-d3a6-425a-b7b6-901157ead955",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 493.5324475932909,
+            "y": 667.679012396477
+          },
+          "nodeIndex": "List Users",
+          "nodeLineageTag": "6517f3a1-f4d1-4f5d-81d3-e10cac4792d5",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "Day_Book"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "8ffadfbe-ec41-4514-aca2-567d2d910d57"
+  }
+}

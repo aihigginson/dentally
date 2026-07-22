@@ -1,0 +1,581 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 592,
+        "y": 972
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 2612.027286585504,
+            "y": 939.0343360692882
+          },
+          "nodeIndex": "_Measures",
+          "nodeLineageTag": "bf2e5790-d134-4fe1-ba3a-85c371f36fdf",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 1
+        },
+        {
+          "location": {
+            "x": 1144.8055931078216,
+            "y": 1099.9735613300627
+          },
+          "nodeIndex": "_Appointments",
+          "nodeLineageTag": "e989637f-e59c-47df-b07e-fcf9b59b934a",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 2
+        },
+        {
+          "location": {
+            "x": 262.14715335855544,
+            "y": 1257.8299261881691
+          },
+          "nodeIndex": "_Contracts",
+          "nodeLineageTag": "a6a08368-ae67-445f-9d63-ae380bee038b",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 3
+        },
+        {
+          "location": {
+            "x": 1433.7606482577705,
+            "y": 1034.6641049060145
+          },
+          "nodeIndex": "_Invoice Items",
+          "nodeLineageTag": "66ca4d65-f572-4111-af5e-a37296188157",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 4
+        },
+        {
+          "location": {
+            "x": 554.40936376172215,
+            "y": 1564.8698405078487
+          },
+          "nodeIndex": "_Practitioner Diaries",
+          "nodeLineageTag": "4647b0f6-a55b-4a9c-82e0-8d9209c1b58c",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 5
+        },
+        {
+          "location": {
+            "x": 1920.8759596561831,
+            "y": 1809.0796537652816
+          },
+          "nodeIndex": "_Recalls",
+          "nodeLineageTag": "cfc215dc-7a70-4941-ac1d-c26cca85e8b0",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 6
+        },
+        {
+          "location": {
+            "x": 2896.027286585504,
+            "y": 939.0343360692882
+          },
+          "nodeIndex": "_Targets",
+          "nodeLineageTag": "6da8bd93-38bf-4d65-9fd3-6d0d9ab2fd32",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 7
+        },
+        {
+          "location": {
+            "x": 2111.4902782935069,
+            "y": 608.97996355515852
+          },
+          "nodeIndex": "_Treatment Appointments",
+          "nodeLineageTag": "9cd0e8da-9ecd-4ac7-9284-af4a572859d5",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 8
+        },
+        {
+          "location": {
+            "x": 1816.1752754832007,
+            "y": 657.3812558343468
+          },
+          "nodeIndex": "_Treatment Plan Items",
+          "nodeLineageTag": "14ee4f4f-a86a-4d75-8642-9141b76a39ef",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 9
+        },
+        {
+          "location": {
+            "x": 1467.053988778257,
+            "y": 1828.0686721385764
+          },
+          "nodeIndex": "Aggregate Site Patient Current",
+          "nodeLineageTag": "5a802922-e68e-47f1-9b72-242697580434",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 10
+        },
+        {
+          "location": {
+            "x": 1203.3976705557193,
+            "y": 678.06613029907794
+          },
+          "nodeIndex": "Aggregate Site Patient Practitioner Daily",
+          "nodeLineageTag": "1e5f0f16-aa40-48ff-810d-6b22c53767d3",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 11
+        },
+        {
+          "location": {
+            "x": 887.94281325098143,
+            "y": 1828.1315401812608
+          },
+          "nodeIndex": "Aggregate Site Practitioner Current",
+          "nodeLineageTag": "4eb560d4-cf49-41d2-93cf-984066e00f36",
+          "size": {
+            "height": 272,
+            "width": 234
+          },
+          "zIndex": 12
+        },
+        {
+          "location": {
+            "x": 3180.027286585504,
+            "y": 1001.0343360692882
+          },
+          "nodeIndex": "Application Users",
+          "nodeLineageTag": "1c2aed09-f006-4d68-b01b-c06713f825b6",
+          "size": {
+            "height": 176,
+            "width": 234
+          },
+          "zIndex": 13
+        },
+        {
+          "location": {
+            "x": 1188.8714983544164,
+            "y": -50
+          },
+          "nodeIndex": "List Accounts",
+          "nodeLineageTag": "0bf5240c-9518-4f83-a6a0-b88a3006ccd0",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 15
+        },
+        {
+          "location": {
+            "x": 557.87214840421143,
+            "y": 1039.3048519888132
+          },
+          "nodeIndex": "List Date",
+          "nodeLineageTag": "93f1d74f-fcff-4306-981a-7c05049059ce",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 16
+        },
+        {
+          "location": {
+            "x": 50,
+            "y": 1012.3552389843067
+          },
+          "nodeIndex": "List Date Grouping",
+          "nodeLineageTag": "d6f098a3-9ecf-4bb6-9168-b7c7c8ff8d6c",
+          "size": {
+            "height": 152,
+            "width": 234
+          },
+          "zIndex": 17
+        },
+        {
+          "location": {
+            "x": 1720.3691989429922,
+            "y": 1020.6696084515977
+          },
+          "nodeIndex": "List Patients",
+          "nodeLineageTag": "cf89c9ad-1403-4838-bb44-c8df64d7cd06",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 18
+        },
+        {
+          "location": {
+            "x": 1498.7831755298043,
+            "y": 355.50365553058055
+          },
+          "nodeIndex": "List Payment Plans",
+          "nodeLineageTag": "7e971f5d-1b17-4cfb-833c-b2576f9a299b",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 19
+        },
+        {
+          "location": {
+            "x": 849.56339593345183,
+            "y": 1439.7970201476844
+          },
+          "nodeIndex": "List Practice Sites",
+          "nodeLineageTag": "69b56ee5-6755-4c80-bb1c-74d055c2faf6",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 20
+        },
+        {
+          "location": {
+            "x": 1277.8933764163421,
+            "y": 1463.6135664445544
+          },
+          "nodeIndex": "List Practitioners",
+          "nodeLineageTag": "05a1c3c2-5941-4a27-b53b-b2625b92d364",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 21
+        },
+        {
+          "location": {
+            "x": 1794.0978787229822,
+            "y": 292.99863910155159
+          },
+          "nodeIndex": "List Treatment Plans",
+          "nodeLineageTag": "3f56510e-3c18-4034-8f73-a5900e50628f",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 22
+        },
+        {
+          "location": {
+            "x": 2378.027286585504,
+            "y": 244.5360363727641
+          },
+          "nodeIndex": "List Treatments",
+          "nodeLineageTag": "66ad7626-d3a6-425a-b7b6-901157ead955",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 23
+        },
+        {
+          "location": {
+            "x": 934.16751404021159,
+            "y": 314.42448308462531
+          },
+          "nodeIndex": "List Users",
+          "nodeLineageTag": "6517f3a1-f4d1-4f5d-81d3-e10cac4792d5",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 26
+        },
+        {
+          "location": {
+            "x": 5741.2350484709332,
+            "y": 889.0343360692882
+          },
+          "nodeIndex": "_Appointment Journey",
+          "nodeLineageTag": "22f41d9c-70c6-4905-8090-3836bf03a758",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 7111.2350484709332,
+            "y": 941.0343360692882
+          },
+          "nodeIndex": "_Daily Targets",
+          "nodeLineageTag": "ef65bddd-aca5-410c-a049-d26db8f7d5e5",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 7395.2350484709332,
+            "y": 941.0343360692882
+          },
+          "nodeIndex": "_Effective Targets",
+          "nodeLineageTag": "aeac300c-1b19-4614-bb0e-5ae9eae5f85f",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 3748.20670225539,
+            "y": 947.75957251595355
+          },
+          "nodeIndex": "_Finance",
+          "nodeLineageTag": "5da259e0-4dd8-4fb3-baa2-1cb7755d29db",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 6309.2350484709332,
+            "y": 889.0343360692882
+          },
+          "nodeIndex": "_Invoices",
+          "nodeLineageTag": "3ebb9a1b-218e-4292-b02d-25fd5c500b2a",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 7679.2350484709332,
+            "y": 939.0343360692882
+          },
+          "nodeIndex": "_KPI Snapshot",
+          "nodeLineageTag": "a3cb9054-6034-4a7d-9f41-a2a05a69e9b8",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 6877.2350484709332,
+            "y": 889.0343360692882
+          },
+          "nodeIndex": "_Lifetime Invoice Items",
+          "nodeLineageTag": "641b9f85-e606-4906-8391-344d796b288c",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 4316.6041637512835,
+            "y": 684.99078768656636
+          },
+          "nodeIndex": "_Metric Actuals",
+          "nodeLineageTag": "f9d271d5-1aa2-4657-88f7-4ff8f585c9bd",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 5173.2350484709332,
+            "y": 1238.2661380217316
+          },
+          "nodeIndex": "_NHS Claims",
+          "nodeLineageTag": "4f36eb55-73f2-4971-a0de-15b53fac76ce",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 4600.6041637512835,
+            "y": 696.43258679998871
+          },
+          "nodeIndex": "_NHS Claims Approved",
+          "nodeLineageTag": "b2a54ea1-4adc-4957-bf62-58b2e45a53fd",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 5006.3688135741468,
+            "y": 539.80253411684464
+          },
+          "nodeIndex": "_NHS Contract Week",
+          "nodeLineageTag": "0b50b3db-6c28-4632-a9cd-3adc7bf7fac7",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 7963.2350484709332,
+            "y": 939.0343360692882
+          },
+          "nodeIndex": "_Payments",
+          "nodeLineageTag": "25787cbc-21dc-42fe-843f-b46e0ba5b97d",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 6593.2350484709332,
+            "y": 889.0343360692882
+          },
+          "nodeIndex": "_Treatment Plans",
+          "nodeLineageTag": "8ef3c20b-7bcc-49e3-8375-4a8f496fd9ed",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 5457.2350484709332,
+            "y": 987.0343360692882
+          },
+          "nodeIndex": "Journey Filter",
+          "nodeLineageTag": "042f705e-20e3-48f7-b3f5-a2b71c7f0982",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 8247.2350484709332,
+            "y": 941.0343360692882
+          },
+          "nodeIndex": "List Acquisition Sources",
+          "nodeLineageTag": "8607ebb3-340f-4378-81bb-17f01a3dfce9",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 8531.2350484709332,
+            "y": 939.0343360692882
+          },
+          "nodeIndex": "List Cancellation Reasons",
+          "nodeLineageTag": "0757e2c0-9c98-432e-a3f7-07e7036b1036",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 4032.4037417858744,
+            "y": 799.862021993737
+          },
+          "nodeIndex": "List Date Unconstrained",
+          "nodeLineageTag": "6f361137-086c-45a7-81b1-c10242217fbe",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 3464.027286585504,
+            "y": 1093.07788445201
+          },
+          "nodeIndex": "List GL Account",
+          "nodeLineageTag": "81978a8b-5e41-44ef-aa98-5168987858a8",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 6025.2350484709332,
+            "y": 889.0343360692882
+          },
+          "nodeIndex": "List Invoices",
+          "nodeLineageTag": "053778bb-b9bb-415b-abac-9b5d41d11f1d",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 4886.257850488284,
+            "y": 893.50761313382668
+          },
+          "nodeIndex": "List NHS Contracts",
+          "nodeLineageTag": "3d091486-d2a3-4d29-bc54-049c1bffd6a5",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}
