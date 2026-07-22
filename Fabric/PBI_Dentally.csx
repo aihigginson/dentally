@@ -2326,8 +2326,11 @@ add("Spider Rev Avg Deposit Value",
 // One support table + measure so a many-category stacked chart shows top-8 + "Other",
 // re-ranked live under cross-filter. Chart wires to Category Bucket[Category] + [Revenue (Top N)].
 {
+    // Exclude a real category literally named "Other" from the bucket's own rows -- otherwise it
+    // collides with the synthetic "Other" (two identical "Other" series, same value). The real
+    // "Other"'s revenue is folded into the synthetic bucket by the measure (OtherNames) below.
     var bucketDax = @"UNION (
-    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
+    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
     ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
 )";
     var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
@@ -2347,8 +2350,8 @@ add("Spider Rev Avg Deposit Value",
 VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
 VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ), ""@Total"", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) ) )
 VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
-VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
-VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || 'List Treatments'[Standard Treatment Category] = ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
 RETURN
 SWITCH ( TRUE (),
     NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
