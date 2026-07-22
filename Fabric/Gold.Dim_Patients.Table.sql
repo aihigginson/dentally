@@ -29,6 +29,7 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Is_Phone_Missing]                   [bit]           NULL,
     [Active]                             [bit]           NULL,
     [Payment_Plan_ID]                    [int]           NULL,
+    [Standard_Payment_Plan]              [varchar](100)  NULL,
     [Site_ID]                            [varchar](50)   NULL,
     [Acquisition_Source_ID]              [varchar](50)   NULL,
     [fk_Acquisition_Source]              [bigint]        NULL,

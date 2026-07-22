@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V110 -- Patients-by-Plan: Standard_Payment_Plan on Dim_Patients
+# =====================================================================
+# Denormalises the standardised payment-plan name onto Gold.Dim_Patients so patients slice by plan
+# with no model relationship (Payment_Plan_ID is per-tenant -> a natural-key relationship fans out
+# across tenants). MIGRATE adds the column in place (existing rows preserved); DEPLOY updates the
+# load to derive it (dedup Silver.Payment_Plans + Input.Payment_Plan_Map override) and includes it in
+# the change hash so the reload UPDATEs every existing patient. MIGRATE must precede DEPLOY (Fabric
+# validates columns at CREATE time). Gold.Dim_Patients.Table.sql is updated in the repo for fresh
+# builds but NOT deployed here (DROP/CREATE would wipe the 170k-row table).
+#
+# APPLY: after deploy, reload Dim_Patients (Orchestrate_Build, or EXEC Gold.usp_Load_Dim_Patients),
+# which also regenerates the PBI views (List Patients gains "Standard Payment Plan"); then refresh
+# the model. The My Data "Patients by Plan" donut binds to List Patients[Standard Payment Plan].
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V110__patient_standard_payment_plan.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V110__patient_standard_payment_plan.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+
+TEST
