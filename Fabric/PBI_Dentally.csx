@@ -1054,6 +1054,17 @@ add("Patients Phone Not Captured",
 
 // ===================== Patients =====================
 {
+// Patients Seen: distinct patients this practitioner ATTENDED in the period. Drives the My Data
+// "Patients by Plan" donut (grouped by List Patients[Standard Payment Plan]). Keyed off the
+// appointment fact so it respects the practitioner ON the appointment AND the date filter -- a
+// roster count off the patient dim does neither. Attended only (Is Arrived), so DNAs/cancellations
+// are excluded. One plan per patient, so the plan buckets sum to total Patients Seen.
+add("Patients Seen",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Appointments'[fk Patient]),
+    '_Appointments'[Is Arrived] = TRUE())",
+    "#,##0");
+
 // Patient KPI measures — data-driven generation.
 //
 // Per-KPI Target / vs-Target / BG blocks (~40 lines each) are generated from
