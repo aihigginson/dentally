@@ -41,7 +41,8 @@
                 }
               },
               "queryRef": "_Measures.Revenue Per Clinical Hour",
-              "nativeQueryRef": "Revenue Per Clinical Hour"
+              "nativeQueryRef": "Revenue Per Clinical Hour",
+              "displayName": "Rev/Clinical Hr"
             },
             {
               "field": {
@@ -83,7 +84,8 @@
                 }
               },
               "queryRef": "_Measures.Outstanding Invoices",
-              "nativeQueryRef": "Outstanding Invoices"
+              "nativeQueryRef": "Outstanding Invoices",
+              "displayName": "Outstanding Inv"
             },
             {
               "field": {
@@ -300,7 +302,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -370,7 +372,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             },

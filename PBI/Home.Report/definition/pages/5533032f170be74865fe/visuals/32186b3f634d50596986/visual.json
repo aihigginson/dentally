@@ -3,7 +3,7 @@
   "name": "32186b3f634d50596986",
   "position": {
     "x": 512,
-    "y": 0.085475463748252878,
+    "y": 0.08547546374825288,
     "z": 2000,
     "height": 314.2559351476549,
     "width": 250,
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "_Measures.Chair Utilisation",
-              "nativeQueryRef": "Chair Utilisation"
+              "nativeQueryRef": "Chair Utilisation",
+              "displayName": "Chair Util"
             },
             {
               "field": {
@@ -55,7 +56,8 @@
                 }
               },
               "queryRef": "_Measures.Cancellation Frequency",
-              "nativeQueryRef": "Cancellation Frequency"
+              "nativeQueryRef": "Cancellation Frequency",
+              "displayName": "Cancel %"
             },
             {
               "field": {
@@ -69,7 +71,8 @@
                 }
               },
               "queryRef": "_Measures.Short Notice Cancellation Rate",
-              "nativeQueryRef": "Short Notice Cancellation Rate"
+              "nativeQueryRef": "Short Notice Cancellation Rate",
+              "displayName": "Short Notice"
             },
             {
               "field": {
@@ -83,7 +86,8 @@
                 }
               },
               "queryRef": "_Measures.Book Before You Leave",
-              "nativeQueryRef": "Book Before You Leave"
+              "nativeQueryRef": "Book Before You Leave",
+              "displayName": "Book Before Leave"
             },
             {
               "field": {
@@ -97,7 +101,8 @@
                 }
               },
               "queryRef": "_Measures.Days Until Next 30 Minute Free",
-              "nativeQueryRef": "Days Until Next 30 Minute Free"
+              "nativeQueryRef": "Days Until Next 30 Minute Free",
+              "displayName": "Days to 30min Free"
             }
           ]
         }
@@ -286,7 +291,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -328,7 +333,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             },

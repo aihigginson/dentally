@@ -55,7 +55,8 @@
                 }
               },
               "queryRef": "_Measures.NHS UDA Completion Rate",
-              "nativeQueryRef": "NHS UDA Completion Rate"
+              "nativeQueryRef": "NHS UDA Completion Rate",
+              "displayName": "UDA Completion"
             }
           ]
         }
@@ -244,7 +245,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -314,7 +315,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             },

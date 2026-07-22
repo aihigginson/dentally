@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "_Measures.Revenue Per Clinical Hour",
-              "nativeQueryRef": "Revenue Per Clinical Hour"
+              "nativeQueryRef": "Revenue Per Clinical Hour",
+              "displayName": "Rev/Clinical Hr"
             },
             {
               "field": {
@@ -41,7 +42,8 @@
                 }
               },
               "queryRef": "_Measures.Average Plan Value",
-              "nativeQueryRef": "Average Plan Value"
+              "nativeQueryRef": "Average Plan Value",
+              "displayName": "Avg Plan £"
             },
             {
               "field": {
@@ -83,7 +85,8 @@
                 }
               },
               "queryRef": "_Measures.Open Courses Without Appointment",
-              "nativeQueryRef": "Open Courses Without Appointment"
+              "nativeQueryRef": "Open Courses Without Appointment",
+              "displayName": "Open (No Appt)"
             },
             {
               "field": {
@@ -286,7 +289,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -342,7 +345,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             },

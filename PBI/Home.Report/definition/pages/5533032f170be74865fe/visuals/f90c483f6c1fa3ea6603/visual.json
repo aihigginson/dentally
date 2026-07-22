@@ -3,7 +3,7 @@
   "name": "f90c483f6c1fa3ea6603",
   "position": {
     "x": 256,
-    "y": 0.45547546374825032,
+    "y": 0.4554754637482503,
     "z": 1000,
     "height": 366.08624898291293,
     "width": 250,
@@ -41,7 +41,8 @@
                 }
               },
               "queryRef": "_Measures.Dentist Retention Outlook",
-              "nativeQueryRef": "Dentist Retention Outlook"
+              "nativeQueryRef": "Dentist Retention Outlook",
+              "displayName": "Dentist Retention"
             },
             {
               "field": {
@@ -97,7 +98,8 @@
                 }
               },
               "queryRef": "_Measures.Email Details Rate",
-              "nativeQueryRef": "Email Details Rate"
+              "nativeQueryRef": "Email Details Rate",
+              "displayName": "Email Details"
             },
             {
               "field": {
@@ -111,7 +113,8 @@
                 }
               },
               "queryRef": "_Measures.Phone Details Rate",
-              "nativeQueryRef": "Phone Details Rate"
+              "nativeQueryRef": "Phone Details Rate",
+              "displayName": "Phone Details"
             }
           ]
         }
@@ -300,7 +303,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -398,7 +401,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             },
