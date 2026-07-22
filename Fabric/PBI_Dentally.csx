@@ -2334,10 +2334,12 @@ add("Spider Rev Avg Deposit Value",
     ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
 )";
     var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
-    // Rebuild only if it's the OLD shape (materialised columns, but no 'Sort Order'); never delete a
-    // freshly-created (not-yet-refreshed) table, so the sort can be applied on the next pass.
-    if (bucketTbl != null && bucketTbl.Columns.Count > 0 && !bucketTbl.Columns.Any(c => c.Name == "Sort Order")) { bucketTbl.Delete(); bucketTbl = null; }
+    // Create it, or -- crucially -- refresh the DAX of an existing table so edits (e.g. the "Other"
+    // dedup) actually land. The old logic left an existing table untouched, so DAX changes never
+    // applied. We update the expression in place (rather than delete+recreate) so the Category /
+    // Sort Order columns persist and SortByColumn stays set.
     if (bucketTbl == null) bucketTbl = Model.AddCalculatedTable("Category Bucket", bucketDax);
+    else bucketTbl.Partitions[0].Expression = bucketDax;
     // Keep "Other" last: sort Category by the hidden Sort Order column. Calc-table columns only
     // materialise on refresh, so this takes effect once the model has been refreshed + the script re-run.
     if (bucketTbl.Columns.Any(c => c.Name == "Sort Order")) {
