@@ -2061,23 +2061,31 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 // Used to prorate annual targets against actual YTD working days.
 
 // ── Home area RAG: score each of the area's card metrics 1-4 from its [<name> BG] band
-//    (dark red=1 Bad, salmon=2 Poor, light green=3 Good, dark green=4 Very Good; no target/no
-//    data = 2.5 neutral), average the scores, and map the average to the 4-way scheme:
-//    <2 dark red, 2-2.5 salmon, 2.5-3 light green, >3 dark green. Reuses each metric's BG (which
-//    already encodes direction + type + variance band), and recomputes in the live filter context
-//    (Period/Site/Role/Practitioner) so the header colours track the app filters. Drives the
-//    coloured area headers on Home Key Metrics.
-Action<string,string> areaRag = (name, bgList) => add(name,
-    (@"VAR bgs = { " + bgList + @" }
-VAR avg = AVERAGEX(bgs, SWITCH([Value], ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 2.5))
-RETURN SWITCH(TRUE(), avg < 2, ""#c0392b"", avg < 2.5, ""#f4a261"", avg <= 3, ""#6abf7b"", ""#1a7f3c"")"), "");
-areaRag("Revenue Area RAG",    "[Total Revenue BG], [Revenue Per Clinical Hour BG], [Private Revenue BG], [NHS Revenue BG], [Outstanding Invoices BG], [Discounts BG], [Deposit Value BG]");
-areaRag("Patients Area RAG",   "[Active Patients BG], [Dentist Retention Outlook BG], [New Patients BG], [Lapsed Patients BG], [Overdue Recalls BG], [Email Details Rate BG], [Phone Details Rate BG]");
-areaRag("Scheduling Area RAG", "[Chair Utilisation BG], [DNA Rate BG], [Cancellation Frequency BG], [Short Notice Cancellation Rate BG], [Book Before You Leave BG], [Days Until Next 30 Minute Free BG]");
-areaRag("Clinical Area RAG",   "[Revenue Per Clinical Hour BG], [Average Plan Value BG], [Open Courses Value BG], [Open Courses BG], [Open Courses Without Appointment BG], [Exam Ratio BG]");
+//    (dark red #c0392b=1 Bad, salmon #f4a261=2 Poor, light green #6abf7b=3 Good, dark green
+//    #1a7f3c=4 Very Good; anything else -- no target / no data -- = 2.5 neutral), average the
+//    scores, and map: <2 dark red, 2-2.5 salmon, 2.5-3 light green, >3 dark green. Reuses each
+//    metric's BG (already encodes direction/type/variance band + reacts to the filters), so the
+//    header colour recomputes live in the Period/Site/Role/Practitioner context. Built as a sum of
+//    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
+Action<string,string[]> areaRag = (name, bgs) => {
+    string scores = "";
+    foreach (var m in bgs) {
+        if (scores != "") scores += @" +
+    ";
+        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 2.5)";
+    }
+    add(name, @"VAR scoreAvg = DIVIDE(
+    " + scores + @",
+    " + bgs.Length + @")
+RETURN SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"")", "");
+};
+areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Revenue Per Clinical Hour BG]", "[Private Revenue BG]", "[NHS Revenue BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
+areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
+areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
+areaRag("Clinical Area RAG",   new string[]{ "[Revenue Per Clinical Hour BG]", "[Average Plan Value BG]", "[Open Courses Value BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]" });
 // NHS: only Completion Rate carries a target/band (Contracted/Completed are raw UDA counts), so
 // the NHS area score rides on that single metric.
-areaRag("NHS Area RAG",        "[NHS UDA Completion Rate BG]");
+areaRag("NHS Area RAG",        new string[]{ "[NHS UDA Completion Rate BG]" });
 
 add("_Period Run Rate",
     @"VAR period_key = [_FY Period Key]
