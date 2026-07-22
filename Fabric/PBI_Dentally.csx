@@ -253,9 +253,11 @@ add("Open Courses Without Appointment Value",
 
 // Exam ratio: exam appointments / all appointments
 add("Exam Ratio",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[Exam Count]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // Open Courses Value: outstanding private value across ALL open courses (In Progress +
@@ -589,11 +591,15 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // _Targets backing, so BG measures return white until targets are added.
 
 add("NHS UDAs",
-    @"SUM('Aggregate Site Patient Practitioner Daily'[NHS UDAs])",
+    @"CALCULATE(
+SUM('Aggregate Site Patient Practitioner Daily'[NHS UDAs])
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.00");
 
 add("NHS UOAs",
-    @"SUM('Aggregate Site Patient Practitioner Daily'[NHS UOAs])",
+    @"CALCULATE(
+SUM('Aggregate Site Patient Practitioner Daily'[NHS UOAs])
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.00");
 
 // ── CONTRACT cards (the headline NHS targets vs delivery) ─────────────────────
@@ -1266,8 +1272,10 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 add("New Patients",
     @"CALCULATE(
+CALCULATE(
     DISTINCTCOUNT('Aggregate Site Patient Practitioner Daily'[fk Patient]),
-    'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())",
+    'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE())
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0");
 
 // Lapsed = a FLOW metric (V050): read the AGG ('_Metric Actuals' -- a fact PROPERLY related to
@@ -1660,6 +1668,14 @@ add("Total Revenue",
     @"SUM('_Invoice Items'[Total Price])",
     "£#,##0");
 
+// Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
+// in Gold.Aggregate_Practitioner_Contribution[Associate_Pay] (= Production * Associate_Pct/100 from
+// admin-entered Input.Practitioner_Pay), so this is a straight SUM. Reads 0 until the owner enters
+// each associate's Associate_Pct in the app; rates are stored as whole percent (the load divides by 100).
+add("Earnings",
+    @"SUM('Aggregate Practitioner Contribution'[Associate Pay])",
+    "£#,##0");
+
 add("NHS Revenue",
     @"CALCULATE(
     SUM('_Invoice Items'[Total Price]),
@@ -1692,7 +1708,8 @@ add("Revenue Per Patient",
     "£#,##0");
 
 add("Revenue Per Clinical Hour",
-    @"VAR by_prac_day =
+    @"CALCULATE(
+VAR by_prac_day =
 SUMMARIZE(
     FILTER(
         'Aggregate Site Patient Practitioner Daily',
@@ -1702,14 +1719,16 @@ SUMMARIZE(
     'Aggregate Site Patient Practitioner Daily'[fk Date],
     ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
 VAR total_worked = SUMX(by_prac_day, [WH])
-RETURN DIVIDE([Total Revenue], total_worked)",
+RETURN DIVIDE([Total Revenue], total_worked)
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "£#,##0");
 
 // Revenue Per Dentist Hour: as Clinical Hour but restricted to the Dentally Role 'Dentist' on
 // BOTH sides -- dentist revenue over dentist worked hours -- so hygiene time and revenue don't
 // tilt the practice-level rate. (Apply mode retargets this onto '_Metric Actuals' via dRate.)
 add("Revenue Per Dentist Hour",
-    @"VAR by_prac_day =
+    @"CALCULATE(
+VAR by_prac_day =
 SUMMARIZE(
     FILTER(
         'Aggregate Site Patient Practitioner Daily',
@@ -1720,11 +1739,13 @@ SUMMARIZE(
     ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
 VAR total_worked = SUMX(by_prac_day, [WH])
 VAR dentist_rev  = CALCULATE([Total Revenue], KEEPFILTERS('List Practitioners'[Role] = ""dentist""))
-RETURN DIVIDE(dentist_rev, total_worked)",
+RETURN DIVIDE(dentist_rev, total_worked)
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "£#,##0");
 
 add("DNA Revenue Lost",
-    @"VAR dna_count =
+    @"CALCULATE(
+VAR dna_count =
     CALCULATE(
         SUM('Aggregate Site Patient Practitioner Daily'[DNA Appointments]),
         REMOVEFILTERS('List Practitioners')
@@ -1739,7 +1760,8 @@ VAR avg_appt_value =
             REMOVEFILTERS('List Date'),
             REMOVEFILTERS('List Practitioners'))
     )
-RETURN dna_count * avg_appt_value",
+RETURN dna_count * avg_appt_value
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "£#,##0");
 
 add("Deposit Value",
@@ -1885,7 +1907,8 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 // practitioner sees multiple patients on the same day. (Retargeted onto _Metric Actuals
 // [diary_fill] by TabularEditor_MetricActuals.csx; bespoke fallback kept for standalone runs.)
 add("Diary Fill",
-    @"VAR by_prac_day =
+    @"CALCULATE(
+VAR by_prac_day =
     SUMMARIZE(
         'Aggregate Site Patient Practitioner Daily',
         'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
@@ -1895,13 +1918,15 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN
     DIVIDE(
         SUM('Aggregate Site Patient Practitioner Daily'[Appointment Hours]),
-        total_worked)",
+        total_worked)
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // Chair Utilisation: ACTUAL capped in-chair hours / worked hours -- real time in the chair.
 // (Retargeted onto _Metric Actuals[chair_utilisation]; bespoke fallback for standalone runs.)
 add("Chair Utilisation",
-    @"VAR by_prac_day =
+    @"CALCULATE(
+VAR by_prac_day =
     SUMMARIZE(
         'Aggregate Site Patient Practitioner Daily',
         'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
@@ -1911,20 +1936,25 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN
     DIVIDE(
         SUM('Aggregate Site Patient Practitioner Daily'[Chair Hours]),
-        total_worked)",
+        total_worked)
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // Patient Tracked in Surgery: appts with an in-surgery timestamp / all appts (reception tracking).
 add("Patient Tracked in Surgery",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[Tracked Appointments]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 add("DNA Rate",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[DNA Appointments]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // Days until next available slot — MIN across practitioners
@@ -1933,9 +1963,11 @@ add("Days Until Next 30 Minute Free",
     "#,##0");
 
 add("Book Before You Leave",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[BBYL Appointments]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // Home Detail measures: Cancellation Frequency and Short Notice Cancellation Rate
@@ -1943,15 +1975,19 @@ add("Book Before You Leave",
 // columns) to avoid cross-table relationship dependency on _Appointments[Is Cancelled].
 
 add("Cancellation Frequency",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "0.0%");
 
 add("Short Notice Cancellation Rate",
-    @"DIVIDE(
+    @"CALCULATE(
+DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[Short Notice Cancellations]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))
+    , USERELATIONSHIP('List Date'[pk Date], 'Aggregate Site Patient Practitioner Daily'[fk Date]))",
     "#,##0.0%");
 
 // ── Forward heatmap: Diary Fill projected forwards ───────────────────────────
