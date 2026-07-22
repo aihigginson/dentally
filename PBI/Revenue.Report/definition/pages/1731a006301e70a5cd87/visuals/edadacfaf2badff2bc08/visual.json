@@ -3,10 +3,10 @@
   "name": "edadacfaf2badff2bc08",
   "position": {
     "x": 0,
-    "y": 46,
+    "y": 42.491467576791806,
     "z": 5000,
-    "height": 30,
-    "width": 720,
+    "height": 34,
+    "width": 719.7952218430034,
     "tabOrder": 5000
   },
   "visual": {
@@ -19,19 +19,6 @@
               "expr": {
                 "Literal": {
                   "Value": "6L"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "grid": [
-        {
-          "properties": {
-            "padding": {
-              "expr": {
-                "Literal": {
-                  "Value": "4D"
                 }
               }
             }
@@ -146,13 +133,6 @@
                   }
                 }
               }
-            },
-            "bold": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
             }
           },
           "selector": {
@@ -167,6 +147,66 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "bookmarks": [
+        {
+          "properties": {
+            "selectedBookmark": {
+              "expr": {
+                "Literal": {
+                  "Value": "'5a73866a5fc500888935'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "padding": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
                 }
               }
             }
