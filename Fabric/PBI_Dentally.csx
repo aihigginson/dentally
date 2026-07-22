@@ -2002,27 +2002,31 @@ DIVIDE(
     "#,##0.0%");
 
 // ── Forward heatmap: Diary Fill projected forwards ───────────────────────────
-// Same metric as [Diary Fill], but its date axis comes from 'List Date Unconstrained'
-// (a second alias of PBI.[List Date]) so the external period filter can't clamp it to today.
-// Put 'List Date Unconstrained' on the heatmap axis + a relative-date slicer (e.g. 0..13 days)
-// to look as far forward as you like. REMOVEFILTERS drops the app's period filter; the TREATAS
-// on 'List Date Unconstrained'[pk Date] re-applies the heatmap's date window onto the fact --
-// robust whether or not the physical relationship you add to _Metric Actuals is active.
-// (Works forwards because 7,040 future appts + 5,127 future rota rows exist in the aggregate.)
+// Reads the UNCONSTRAINED aggregate alias 'Aggregate Site Patient Practitioner Daily Unconstrained'
+// whose [fk Date] relates to 'List Date Unconstrained' (active) -- so the app's period filter (on
+// 'List Date') can't clamp it and future days stay visible. Put 'List Date Unconstrained' on the
+// heatmap axis + a relative-date slicer (e.g. 0..13 days) to look as far forward as you like.
+// Practitioner/site come through the alias's OWN active relationships to List Practitioners /
+// List Practice Sites, so no REMOVEFILTERS/TREATAS/USERELATIONSHIP is needed. Same ratio as
+// [Diary Fill]: Appointment Hours / Worked Hours (Worked Hours deduped per practitioner-day via
+// SUMMARIZE, as it repeats across the patient rows).
+//
+// REQUIRES on 'Aggregate Site Patient Practitioner Daily Unconstrained' (ACTIVE relationships):
+//   [fk Date]          -> 'List Date Unconstrained'[pk Date]
+//   [fk Practitioner]  -> 'List Practitioners'[pk Practitioner]
+//   [fk Practice Site] -> 'List Practice Sites'[pk Practice Site]
 add("Diary Fill (Forward)",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
-    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
-    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
-VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
-    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
-    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
-RETURN DIVIDE(n, d)",
+    @"VAR by_prac_day =
+    SUMMARIZE(
+        'Aggregate Site Patient Practitioner Daily Unconstrained',
+        'Aggregate Site Patient Practitioner Daily Unconstrained'[fk Practitioner],
+        'Aggregate Site Patient Practitioner Daily Unconstrained'[fk Date],
+        ""WH"", MAX('Aggregate Site Patient Practitioner Daily Unconstrained'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+RETURN
+    DIVIDE(
+        SUM('Aggregate Site Patient Practitioner Daily Unconstrained'[Appointment Hours]),
+        total_worked)",
     "#,##0.0%");
 
 // Forward Book Value — the £ companion to the % fill (confirmed forward revenue, next 7 days).
