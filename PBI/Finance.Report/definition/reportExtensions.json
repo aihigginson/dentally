@@ -9,7 +9,6 @@
           "name": "Total Revenue Card Label",
           "dataType": "Double",
           "expression": "\n  [Total Revenue vs Target] & UNICHAR(13) & UNICHAR(10) & FORMAT([Total Revenue Target], \"£#,##0,,\"\"M\"\"\")",
-          "formatString": "General Number",
           "references": {
             "measures": [
               {
