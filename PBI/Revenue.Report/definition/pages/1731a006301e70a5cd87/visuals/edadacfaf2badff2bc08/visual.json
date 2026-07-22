@@ -12,19 +12,6 @@
   "visual": {
     "visualType": "bookmarkNavigator",
     "objects": {
-      "bookmarks": [
-        {
-          "properties": {
-            "bookmarkGroup": {
-              "expr": {
-                "Literal": {
-                  "Value": "'554e87cef149f1059a14'"
-                }
-              }
-            }
-          }
-        }
-      ],
       "shape": [
         {
           "properties": {
