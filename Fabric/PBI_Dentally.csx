@@ -1054,18 +1054,6 @@ add("Patients Phone Not Captured",
 
 // ===================== Patients =====================
 {
-// Patients Booked: distinct patients with an appointment in the period. Drives the My Data
-// "Patients by Plan" donut (grouped by List Patients[Standard Payment Plan]). Keyed off the
-// appointment fact so it respects the practitioner ON the appointment AND the date filter -- a
-// roster count off the patient dim does neither. Attendance is NOT filtered (attended + DNA both
-// count), but cancelled appointments ARE excluded (Is Cancelled). One plan per patient, so the
-// plan buckets sum to the total.
-add("Patients Booked",
-    @"CALCULATE(
-    DISTINCTCOUNT('_Appointments'[fk Patient]),
-    '_Appointments'[Is Cancelled] = FALSE())",
-    "#,##0");
-
 // Patient KPI measures — data-driven generation.
 //
 // Per-KPI Target / vs-Target / BG blocks (~40 lines each) are generated from
@@ -1096,6 +1084,17 @@ Action<string,string,string> add = (name, dax, fmt) => {
     m.DisplayFolder = g;
     if (fmt != "") m.FormatString = fmt;
 };
+
+// Patients Booked: distinct patients with a (non-cancelled) appointment in the period. Drives the
+// My Data "Patients by Plan" donut (grouped by List Patients[Standard Payment Plan]). Keyed off the
+// appointment fact so it respects the practitioner ON the appointment AND the date filter -- a
+// roster count off the patient dim does neither. Attendance NOT filtered (attended + DNA both count);
+// cancelled excluded (Is Cancelled). One plan per patient, so the plan buckets sum to the total.
+add("Patients Booked",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Appointments'[fk Patient]),
+    '_Appointments'[Is Cancelled] = FALSE())",
+    "#,##0");
 
 // ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
 // lvl: practitioner in context -> Custom Role; role -> that role; else Practice. RunRate/tDaily
