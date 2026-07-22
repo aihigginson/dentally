@@ -601,7 +601,7 @@
         <div class="embed-slot embed-full" id="embed-day_book">Coming soon</div>
     </section>
     <section class="section" id="section-my_data">
-        <div class="embed-slot embed-full" id="embed-my_data">Coming soon</div>
+        <div class="embed-slot embed-full" id="embed-my_data"></div>
     </section>
     <section class="section" id="section-marketing">
         <div class="embed-slot embed-full" id="embed-marketing">Coming soon</div>
@@ -2578,6 +2578,18 @@
 
         const slot = document.getElementById('embed-' + sectionKey);
         if (!slot) return;
+
+        // Show the branded spinner IMMEDIATELY -- before the async token fetch below -- so the slot
+        // never flashes a static placeholder ("Coming soon") or a blank gap while the token
+        // round-trips. doEmbed's powerbi.reset() clears this and attachEmbedOverlay re-adds an
+        // identical spinner, so the hand-off is seamless (no flicker).
+        if (!slot.querySelector('.pbi-loading')) {
+            slot.textContent = '';
+            const ov = document.createElement('div');
+            ov.className = 'pbi-loading';
+            ov.innerHTML = '<div class="pbi-loading-brand">Analytic<span>ally</span></div><div class="pbi-loading-spinner"></div>';
+            slot.appendChild(ov);
+        }
 
         let config;
         try {
