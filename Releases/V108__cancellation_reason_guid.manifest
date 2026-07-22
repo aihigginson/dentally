@@ -13,13 +13,16 @@
 # is also updated to varchar in the repo for fresh onboarding, but NOT deployed here (DROP/CREATE would
 # wipe the existing 247k-row table).
 #
-# APPLY: after this, RE-INGEST real tenants' appointments so historical reason GUIDs re-pull through the
-# fixed load (init_stage retains only the latest delta). Verified on dev: 45 recent cancellations now
-# resolve (Patient - Cancelled, Practice - Clinician unavailable, ...).
+# The V108b backfill then TRUNCATEs the appointments for any tenant still in the pre-fix state
+# (cancellations but zero reasons), resetting the per-tenant Bronze watermark so the next ingest
+# cold-pulls the full history incl cancelled + GUID reasons. Guarded/idempotent: a no-op where already
+# fixed (dev). *** You MUST trigger build_Ingest_Dentally (affected tenants) AFTER this deploy *** --
+# the manifest can't run the Fabric ingest notebook. Verified on dev: 31,256 cancelled / 21,059 reasons.
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V108__cancellation_reason_guid.manifest -SkipTests
 # =====================================================================
 
 MIGRATE  Migrations\V108__cancellation_reason_guid.sql
 DEPLOY   Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+MIGRATE  Migrations\V108b__reingest_appointments.sql
 
 TEST
