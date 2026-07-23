@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "b1b2b3b4b5b600110022",
+  "name": "398b68d19d223e836615",
   "position": {
-    "x": 0,
-    "y": 33.78839590443686,
+    "x": 4,
+    "y": 74,
     "z": 0,
-    "height": 42.491467576791806,
-    "width": 1279.863481228669,
+    "height": 72,
+    "width": 1272,
     "tabOrder": 0
   },
   "visual": {
@@ -23,12 +23,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Overdue Recalls"
+                  "Property": "Outstanding Invoices"
                 }
               },
-              "queryRef": "_Measures.Overdue Recalls",
-              "nativeQueryRef": "Overdue Recalls",
-              "displayName": "Overdue Recalls"
+              "queryRef": "_Measures.Outstanding Invoices",
+              "nativeQueryRef": "Outstanding Invoices",
+              "displayName": "Outstanding Invoices"
             },
             {
               "field": {
@@ -38,12 +38,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Dentist Retention Outlook"
+                  "Property": "Patients With Outstanding Invoice"
                 }
               },
-              "queryRef": "_Measures.Dentist Retention Outlook",
-              "nativeQueryRef": "Dentist Retention",
-              "displayName": "Dentist Retention"
+              "queryRef": "_Measures.Patients With Outstanding Invoice",
+              "nativeQueryRef": "Patients With Outstanding Invoice",
+              "displayName": "Patients With Outstanding Invoice"
             },
             {
               "field": {
@@ -53,12 +53,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Hygiene Retention Outlook"
+                  "Property": "Email Details Rate"
                 }
               },
-              "queryRef": "_Measures.Hygiene Retention Outlook",
-              "nativeQueryRef": "Hygiene Retention",
-              "displayName": "Hygiene Retention"
+              "queryRef": "_Measures.Email Details Rate",
+              "nativeQueryRef": "Email Details Rate",
+              "displayName": "Email Details Rate"
             },
             {
               "field": {
@@ -68,12 +68,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Dentist Recall Conversion"
+                  "Property": "Phone Details Rate"
                 }
               },
-              "queryRef": "_Measures.Dentist Recall Conversion",
-              "nativeQueryRef": "Dentist Conversion",
-              "displayName": "Dentist Conversion"
+              "queryRef": "_Measures.Phone Details Rate",
+              "nativeQueryRef": "Phone Details Rate",
+              "displayName": "Phone Details Rate"
             },
             {
               "field": {
@@ -83,12 +83,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Hygiene Recall Conversion"
+                  "Property": "Patients Email Not Captured"
                 }
               },
-              "queryRef": "_Measures.Hygiene Recall Conversion",
-              "nativeQueryRef": "Hygiene Conversion",
-              "displayName": "Hygiene Conversion"
+              "queryRef": "_Measures.Patients Email Not Captured",
+              "nativeQueryRef": "Patients Email Not Captured",
+              "displayName": "Patients Email Not Captured"
             },
             {
               "field": {
@@ -98,12 +98,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Open Courses Without Appointment Value"
+                  "Property": "Patients Phone Not Captured"
                 }
               },
-              "queryRef": "_Measures.Open Courses Without Appointment Value",
-              "nativeQueryRef": "Open Courses (No Appt)",
-              "displayName": "Open Courses (No Appt)"
+              "queryRef": "_Measures.Patients Phone Not Captured",
+              "nativeQueryRef": "Patients Phone Not Captured",
+              "displayName": "Patients Phone Not Captured"
             }
           ]
         }
