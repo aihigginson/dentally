@@ -3,8 +3,8 @@
   "name": "45d512a640162d50a944",
   "position": {
     "x": 0,
-    "y": 76.28,
-    "z": 1000,
+    "y": 74.2320819112628,
+    "z": 5000,
     "height": 468.94197952218428,
     "width": 1279.8634812286689,
     "tabOrder": 0
@@ -251,5 +251,51 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "a5dcecfa08a82806e903",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0f19ab1f905e8050ecd5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Category Bucket"
+              }
+            },
+            "Property": "Category"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e4a8316c69e467eed3ce",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Revenue (Top N)"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

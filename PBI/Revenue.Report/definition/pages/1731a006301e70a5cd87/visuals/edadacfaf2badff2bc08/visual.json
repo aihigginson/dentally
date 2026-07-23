@@ -4,10 +4,10 @@
   "position": {
     "x": 0,
     "y": 42.491467576791806,
-    "z": 5000,
+    "z": 10000,
     "height": 22.525597269624573,
-    "width": 719.79522184300345,
-    "tabOrder": 5000
+    "width": 719.7952218430034,
+    "tabOrder": 11000
   },
   "visual": {
     "visualType": "bookmarkNavigator",
@@ -152,6 +152,20 @@
                       "Value": "'#FFFFFF'"
                     }
                   }
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }

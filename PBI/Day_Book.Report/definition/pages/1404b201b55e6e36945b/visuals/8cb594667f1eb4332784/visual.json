@@ -3,9 +3,9 @@
   "name": "8cb594667f1eb4332784",
   "position": {
     "x": 0,
-    "y": 70,
+    "y": 38.907849829351534,
     "z": 5000,
-    "height": 23,
+    "height": 23.037542662116042,
     "width": 750,
     "tabOrder": 5000
   },
@@ -154,6 +154,20 @@
                   }
                 }
               }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
             }
           },
           "selector": {
@@ -180,7 +194,7 @@
             "selectedBookmark": {
               "expr": {
                 "Literal": {
-                  "Value": "'9cd1df4d33e79f4de5e8'"
+                  "Value": "'19c0e17a7269295e8302'"
                 }
               }
             }
