@@ -2,6 +2,17 @@
 
 Working list — we tick these off together. Created 2026-07-23. IDs are stable; reference by number.
 
+## Progress log — 2026-07-23 (autonomous session; commits are LOCAL, not pushed — eyeball in Desktop)
+- **#3 DONE** — navigator "selected" label pinned to 8pt/regular across all 7 navigators (was inheriting a bigger size).
+- **#5 DONE** — Home **Revenue** card now uses `Revenue Per Dentist Hour` (label auto → "Rev/Dentist Hr"); **Clinical** card keeps `Revenue Per Clinical Hour` → removes the duplication. Measure already exists in `PBI_Dentally.csx`; if the card shows blank, the model needs the current csx applied + refresh.
+- **#7 DONE** — Patient/Acquisition "Week Ending Date" x-axis title hidden (visual `ecd102b2`).
+- **#10 ROOT CAUSE (not yet fixed)** — `Gold.Fact_Appointments.fk_Cancellation_Reason = -1` on **224,758** non-cancelled rows (real reason IDs only on genuine cancellations). Any cancellation visual/measure **not filtered to `Is_Cancelled = 1`** pulls those in as spurious "(no reason)" rows — your symptom. **Fix:** add filter `Is_Cancelled = 1` (or exclude `fk_Cancellation_Reason = -1`) on the cancellation view(s). Left unfixed only because I want to pinpoint the exact visual with you; the filter add is low-risk. (`Fact_Appointments` has `Is_Cancelled, Is_DNA, Reason, Rebooked_Status, Cancelled_At`.)
+- **#11 CHECKED — definitions are as desired.** `Diary Fill` = Appointment (scheduled) Hours / Worked Hours ✓; `Chair Utilisation` = actual capped in-chair hours / Worked Hours ✓. Only `Diary Fill` has a **Forward** variant; there is **no** forward Chair Utilisation ✓ (matches your requirement). "Clinical hours < appointment hours" is expected — Appointment Hours counts all booked appts; clinical/dentist chair time is a subset. If you still think a page is wrong, name it and I'll trace the exact measures.
+- **#6 NEEDS A MEASURE (left for you)** — no `Rebooked Cancellations %` exists. Proposal: `DIVIDE(cancelled appts where Rebooked_Status = rebooked, all cancelled appts)`. Needs the `Rebooked_Status` value semantics confirmed + a csx add + your apply.
+- **#4 DESIGN PROPOSAL (for your ok)** — one consistently-placed **"Details ▸"** button, right-aligned on the navigator/slicer row (top-right), styled as an app button: **navy fill + white text when its drill target is available (active), greyed when not** — which also fixes the inverted highlight (4b). Same position on every report. Say yes and I'll roll it out (pairs naturally with #9 Retention positioning).
+- **Deferred (need you):** #1 (bar heights — subjective, needs your eye), #9 (do alongside #4), #12/#13 (report builds), #14/#15 (parked).
+
+
 ## Closed
 - [x] **Top-N "(Blank)" series** — user reports fixed (verify on next pass through the Top-N charts).
 - [x] **My Data "Patients by Plan" donut** — fixed.
