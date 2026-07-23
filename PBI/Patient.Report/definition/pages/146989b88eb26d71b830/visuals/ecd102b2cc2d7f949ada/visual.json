@@ -6,7 +6,7 @@
     "y": 80.375,
     "z": 0,
     "height": 423.89078498293514,
-    "width": 611.77474402730377,
+    "width": 611.7747440273038,
     "tabOrder": 0
   },
   "visual": {
@@ -251,6 +251,13 @@
               "expr": {
                 "Literal": {
                   "Value": "true"
+                }
+              }
+            },
+            "showAxisTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }
