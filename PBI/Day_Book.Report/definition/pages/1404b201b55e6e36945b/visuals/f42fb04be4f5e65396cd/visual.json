@@ -1,11 +1,11 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "799f4a68c03ec985404d",
+  "name": "f42fb04be4f5e65396cd",
   "position": {
     "x": 4,
-    "y": 150,
-    "z": 0,
-    "height": 440,
+    "y": 98,
+    "z": 10,
+    "height": 494,
     "width": 1272,
     "tabOrder": 10
   },
@@ -59,31 +59,33 @@
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Total Invoiced"
+                  "Property": "Overdue Recalls"
                 }
               },
-              "queryRef": "List Patients.Total Invoiced",
-              "nativeQueryRef": "Total Invoiced"
+              "queryRef": "_Measures.Overdue Recalls",
+              "nativeQueryRef": "Overdue Recalls",
+              "displayName": "Overdue Recalls"
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Total Paid"
+                  "Property": "Open Courses Without Appointment"
                 }
               },
-              "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Total Paid"
+              "queryRef": "_Measures.Open Courses Without Appointment",
+              "nativeQueryRef": "Open Courses Without Appointment",
+              "displayName": "Open Courses Without Appointment"
             },
             {
               "field": {

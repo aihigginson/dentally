@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "398b68d19d223e836615",
+  "name": "49dcd3fe779ade836e00",
   "position": {
-    "x": 4,
-    "y": 74,
+    "x": 0,
+    "y": 0,
     "z": 0,
-    "height": 72,
-    "width": 1272,
+    "height": 64,
+    "width": 1280,
     "tabOrder": 0
   },
   "visual": {
@@ -23,57 +23,42 @@
                       "Entity": "_Measures"
                     }
                   },
+                  "Property": "Overdue Recalls"
+                }
+              },
+              "queryRef": "_Measures.Overdue Recalls",
+              "nativeQueryRef": "Overdue Recalls",
+              "displayName": "Overdue Recalls"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Open Courses Without Appointment"
+                }
+              },
+              "queryRef": "_Measures.Open Courses Without Appointment",
+              "nativeQueryRef": "Open Courses Without Appointment",
+              "displayName": "Open Courses Without Appointment"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
                   "Property": "Outstanding Invoices"
                 }
               },
               "queryRef": "_Measures.Outstanding Invoices",
               "nativeQueryRef": "Outstanding Invoices",
               "displayName": "Outstanding Invoices"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Patients With Outstanding Invoice"
-                }
-              },
-              "queryRef": "_Measures.Patients With Outstanding Invoice",
-              "nativeQueryRef": "Patients With Outstanding Invoice",
-              "displayName": "Patients With Outstanding Invoice"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Email Details Rate"
-                }
-              },
-              "queryRef": "_Measures.Email Details Rate",
-              "nativeQueryRef": "Email Details Rate",
-              "displayName": "Email Details Rate"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Phone Details Rate"
-                }
-              },
-              "queryRef": "_Measures.Phone Details Rate",
-              "nativeQueryRef": "Phone Details Rate",
-              "displayName": "Phone Details Rate"
             },
             {
               "field": {
@@ -104,27 +89,24 @@
               "queryRef": "_Measures.Patients Phone Not Captured",
               "nativeQueryRef": "Patients Phone Not Captured",
               "displayName": "Patients Phone Not Captured"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Book Before You Leave"
+                }
+              },
+              "queryRef": "_Measures.Book Before You Leave",
+              "nativeQueryRef": "Book Before You Leave",
+              "displayName": "Book Before You Leave"
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Measure": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "_Measures"
-                  }
-                },
-                "Property": "Email Details Rate"
-              }
-            },
-            "direction": "Descending"
-          }
-        ],
-        "isDefaultSort": true
       }
     },
     "objects": {

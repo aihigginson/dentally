@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
-  "name": "d55283258b2b1da72a39",
-  "displayName": "Housekeeping",
+  "name": "1404b201b55e6e36945b",
+  "displayName": "Day Book",
   "displayOption": "FitToPage",
   "height": 600,
   "width": 1280,
   "pageBinding": {
-    "name": "245dd84cc5ec162ad243",
+    "name": "41c777d890ce1e371ec9",
     "type": "Default",
     "parameters": [],
     "acceptsFilterContext": "None"

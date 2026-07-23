@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "a5b17650ec8d9d0fb0fe",
+  "name": "8cb594667f1eb4332784",
   "position": {
     "x": 0,
-    "y": 40,
+    "y": 70,
     "z": 5000,
-    "height": 26,
+    "height": 23,
     "width": 750,
     "tabOrder": 5000
   },
   "visual": {
-    "visualType": "pageNavigator",
+    "visualType": "bookmarkNavigator",
     "objects": {
       "shape": [
         {
@@ -168,6 +168,19 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "bookmarks": [
+        {
+          "properties": {
+            "selectedBookmark": {
+              "expr": {
+                "Literal": {
+                  "Value": "'9cd1df4d33e79f4de5e8'"
                 }
               }
             }
