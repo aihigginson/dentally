@@ -505,18 +505,6 @@
               ]
             }
           },
-          "b7f33080d05d4708e901": {
-            "singleVisual": {
-              "visualType": "actionButton",
-              "objects": {}
-            }
-          },
-          "cd2801ef3c0a8049e938": {
-            "singleVisual": {
-              "visualType": "actionButton",
-              "objects": {}
-            }
-          },
           "c7d8e9f0a1b2c3d40056": {
             "filters": {
               "byExpr": [
