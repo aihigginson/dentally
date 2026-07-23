@@ -37,12 +37,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue Per Clinical Hour"
+                  "Property": "Revenue Per Dentist Hour"
                 }
               },
-              "queryRef": "_Measures.Revenue Per Clinical Hour",
-              "nativeQueryRef": "Revenue Per Clinical Hour",
-              "displayName": "Rev/Clinical Hr"
+              "queryRef": "_Measures.Revenue Per Dentist Hour",
+              "nativeQueryRef": "Revenue Per Dentist Hour",
+              "displayName": "Rev/Dentist Hr"
             },
             {
               "field": {
