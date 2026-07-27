@@ -3,15 +3,12 @@
 Working list. Created 2026-07-23; last updated 2026-07-27. IDs stable; reference by number.
 
 ## Recently completed (removed from active list — all on dev, republish from Desktop)
-Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label size · **#7** Patient/Acquisition x-axis title · **#5** Home Revenue → Dentist Hour (value **+ target**) + added to Revenue ribbon + targets loaded + model refreshed.
+Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label size · **#7** Patient/Acquisition x-axis title · **#5** Home Revenue → Dentist Hour (value **+ target**) + Revenue ribbon · **#6 Cancellations Rebooked** (V111/V112: Short Notice moved to a date-based fact flag, Dim reason flag dropped, `Cancellations_Rebooked` aggregate col + measure + target, wired onto Home Scheduling + Schedule cards).
 
 ## Open — report-side, I can do solo
 - **#8 Recalls by Status** — active patients only; cap recall history at 2 years.
 - **#10 Cancellations "blanks"** — *diagnosis resolved:* `Is_Cancelled` is correct (`Cancelled_At IS NOT NULL`). The blanks = **10,363 cancellations (32%) with NO reason recorded at source** (raw `Cancellation_Reason_ID` NULL) — real gaps, not a filter/backend bug. **Fix:** relabel the `fk_Cancellation_Reason = -1` bucket to "No reason recorded" (or exclude it) on the by-reason visual. *Minor:* 752 rows have a reason but `Cancelled_At` NULL → `Is_Cancelled=0`; optionally widen `Is_Cancelled` to include `fk_Cancellation_Reason <> -1`.
 - **#12 Open Course Value** — split **With Appointment vs Without Appointment**.
-
-## Open — needs a measure / backend + your csx apply
-- **#6 Cancellation Rebook** (you: "Cancellations Rebooked") — metric **defined** as `cancellation_rebook` ("% of cancelled appts rebooked into a future slot", scheduling, higher-better) but **no DAX measure** and **no loaded target** (only `cancellation_frequency` + `short_notice_cancellation_rate` are in `Fact_Effective_Targets`). Build the measure set (X / X Target / X vs Target / X BG) in `PBI_Dentally.csx`, set + load the target, apply csx, then add to the Home **Scheduling** column + the Scheduling report.
 
 ## Open — needs your OK / pairing
 - **#4 Detail drill button** — proposal: one right-aligned **"Details ▸"**, **navy when its drill target is active / grey when not** (fixes the inverted highlight), consistent on every report. Pairs with **#9 Patient Retention** detail + filter positioning. Awaiting go.
