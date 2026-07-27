@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V113 -- Label the -1 cancellation-reason seed "No reason recorded"
+# =====================================================================
+# ~32% of real-Dentally cancellations have no reason at source (raw Cancellation_Reason_ID NULL),
+# so they map to the -1 Dim seed row, which had a NULL Reason -> a blank bucket in cancellation
+# by-reason visuals. The Dim load now seeds/backfills the -1 row Reason + Standard as
+# "No reason recorded". SP-only change (no schema); the SP's own UPDATE fixes the existing row.
+#
+# APPLY after deploy: reload Dim_Cancellation_Reasons (Orchestrate_Build, or
+# EXEC Gold.usp_Load_Dim_Cancellation_Reasons) then refresh the model -- the by-reason visuals
+# now show "No reason recorded" instead of a blank.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V113__cancellation_no_reason_label.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql
+
+TEST

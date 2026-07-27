@@ -107,10 +107,16 @@ BEGIN
 
         DROP TABLE #src;
 
-        -- Ensure unknown/-1 seed row exists
-        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        -- Ensure unknown/-1 seed row exists, labelled "No reason recorded" so cancellations
+        -- with no source reason show a meaningful bucket (not a blank) in by-reason visuals.
+        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Reason, Standard_Cancellation_Reason, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 'No reason recorded', 'No reason recorded', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason = -1);
+
+        -- Backfill the label on an already-seeded -1 row (was NULL before this change).
+        UPDATE Gold.Dim_Cancellation_Reasons
+        SET Reason = 'No reason recorded', Standard_Cancellation_Reason = 'No reason recorded', DW_Updated_At = SYSUTCDATETIME()
+        WHERE pk_Cancellation_Reason = -1 AND ISNULL(Reason,'') <> 'No reason recorded';
 
         --*********************************
         --**** Procedure logic ends    ****
