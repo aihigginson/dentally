@@ -13,7 +13,7 @@ Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow 
 - **#12 Open Course Value** — split **With Appointment vs Without Appointment**.
 
 ## Open — needs your OK / pairing
-- **#4 Detail drill button** — proposal: one right-aligned **"Details ▸"**, **navy when its drill target is active / grey when not** (fixes the inverted highlight), consistent on every report. Pairs with **#9 Patient Retention** detail + filter positioning. Awaiting go.
+- **#4 Detail drill button** — DECIDED (2026-07-27): **icon-only** button (▸ / magnifier glyph), **navy=active / grey=inactive** (fixes the inverted highlight), consistent placement on every report. Pairs with **#9 Patient Retention** detail + filter positioning. Ready to build.
 
 ## Confirmed — likely no change
 - **#11 Scheduling hours** — Diary Fill = scheduled hrs / worked hrs ✓; Chair Util = actual in-chair / worked hrs ✓; **no** forward Chair Util ✓. Clinical < Appointment hours is expected. Close unless a specific page is wrong.
@@ -22,11 +22,13 @@ Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow 
 - **#13 My Data** — Open Courses tab (course age + value, drill-through to patient list).
 - **#16 Day Book — REVISIT** — straw man is wired into the dev app but needs a full revamp per **`.claude/plans/day-book-spec.md`**: unified task-flagged patient list + lens filters, hide no-issue patients, the DNA-risk + today's-appt data gaps, and a real Tracking measure.
 
+## Ready to build (direction agreed 2026-07-27)
+- **#2** App menu font → **change to Arial** to match the PBI navigator (`Web/index.html`).
+- **#1** KPI ribbon vs navigator bar → **match heights + tighten the gap**.
+- **#15** Filter/slicer inconsistencies → **I audit every report + propose one standard** (position/header/default text) for approval.
+
 ## Parked / needs your input
-- **#2** App menu font → match the PBI navigator font.
-- **#1** KPI bar vs menu bar height/spacing (needs your eye).
 - **#14** Canvas height standardisation (per-report when we're in it).
-- **#15** Filter/slicer inconsistencies (awaiting your list of spots).
 
 ## Closed
 - Top-N "(Blank)" — verify · My Data Patients-by-Plan donut — fixed · Slicer "All" → "All X" — wontfix (PBI limit).
