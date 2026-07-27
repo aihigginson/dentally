@@ -93,7 +93,7 @@ USING (VALUES
         'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
     ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
         'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
-    ('cancellation_rebook',        'Cancellation Rebook',                'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
+    ('cancellation_rebook',        'Cancellations Rebooked',             'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
         'Of appointments cancelled in the period, the percentage that were successfully rebooked into a future slot -- recovering the chair time and revenue that a cancellation would otherwise lose. The counter-measure to Cancellation Frequency and Short Notice Cancellation Rate: cancellations happen, but how many do you win back? Higher is better.'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
@@ -201,23 +201,23 @@ GO
 -- Short KPI-card label (falls back to Display_Name when NULL). Held on the metric so the PBIR
 -- report generator picks it up per metric.
 UPDATE Config.Metric_Definitions SET Card_Label = CASE Metric_Key
-    WHEN 'revenue_per_patient'             THEN 'Rev / Patient'
-    WHEN 'revenue_per_clinical_hour'       THEN 'Rev / Clinical Hr'
-    WHEN 'revenue_per_dentist_hour'        THEN 'Rev / Dentist Hr'
+    WHEN 'revenue_per_patient'             THEN 'Rev/Patient'
+    WHEN 'revenue_per_clinical_hour'       THEN 'Rev/Clinical Hr'
+    WHEN 'revenue_per_dentist_hour'        THEN 'Rev/Dentist Hr'
     WHEN 'outstanding_invoices'            THEN 'Outstanding Inv'
     WHEN 'dentist_retention_outlook'       THEN 'Dentist Retention'
     WHEN 'hygiene_retention_outlook'       THEN 'Hygiene Retention'
-    WHEN 'dentist_recall_conversion'       THEN 'Dentist Conversion'
-    WHEN 'hygiene_recall_conversion'       THEN 'Hygiene Conversion'
+    WHEN 'dentist_recall_conversion'       THEN 'Dentist Recall%'
+    WHEN 'hygiene_recall_conversion'       THEN 'Hygiene Recall%'
     WHEN 'email_details_rate'              THEN 'Email Details'
     WHEN 'phone_details_rate'              THEN 'Phone Details'
     WHEN 'open_courses_without_appt'       THEN 'Open (No Appt)'
-    WHEN 'open_courses_without_appt_value' THEN 'Open Courses (No Appt)'
-    WHEN 'avg_plan_value'                  THEN 'Avg Plan Value'
+    WHEN 'open_courses_without_appt_value' THEN 'Open £ (No Appt)'
+    WHEN 'avg_plan_value'                  THEN 'Avg Plan £'
     WHEN 'chair_utilisation'               THEN 'Chair Util'
     WHEN 'days_until_30min_free'           THEN 'Days to 30min Free'
-    WHEN 'cancellation_frequency'          THEN 'Cancel Frequency'
-    WHEN 'short_notice_cancellation_rate'  THEN 'Short Notice Canc'
+    WHEN 'cancellation_frequency'          THEN 'Cancel %'
+    WHEN 'short_notice_cancellation_rate'  THEN 'Short Notice'
     WHEN 'patient_tracked_in_surgery'      THEN 'Patient Tracked'
     WHEN 'nhs_uda_completion_rate'         THEN 'UDA Completion'
     WHEN 'book_before_you_leave'           THEN 'Book Before Leave'

@@ -37,7 +37,7 @@
 --                             days. With worked = booked: Diary Fill 100% by design, Chair Util <=100%.
 --    *10     27/07/2026  AIH  Short_Notice_Cancellations now SUMs Fact_Appointments.Is_Short_Notice
 --                             (date-based flag moved onto the fact; Dim reason flag dropped). Added
---                             Rebooked_Cancellations (Rebooked_Status = 'Rebooked') -> Cancellation Rebook.
+--                             Cancellations_Rebooked (Rebooked_Status = 'Rebooked') -> Cancellations Rebooked.
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -117,7 +117,7 @@ BEGIN
             apt.Tenant_ID,
             COUNT(*)                                                            AS Cancelled_Appointments,
             SUM(CAST(ISNULL(apt.Is_Short_Notice,0) AS INT))                     AS Short_Notice_Cancellations,
-            SUM(CASE WHEN apt.Rebooked_Status = 'Rebooked' THEN 1 ELSE 0 END)   AS Rebooked_Cancellations
+            SUM(CASE WHEN apt.Rebooked_Status = 'Rebooked' THEN 1 ELSE 0 END)   AS Cancellations_Rebooked
         INTO #cancel_agg
         FROM Gold.Fact_Appointments apt
         WHERE apt.Is_Cancelled = 1
@@ -309,7 +309,7 @@ BEGIN
             Open_Treatment_Plan, Future_Appointment,
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
-            Cancelled_Appointments, Short_Notice_Cancellations, Rebooked_Cancellations,
+            Cancelled_Appointments, Short_Notice_Cancellations, Cancellations_Rebooked,
             Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
@@ -337,7 +337,7 @@ BEGIN
             a.Appointment_Hours,
             ISNULL(c.Cancelled_Appointments,     0)            AS Cancelled_Appointments,
             ISNULL(c.Short_Notice_Cancellations, 0)            AS Short_Notice_Cancellations,
-            ISNULL(c.Rebooked_Cancellations,     0)            AS Rebooked_Cancellations,
+            ISNULL(c.Cancellations_Rebooked,     0)            AS Cancellations_Rebooked,
             ISNULL(ch.Chair_Hours, 0)                          AS Chair_Hours,
             ISNULL(ch.Tracked_Appointments, 0)                 AS Tracked_Appointments,
             SYSUTCDATETIME(),
@@ -383,7 +383,7 @@ BEGIN
             Open_Treatment_Plan, Future_Appointment,
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
-            Cancelled_Appointments, Short_Notice_Cancellations, Rebooked_Cancellations,
+            Cancelled_Appointments, Short_Notice_Cancellations, Cancellations_Rebooked,
             Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
@@ -401,7 +401,7 @@ BEGIN
             NULL, 0,                 -- Worked_Hours, Appointment_Hours
             c.Cancelled_Appointments,
             c.Short_Notice_Cancellations,
-            c.Rebooked_Cancellations,
+            c.Cancellations_Rebooked,
             NULL, 0,                 -- Chair_Hours, Tracked_Appointments
             SYSUTCDATETIME(),
             SYSUTCDATETIME()

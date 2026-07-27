@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V112 -- Rename Rebooked_Cancellations -> Cancellations_Rebooked + regenerate PBI views
+# =====================================================================
+# Renames the aggregate column to the preferred "Cancellations Rebooked" (Gold column
+# Cancellations_Rebooked -> PBI view "Cancellations Rebooked"). Also REGENERATES the Gold->PBI
+# views, which V111 did not do -- that is why the model/csx could not find the new column even
+# though the Gold column existed. The csx measure "Cancellations Rebooked" (renamed from
+# "Cancellation Rebook") + Config Display_Name are updated in the repo.
+#
+# MIGRATE drops the old column + adds the new (empty; repopulated on reload; must precede the SP
+# redeploy). DEPLOY updates the aggregate load SP to the new name. EXEC regenerates the PBI views
+# so [Aggregate Site Patient Practitioner Daily] exposes "Cancellations Rebooked".
+#
+# APPLY after deploy:
+#   1. Reload the aggregate (Orchestrate_Build, or EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily)
+#      so Cancellations_Rebooked populates.
+#   2. Refresh the model, THEN apply PBI_Dentally.csx (the [Cancellations Rebooked] column now resolves).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V112__rename_cancellations_rebooked.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V112__rename_cancellations_rebooked.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
