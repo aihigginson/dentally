@@ -93,20 +93,6 @@
                       "Entity": "List Patients"
                     }
                   },
-                  "Property": "Total Invoiced"
-                }
-              },
-              "queryRef": "List Patients.Total Invoiced",
-              "nativeQueryRef": "Total Invoiced"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
                   "Property": "Email Address"
                 }
               },
@@ -137,13 +123,13 @@
               "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "List Date Unconstrained"
+                    "Entity": "List Patients"
                   }
                 },
-                "Property": "Full Date"
+                "Property": "Email Address"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ]
       }
@@ -258,6 +244,104 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "5b0ecc9d3211c420332c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "dff8f6a9252e62b3c782",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Recall Type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "30d9d8aea25280b40004",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Recall Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "59856d871d22ab08d23e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date Unconstrained"
+              }
+            },
+            "Property": "Full Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "5de1d1a24535dcd69e55",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Total Paid"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "73207e344ae889a65eec",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8ab58ed7e929b0dd2200",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
       }
     ],
     "filterSortOrder": "Custom"

@@ -276,5 +276,105 @@
     },
     "drillFilterOtherVisuals": true
   },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "c6990df3908467016555",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "774032bde359e74a09b5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Rebooked Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "7c29080f0014a04be4cc",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Patient Count"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "1c58197460a1932010a1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Cancelled"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "_",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "_"
+                          }
+                        },
+                        "Property": "Is Cancelled"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
+  },
   "isHidden": true
 }

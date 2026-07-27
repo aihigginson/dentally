@@ -93,20 +93,6 @@
                       "Entity": "List Patients"
                     }
                   },
-                  "Property": "Total Invoiced"
-                }
-              },
-              "queryRef": "List Patients.Total Invoiced",
-              "nativeQueryRef": "Total Invoiced"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
                   "Property": "Email Address"
                 }
               },
@@ -241,6 +227,104 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "f3862be17eed3477770e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "195143b0574e55ce76c3",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Cancellation Reasons"
+              }
+            },
+            "Property": "Reason"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "f7f09f7d127593833562",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Cancellation Reasons"
+              }
+            },
+            "Property": "Is Short Notice"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c0e2861bb302723850ce",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Rebooked Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8cb15cfbd5bd6363c337",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Total Paid"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "f5c40626be3d1a83a8b4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "33e4df40ea16b09282da",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
       }
     ],
     "filterSortOrder": "Custom"

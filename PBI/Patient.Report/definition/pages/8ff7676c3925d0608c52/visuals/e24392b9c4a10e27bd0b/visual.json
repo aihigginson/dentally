@@ -3,10 +3,10 @@
   "name": "e24392b9c4a10e27bd0b",
   "position": {
     "x": 0,
-    "y": 33.788395904436861,
+    "y": 33.78839590443686,
     "z": 1000,
     "height": 458.90784982935156,
-    "width": 266.00682593856658,
+    "width": 266.0068259385666,
     "tabOrder": 1000
   },
   "visual": {
@@ -28,6 +28,21 @@
               },
               "queryRef": "_Measures.Active Patients",
               "nativeQueryRef": "Active Patients"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Net Patient Growth"
+                }
+              },
+              "queryRef": "_Measures.Net Patient Growth",
+              "nativeQueryRef": "Net Patient Growth",
+              "displayName": "Patient Growth"
             },
             {
               "field": {
@@ -1058,6 +1073,106 @@
             "id": "field-68a0a119-453f-7356-8fda-d49e8319d216",
             "order": 1
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Net Patient Growth vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth",
+            "id": "field-61925310-616b-6a1f-4b12-3ad44e4c8b73",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Net Patient Growth BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth"
+          }
+        },
+        {
+          "properties": {
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Net Patient Growth Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth",
+            "id": "field-7f448ffa-63b5-f039-15ae-89a565e06d5f",
+            "order": 1
+          }
         }
       ],
       "referenceLabelValue": [
@@ -1208,6 +1323,20 @@
           },
           "selector": {
             "metadata": "_Measures.Lapsed Patients"
+          }
+        },
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
           }
         }
       ]

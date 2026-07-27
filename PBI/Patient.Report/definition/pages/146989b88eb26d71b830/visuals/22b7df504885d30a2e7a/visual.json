@@ -269,5 +269,110 @@
     },
     "drillFilterOtherVisuals": true
   },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "8b486f47614d50276646",
+        "ordinal": 0,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Cancellation Reasons"
+              }
+            },
+            "Property": "Is Short Notice"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "511562e81a951bb2b460",
+        "ordinal": 1,
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Patient Count"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "fdb3cc688304b9751088",
+        "ordinal": 2,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "7ec871a3ca8e8356e032",
+        "ordinal": 3,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Cancelled"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "_",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "_"
+                          }
+                        },
+                        "Property": "Is Cancelled"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ],
+    "filterSortOrder": "Custom"
+  },
   "isHidden": true
 }

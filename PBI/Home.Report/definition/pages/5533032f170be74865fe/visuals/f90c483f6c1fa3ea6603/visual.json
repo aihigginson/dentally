@@ -3,7 +3,7 @@
   "name": "f90c483f6c1fa3ea6603",
   "position": {
     "x": 256,
-    "y": 0.45547546374825032,
+    "y": 0.4554754637482503,
     "z": 1000,
     "height": 366.08624898291293,
     "width": 250,
@@ -52,25 +52,12 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "New Patients"
+                  "Property": "Net Patient Growth"
                 }
               },
-              "queryRef": "_Measures.New Patients",
-              "nativeQueryRef": "New Patients"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Lapsed Patients"
-                }
-              },
-              "queryRef": "_Measures.Lapsed Patients",
-              "nativeQueryRef": "Lapsed Patients"
+              "queryRef": "_Measures.Net Patient Growth",
+              "nativeQueryRef": "Net Patient Growth",
+              "displayName": "Patient Growth"
             },
             {
               "field": {
@@ -356,35 +343,21 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.New Patients"
-          }
-        },
-        {
-          "properties": {
-            "labelDisplayUnits": {
-              "expr": {
-                "Literal": {
-                  "Value": "1D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "_Measures.Lapsed Patients"
-          }
-        },
-        {
-          "properties": {
-            "labelDisplayUnits": {
-              "expr": {
-                "Literal": {
-                  "Value": "1D"
-                }
-              }
-            }
-          },
-          "selector": {
             "metadata": "_Measures.Overdue Recalls"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
           }
         }
       ],
@@ -561,34 +534,6 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "New Patients vs Target"
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.New Patients",
-            "id": "field-b77f1718-a18a-c8ec-8db3-c8a33456e9a6",
-            "order": 0
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
                   "Property": "Overdue Recalls vs Target"
                 }
               }
@@ -705,50 +650,6 @@
           },
           "selector": {
             "metadata": "_Measures.Active Patients"
-          }
-        },
-        {
-          "properties": {
-            "backgroundColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Measures"
-                        }
-                      },
-                      "Property": "New Patients BG"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.New Patients"
-          }
-        },
-        {
-          "properties": {
-            "backgroundTransparency": {
-              "expr": {
-                "Literal": {
-                  "Value": "50D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "_Measures.New Patients"
           }
         },
         {
@@ -893,78 +794,6 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Lapsed Patients vs Target"
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.Lapsed Patients",
-            "id": "field-eab22090-e04f-9dd6-67e7-9743cf7eba12",
-            "order": 0
-          }
-        },
-        {
-          "properties": {
-            "backgroundColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Measures"
-                        }
-                      },
-                      "Property": "Lapsed Patients BG"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.Lapsed Patients"
-          }
-        },
-        {
-          "properties": {
-            "backgroundTransparency": {
-              "expr": {
-                "Literal": {
-                  "Value": "50D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "_Measures.Lapsed Patients"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
                   "Property": "Active Patients Target"
                 }
               }
@@ -980,62 +809,6 @@
             ],
             "metadata": "_Measures.Active Patients",
             "id": "field-b4c35f82-b01f-a5d6-4ce1-1583dcbb244a",
-            "order": 1
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "New Patients Target"
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.New Patients",
-            "id": "field-82d244f0-37ca-70bd-7f51-7dd601bf5c34",
-            "order": 1
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Lapsed Patients Target"
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 0
-                }
-              }
-            ],
-            "metadata": "_Measures.Lapsed Patients",
-            "id": "field-a60610e5-7c1e-984a-049a-c3e368993f1d",
             "order": 1
           }
         },
@@ -1222,6 +995,106 @@
             "id": "field-bac2e3e9-51ad-d519-4507-06923a2fc367",
             "order": 1
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Net Patient Growth vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth",
+            "id": "field-8723288b-0bf8-1087-e10b-3b60f406a137",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Net Patient Growth BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth"
+          }
+        },
+        {
+          "properties": {
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Net Patient Growth Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Net Patient Growth",
+            "id": "field-abec8fcd-7388-6989-88c5-5b924a6f4fb0",
+            "order": 1
+          }
         }
       ],
       "referenceLabelValue": [
@@ -1294,20 +1167,6 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.New Patients"
-          }
-        },
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          },
-          "selector": {
             "metadata": "_Measures.Overdue Recalls"
           }
         },
@@ -1350,7 +1209,7 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.Lapsed Patients"
+            "metadata": "_Measures.Dentist Retention Outlook"
           }
         },
         {
@@ -1364,7 +1223,7 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.Dentist Retention Outlook"
+            "metadata": "_Measures.Net Patient Growth"
           }
         }
       ]
