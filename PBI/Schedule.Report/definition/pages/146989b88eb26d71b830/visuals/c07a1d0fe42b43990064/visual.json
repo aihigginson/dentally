@@ -116,7 +116,7 @@
                 }
               },
               "queryRef": "_Measures.Cancellations Rebooked",
-              "nativeQueryRef": "Book Before Leave",
+              "nativeQueryRef": "Cancellations Rebooked",
               "displayName": "Rebooked %"
             }
           ]
