@@ -35,6 +35,7 @@ CREATE TABLE [Gold].[Fact_Appointments](
 	[Is_Cancelled] [bit] NULL,
 	[Is_DNA] [bit] NULL,
 	[Is_Arrived] [bit] NULL,
+	[Is_Short_Notice] [bit] NULL,
 	[Duration_Mins] [int] NULL,
 	[Waiting_Mins] [int] NULL,
 	[In_Surgery_Mins]    [int]          NULL,

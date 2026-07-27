@@ -523,6 +523,7 @@ var metrics = new[] {
     new[]{"Book Before You Leave",            "book_before_you_leave",          "rate",    "#,##0.0%"},
     new[]{"Cancellation Frequency",           "cancellation_frequency",         "rate",    "0.0%"},
     new[]{"Short Notice Cancellation Rate",   "short_notice_cancellation_rate", "rate",    "#,##0.0%"},
+    new[]{"Cancellation Rebook",              "cancellation_rebook",            "rate",    "#,##0.0%"},
     new[]{"Exam Ratio",                       "exam_ratio",                     "rate",    "#,##0.0%"},
     new[]{"Diary Fill",                       "diary_fill",                     "rate",    "#,##0.0%"},
     new[]{"Chair Utilisation",                "chair_utilisation",              "rate",    "#,##0.0%"},
@@ -1973,6 +1974,15 @@ add("Short Notice Cancellation Rate",
     SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
     "#,##0.0%");
 
+// Cancellation Rebook: of cancelled appointments, the % rebooked into a future slot.
+// Improves retrospectively -- Rebooked_Status flips to 'Rebooked' when the patient rebooks,
+// so a cancellation counted here today can move into the numerator later.
+add("Cancellation Rebook",
+    @"DIVIDE(
+    SUM('Aggregate Site Patient Practitioner Daily'[Rebooked Cancellations]),
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
+    "#,##0.0%");
+
 // ── Forward heatmap: Diary Fill projected forwards ───────────────────────────
 // Reads the UNCONSTRAINED aggregate alias 'Aggregate Site Patient Practitioner Daily Unconstrained'
 // whose [fk Date] relates to 'List Date Unconstrained' (active) -- so the app's period filter (on
@@ -2027,6 +2037,7 @@ kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_fr
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
+kpi("Cancellation Rebook",              "#,##0.0%", tEff100("cancellation_rebook"),            vPp("Cancellation Rebook"),              bgHigherPp("Cancellation Rebook", "cancellation_rebook"));
 // Diary Fill (Forward) is a bespoke heatmap measure (its own unconstrained date axis), so it has
 // no data-driven KPI triple here -- colour the heatmap by value, or vs the [Diary Fill Target].
 

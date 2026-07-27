@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V111 -- Short Notice on the fact + Rebooked_Cancellations aggregate + Cancellation Rebook
+# =====================================================================
+# Moves "short notice" from a reason-based Dim flag to a per-appointment DATE-based flag on
+# Gold.Fact_Appointments (Is_Short_Notice = cancelled within 1 day of Start_Time), so the definition
+# lives on the fact. Adds Gold.Aggregate...Daily.Rebooked_Cancellations (cancelled appts whose
+# Rebooked_Status = 'Rebooked') feeding the new "Cancellation Rebook" metric. Drops the unused
+# reason-based Dim_Cancellation_Reasons.Is_Short_Notice.
+#
+# MIGRATE adds the two columns + drops the Dim column IN PLACE (must precede DEPLOY -- Fabric
+# validates columns at CREATE time). DEPLOY updates the three load SPs: the fact now computes
+# Is_Short_Notice (and includes it in the change-hash, so every existing row UPDATEs on reload);
+# the aggregate reads the fact's Is_Short_Notice for Short_Notice_Cancellations and derives
+# Rebooked_Cancellations; the Dim load drops all Is_Short_Notice references. The three Gold
+# *.Table.sql files are updated in the repo for fresh builds but NOT deployed (DROP/CREATE would
+# wipe them).
+#
+# APPLY after deploy:
+#   1. Reload so the flag/column populate: Orchestrate_Build (or EXEC the three loads:
+#      usp_Load_Dim_Cancellation_Reasons -> usp_Load_Fact_Appointments -> usp_Load_Aggregate...).
+#   2. Apply PBI_Dentally.csx (adds the "Cancellation Rebook" measure + Target/vs/BG) and refresh.
+#   3. Confirm the Cancellation Rebook target is loaded (Input.Targets/data-entry -> Fact_Effective_Targets).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V111__short_notice_fact_rebooked_cancellations.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V111__short_notice_fact_rebooked_cancellations.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+TEST

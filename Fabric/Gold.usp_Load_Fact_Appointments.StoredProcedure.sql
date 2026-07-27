@@ -178,6 +178,16 @@ BEGIN
             CASE WHEN a.Did_Not_Attend_At IS NOT NULL THEN 1 ELSE 0 END AS Is_DNA,
             CASE WHEN a.Arrived_At IS NOT NULL THEN 1 ELSE 0 END        AS Is_Arrived,
 
+            -- Short notice = cancelled within 1 day of the appointment start (date-based, per
+            -- appointment). Lives on the fact, NOT on Dim_Cancellation_Reasons (reason-based
+            -- flag was empty on real Dentally data). Window is the same as the old aggregate rule.
+            CASE WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NOT NULL
+                  AND TRY_CAST(NULLIF(TRIM(a.Start_Time),'')  AS datetime2(3)) IS NOT NULL
+                  AND DATEDIFF(day,
+                        CAST(TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) AS DATE),
+                        CAST(TRY_CAST(NULLIF(TRIM(a.Start_Time),'')  AS datetime2(3)) AS DATE)) BETWEEN 0 AND 1
+                 THEN 1 ELSE 0 END                                      AS Is_Short_Notice,
+
             CAST(ISNULL(a.Duration,0) AS INT)                           AS Duration_Mins,
 
             CASE WHEN a.Arrived_At IS NOT NULL AND a.In_Surgery_At IS NOT NULL
@@ -250,6 +260,7 @@ BEGIN
             Is_Cancelled            = src.Is_Cancelled,
             Is_DNA                  = src.Is_DNA,
             Is_Arrived              = src.Is_Arrived,
+            Is_Short_Notice         = src.Is_Short_Notice,
             Duration_Mins           = src.Duration_Mins,
             Waiting_Mins            = src.Waiting_Mins,
             In_Surgery_Mins         = src.In_Surgery_Mins,
@@ -286,6 +297,7 @@ BEGIN
            ISNULL(CAST(tgt.[Is_Cancelled] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_DNA] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Arrived] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Short_Notice] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[In_Surgery_Mins] AS VARCHAR(500)), ''),
@@ -320,6 +332,7 @@ BEGIN
            ISNULL(CAST(src.[Is_Cancelled] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_DNA] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Arrived] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Short_Notice] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Duration_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Waiting_Mins] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[In_Surgery_Mins] AS VARCHAR(500)), ''),
@@ -338,7 +351,7 @@ BEGIN
             Room_ID, State, Reason, Cancellation_Reason_ID,
             Arrived_At, In_Surgery_At, Completed_At, Confirmed_At, Cancelled_At, Did_Not_Attend_At,
             Start_Time, Finish_Time, Pending_At,
-            Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived,
+            Is_Completed, Is_Cancelled, Is_DNA, Is_Arrived, Is_Short_Notice,
             Duration_Mins, Waiting_Mins, In_Surgery_Mins,
             Booking, Appointment_Reason, Rebooked_Status,
             DW_Created_At, DW_Updated_At
@@ -351,7 +364,7 @@ BEGIN
             src.Room_ID, src.State, src.Reason, src.Cancellation_Reason_ID,
             src.Arrived_At, src.In_Surgery_At, src.Completed_At, src.Confirmed_At, src.Cancelled_At, src.Did_Not_Attend_At,
             src.Start_Time, src.Finish_Time, src.Pending_At,
-            src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived,
+            src.Is_Completed, src.Is_Cancelled, src.Is_DNA, src.Is_Arrived, src.Is_Short_Notice,
             src.Duration_Mins, src.Waiting_Mins, src.In_Surgery_Mins,
             src.Booking, src.Appointment_Reason, src.Rebooked_Status,
             SYSUTCDATETIME(), SYSUTCDATETIME()
