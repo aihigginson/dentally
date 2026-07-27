@@ -3,10 +3,10 @@
   "name": "4c5ed0d5c92795511403",
   "position": {
     "x": 0,
-    "y": -0.2116,
+    "y": 0,
     "z": 1000,
-    "height": 43.003412969283275,
-    "width": 1279.8634812286689,
+    "height": 42,
+    "width": 1279.863481228669,
     "tabOrder": 1000
   },
   "visual": {
@@ -42,8 +42,8 @@
                 }
               },
               "queryRef": "_Measures.Average Plan Value",
-              "nativeQueryRef": "Avg Plan £",
-              "displayName": "Avg Plan £"
+              "nativeQueryRef": "Avg Plan \u00a3",
+              "displayName": "Avg Plan \u00a3"
             },
             {
               "field": {
