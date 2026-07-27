@@ -5,8 +5,8 @@
     "x": 0,
     "y": 0.3003,
     "z": 3000,
-    "height": 41.979522184300343,
-    "width": 1279.8634812286689,
+    "height": 41.97952218430034,
+    "width": 1279.863481228669,
     "tabOrder": 8000
   },
   "visual": {
@@ -99,6 +99,21 @@
               },
               "queryRef": "_Measures.Deposit Value",
               "nativeQueryRef": "Deposit Value"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Revenue Per Dentist Hour"
+                }
+              },
+              "queryRef": "_Measures.Revenue Per Dentist Hour",
+              "nativeQueryRef": "Revenue Per Dentist Hour",
+              "displayName": "Rev/Dentist Hr"
             }
           ]
         }
@@ -1157,6 +1172,113 @@
             "id": "field-24530124-89a9-6611-723f-aa825c1bb4ab",
             "order": 2
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Revenue Per Dentist Hour vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Revenue Per Dentist Hour",
+            "id": "field-a542cee6-ea80-42e9-0af5-448d2fa58ec8",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundShow": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Revenue Per Dentist Hour"
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Revenue Per Dentist Hour BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Revenue Per Dentist Hour"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Revenue Per Dentist Hour Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Revenue Per Dentist Hour",
+            "id": "field-7d568852-d7f0-8eaa-9239-a021e8c8968f",
+            "order": 1
+          }
         }
       ],
       "referenceLabelTitle": [
@@ -1249,6 +1371,20 @@
           },
           "selector": {
             "metadata": "_Measures.Deposit Value"
+          }
+        },
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Revenue Per Dentist Hour"
           }
         }
       ],
