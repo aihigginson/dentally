@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       manifest:
-        description: 'Release manifest filename under Releases/ (e.g. V012__remove_free_text.manifest)'
+        description: 'Manifest filename(s) under Releases/ -- one per line or comma-separated for a batch, deployed in the order given (e.g. V012__remove_free_text.manifest)'
         required: true
       target:
         description: 'Target environment'
@@ -24,6 +24,11 @@ on:
         type: choice
         options: [dev, prod]
         default: dev
+      skip_tests:
+        description: 'Skip the TEST regression gate (recommended for schema/data catch-up batches)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   id-token: write   # required for OIDC federation (prod)
@@ -58,13 +63,24 @@ jobs:
 
       # --- Apply the manifest. Dev uses the SP secret; prod uses FABRIC_ACCESS_TOKEN
       #     set above (Deploy.ps1 prefers the pre-acquired token when present). ---
-      - name: Apply release manifest
+      - name: Apply release manifest(s)
         shell: powershell
         env:
           FABRIC_SP_TENANT: ${{ secrets.FABRIC_SP_TENANT }}
           FABRIC_SP_CLIENT_ID: ${{ secrets.FABRIC_SP_CLIENT_ID }}
           FABRIC_SP_CLIENT_SECRET: ${{ secrets.FABRIC_SP_CLIENT_SECRET }}
-        run: .\Scripts\Deploy.ps1 -Manifest "Releases\${{ inputs.manifest }}"
+          MANIFESTS: ${{ inputs.manifest }}
+          SKIP_TESTS: ${{ inputs.skip_tests }}
+        run: |
+          $manifests = $env:MANIFESTS -split "[`r`n,]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $skip = $env:SKIP_TESTS -eq 'true'
+          Write-Host "Deploying $($manifests.Count) manifest(s) in order (skip_tests=$skip):"
+          $manifests | ForEach-Object { Write-Host "  - $_" }
+          foreach ($m in $manifests) {
+            Write-Host "`n========== $m =========="
+            if ($skip) { .\Scripts\Deploy.ps1 -Manifest "Releases\$m" -SkipTests }
+            else       { .\Scripts\Deploy.ps1 -Manifest "Releases\$m" }
+          }
 
   # Regression/reconciliation/RLS gate runs against the DEV test tenant (deterministic
   # T11 baseline), so it only applies to dev deploys. Prod is verified separately.
