@@ -269,6 +269,15 @@ add("Open Courses Value",
 )",
     "£#,##0");
 
+// Open Courses WITH an appointment = 'In Progress' (the complement of Without Appointment).
+// Open Courses Value = With Appointment + Without Appointment; use these two for the #12 split.
+add("Open Courses With Appointment Value",
+    @"CALCULATE(
+    SUM('_Treatment Plans'[Private Treatment Value Outstanding]),
+    '_Treatment Plans'[Course Status] = ""In Progress""
+)",
+    "£#,##0");
+
 // Average private treatment value per started plan. Plan grain via '_Treatment Plans'
 // (plan's own practitioner slicer, no active date relationship -> current-state).
 add("Average Plan Value",
