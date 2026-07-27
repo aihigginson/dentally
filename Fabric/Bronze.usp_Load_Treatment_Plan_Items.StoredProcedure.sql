@@ -44,7 +44,10 @@ BEGIN
             , LEFT(created_at,           255)                                          AS Created_At
             , LEFT(updated_at,           255)                                          AS Updated_At
             , LEFT(appear_on_invoice, 255)                                              AS Appear_On_Invoice
-            , TRY_CAST(base_chart        AS DECIMAL(18,4))                             AS Base_Chart
+            -- Real Dentally sends base_chart as boolean ('True'/'False'); map -> 1/0 (numeric fallback).
+            , CASE WHEN LOWER(LTRIM(RTRIM(base_chart))) IN ('true','1')  THEN 1
+                   WHEN LOWER(LTRIM(RTRIM(base_chart))) IN ('false','0') THEN 0
+                   ELSE TRY_CAST(base_chart AS DECIMAL(18,4)) END                       AS Base_Chart
             , LEFT(charged,          255)                                              AS Charged
             , LEFT(completed,        255)                                              AS Completed
             , LEFT(completed_at,         255)                                          AS Completed_At

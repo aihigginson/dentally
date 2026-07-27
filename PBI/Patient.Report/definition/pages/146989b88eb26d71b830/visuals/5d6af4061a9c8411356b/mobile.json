@@ -1,0 +1,28 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
+  "position": {
+    "x": 49,
+    "y": 54,
+    "z": 2000,
+    "height": 120,
+    "width": 226,
+    "tabOrder": 2000
+  },
+  "objects": {
+    "general": [
+      {
+        "properties": {
+          "paragraphs": [
+            {
+              "textRuns": [
+                {
+                  "value": "Sorry, not available on mobile"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

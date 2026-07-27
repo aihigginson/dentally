@@ -35,6 +35,9 @@
 --                             which excludes blocks already; subtracting them again dropped the
 --                             denominator below booked -> Diary Fill ~145% / Chair Util ~116% on dummy
 --                             days. With worked = booked: Diary Fill 100% by design, Chair Util <=100%.
+--    *10     27/07/2026  AIH  Short_Notice_Cancellations now SUMs Fact_Appointments.Is_Short_Notice
+--                             (date-based flag moved onto the fact; Dim reason flag dropped). Added
+--                             Cancellations_Rebooked (Rebooked_Status = 'Rebooked') -> Cancellations Rebooked.
 --  Notes:
 --    Grain  : Site x Patient x Practitioner x Date x Tenant
 --    Pattern: Full DELETE + INSERT each run (no incremental merge).
@@ -103,10 +106,9 @@ BEGIN
 
         -- ── Cancellation counts (per site-patient-practitioner-date) ────────────
         -- Built separately because cancelled appointments are excluded from the
-        -- appointment spine. Short notice = cancelled within @Short_Notice_Days of the
-        -- appointment (Cancelled_At vs the appointment date) -- the reason-map
-        -- Dim_Cancellation_Reasons.Is_Short_Notice is empty on real Dentally data (*07).
-        DECLARE @Short_Notice_Days INT = 1;   -- days before the appt that count as short notice (configurable)
+        -- appointment spine. Short notice and rebooked are per-appointment flags read
+        -- straight off the fact (Fact_Appointments.Is_Short_Notice / Rebooked_Status),
+        -- so each definition lives in exactly one place.
         SELECT
             apt.fk_Practice_Site                                                AS fk_Site,
             apt.fk_Patient,
@@ -114,12 +116,10 @@ BEGIN
             apt.fk_Date_Start                                                   AS fk_Date,
             apt.Tenant_ID,
             COUNT(*)                                                            AS Cancelled_Appointments,
-            SUM(CASE WHEN apt.Cancelled_At IS NOT NULL AND dd.Full_Date IS NOT NULL
-                      AND DATEDIFF(day, CAST(apt.Cancelled_At AS DATE), dd.Full_Date) BETWEEN 0 AND @Short_Notice_Days
-                     THEN 1 ELSE 0 END)                                         AS Short_Notice_Cancellations
+            SUM(CAST(ISNULL(apt.Is_Short_Notice,0) AS INT))                     AS Short_Notice_Cancellations,
+            SUM(CASE WHEN apt.Rebooked_Status = 'Rebooked' THEN 1 ELSE 0 END)   AS Cancellations_Rebooked
         INTO #cancel_agg
         FROM Gold.Fact_Appointments apt
-        LEFT JOIN Gold.Dim_Date dd ON dd.pk_Date = apt.fk_Date_Start
         WHERE apt.Is_Cancelled = 1
         GROUP BY
             apt.fk_Practice_Site,
@@ -309,7 +309,7 @@ BEGIN
             Open_Treatment_Plan, Future_Appointment,
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
-            Cancelled_Appointments, Short_Notice_Cancellations,
+            Cancelled_Appointments, Short_Notice_Cancellations, Cancellations_Rebooked,
             Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
@@ -337,6 +337,7 @@ BEGIN
             a.Appointment_Hours,
             ISNULL(c.Cancelled_Appointments,     0)            AS Cancelled_Appointments,
             ISNULL(c.Short_Notice_Cancellations, 0)            AS Short_Notice_Cancellations,
+            ISNULL(c.Cancellations_Rebooked,     0)            AS Cancellations_Rebooked,
             ISNULL(ch.Chair_Hours, 0)                          AS Chair_Hours,
             ISNULL(ch.Tracked_Appointments, 0)                 AS Tracked_Appointments,
             SYSUTCDATETIME(),
@@ -382,7 +383,7 @@ BEGIN
             Open_Treatment_Plan, Future_Appointment,
             Exam_Count, Treatment_Count, New_Patient,
             Worked_Hours, Appointment_Hours,
-            Cancelled_Appointments, Short_Notice_Cancellations,
+            Cancelled_Appointments, Short_Notice_Cancellations, Cancellations_Rebooked,
             Chair_Hours, Tracked_Appointments,
             DW_Created_At, DW_Updated_At
         )
@@ -400,6 +401,7 @@ BEGIN
             NULL, 0,                 -- Worked_Hours, Appointment_Hours
             c.Cancelled_Appointments,
             c.Short_Notice_Cancellations,
+            c.Cancellations_Rebooked,
             NULL, 0,                 -- Chair_Hours, Tracked_Appointments
             SYSUTCDATETIME(),
             SYSUTCDATETIME()

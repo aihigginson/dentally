@@ -1,0 +1,69 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 71,
+    "z": 0,
+    "height": 385,
+    "width": 324,
+    "tabOrder": 0
+  },
+  "objects": {
+    "legend": [
+      {
+        "properties": {
+          "position": {
+            "expr": {
+              "Literal": {
+                "Value": "'Top'"
+              }
+            }
+          },
+          "fontSize": {
+            "expr": {
+              "Literal": {
+                "Value": "8D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "labels": [
+      {
+        "properties": {
+          "position": {
+            "expr": {
+              "Literal": {
+                "Value": "'outside'"
+              }
+            }
+          },
+          "labelStyle": {
+            "expr": {
+              "Literal": {
+                "Value": "'Data value, percent of total'"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "visualContainerObjects": {
+    "title": [],
+    "visualTooltip": [
+      {
+        "properties": {
+          "type": {
+            "expr": {
+              "Literal": {
+                "Value": "'Canvas'"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -44,7 +44,6 @@ BEGIN
             LEFT(cr.Reason, 255)                                                                       AS Reason,
             COALESCE(NULLIF(TRIM(m.Standard_Cancellation_Reason),''), LEFT(cr.Reason, 100))             AS Standard_Cancellation_Reason,
             LEFT(cr.Reason_Type, 50)                                                                   AS Reason_Type,
-            CAST(CASE WHEN LOWER(ISNULL(cr.Reason,'')) LIKE '%short%notice%' THEN 1 ELSE 0 END AS BIT) AS Is_Short_Notice,
             CAST(1 AS INT)                                                                             AS Cancellation_Reason_Count
         INTO #src
         FROM Silver.Appointment_Cancellation_Reasons cr
@@ -68,7 +67,6 @@ BEGIN
             Reason                       = src.Reason,
             Standard_Cancellation_Reason = src.Standard_Cancellation_Reason,
             Reason_Type                  = src.Reason_Type,
-            Is_Short_Notice              = src.Is_Short_Notice,
             DW_Updated_At                = SYSUTCDATETIME()
         FROM Gold.Dim_Cancellation_Reasons tgt
         INNER JOIN #src src
@@ -78,14 +76,12 @@ BEGIN
             ISNULL(CAST(tgt.[Is_Active]                    AS VARCHAR(500)), ''),
             ISNULL(CAST(tgt.[Reason]                       AS VARCHAR(500)), ''),
             ISNULL(CAST(tgt.[Standard_Cancellation_Reason] AS VARCHAR(500)), ''),
-            ISNULL(CAST(tgt.[Reason_Type]                  AS VARCHAR(500)), ''),
-            ISNULL(CAST(tgt.[Is_Short_Notice]              AS VARCHAR(500)), '')
+            ISNULL(CAST(tgt.[Reason_Type]                  AS VARCHAR(500)), '')
         )) <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
             ISNULL(CAST(src.[Is_Active]                    AS VARCHAR(500)), ''),
             ISNULL(CAST(src.[Reason]                       AS VARCHAR(500)), ''),
             ISNULL(CAST(src.[Standard_Cancellation_Reason] AS VARCHAR(500)), ''),
-            ISNULL(CAST(src.[Reason_Type]                  AS VARCHAR(500)), ''),
-            ISNULL(CAST(src.[Is_Short_Notice]              AS VARCHAR(500)), '')
+            ISNULL(CAST(src.[Reason_Type]                  AS VARCHAR(500)), '')
         ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -93,13 +89,13 @@ BEGIN
         DECLARE @pk_base BIGINT = ISNULL((SELECT MAX(pk_Cancellation_Reason) FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason > 0), 0);
         INSERT INTO Gold.Dim_Cancellation_Reasons (
             pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID,
-            Is_Active, Reason, Standard_Cancellation_Reason, Reason_Type, Is_Short_Notice,
+            Is_Active, Reason, Standard_Cancellation_Reason, Reason_Type,
             Cancellation_Reason_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Cancellation_Reason_ID),
             src.Tenant_ID, src.Cancellation_Reason_ID,
-            src.Is_Active, src.Reason, src.Standard_Cancellation_Reason, src.Reason_Type, src.Is_Short_Notice,
+            src.Is_Active, src.Reason, src.Standard_Cancellation_Reason, src.Reason_Type,
             src.Cancellation_Reason_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (
@@ -111,10 +107,16 @@ BEGIN
 
         DROP TABLE #src;
 
-        -- Ensure unknown/-1 seed row exists
-        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        -- Ensure unknown/-1 seed row exists, labelled "No reason recorded" so cancellations
+        -- with no source reason show a meaningful bucket (not a blank) in by-reason visuals.
+        INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Reason, Standard_Cancellation_Reason, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 'No reason recorded', 'No reason recorded', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason = -1);
+
+        -- Backfill the label on an already-seeded -1 row (was NULL before this change).
+        UPDATE Gold.Dim_Cancellation_Reasons
+        SET Reason = 'No reason recorded', Standard_Cancellation_Reason = 'No reason recorded', DW_Updated_At = SYSUTCDATETIME()
+        WHERE pk_Cancellation_Reason = -1 AND ISNULL(Reason,'') <> 'No reason recorded';
 
         --*********************************
         --**** Procedure logic ends    ****

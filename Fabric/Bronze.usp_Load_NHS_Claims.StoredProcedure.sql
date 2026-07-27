@@ -44,7 +44,10 @@ BEGIN
             , TRY_CAST(scot_amount_authorised AS DECIMAL(18,4))   AS Scot_Amount_Authorised
             , TRY_CAST(scot_amount_expected AS DECIMAL(18,4))     AS Scot_Amount_Expected
             , TRY_CAST(uda_band AS DECIMAL(18,4))                 AS UDA_Band
-            , TRY_CAST(ortho AS DECIMAL(18,4))                    AS Ortho
+            -- Real Dentally sends ortho as boolean ('True'/'False'); map -> 1/0 (numeric fallback).
+            , CASE WHEN LOWER(LTRIM(RTRIM(ortho))) IN ('true','1')  THEN 1
+                   WHEN LOWER(LTRIM(RTRIM(ortho))) IN ('false','0') THEN 0
+                   ELSE TRY_CAST(ortho AS DECIMAL(18,4)) END       AS Ortho
             , LEFT(continuation_part_number, 255)                 AS Continuation_Part_Number
             , LEFT(nhs_updated_at, 255)                          AS NHS_Updated_At
             , TRY_CAST(dentist_charge AS DECIMAL(18,4))          AS Dentist_Charge

@@ -40,14 +40,6 @@ var jc = jmTable.AddMeasure("Journey Count", "COUNTROWS('_Appointment Journey')"
 jc.DisplayFolder = jmFolder;
 jc.FormatString  = "#,##0";
 
-Info(
-    "Appointment Journey: retired the old dynamic measures; added [Journey Count] = " +
-    "COUNTROWS('_Appointment Journey').\n" +
-    "MANUAL (step 4): (1) import PBI.[_Appointment Journey]; (2) point the Deneb Alluvial " +
-    "at its columns Booking / Appointment Reason / Delay / Next Appointment / Current State " +
-    "+ the [Journey Count] measure (NO bk Appointment ID); (3) put '_Appointment Journey'[Mode] " +
-    "on the slicer and DELETE the old disconnected 'Journey Filter' table; (4) publish."
-);
 }
 
 // ===================== Clinical =====================
@@ -108,7 +100,7 @@ Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -118,7 +110,7 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -127,17 +119,16 @@ Func<string,string> vPctGrey = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
@@ -161,8 +152,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct >= band,     ""#1a7f3c"",
     pct >= 0,        ""#6abf7b"",
     pct >= -band,    ""#f4a261"",
@@ -186,8 +177,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
@@ -278,6 +269,15 @@ add("Open Courses Value",
 )",
     "£#,##0");
 
+// Open Courses WITH an appointment = 'In Progress' (the complement of Without Appointment).
+// Open Courses Value = With Appointment + Without Appointment; use these two for the #12 split.
+add("Open Courses With Appointment Value",
+    @"CALCULATE(
+    SUM('_Treatment Plans'[Private Treatment Value Outstanding]),
+    '_Treatment Plans'[Course Status] = ""In Progress""
+)",
+    "£#,##0");
+
 // Average private treatment value per started plan. Plan grain via '_Treatment Plans'
 // (plan's own practitioner slicer, no active date relationship -> current-state).
 add("Average Plan Value",
@@ -308,7 +308,6 @@ kpi("Exam Ratio",                       "#,##0.0%", tEff100("exam_ratio"),      
 kpi("Open Courses Value",               "£#,##0",   tEffAdd("open_courses_value"),         vPctGrey("Open Courses Value"),                  bgHigherEffGrey("Open Courses Value", "open_courses_value"));
 kpi("Average Plan Value",               "£#,##0",   tEff("avg_plan_value"),             vPct("Average Plan Value"),                      bgHigherEff("Average Plan Value", "avg_plan_value"));
 
-Info("Clinical KPI measures created (data-driven).");
 }
 
 // ===================== Finance =====================
@@ -367,8 +366,6 @@ add("Net Profit", @"[Total Revenue (PL)] - [Total Costs]",     CUR);
 add("EBITDA Margin %", @"DIVIDE([EBITDA], [Total Revenue (PL)])",     PCT);
 add("Net Margin %",    @"DIVIDE([Net Profit], [Total Revenue (PL)])", PCT);
 
-Info("Finance KPIs created: Total Revenue, Cost of Sales, Operating Expenses, Operating Costs, "
-   + "Depreciation & Interest, Total Costs, EBITDA, Net Profit, EBITDA Margin %, Net Margin %.");
 }
 
 // ===================== KPI_Snapshot =====================
@@ -410,7 +407,6 @@ add("Open Courses Value Trend",
 // "Clinical KPIs" folder), which poisoned resolution of [Open Courses Value] / [Average Plan
 // Value]. KPI_Snapshot keeps ONLY the historical Trend series.
 
-Info("Clinical KPI snapshot Trend created.");
 }
 
 // ===================== MetricActuals =====================
@@ -450,6 +446,9 @@ foreach (var m in t.Measures.Where(m => m.DisplayFolder == g).ToList()) m.Delete
 // Cumulative: sum over the date context.
 Func<string,string> dCum = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 RETURN
 CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
@@ -457,41 +456,50 @@ CALCULATE(
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""{key}"",
     '_Metric Actuals'[fk Practice Site] = sel_site,
-    '_Metric Actuals'[fk Practitioner]  = sel_prac
+    pracf
 )").Replace("{key}", key);
 
 // Rate over the date context: DIVIDE(sum num, sum den).
 Func<string,string> dRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
 // Snapshot stock: latest snapshot date in the selected period, then the value at it.
 Func<string,string> dSnap = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 VAR snap_fk = CALCULATE( MAX('_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     '_Metric Actuals'[fk Date] = snap_fk,
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
 
 // Current-state value: ONE row per grain, read date-blind (period-independent).
 Func<string,string> dCur = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
+VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
 
 // Current-state rate: date-blind DIVIDE. currate metrics are all practitioner-AGNOSTIC (stored at
 // fk Practitioner = -1 only), so pin to -1 and IGNORE the practitioner slicer -> shows the global
@@ -524,12 +532,14 @@ var metrics = new[] {
     new[]{"Book Before You Leave",            "book_before_you_leave",          "rate",    "#,##0.0%"},
     new[]{"Cancellation Frequency",           "cancellation_frequency",         "rate",    "0.0%"},
     new[]{"Short Notice Cancellation Rate",   "short_notice_cancellation_rate", "rate",    "#,##0.0%"},
+    new[]{"Cancellations Rebooked",              "cancellation_rebook",            "rate",    "#,##0.0%"},
     new[]{"Exam Ratio",                       "exam_ratio",                     "rate",    "#,##0.0%"},
     new[]{"Diary Fill",                       "diary_fill",                     "rate",    "#,##0.0%"},
     new[]{"Chair Utilisation",                "chair_utilisation",              "rate",    "#,##0.0%"},
     new[]{"Patient Tracked in Surgery",       "patient_tracked_in_surgery",     "rate",    "#,##0.0%"},
     new[]{"Average Plan Value",               "avg_plan_value",                 "rate",    "£#,##0"},
     new[]{"Revenue Per Clinical Hour",        "revenue_per_clinical_hour",      "rate",    "£#,##0"},
+    new[]{"Revenue Per Dentist Hour",         "revenue_per_dentist_hour",       "rate",    "£#,##0"},
     new[]{"Discounts",                        "discounts",                      "rate",    "0.0%"},
     new[]{"Deposit Value",                    "deposit_ratio",                  "rate",    "0.0%"},
     new[]{"Active Patients",                  "active_patients",                "snap",    "#,##0"},
@@ -537,9 +547,10 @@ var metrics = new[] {
     new[]{"Lapsed (Set Inactive)",            "lapsed_deactivated",             "cum",     "#,##0"},
     new[]{"Lapsed (Silently)",                "lapsed_calculated",              "cum",     "#,##0"},
     new[]{"Outstanding Invoices",             "outstanding_invoices",           "snap",    "£#,##0"},
-    // Overdue Recalls is practitioner-agnostic but 'cur' also serves practitioner-supporting metrics
-    // (days_until_*), so it is NOT retargeted here -- its bespoke measure in Patients.csx pins fk
-    // Practitioner = -1 (global, greyed) directly.
+    // Overdue Recalls now carries a per-practitioner grain (dentist/hygienist by Recall_Type) in
+    // Fact_Metric_Actuals, so retarget it here with the grain-aware 'cur' builder (was a bespoke
+    // fk Practitioner = -1 pin).
+    new[]{"Overdue Recalls",                  "overdue_recalls",                "cur",     "#,##0"},
     // Open Courses family now reads Gold.Fact_Treatment_Plans LIVE (via '_Treatment Plans' +
     // [Course Status]) in TabularEditor_Clinical.csx -- NOT materialised here -- so the item-level
     // rules + 3-month recency band evaluate at query time (no row rebuild as courses age).
@@ -558,7 +569,7 @@ foreach (var m in metrics) {
     string dax = build(shape, key);
     if (MODE == "apply") {
         var meas = t.Measures.FirstOrDefault(x => x.Name == name);
-        if (meas == null) { Warning("measure not found, skipped: " + name); missing++; continue; }
+        if (meas == null) { missing++; continue; }
         meas.Expression = dax; applied++;
     } else {
         var nu = t.AddMeasure(name + " New",   dax);                                 nu.DisplayFolder = g; nu.FormatString = fmt;
@@ -567,10 +578,6 @@ foreach (var m in metrics) {
     }
 }
 
-if (MODE == "apply")
-    Info("APPLY: " + applied + " card measures retargeted onto '_Metric Actuals', " + missing + " not found; compare harness removed.");
-else
-    Info("COMPARE: " + made + " measures created in '" + g + "'. Set MODE=\"apply\" to switch the cards over.");
 }
 
 // ===================== NHS =====================
@@ -991,7 +998,6 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")",
     "");
 
-Info("NHS KPI measures created.");
 }
 
 // ===================== PatientCohorts =====================
@@ -1048,7 +1054,6 @@ add("Patients Phone Not Captured",
     '_Appointments'[Is Arrived] = TRUE())",
     "#,##0");
 
-Info("Patient Cohort measures created.");
 }
 
 // ===================== Patients =====================
@@ -1083,6 +1088,17 @@ Action<string,string,string> add = (name, dax, fmt) => {
     m.DisplayFolder = g;
     if (fmt != "") m.FormatString = fmt;
 };
+
+// Patients Booked: distinct patients with a (non-cancelled) appointment in the period. Drives the
+// My Data "Patients by Plan" donut (grouped by List Patients[Standard Payment Plan]). Keyed off the
+// appointment fact so it respects the practitioner ON the appointment AND the date filter -- a
+// roster count off the patient dim does neither. Attendance NOT filtered (attended + DNA both count);
+// cancelled excluded (Is Cancelled). One plan per patient, so the plan buckets sum to the total.
+add("Patients Booked",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Appointments'[fk Patient]),
+    '_Appointments'[Is Cancelled] = FALSE())",
+    "#,##0");
 
 // ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
 // lvl: practitioner in context -> Custom Role; role -> that role; else Practice. RunRate/tDaily
@@ -1131,7 +1147,7 @@ Func<string,string> vPct = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -1141,7 +1157,7 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
@@ -1151,11 +1167,10 @@ VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 VAR prefix = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
@@ -1181,11 +1196,10 @@ VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 VAR prefix  = IF([_Is Practitioner Filtered] = 1, ""⚠ "", """")
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     prefix & IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
-        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
 // ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
@@ -1206,8 +1220,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct >= band,     ""#1a7f3c"",
     pct >= 0,        ""#6abf7b"",
     pct >= -band,    ""#f4a261"",
@@ -1219,8 +1233,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual), ""#E0E0E0"",
     ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(actual), ""#E0E0E0"",
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
@@ -1244,8 +1258,8 @@ VAR target   = [{b} Target]
 VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
-    ISBLANK(actual),  ""#E0E0E0"",
     ISBLANK(target),  ""#FFFFFF"",
+    ISBLANK(actual),  ""#E0E0E0"",
     diff_pp >= band,  ""#1a7f3c"",
     diff_pp >= 0,     ""#6abf7b"",
     diff_pp >= -band, ""#f4a261"",
@@ -1501,7 +1515,6 @@ kpi("Overdue Recalls",          "#,##0",    tEffAdd("overdue_recalls"),         
 kpi("Email Details Rate",       "#,##0.0%", tEff100("email_details_rate"),       vPpP("Email Details Rate"),         bgHigherPp("Email Details Rate", "email_details_rate"));
 kpi("Phone Details Rate",       "#,##0.0%", tEff100("phone_details_rate"),       vPpP("Phone Details Rate"),         bgHigherPp("Phone Details Rate", "phone_details_rate"));
 
-Info("Patients KPI measures created (data-driven).");
 }
 
 // ===================== Revenue =====================
@@ -1584,17 +1597,16 @@ Func<string,string> vPctGrey = b => (@"VAR actual = [{b}]
 VAR target = [{b} Target]
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN IF(
-    ISBLANK(actual), ""No data"",
-    IF(ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(pct >= 0,
         ""▲ "" & FORMAT(pct,      ""0.0"") & ""%"",
-        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%"")))").Replace("{b}", b);
+        ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))").Replace("{b}", b);
 
 Func<string,string> vPp = b => (@"VAR actual  = [{b}]
 VAR target  = [{b} Target]
 VAR diff_pp = (actual - target) * 100
 RETURN IF(
-    ISBLANK(target), BLANK(),
+    ISBLANK(actual) || ISBLANK(target), BLANK(),
     IF(diff_pp >= 0,
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
@@ -1617,15 +1629,15 @@ Func<string,string,string> bgHigherEffF = bgHigherRefF;
 
 // lower=better; grey=true adds the blank-actual grey row (e.g. Outstanding Invoices)
 Func<string,string,bool,string> bgLowerEffF = (b, key, grey) => {
-    var greyRow = grey ? @"ISBLANK(actual), ""#E0E0E0"",
-    " : "";
+    var greyRow = grey ? @"
+    ISBLANK(actual), ""#E0E0E0""," : "";
     return (@"VAR actual = [{b}]
 VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target = [{b} Target]
 VAR band   = {band}
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
-    {grey}ISBLANK(target), ""#FFFFFF"",
+    ISBLANK(target), ""#FFFFFF"",{grey}
     pct <= -band,    ""#1a7f3c"",
     pct <= 0,        ""#6abf7b"",
     pct <= band,     ""#f4a261"",
@@ -1667,6 +1679,14 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 add("Total Revenue",
     @"SUM('_Invoice Items'[Total Price])",
+    "£#,##0");
+
+// Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
+// in Gold.Aggregate_Practitioner_Contribution[Associate_Pay] (= Production * Associate_Pct/100 from
+// admin-entered Input.Practitioner_Pay), so this is a straight SUM. Reads 0 until the owner enters
+// each associate's Associate_Pct in the app; rates are stored as whole percent (the load divides by 100).
+add("Earnings",
+    @"SUM('Aggregate Practitioner Contribution'[Associate Pay])",
     "£#,##0");
 
 add("NHS Revenue",
@@ -1714,6 +1734,24 @@ VAR total_worked = SUMX(by_prac_day, [WH])
 RETURN DIVIDE([Total Revenue], total_worked)",
     "£#,##0");
 
+// Revenue Per Dentist Hour: as Clinical Hour but restricted to the Dentally Role 'Dentist' on
+// BOTH sides -- dentist revenue over dentist worked hours -- so hygiene time and revenue don't
+// tilt the practice-level rate. (Apply mode retargets this onto '_Metric Actuals' via dRate.)
+add("Revenue Per Dentist Hour",
+    @"VAR by_prac_day =
+SUMMARIZE(
+    FILTER(
+        'Aggregate Site Patient Practitioner Daily',
+        RELATED('List Practitioners'[Role]) = ""dentist""
+    ),
+    'Aggregate Site Patient Practitioner Daily'[fk Practitioner],
+    'Aggregate Site Patient Practitioner Daily'[fk Date],
+    ""WH"", MAX('Aggregate Site Patient Practitioner Daily'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+VAR dentist_rev  = CALCULATE([Total Revenue], KEEPFILTERS('List Practitioners'[Role] = ""dentist""))
+RETURN DIVIDE(dentist_rev, total_worked)",
+    "£#,##0");
+
 add("DNA Revenue Lost",
     @"VAR dna_count =
     CALCULATE(
@@ -1751,11 +1789,11 @@ kpi("Private Revenue",           "£#,##0", tCumFTE("private_revenue"),         
 kpi("Outstanding Invoices",      "£#,##0", tRate("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tRate("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tRate("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));
+kpi("Revenue Per Dentist Hour",  "£#,##0", tRate("revenue_per_dentist_hour"),   vPct("Revenue Per Dentist Hour"),  bgHigherEffF("Revenue Per Dentist Hour", "revenue_per_dentist_hour"));
 kpi("DNA Revenue Lost",          "£#,##0", tRate("dna_revenue_lost"),           vPct("DNA Revenue Lost"),          bgLowerEffF("DNA Revenue Lost", "dna_revenue_lost", false));
 kpi("Deposit Value",             "0.0%",   tRate100("deposit_ratio"),           vPp("Deposit Value"),              bgHigherPpF("Deposit Value", "deposit_ratio"));
 kpi("Discounts",                 "0.0%",   tRate100("discounts"),               vPp("Discounts"),                  bgLowerPpF("Discounts", "discounts"));
 
-Info("Revenue KPI measures created (data-driven).");
 }
 
 // ===================== Scheduling =====================
@@ -1945,28 +1983,41 @@ add("Short Notice Cancellation Rate",
     SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
     "#,##0.0%");
 
+// Cancellations Rebooked: of cancelled appointments, the % rebooked into a future slot.
+// Improves retrospectively -- Rebooked_Status flips to 'Rebooked' when the patient rebooks,
+// so a cancellation counted here today can move into the numerator later.
+add("Cancellations Rebooked",
+    @"DIVIDE(
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancellations Rebooked]),
+    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
+    "#,##0.0%");
+
 // ── Forward heatmap: Diary Fill projected forwards ───────────────────────────
-// Same metric as [Diary Fill], but its date axis comes from 'List Date Unconstrained'
-// (a second alias of PBI.[List Date]) so the external period filter can't clamp it to today.
-// Put 'List Date Unconstrained' on the heatmap axis + a relative-date slicer (e.g. 0..13 days)
-// to look as far forward as you like. REMOVEFILTERS drops the app's period filter; the TREATAS
-// on 'List Date Unconstrained'[pk Date] re-applies the heatmap's date window onto the fact --
-// robust whether or not the physical relationship you add to _Metric Actuals is active.
-// (Works forwards because 7,040 future appts + 5,127 future rota rows exist in the aggregate.)
+// Reads the UNCONSTRAINED aggregate alias 'Aggregate Site Patient Practitioner Daily Unconstrained'
+// whose [fk Date] relates to 'List Date Unconstrained' (active) -- so the app's period filter (on
+// 'List Date') can't clamp it and future days stay visible. Put 'List Date Unconstrained' on the
+// heatmap axis + a relative-date slicer (e.g. 0..13 days) to look as far forward as you like.
+// Practitioner/site come through the alias's OWN active relationships to List Practitioners /
+// List Practice Sites, so no REMOVEFILTERS/TREATAS/USERELATIONSHIP is needed. Same ratio as
+// [Diary Fill]: Appointment Hours / Worked Hours (Worked Hours deduped per practitioner-day via
+// SUMMARIZE, as it repeats across the patient rows).
+//
+// REQUIRES on 'Aggregate Site Patient Practitioner Daily Unconstrained' (ACTIVE relationships):
+//   [fk Date]          -> 'List Date Unconstrained'[pk Date]
+//   [fk Practitioner]  -> 'List Practitioners'[pk Practitioner]
+//   [fk Practice Site] -> 'List Practice Sites'[pk Practice Site]
 add("Diary Fill (Forward)",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
-    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
-    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
-VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
-    REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
-    TREATAS(VALUES('List Date Unconstrained'[pk Date]), '_Metric Actuals'[fk Date]),
-    TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""diary_fill"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )
-RETURN DIVIDE(n, d)",
+    @"VAR by_prac_day =
+    SUMMARIZE(
+        'Aggregate Site Patient Practitioner Daily Unconstrained',
+        'Aggregate Site Patient Practitioner Daily Unconstrained'[fk Practitioner],
+        'Aggregate Site Patient Practitioner Daily Unconstrained'[fk Date],
+        ""WH"", MAX('Aggregate Site Patient Practitioner Daily Unconstrained'[Worked Hours]))
+VAR total_worked = SUMX(by_prac_day, [WH])
+RETURN
+    DIVIDE(
+        SUM('Aggregate Site Patient Practitioner Daily Unconstrained'[Appointment Hours]),
+        total_worked)",
     "#,##0.0%");
 
 // Forward Book Value — the £ companion to the % fill (confirmed forward revenue, next 7 days).
@@ -1995,10 +2046,10 @@ kpi("Days Until Next 30 Minute Free",   "#,##0",    tEffAdd("days_until_30min_fr
 kpi("Book Before You Leave",            "#,##0.0%", tEff100("book_before_you_leave"),          vPp("Book Before You Leave"),            bgHigherPp("Book Before You Leave", "book_before_you_leave"));
 kpi("Cancellation Frequency",           "0.0%",     tEff100("cancellation_frequency"),         vPp("Cancellation Frequency"),           bgLowerPp("Cancellation Frequency", "cancellation_frequency"));
 kpi("Short Notice Cancellation Rate",   "#,##0.0%", tEff100("short_notice_cancellation_rate"), vPp("Short Notice Cancellation Rate"),   bgLowerPp("Short Notice Cancellation Rate", "short_notice_cancellation_rate"));
+kpi("Cancellations Rebooked",              "#,##0.0%", tEff100("cancellation_rebook"),            vPp("Cancellations Rebooked"),              bgHigherPp("Cancellations Rebooked", "cancellation_rebook"));
 // Diary Fill (Forward) is a bespoke heatmap measure (its own unconstrained date axis), so it has
 // no data-driven KPI triple here -- colour the heatmap by value, or vs the [Diary Fill Target].
 
-Info("Scheduling KPI measures created (data-driven).");
 }
 
 // ===================== Shared =====================
@@ -2028,6 +2079,33 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 // Returns the fraction of the financial year's working days that have elapsed.
 // = 1.0 when no YTD filter is active (full-year or all-time view).
 // Used to prorate annual targets against actual YTD working days.
+
+// ── Home area RAG: score each of the area's card metrics 1-4 from its [<name> BG] band
+//    (dark red #c0392b=1 Bad, salmon #f4a261=2 Poor, light green #6abf7b=3 Good, dark green
+//    #1a7f3c=4 Very Good; anything else -- no target / no data -- = 2.5 neutral), average the
+//    scores, and map: <2 dark red, 2-2.5 salmon, 2.5-3 light green, >3 dark green. Reuses each
+//    metric's BG (already encodes direction/type/variance band + reacts to the filters), so the
+//    header colour recomputes live in the Period/Site/Role/Practitioner context. Built as a sum of
+//    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
+Action<string,string[]> areaRag = (name, bgs) => {
+    string scores = "";
+    foreach (var m in bgs) {
+        if (scores != "") scores += @" +
+    ";
+        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 2.5)";
+    }
+    add(name, @"VAR scoreAvg = DIVIDE(
+    " + scores + @",
+    " + bgs.Length + @")
+RETURN SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"")", "");
+};
+areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Revenue Per Clinical Hour BG]", "[Private Revenue BG]", "[NHS Revenue BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
+areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
+areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
+areaRag("Clinical Area RAG",   new string[]{ "[Revenue Per Clinical Hour BG]", "[Average Plan Value BG]", "[Open Courses Value BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]" });
+// NHS: only Completion Rate carries a target/band (Contracted/Completed are raw UDA counts), so
+// the NHS area score rides on that single metric.
+areaRag("NHS Area RAG",        new string[]{ "[NHS UDA Completion Rate BG]" });
 
 add("_Period Run Rate",
     @"VAR period_key = [_FY Period Key]
@@ -2070,7 +2148,6 @@ VAR cur_fy   = ""FY "" & fy_year & ""-"" & RIGHT("""" & (fy_year + 1), 2)
 RETURN IF(selected <> """", selected, cur_fy)",
     "");
 
-Info("Period helper measures created. Run this script once before any tab script.");
 }
 
 // ===================== SpiderRevenue =====================
@@ -2263,4 +2340,48 @@ add("Spider Rev Avg Discounts",
 add("Spider Rev Avg Deposit Value",
     @"AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Spider Rev Deposit Value])",
     @"0.00");
+}
+
+// ===================== Top-N + Other (Revenue by Category) =====================
+// One support table + measure so a many-category stacked chart shows top-8 + "Other",
+// re-ranked live under cross-filter. Chart wires to Category Bucket[Category] + [Revenue (Top N)].
+{
+    // Exclude a real category literally named "Other" from the bucket's own rows -- otherwise it
+    // collides with the synthetic "Other" (two identical "Other" series, same value). The real
+    // "Other"'s revenue is folded into the synthetic bucket by the measure (OtherNames) below.
+    var bucketDax = @"UNION (
+    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
+    ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
+)";
+    var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
+    // Create it, or -- crucially -- refresh the DAX of an existing table so edits (e.g. the "Other"
+    // dedup) actually land. The old logic left an existing table untouched, so DAX changes never
+    // applied. We update the expression in place (rather than delete+recreate) so the Category /
+    // Sort Order columns persist and SortByColumn stays set.
+    if (bucketTbl == null) bucketTbl = Model.AddCalculatedTable("Category Bucket", bucketDax);
+    else bucketTbl.Partitions[0].Expression = bucketDax;
+    // Keep "Other" last: sort Category by the hidden Sort Order column. Calc-table columns only
+    // materialise on refresh, so this takes effect once the model has been refreshed + the script re-run.
+    if (bucketTbl.Columns.Any(c => c.Name == "Sort Order")) {
+        bucketTbl.Columns["Category"].SortByColumn = bucketTbl.Columns["Sort Order"];
+        bucketTbl.Columns["Sort Order"].IsHidden = true;
+    }
+
+    var mt = Model.Tables["_Measures"];
+    var topDax = @"VAR N = 8
+VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
+VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ), ""@Total"", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) ) )
+VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
+VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || 'List Treatments'[Standard Treatment Category] = ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+RETURN
+SWITCH ( TRUE (),
+    NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
+    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
+    CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
+)";
+    var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
+    if (rm == null) rm = mt.AddMeasure("Revenue (Top N)", topDax); else rm.Expression = topDax;
+    rm.FormatString = "£#,##0";
+    rm.DisplayFolder = "Revenue KPIs";
 }

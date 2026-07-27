@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/reportExtension/1.0.0/schema.json",
+  "name": "extension",
+  "entities": [
+    {
+      "name": "Sankey Journey",
+      "measures": [
+        {
+          "name": "Appts",
+          "dataType": "Double",
+          "expression": "SUM('Sankey Journey'[Weight])"
+        }
+      ]
+    }
+  ]
+}

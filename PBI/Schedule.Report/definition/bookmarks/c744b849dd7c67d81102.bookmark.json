@@ -1,0 +1,68 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Cancellations and DNA",
+  "name": "c744b849dd7c67d81102",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "9be492de75d46d9a2a42",
+      "44689296c199b141002c",
+      "060fbf437d24bb8c76d3",
+      "25e61f6e51009862a1c9",
+      "acc667495ee9c32ecbd0"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "146989b88eb26d71b830",
+    "sections": {
+      "146989b88eb26d71b830": {
+        "visualContainers": {
+          "9be492de75d46d9a2a42": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "44689296c199b141002c": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {}
+            }
+          },
+          "060fbf437d24bb8c76d3": {
+            "singleVisual": {
+              "visualType": "lineClusteredColumnComboChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "25e61f6e51009862a1c9": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "acc667495ee9c32ecbd0": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

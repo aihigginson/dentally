@@ -20,8 +20,8 @@ USING (VALUES
         'Total revenue in the period divided by the number of active patients — the average value each patient relationship produces. Lets you compare productivity independently of how big the patient base is.'),
     ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',
         'Revenue earned for each hour of scheduled clinical chair time, counting all clinical roles (dentists, hygienists, therapists, orthodontists and specialists). Measures how productively clinical time is used. Revenue per Dentist Hour is the dentist-only equivalent.'),
-    ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist and orthodontist time only',        1, 1, 1, 15, 'above', 'rate',
-        'Revenue earned for each hour of scheduled dentist (and orthodontist) chair time only, excluding hygiene and therapy time. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
+    ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist time only (Dentally role Dentist)',  0, 1, 1, 15, 'above', 'rate',
+        'Revenue earned for each hour of scheduled dentist chair time only (practitioners whose Dentally role is Dentist), excluding hygiene and therapy time and revenue. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
     ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Deposits collected as a percentage of revenue',                           1, 1, 1, 16, 'above', 'point_in_time',
         'The value of deposits taken on treatment plans as a percentage of revenue in the period — money collected up front (e.g. for lab or private work) relative to total income. A higher ratio means more treatment is secured with a deposit before work begins.'),
     ('discounts',                  'Discounts',                          'revenue',    'percent', 'Total discounts applied to invoices (invoice header minus items sum)',    1, 1, 1, 17, 'below', 'rate',
@@ -93,7 +93,7 @@ USING (VALUES
         'The share of available chair time over the next 7 days that is already booked with patient appointments — how full the immediate diary is. A forward-looking capacity measure; higher is better, up to practical limits.'),
     ('patient_tracked_in_surgery', 'Patient Tracked in Surgery',         'scheduling', 'percent',  'Percentage of appointments where the patient was logged into surgery', 0, 1, 1, 48, 'above', 'rate',
         'The percentage of attended appointments for which reception logged the patient as in surgery (an in-surgery timestamp exists). A front-desk process and data-quality measure that also underpins Chair Utilisation -- untracked visits fall back to scheduled time. Higher is better.'),
-    ('cancellation_rebook',        'Cancellation Rebook',                'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
+    ('cancellation_rebook',        'Cancellations Rebooked',             'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
         'Of appointments cancelled in the period, the percentage that were successfully rebooked into a future slot -- recovering the chair time and revenue that a cancellation would otherwise lose. The counter-measure to Cancellation Frequency and Short Notice Cancellation Rate: cancellations happen, but how many do you win back? Higher is better.'),
 -- Home
     ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
@@ -129,7 +129,7 @@ GO
 -- ── Post-seed adjustments (2026-07-13) ──────────────────────────────────────
 -- (kept out of the MERGE VALUES so the per-metric rows above stay readable.)
 -- Cut metrics: removed from the product (dead-end / superseded).
---   revenue_per_dentist_hour      = Revenue per Clinical Hour filtered to Practitioner Type = Dentist
+--   (revenue_per_dentist_hour re-instated 2026-07-20 -- Revenue per Clinical Hour filtered to Dentally role Dentist.)
 --   acceptance_rate               = dead end on real data (Accepted_At NULL on all plans)
 --   days_until_1hr_free           = dropped; keep only the 30-minute availability metric
 --   immediate_forward_utilisation = superseded by Diary Fill measured FORWARDS (same metric over a
@@ -139,7 +139,7 @@ GO
 --                       real recall-record status). The old single metric counted completed/historical
 --                       recall cycles as overdue. (overdue_recalls stays ACTIVE -- redefined below.)
 UPDATE [Config].[Metric_Definitions] SET [Is_Active] = 0
-    WHERE [Metric_Key] IN ('revenue_per_dentist_hour', 'acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
+    WHERE [Metric_Key] IN ('acceptance_rate', 'days_until_1hr_free', 'immediate_forward_utilisation', 'retention_outlook', 'revenue_per_patient');
 -- Lapsed sub-cohorts roll up into lapsed_patients -> no SEPARATE target (still active for display).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('lapsed_deactivated', 'lapsed_calculated');
@@ -197,6 +197,31 @@ UPDATE Config.Metric_Definitions SET Sample_Value = CASE Metric_Key
     WHEN 'nhs_uda_completion_rate' THEN '95%'
     WHEN 'cancellation_rebook' THEN '60%'
     ELSE Sample_Value END;
+GO
+-- Short KPI-card label (falls back to Display_Name when NULL). Held on the metric so the PBIR
+-- report generator picks it up per metric.
+UPDATE Config.Metric_Definitions SET Card_Label = CASE Metric_Key
+    WHEN 'revenue_per_patient'             THEN 'Rev/Patient'
+    WHEN 'revenue_per_clinical_hour'       THEN 'Rev/Clinical Hr'
+    WHEN 'revenue_per_dentist_hour'        THEN 'Rev/Dentist Hr'
+    WHEN 'outstanding_invoices'            THEN 'Outstanding Inv'
+    WHEN 'dentist_retention_outlook'       THEN 'Dentist Retention'
+    WHEN 'hygiene_retention_outlook'       THEN 'Hygiene Retention'
+    WHEN 'dentist_recall_conversion'       THEN 'Dentist Recall%'
+    WHEN 'hygiene_recall_conversion'       THEN 'Hygiene Recall%'
+    WHEN 'email_details_rate'              THEN 'Email Details'
+    WHEN 'phone_details_rate'              THEN 'Phone Details'
+    WHEN 'open_courses_without_appt'       THEN 'Open (No Appt)'
+    WHEN 'open_courses_without_appt_value' THEN 'Open £ (No Appt)'
+    WHEN 'avg_plan_value'                  THEN 'Avg Plan £'
+    WHEN 'chair_utilisation'               THEN 'Chair Util'
+    WHEN 'days_until_30min_free'           THEN 'Days to 30min Free'
+    WHEN 'cancellation_frequency'          THEN 'Cancel %'
+    WHEN 'short_notice_cancellation_rate'  THEN 'Short Notice'
+    WHEN 'patient_tracked_in_surgery'      THEN 'Patient Tracked'
+    WHEN 'nhs_uda_completion_rate'         THEN 'UDA Completion'
+    WHEN 'book_before_you_leave'           THEN 'Book Before Leave'
+    ELSE Card_Label END;
 GO
 UPDATE Config.Metric_Definitions SET FTE_Scaled = CASE WHEN Metric_Key IN (
         'total_revenue','nhs_revenue','private_revenue',

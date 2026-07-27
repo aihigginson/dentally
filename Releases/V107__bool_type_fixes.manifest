@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V107 -- boolean-as-numeric type fixes (real Dentally shape)
+# =====================================================================
+# Real Dentally sends several flags as booleans ('True'/'False') but the mock sent numerics, so the
+# Bronze loads did TRY_CAST(... AS DECIMAL) which nulled every real 'True'/'False'. Same class as
+# NHS_Charge (V106). Fix maps bool -> 1/0 with a numeric fallback (decimal columns hold 0/1; no
+# schema change). Covers: NHS_Claims.Ortho, Treatment_Plan_Items.Base_Chart. (Waiting_Lists.Active
+# already handled; NHS_Charge = V106.) After deploy, re-run the load chains (or backfill from
+# init_stage) so existing rows update.
+#
+# NOT included -- Appointments.Appointment_Cancellation_Reason_ID (GUID, task #8): needs a Bronze
+# table rebuild (Fabric can't ALTER COLUMN int->varchar; table is DROP/CREATE) + full re-ingest +
+# Dim_Cancellation_Reasons loaded with real T100 GUID reasons (currently only Tenant 11 ints).
+# Handle as its own coordinated step.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V107__bool_type_fixes.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_NHS_Claims.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+
+TEST

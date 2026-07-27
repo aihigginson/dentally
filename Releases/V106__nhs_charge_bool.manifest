@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V106 -- NHS_Charge boolean fix (real Dentally shape)
+# =====================================================================
+# Real Dentally sends invoice_items.nhs_charge as a BOOLEAN ('True'/'False'); the mock sent a
+# numeric, so Bronze.usp_Load_Invoice_Items did CAST(TRY_CAST(nhs_charge AS DECIMAL) AS INT) which
+# nulled every real 'True'/'False' -> Silver bit 0 -> Gold 0 -> "NHS Revenue" blank on real tenants.
+# Fix maps bool -> 1/0 (numeric fallback kept) so the existing NHS/Private split ([NHS Charge] > 0)
+# classifies correctly. Bronze column stays int (holds 0/1); Silver already bit; no schema change.
+# Deploy the SP, then re-run the load chain (Orchestrate_Build, or Bronze->Silver->Gold for
+# invoice_items) so the MERGE re-reads init_stage and updates the existing NULL NHS_Charge rows.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V106__nhs_charge_bool.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Invoice_Items.StoredProcedure.sql
+
+TEST

@@ -95,7 +95,9 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
         body.dev-mode .header { background: #6B21A8; }
-        body.dev-mode .nav-tab.active, body.dev-mode .nav-tab:hover { color: #6B21A8; border-bottom-color: #6B21A8; }
+        body.dev-mode .nav-tab.active { color: #fff; background: #6B21A8; border-bottom-color: transparent; }
+        body.dev-mode .nav-tab:hover  { color: #6B21A8; background: #f1e8fb; }
+        body.dev-mode .nav-tab.active:hover { color: #fff; background: #6B21A8; }
         .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
@@ -130,12 +132,14 @@
         /* ── Primary nav ── */
         .nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; flex-shrink: 0; }
         .nav-tab {
-            padding: 13px 18px; font-size: 13px; font-weight: 500; color: var(--text-2);
+            padding: 13px 18px; font-size: 13px; font-weight: 500; font-family: Arial, sans-serif; color: var(--text-2);
             cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
-            white-space: nowrap; user-select: none; transition: color 0.12s, border-color 0.12s;
+            white-space: nowrap; user-select: none; transition: color 0.12s, background 0.12s;
+            border-radius: 6px 6px 0 0;
         }
-        .nav-tab:hover  { color: var(--navy); }
-        .nav-tab.active { color: var(--navy); border-bottom-color: var(--navy); }
+        .nav-tab:hover  { color: var(--navy); background: var(--surface-2, #f1f5f9); }
+        .nav-tab.active { color: #fff; background: var(--navy); border-bottom-color: transparent; font-weight: 600; }
+        .nav-tab.active:hover { color: #fff; background: var(--navy); }
 
         /* ── Filter toggle button ── */
         .filter-toggle {
@@ -502,7 +506,8 @@
     <div class="nav-tab"        data-section="day_book">Day Book</div>
     <div class="nav-tab"        data-section="finance">Finance</div>
     <div class="nav-tab"        data-section="revenue">Revenue</div>
-    <div class="nav-tab"        data-section="marketing">Marketing</div>
+    <!-- Marketing hidden for now (2026-07-21) — remove style to restore -->
+    <div class="nav-tab"        data-section="marketing" style="display:none">Marketing</div>
     <div class="nav-tab"        data-section="patient">Patient</div>
     <div class="nav-tab"        data-section="scheduling">Schedule</div>
     <div class="nav-tab"        data-section="clinical">Clinical</div>
@@ -593,10 +598,10 @@
          Access_* flag is set). No SECTION_REPORT entry, so they show the placeholder
          rather than attempting an embed. ── -->
     <section class="section" id="section-day_book">
-        <div class="embed-slot embed-full" id="embed-day_book">Coming soon</div>
+        <div class="embed-slot embed-full" id="embed-day_book">Please Wait...</div>
     </section>
     <section class="section" id="section-my_data">
-        <div class="embed-slot embed-full" id="embed-my_data">Coming soon</div>
+        <div class="embed-slot embed-full" id="embed-my_data"></div>
     </section>
     <section class="section" id="section-marketing">
         <div class="embed-slot embed-full" id="embed-marketing">Coming soon</div>
@@ -1193,6 +1198,8 @@
         'clinical':  'clinical',
         'nhs':       'nhs',
         'finance':   'finance',
+        'my_data':   'my_data',
+        'day_book':  'day_book',
     };
 
     // ── Page list — update this when PBI reports change ──────────────────────
@@ -1200,40 +1207,30 @@
     // Sections with 0 or 1 entry show no dropdown.
     const SECTION_PAGES = {
         home: [
-            { displayName: 'Headlines',   name: '146989b88eb26d71b830' },
             { displayName: 'Key Metrics', name: '5533032f170be74865fe' },
         ],
+        // Consolidated to one page each (in-report buttons switch views); the page
+        // dropdown auto-hides at pages.length <= 1, so the sub-nav disappears.
         revenue: [
-            { displayName: 'By Category',     name: '1731a006301e70a5cd87' },
-            { displayName: 'By Practitioner', name: 'ad9e62f74c350683b2a8' },
-            { displayName: 'Debt',            name: '7f6e0ba3e2ead59a06c5' },
-            { displayName: 'Discounts',       name: '2b3f398145d40b179050' },
-            { displayName: 'Deposits',        name: '24208f3d007390977e6c' },
-            { displayName: 'Comparison',      name: 'c5967aa555b6d08669a5' },
+            { displayName: 'By Category', name: '1731a006301e70a5cd87' },
         ],
         patient: [
-            { displayName: 'Acquisition',   name: '146989b88eb26d71b830' },
-            { displayName: 'Journeys',      name: 'e4dd9e17b481ec28099d' },
-            { displayName: 'Retention',     name: '4ebf2bb99ffb110e19e2' },
-            { displayName: 'Cancellations', name: '3a38bf4312246540303c' },
+            { displayName: 'Acquisition', name: '146989b88eb26d71b830' },
         ],
         scheduling: [
-            { displayName: 'Utilisation',           name: '146989b88eb26d71b830' },
-            { displayName: 'Cancellations and DNA',  name: '3f0a60f9895e0db15be8' },
-            { displayName: 'BBYL',                   name: '5e1e3e4a400344602496' },
-            { displayName: 'Availability',           name: 'b8c471d14517cbc187be' },
+            { displayName: 'Utilisation', name: '146989b88eb26d71b830' },
         ],
         clinical: [
-            { displayName: 'Revenue',    name: '146989b88eb26d71b830' },
-            { displayName: 'Blend',      name: 'a210cd4d0750719b05c7' },
-            { displayName: 'Other KPIs', name: '866800f0b9230dc066c9' },
+            { displayName: 'Revenue', name: '146989b88eb26d71b830' },
         ],
         nhs: [
             { displayName: 'Key Metrics', name: '146989b88eb26d71b830' },
         ],
         finance: [
             { displayName: 'Revenue vs Costs', name: '1731a006301e70a5cd87' },
-            { displayName: 'EBITDA vs Costs',  name: '2651bb7948127159e65e' },
+        ],
+        day_book: [
+            { displayName: 'Day Book', name: '1404b201b55e6e36945b' },
         ],
     };
 
@@ -1550,7 +1547,7 @@
                 body: JSON.stringify(rows),
             });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) {
             msg.style.color = '#b3261e'; msg.textContent = 'Save failed.';
         } finally {
@@ -1751,29 +1748,54 @@
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
-            list.innerHTML = people.map(p =>
-                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '">'
+            const _priceOf = k => { const o = _teamProfiles.find(x => x.key === k); return o ? (o.price || 0) : 0; };
+            list.innerHTML =
+                '<div style="background:#f4f7f9;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.55">'
+                + _teamProfiles.filter(o => o.key !== 'no_access').map(o =>
+                    '<div><strong>' + escHtml(o.name) + '</strong> — ' + escHtml(o.desc || '')
+                    + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo</span></div>').join('')
+                + '<div style="margin-top:6px;color:#888">Admin (the Settings tab) is a separate tick at no extra cost — at least one person needs it, and that’s always you.</div>'
+                + '</div>'
+                + people.map(p =>
+                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
                 + '<span style="white-space:nowrap">'
                 + (p.is_self
-                    ? '<span style="color:#999;font-size:12px">You &mdash; Full (locked)</span>'
+                    ? '<span style="color:#999;font-size:12px">You &mdash; All reports + Admin</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
                       + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
+                + '<span class="team-price" style="font-size:11px;color:#0b3d5c;margin-left:10px">£' + _priceOf(p.profile).toFixed(2) + '</span>'
+                + (p.is_self ? '' : '<label style="margin-left:12px;font-size:11px;color:#666" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
                 + '<label style="margin-left:12px;font-size:11px;color:#666" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
                 + '</span></div>').join('')
+                + '<div id="team-total" style="margin-top:12px;font-size:13px;font-weight:700;color:#0b3d5c"></div>'
                 + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee">'
                 + '<div style="font-size:13px;font-weight:600;margin-bottom:3px">Invoice email</div>'
                 + '<div style="font-size:11px;color:#888;margin-bottom:6px">Where the monthly invoice is sent. Leave blank to use the primary account’s email, or enter another address (e.g. your accountant).</div>'
                 + '<input type="email" id="team-invoice-email" placeholder="' + escHtml(_teamBilling.primary_email || 'accounts@yourpractice.co.uk') + '" value="' + escHtml(_teamBilling.invoice_email || '') + '" style="width:100%;max-width:340px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">'
                 + '</div>';
+            const _recalcCharges = () => {
+                let t = 0;
+                list.querySelectorAll('.roles-row').forEach(row => {
+                    const sel = row.querySelector('.team-profile');
+                    const key = sel ? sel.value : row.dataset.profile;
+                    t += _priceOf(key);
+                    const ps = row.querySelector('.team-price'); if (ps) ps.textContent = '£' + _priceOf(key).toFixed(2);
+                });
+                const el = document.getElementById('team-total');
+                if (el) el.textContent = 'Estimated monthly charge: £' + t.toFixed(2);
+            };
             list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
                 const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
                 if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }
+                _recalcCharges();
                 markDirty();
             }));
             list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
+            list.querySelectorAll('.team-admin').forEach(r => r.addEventListener('change', markDirty));
             const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
+            _recalcCharges();
             saveBtn.style.display = '';
         } catch (e) { list.textContent = 'Could not load the team.'; }
     }
@@ -1786,7 +1808,8 @@
         const rows = [...document.querySelectorAll('#team-list .roles-row')]
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
-                         profile: r.querySelector('.team-profile').value }));
+                         profile: r.querySelector('.team-profile').value,
+                         admin: !!(r.querySelector('.team-admin') && r.querySelector('.team-admin').checked) }));
         const _primEl = document.querySelector('#team-list .team-primary:checked');
         const primary_email = _primEl ? _primEl.value : '';
         const invoice_email = (document.getElementById('team-invoice-email') || {}).value || '';
@@ -2337,11 +2360,85 @@
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${res.status}`);
         }
-        const { token, embedUrl, reportId } = await res.json();
-        const entry = { token, embedUrl, reportId, expiry: Date.now() + 55 * 60 * 1000 };
+        const { token, embedUrl, reportId, expiration } = await res.json();
+        const entry = { token, embedUrl, reportId,
+            expiry: expiration ? Date.parse(expiration) : Date.now() + 55 * 60 * 1000 };
         tokenCache[reportName] = entry;
         return _buildConfig(entry);
     }
+
+    // Force a fresh embed token (bypass cache) and update the cache. Used by the
+    // tokenExpired handler so a report left open past the token lifetime silently
+    // re-authorises instead of showing PBI's "Access token has expired" on every visual.
+    async function refreshEmbedToken(reportName) {
+        const res = await authFetch(`/api/embed-token?report=${encodeURIComponent(reportName)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { token, embedUrl, reportId, expiration } = await res.json();
+        const entry = { token, embedUrl, reportId,
+            expiry: expiration ? Date.parse(expiration) : Date.now() + 55 * 60 * 1000 };
+        tokenCache[reportName] = entry;
+        return entry;
+    }
+
+    // Proactively renew the embed token ~2 min BEFORE it lapses, so visuals never hit an expired
+    // token. The reactive tokenExpired event alone let some visuals error first (PBI fires it late /
+    // not before a query). Keyed per section so a re-embed clears the prior timer.
+    const tokenRefreshTimers = {};
+    function scheduleTokenRefresh(sectionKey, r) {
+        const reportName = SECTION_REPORT[sectionKey];
+        const entry = reportName ? tokenCache[reportName] : null;
+        if (!entry || !entry.expiry) return;
+        clearTimeout(tokenRefreshTimers[sectionKey]);
+        const ms = Math.max(30000, entry.expiry - Date.now() - 120000);
+        tokenRefreshTimers[sectionKey] = setTimeout(async () => {
+            try {
+                const fresh = await refreshEmbedToken(reportName);
+                await r.setAccessToken(fresh.token);
+                _devLog('[token] proactively refreshed for', sectionKey);
+                scheduleTokenRefresh(sectionKey, r);
+            } catch (e) { _devLog('[token] proactive refresh failed', e); }
+        }, ms);
+    }
+
+    // Recover a report whose embed token expired: mint a fresh one, hand it to the embed via
+    // setAccessToken, then refresh() so any visual that already errored ("Access token has
+    // expired") re-queries and re-renders. Falls back to the friendly session-timeout overlay
+    // if the app session itself is dead. 20s cooldown so a failing refresh (or one error event
+    // per visual) can't loop refresh -> error -> refresh.
+    async function recoverEmbedToken(r, sectionKey, reason) {
+        const now = Date.now();
+        if (r.__tokenRecoverAt && now - r.__tokenRecoverAt < 20000) return false;
+        r.__tokenRecoverAt = now;
+        try {
+            const entry = await refreshEmbedToken(SECTION_REPORT[sectionKey]);
+            await r.setAccessToken(entry.token);
+            try { await r.refresh(); } catch (_) {}
+            scheduleTokenRefresh(sectionKey, r);
+            _devLog('[token] recovered via', reason, 'for', sectionKey);
+            return true;
+        } catch (e) {
+            _devLog('[token] recovery failed via', reason, e);
+            const slot = document.getElementById('embed-' + sectionKey);
+            if (slot) showSessionExpired(slot);
+            return false;
+        }
+    }
+
+    // Background tabs and sleeping laptops throttle setTimeout, so the proactive refresh can miss
+    // its window and the token lapses unnoticed. When the tab regains focus, catch any token that's
+    // expired or within 3 min of it and refresh at once (and reschedule the proactive timer, which
+    // may itself have been throttled).
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        Object.keys(embeddedReports).forEach(sectionKey => {
+            const r = embeddedReports[sectionKey];
+            const reportName = SECTION_REPORT[sectionKey];
+            const entry = (r && reportName) ? tokenCache[reportName] : null;
+            if (!entry) return;
+            if (entry.expiry - Date.now() < 180000) recoverEmbedToken(r, sectionKey, 'visibility');
+            else scheduleTokenRefresh(sectionKey, r);
+        });
+    });
 
     // Re-embed only on a genuine mobile/desktop breakpoint crossing (rotation,
     // window resize across 768px). matchMedia fires once on the real change and
@@ -2374,6 +2471,20 @@
         function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
         report.on('rendered', remove);
         report.on('error', remove);
+    }
+
+    // Friendly full-slot overlay shown when an embed token can't be refreshed (the app
+    // session has expired). Replaces PBI's alarming per-visual "Access token has expired".
+    function showSessionExpired(slot) {
+        if (slot.querySelector('.pbi-expired')) return;
+        if (getComputedStyle(slot).position === 'static') slot.style.position = 'relative';
+        const ov = document.createElement('div');
+        ov.className = 'pbi-expired';
+        ov.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#fff;z-index:5;text-align:center;padding:24px;';
+        ov.innerHTML = '<div style="font-size:15px;color:#1F2937;">Your session timed out.</div>'
+            + '<button style="background:#1A527A;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;">Refresh</button>';
+        ov.querySelector('button').addEventListener('click', () => location.reload());
+        slot.appendChild(ov);
     }
 
     // Standard event handlers attached to every embedded report. Must be called
@@ -2428,6 +2539,29 @@
             if (page && sectionSubnavData[target] && sectionSubnavData[target].report)
                 sectionSubnavData[target].report.setPage(page.name);
         });
+        // PBI fires tokenExpired shortly before the embed token lapses. Silently mint a fresh
+        // one and hand it back so an idle/long-open report keeps working instead of every visual
+        // showing "Access token has expired". If the refresh fails (app session also died), show
+        // a friendly refresh prompt rather than the raw error.
+        r.on('tokenExpired', () => {
+            _devLog('[tokenExpired] for', sectionKey);
+            recoverEmbedToken(r, sectionKey, 'tokenExpired');
+        });
+        // A visual can error with an expired token WITHOUT tokenExpired firing first (PBI fires it
+        // late, or not before a query runs) -- which is the raw "Access token has expired" the user
+        // still saw. Catch the error event and recover the same way, gated to token/auth errors so
+        // ordinary visual errors are left alone; recoverEmbedToken's cooldown stops any loop.
+        r.on('error', event => {
+            const d = event && event.detail;
+            const blob = d ? [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
+                .filter(Boolean).join(' ') : '';
+            if (/token|expired|401|403|unauthor/i.test(blob)) {
+                _devLog('[error->token recover]', sectionKey, d);
+                recoverEmbedToken(r, sectionKey, 'error');
+            }
+        });
+        // Proactive renewal so the token never actually lapses mid-session.
+        scheduleTokenRefresh(sectionKey, r);
     }
 
     async function loadEmbedsInSection(sectionKey) {
@@ -2436,6 +2570,18 @@
 
         const slot = document.getElementById('embed-' + sectionKey);
         if (!slot) return;
+
+        // Show the branded spinner IMMEDIATELY -- before the async token fetch below -- so the slot
+        // never flashes a static placeholder ("Coming soon") or a blank gap while the token
+        // round-trips. doEmbed's powerbi.reset() clears this and attachEmbedOverlay re-adds an
+        // identical spinner, so the hand-off is seamless (no flicker).
+        if (!slot.querySelector('.pbi-loading')) {
+            slot.textContent = '';
+            const ov = document.createElement('div');
+            ov.className = 'pbi-loading';
+            ov.innerHTML = '<div class="pbi-loading-brand">Analytic<span>ally</span></div><div class="pbi-loading-spinner"></div>';
+            slot.appendChild(ov);
+        }
 
         let config;
         try {

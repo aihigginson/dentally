@@ -133,6 +133,8 @@ REPORTS = {
     'clinical':   os.environ.get('REPORT_ID_CLINICAL',  ''),
     'nhs':        os.environ.get('REPORT_ID_NHS',       ''),
     'finance':    os.environ.get('REPORT_ID_FINANCE',   ''),
+    'my_data':    os.environ.get('REPORT_ID_MY_DATA',   ''),
+    'day_book':   os.environ.get('REPORT_ID_DAY_BOOK',  ''),
 }
 app.logger.info("Reports loaded: %s", {k: (v[:8] + '...') if v else '(missing)' for k, v in REPORTS.items()})
 
@@ -348,7 +350,9 @@ def embed_token():
             headers=headers, json=token_body, timeout=10,
         )
         r2.raise_for_status()
-        return jsonify({'token': r2.json()['token'], 'embedUrl': embed_url, 'reportId': report_id})
+        _tok = r2.json()
+        return jsonify({'token': _tok['token'], 'embedUrl': embed_url, 'reportId': report_id,
+                        'expiration': _tok.get('expiration')})
 
     except requests.HTTPError as e:
         app.logger.exception("embed-token upstream PBI error: %s | %s", e, getattr(e.response, 'text', ''))
@@ -824,6 +828,37 @@ def onboarding_page():
     return send_from_directory('.', 'onboarding.html')
 
 
+@app.route('/pricing')
+def pricing_page():
+    """Public pricing page (pre-account)."""
+    return send_from_directory('.', 'pricing.html')
+
+
+_pricing_cache = {'ts': 0.0, 'data': None}
+
+
+@app.route('/api/pricing')
+def api_pricing():
+    """Public current price list per reporting profile (Admin is a free flag, so not priced separately).
+    Cached in-process for 10 minutes so a public page never hammers / cold-starts the warehouse."""
+    try:
+        if _pricing_cache['data'] is not None and time.time() - _pricing_cache['ts'] < 600:
+            return jsonify({'profiles': _pricing_cache['data']})
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
+                    "JOIN (SELECT Profile_Key, MAX(Valid_From) vf FROM Billing.Profile_Pricing "
+                    "WHERE Valid_From <= CAST(SYSUTCDATETIME() AS DATE) AND (Valid_To IS NULL OR Valid_To >= CAST(SYSUTCDATETIME() AS DATE)) "
+                    "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
+        prices = {r[0]: float(r[1]) for r in cur.fetchall()}
+        conn.close()
+        data = [{'key': k, 'name': _PROFILES[k]['label'], 'desc': _PROFILES[k].get('desc', ''), 'price': prices.get(k, 0.0)}
+                for k in ('full', 'clinician', 'front_office') if k in _PROFILES]
+        _pricing_cache.update(ts=time.time(), data=data)
+        return jsonify({'profiles': data})
+    except Exception as e:
+        return _server_error(e, 'pricing')
+
+
 @app.route('/api/onboarding/challenge', methods=['POST'])
 def onboarding_challenge():
     """Step 1: email a 6-digit code to the principal's address. Returns a signed challenge token that
@@ -989,10 +1024,10 @@ _ACCESS_COLUMNS = [
 # Subscription profiles: preset module flags + Maintain_Targets. Billing basis = the assigned
 # profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
 _PROFILES = {
-    'full':         {'label': 'Full',         'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True},
-    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False},
-    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False},
-    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False},
+    'full':         {'label': 'All reports',  'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True,  'desc': 'Every report and dashboard.'},
+    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False, 'desc': 'Access to the clinician’s OWN data only.'},
+    'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False, 'desc': 'Focuses on the tasks that help the practice run more efficiently.'},
+    'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False, 'desc': 'No access to the app.'},
 }
 _ALL_MODULE_COLS = [c for _, c in _ACCESS_COLUMNS]
 
@@ -1267,7 +1302,12 @@ def get_team():
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage the team'}), 403
-        profiles = [{'key': k, 'name': v['label']} for k, v in _PROFILES.items()]
+        cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
+                    "JOIN (SELECT Profile_Key, MAX(Valid_From) vf FROM Billing.Profile_Pricing "
+                    "WHERE Valid_From <= CAST(SYSUTCDATETIME() AS DATE) AND (Valid_To IS NULL OR Valid_To >= CAST(SYSUTCDATETIME() AS DATE)) "
+                    "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
+        _prices = {r[0]: float(r[1]) for r in cur.fetchall()}
+        profiles = [{'key': k, 'name': v['label'], 'desc': v.get('desc', ''), 'price': _prices.get(k, 0.0)} for k, v in _PROFILES.items()]
         people = []
         billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
@@ -1305,12 +1345,12 @@ def get_team():
             # latest edits, which may not have synced to the warehouse auth copy yet).
             ac = _appdb_conn(); acur = ac.cursor()
             acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                         + ", Profile_Key FROM Input.Application_Users")
+                         + ", Profile_Key, Maintain_Targets FROM Input.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n]}
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n])}
             bph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
             bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
@@ -1322,6 +1362,7 @@ def get_team():
                 m['profile'] = (a['profile_key'] or _derive_profile(a['enabled'])) if a else 'no_access'
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
+                m['is_admin'] = True if m['is_self'] else (a['admin'] if a else False)
                 people.append(m)
         else:
             conn.close()
@@ -1422,12 +1463,13 @@ def save_team():
             preset  = _PROFILES[profile]
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
             prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
+            admin   = 1 if r.get('admin') else 0   # Admin (Settings tab) is a per-user flag now, decoupled from the profile
             acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             acur.execute(
                 "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
                 + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
                 + ", ".join(['?'] * n) + ", ?, ?, ?)",
-                [email, cid, (r.get('name') or email), (1 if preset['maintain_targets'] else 0)] + flags + [prac, profile, upn])
+                [email, cid, (r.get('name') or email), admin] + flags + [prac, profile, upn])
             if cur_profile.get(email.lower()) != profile:
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",

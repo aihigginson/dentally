@@ -26,6 +26,9 @@
 --                            lapse date = updated_at); Type B "Calculated as inactive" (Active=1 but
 --                            last appointment > 730 days ago, lapse date = last appt + 730). Disjoint
 --                            by the Active flag, so a cumulative Lapsed measure = A + B (no overlap).
+--    *13     22/07/2026  AIH V110: denormalise Standard_Payment_Plan onto the patient (dedup Silver
+--                            plan name + Input.Payment_Plan_Map override) so patients slice by plan
+--                            without a per-tenant natural-key relationship. Drives Patients-by-Plan.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -78,6 +81,11 @@ BEGIN
                   AND NULLIF(TRIM(p.Home_Phone),'')   IS NULL THEN 1 ELSE 0 END                      AS Is_Phone_Missing,
             CAST(ISNULL(p.Active, 0) AS BIT)                                                        AS Active,
             CAST(p.Payment_Plan_ID AS INT)                                                          AS Payment_Plan_ID,
+            -- Denormalised plan name so patients slice by plan without a (per-tenant, would-fan-out)
+            -- model relationship. Same standardisation Dim_Payment_Plans uses (Input.Payment_Plan_Map
+            -- override, else the raw plan name). See Patients-by-Plan on My Data.
+            COALESCE(NULLIF(TRIM(m.Standard_Payment_Plan), ''),
+                     LEFT(NULLIF(TRIM(spp.Payment_Plan_Name), ''), 100))                            AS Standard_Payment_Plan,
             NULLIF(TRIM(p.Site_ID), '')                                                             AS Site_ID,
             NULLIF(TRIM(p.Acquisition_Source_ID), '')                                               AS Acquisition_Source_ID,
             ISNULL(das.pk_Acquisition_Source, -1)                                                   AS fk_Acquisition_Source,
@@ -131,6 +139,19 @@ BEGIN
         LEFT JOIN Gold.Dim_Acquisition_Sources das
             ON das.Acquisition_Source_ID = NULLIF(TRIM(p.Acquisition_Source_ID), '')
            AND das.Tenant_ID             = p.Tenant_ID
+        -- Plan name for Standard_Payment_Plan. Dedup Silver by (Tenant, Payment_Plan_ID) so a
+        -- multi-site plan can't fan out patient rows; then the tenant's standard-name override.
+        LEFT JOIN (
+            SELECT   Tenant_ID,
+                     CAST(Payment_Plan_ID AS INT)          AS Payment_Plan_ID,
+                     MAX(NULLIF(TRIM(Payment_Plan_Name), '')) AS Payment_Plan_Name
+            FROM     Silver.Payment_Plans
+            GROUP BY Tenant_ID, CAST(Payment_Plan_ID AS INT)
+        ) spp ON spp.Payment_Plan_ID = CAST(p.Payment_Plan_ID AS INT)
+             AND spp.Tenant_ID       = p.Tenant_ID
+        LEFT JOIN Input.Payment_Plan_Map m
+            ON m.Tenant_ID           = p.Tenant_ID
+           AND m.Source_Payment_Plan = spp.Payment_Plan_Name
         LEFT JOIN Gold.Dim_Date dd_lap
             ON dd_lap.Full_Date =
                CASE WHEN CAST(ISNULL(p.Active,0) AS BIT) = 0 THEN TRY_CAST(p.Updated_At AS DATE)
@@ -161,6 +182,7 @@ BEGIN
             Is_Phone_Missing                    = src.Is_Phone_Missing,
             Active                              = src.Active,
             Payment_Plan_ID                     = src.Payment_Plan_ID,
+            Standard_Payment_Plan               = src.Standard_Payment_Plan,
             Site_ID                             = src.Site_ID,
             fk_Acquisition_Source               = src.fk_Acquisition_Source,
             Dentist_Recall_Date                 = src.Dentist_Recall_Date,
@@ -203,6 +225,7 @@ BEGIN
            ISNULL(CAST(tgt.[Is_Phone_Missing] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Active] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Payment_Plan_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Standard_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Site_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Acquisition_Source] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Dentist_Recall_Date] AS VARCHAR(500)), ''),
@@ -243,6 +266,7 @@ BEGIN
            ISNULL(CAST(src.[Is_Phone_Missing] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Active] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Payment_Plan_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Standard_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Site_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Acquisition_Source] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Dentist_Recall_Date] AS VARCHAR(500)), ''),
@@ -278,7 +302,7 @@ BEGIN
             pk_Patient,
             Tenant_ID, Patient_ID, Account_ID, First_Name, Last_Name, Preferred_Name, Full_Name,
             Email_Address, Home_Phone, Mobile_Phone, Is_Email_Missing, Is_Phone_Missing,
-            Active, Payment_Plan_ID, Site_ID,
+            Active, Payment_Plan_ID, Standard_Payment_Plan, Site_ID,
             Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
             Dentist_Recall_Date, Dentist_Recall_Interval_Months,
             Hygienist_Recall_Date, Hygienist_Recall_Interval_Months,
@@ -295,7 +319,7 @@ BEGIN
             src.Tenant_ID, src.Patient_ID, src.Account_ID, src.First_Name, src.Last_Name,
             src.Preferred_Name, src.Full_Name, src.Email_Address,
             src.Home_Phone, src.Mobile_Phone, src.Is_Email_Missing, src.Is_Phone_Missing,
-            src.Active, src.Payment_Plan_ID, src.Site_ID,
+            src.Active, src.Payment_Plan_ID, src.Standard_Payment_Plan, src.Site_ID,
             src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,
             src.Dentist_Recall_Date, src.Dentist_Recall_Interval_Months,
             src.Hygienist_Recall_Date, src.Hygienist_Recall_Interval_Months,

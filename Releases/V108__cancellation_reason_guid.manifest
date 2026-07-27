@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V108 -- cancellation_reason_id GUID (real Dentally shape)
+# =====================================================================
+# Real Dentally appointment_cancellation_reason_id is a GUID; Bronze.Appointments typed it INT, so
+# TRY_CAST(... AS INT) nulled every real GUID -> no cancellation reason ever resolved for real
+# tenants (fk_Cancellation_Reason = -1). The reason LOOKUP was fine all along
+# (Bronze.Cancellation_Reasons.ID + Gold.Dim_Cancellation_Reasons.bk are varchar GUIDs; the Gold
+# join is string-based) -- the appointment's reason column was the only break.
+#
+# MIGRATE swaps Bronze.Appointments.Appointment_Cancellation_Reason_ID int->varchar(50) IN PLACE
+# (Fabric can't ALTER COLUMN type; table is DROP/CREATE -> in-place add/drop/rename preserves data).
+# DEPLOY updates the Bronze load to keep the GUID as text (was cast to int). Bronze.Appointments.Table.sql
+# is also updated to varchar in the repo for fresh onboarding, but NOT deployed here (DROP/CREATE would
+# wipe the existing 247k-row table).
+#
+# APPLY: deploy V109 IMMEDIATELY AFTER this, then RE-INGEST real tenants' appointments (V109 deletes
+# the pre-fix rows to force a full cold re-pull incl cancelled + GUID reasons). Verified on dev:
+# 31,256 cancelled / 21,059 resolved reasons.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V108__cancellation_reason_guid.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V108__cancellation_reason_guid.sql
+DEPLOY   Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+
+TEST

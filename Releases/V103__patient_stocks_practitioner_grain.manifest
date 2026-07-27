@@ -1,0 +1,37 @@
+# =====================================================================
+# Release V103 -- patient-stock metrics gain a per-practitioner grain
+# =====================================================================
+# active_patients / lapsed_patients / overdue_recalls were practitioner-agnostic in
+# Fact_Metric_Actuals (fk_Practitioner = -1 only), so their KPI cards would not break
+# down when a practitioner or Role was selected. This adds a dentist + hygienist split
+# so the Role filter selects the right rows; the Practice (-1) row stays the true total.
+#
+# All changes are in Gold.usp_Load_Fact_Metric_Actuals (idempotent DROP/CREATE):
+#   * lapsed_patients (#lap) -- already had a per-DENTIST grain; add the parallel
+#     HYGIENIST grain (Dim_Patients.Hygienist_Practitioner_ID) for the type-split
+#     metrics and the lapsed_patients total.
+#   * overdue_recalls (#ovr) -- attribute each recall to a practitioner by Recall_Type:
+#     'Hygienist' -> patient's Hygienist_Practitioner_ID, else Dentist_Practitioner_ID.
+#   * active_patients (#actp, NEW) -- CURRENT value only (owner decision): count active
+#     patients (First_Appointment_Date <= today AND not lapsed) per assigned dentist and
+#     per assigned hygienist, stamped at the latest weekly active_patients snapshot date
+#     so it aligns with the practice/site latest-in-period value. History stays practice/
+#     site-level (the weekly KPI snapshot is not reconstructed per practitioner).
+#
+# Grain model unchanged: rows are site-level (site, -1) XOR practitioner-level (-1, prac);
+# selecting a site AND a practitioner still yields no cross-grain row (as for every other
+# metric). Patients with no assigned dentist/hygienist only appear in the Practice total.
+#
+# PBI side (run PBI_Dentally.csx in Tabular Editor, MODE=apply, then publish/refresh):
+# Overdue Recalls is now in the metrics array as shape 'cur', so the grain-aware dCur
+# retarget replaces its old bespoke fk_Practitioner = -1 pin. active_patients (snap) and
+# lapsed_patients (cum) were already grain-aware -- no measure change needed.
+#
+# Data reload rides the next Orchestrate_Build (rebuilds Fact_Metric_Actuals + aggs +
+# model refresh). No C# / catalog / schema change. Deploy AFTER V102.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V103__patient_stocks_practitioner_grain.manifest -SkipTests
+# =====================================================================
+
+DEPLOY  Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+TEST

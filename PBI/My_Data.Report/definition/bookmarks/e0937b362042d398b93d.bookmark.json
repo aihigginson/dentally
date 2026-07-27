@@ -1,0 +1,601 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Show Revenue",
+  "name": "e0937b362042d398b93d",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "5da3ff6fc7174dbebb17",
+      "81e51d6d314b4d9ea4e5",
+      "c7d8e9f0a1b2c3d40056"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.3",
+    "activeSection": "146989b88eb26d71b830",
+    "sections": {
+      "146989b88eb26d71b830": {
+        "visualContainers": {
+          "090681e3d90dd5b48d60": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "f14b4c1ecabca85d1cd1",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Diary Fill"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "5bcdfaebb0221e56a1d8",
+                  "type": "Advanced",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date Unconstrained"
+                        }
+                      },
+                      "Property": "Full Date"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "e9562d078a09210b0c83",
+                  "type": "Advanced",
+                  "filter": {
+                    "Version": 2,
+                    "From": [
+                      {
+                        "Name": "l",
+                        "Entity": "List Date Unconstrained",
+                        "Type": 0
+                      }
+                    ],
+                    "Where": [
+                      {
+                        "Condition": {
+                          "And": {
+                            "Left": {
+                              "Comparison": {
+                                "ComparisonKind": 3,
+                                "Left": {
+                                  "Column": {
+                                    "Expression": {
+                                      "SourceRef": {
+                                        "Source": "l"
+                                      }
+                                    },
+                                    "Property": "Relative Day"
+                                  }
+                                },
+                                "Right": {
+                                  "Literal": {
+                                    "Value": "15L"
+                                  }
+                                }
+                              }
+                            },
+                            "Right": {
+                              "Comparison": {
+                                "ComparisonKind": 1,
+                                "Left": {
+                                  "Column": {
+                                    "Expression": {
+                                      "SourceRef": {
+                                        "Source": "l"
+                                      }
+                                    },
+                                    "Property": "Relative Day"
+                                  }
+                                },
+                                "Right": {
+                                  "Literal": {
+                                    "Value": "0L"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date Unconstrained"
+                        }
+                      },
+                      "Property": "Relative Day"
+                    }
+                  },
+                  "howCreated": 1
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "pivotTable",
+              "objects": {},
+              "activeProjections": {
+                "Columns": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date Unconstrained"
+                        }
+                      },
+                      "Property": "Full Date"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "5da3ff6fc7174dbebb17": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "e7e100b2d0081de6e94e",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date"
+                        }
+                      },
+                      "Property": "Week Commencing Date"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "a744715fdb4b70135900",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Category Bucket"
+                        }
+                      },
+                      "Property": "Category"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "86445e0336c4c6882a13",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Revenue (Top N)"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "orderBy": [
+                {
+                  "Direction": 1,
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date"
+                        }
+                      },
+                      "Property": "Week Commencing Date"
+                    }
+                  }
+                }
+              ],
+              "activeProjections": {
+                "Category": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Date"
+                        }
+                      },
+                      "Property": "Week Commencing Date"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "81e51d6d314b4d9ea4e5": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "c8437fc45c26bdcac005",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Treatments"
+                        }
+                      },
+                      "Property": "Standard Treatment Category"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "e8f5cae0507d60406838",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Invoice Items"
+                        }
+                      },
+                      "Property": "Revenue"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "orderBy": [
+                {
+                  "Direction": 2,
+                  "Expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Invoice Items"
+                        }
+                      },
+                      "Property": "Revenue"
+                    }
+                  }
+                }
+              ],
+              "activeProjections": {
+                "Category": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Treatments"
+                        }
+                      },
+                      "Property": "Standard Treatment Category"
+                    }
+                  }
+                ]
+              },
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "b1b2b3b4b5b600110022": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "4ed2bf95bec8026a840e",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Total Revenue"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "5fcf58ccc6b901500325",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Revenue Per Clinical Hour"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "83969325b1d200b22cb7",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Average Plan Value"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "7be2f34b4688759ac0b5",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Exam Ratio"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "579254c0b226ab74e75e",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Chair Utilisation"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "d5aab22ed76c86a90cd7",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Diary Fill"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "0c4e35eed68645062b20",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Days Until Next 30 Minute Free"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "db3b36b20bcc08b57019",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Outstanding Invoices"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "7aba72314c5c533bb7d4",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Open Courses"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "884656b0eb3a67b2de77",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Open Courses Value"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "4d1b3681973bc2d08350",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Open Courses Without Appointment"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "c023eb8c6736880949eb",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Open Courses Without Appointment Value"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "cardVisual",
+              "objects": {},
+              "orderBy": [
+                {
+                  "Direction": 2,
+                  "Expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Email Details Rate"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "c7d8e9f0a1b2c3d40056": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "73788f1d77543f6fde4d",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Patients"
+                        }
+                      },
+                      "Property": "Standard Payment Plan"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "95578f487184d7d7a1cd",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Patients Booked"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "orderBy": [
+                {
+                  "Direction": 2,
+                  "Expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Patients Booked"
+                    }
+                  }
+                }
+              ],
+              "activeProjections": {
+                "Category": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "List Patients"
+                        }
+                      },
+                      "Property": "Standard Payment Plan"
+                    }
+                  }
+                ]
+              },
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    },
+    "objects": {
+      "merge": {
+        "outspacePane": [
+          {
+            "properties": {
+              "expanded": {
+                "expr": {
+                  "Literal": {
+                    "Value": "true"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
