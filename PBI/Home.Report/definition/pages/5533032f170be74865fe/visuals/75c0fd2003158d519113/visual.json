@@ -583,7 +583,7 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue Per Clinical Hour vs Target"
+                  "Property": "Revenue Per Dentist Hour vs Target"
                 }
               }
             }
@@ -596,7 +596,7 @@
                 }
               }
             ],
-            "metadata": "_Measures.Revenue Per Clinical Hour",
+            "metadata": "_Measures.Revenue Per Dentist Hour",
             "id": "field-a542cee6-ea80-42e9-0af5-448d2fa58ec8",
             "order": 0
           }
@@ -703,7 +703,7 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.Revenue Per Clinical Hour"
+            "metadata": "_Measures.Revenue Per Dentist Hour"
           }
         },
         {
@@ -718,7 +718,7 @@
                           "Entity": "_Measures"
                         }
                       },
-                      "Property": "Revenue Per Clinical Hour BG"
+                      "Property": "Revenue Per Dentist Hour BG"
                     }
                   }
                 }
@@ -733,7 +733,7 @@
                 }
               }
             ],
-            "metadata": "_Measures.Revenue Per Clinical Hour"
+            "metadata": "_Measures.Revenue Per Dentist Hour"
           }
         },
         {
@@ -1050,7 +1050,7 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue Per Clinical Hour Target"
+                  "Property": "Revenue Per Dentist Hour Target"
                 }
               }
             }
@@ -1063,7 +1063,7 @@
                 }
               }
             ],
-            "metadata": "_Measures.Revenue Per Clinical Hour",
+            "metadata": "_Measures.Revenue Per Dentist Hour",
             "id": "field-7d568852-d7f0-8eaa-9239-a021e8c8968f",
             "order": 1
           }
@@ -1235,7 +1235,7 @@
             }
           },
           "selector": {
-            "metadata": "_Measures.Revenue Per Clinical Hour"
+            "metadata": "_Measures.Revenue Per Dentist Hour"
           }
         },
         {
