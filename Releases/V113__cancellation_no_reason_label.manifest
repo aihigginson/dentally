@@ -9,9 +9,12 @@
 # APPLY after deploy: reload Dim_Cancellation_Reasons (Orchestrate_Build, or
 # EXEC Gold.usp_Load_Dim_Cancellation_Reasons) then refresh the model -- the by-reason visuals
 # now show "No reason recorded" instead of a blank.
+# Also rolls in Audit.usp_Run_Single_Job -- a utility to re-run one job while supplying the standard
+# @Run_Inserts/@Run_Updates/@Run_Deletes OUT params (no data/schema change).
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V113__cancellation_no_reason_label.manifest -SkipTests
 # =====================================================================
 
 DEPLOY   Fabric\Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql
+DEPLOY   Fabric\Audit.usp_Run_Single_Job.StoredProcedure.sql
 
 TEST
