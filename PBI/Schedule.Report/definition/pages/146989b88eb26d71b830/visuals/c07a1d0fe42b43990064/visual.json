@@ -103,6 +103,21 @@
               "queryRef": "_Measures.Days Until Next 30 Minute Free",
               "nativeQueryRef": "Days to 30min Free",
               "displayName": "Days to 30min Free"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked"
+                }
+              },
+              "queryRef": "_Measures.Cancellations Rebooked",
+              "nativeQueryRef": "Book Before Leave",
+              "displayName": "Rebooked %"
             }
           ]
         }
@@ -1061,6 +1076,106 @@
             "id": "field-fda21156-ff9e-08d8-7a47-22427a6fc6ee",
             "order": 1
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked",
+            "id": "field-eb6210a9-8cc6-d912-257e-2f460e86a74a",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Cancellations Rebooked BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked"
+          }
+        },
+        {
+          "properties": {
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Cancellations Rebooked"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked",
+            "id": "field-bea74ff2-cb4e-9c33-a5fa-6c83318d9eb2",
+            "order": 1
+          }
         }
       ],
       "referenceLabelTitle": [
@@ -1146,6 +1261,20 @@
           },
           "selector": {
             "metadata": "_Measures.Days Until Next 30 Minute Free"
+          }
+        },
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Cancellations Rebooked"
           }
         }
       ],

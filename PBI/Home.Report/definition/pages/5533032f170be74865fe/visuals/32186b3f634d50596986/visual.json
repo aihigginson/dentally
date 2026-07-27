@@ -3,7 +3,7 @@
   "name": "32186b3f634d50596986",
   "position": {
     "x": 512,
-    "y": 0.085475463748252878,
+    "y": 0.08547546374825288,
     "z": 2000,
     "height": 314.2559351476549,
     "width": 250,
@@ -103,6 +103,21 @@
               "queryRef": "_Measures.Days Until Next 30 Minute Free",
               "nativeQueryRef": "Days Until Next 30 Minute Free",
               "displayName": "Days to 30min Free"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked"
+                }
+              },
+              "queryRef": "_Measures.Cancellations Rebooked",
+              "nativeQueryRef": "Cancellations Rebooked",
+              "displayName": "Rebooked %"
             }
           ]
         }
@@ -1054,6 +1069,106 @@
             "id": "field-fda21156-ff9e-08d8-7a47-22427a6fc6ee",
             "order": 1
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked",
+            "id": "field-0370f9d2-8ed7-a7a6-16c1-d8f90d660593",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Cancellations Rebooked BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked"
+          }
+        },
+        {
+          "properties": {
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Cancellations Rebooked"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cancellations Rebooked Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Cancellations Rebooked",
+            "id": "field-d5d06e2d-0b7b-fbfe-aa2c-63c5f3f5556b",
+            "order": 1
+          }
         }
       ],
       "referenceLabelTitle": [
@@ -1139,6 +1254,20 @@
           },
           "selector": {
             "metadata": "_Measures.Days Until Next 30 Minute Free"
+          }
+        },
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Cancellations Rebooked"
           }
         }
       ],
