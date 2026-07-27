@@ -2,8 +2,10 @@
 
 Working list. Created 2026-07-23; last updated 2026-07-27. IDs stable; reference by number.
 
-## Recently completed (removed from active list — all on dev, republish from Desktop)
-Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label size · **#7** Patient/Acquisition x-axis title · **#5** Home Revenue → Dentist Hour (value **+ target**) + Revenue ribbon · **#6 Cancellations Rebooked** (V111/V112: Short Notice moved to a date-based fact flag, Dim reason flag dropped, `Cancellations_Rebooked` aggregate col + measure + target, wired onto Home Scheduling + Schedule cards).
+## ✅ Done + tested on DEV — PENDING PROD PROMOTION
+Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label size · **#7** Acquisition x-axis title · **#5** Home Revenue → Dentist Hour (value + target) + Revenue ribbon · **#6 Cancellations Rebooked** (V111/V112: Short Notice→date-based fact flag, Dim reason flag dropped, `Cancellations_Rebooked` col + measure + target, wired onto Home + Schedule) · **Patient Growth** (Net Patient Growth) on Patient cards + replacing New/Lapsed on Home · **Home card bar-height** fix.
+
+**PROD promotion covers:** warehouse **V111 + V112** migrations (deploy to prod warehouse), **csx apply + model refresh** on the prod model, **PBI report re-publish/promote** to the prod workspace, and the **Day Book app wiring** (dev→main PR). Prod report GUIDs differ — Day Book needs `REPORT_ID_DAY_BOOK` set on `ca-analytically-prod` + `Access_Day_Book` there.
 
 ## Open — report-side, I can do solo
 - **#8 Recalls by Status** — active patients only; cap recall history at 2 years.
