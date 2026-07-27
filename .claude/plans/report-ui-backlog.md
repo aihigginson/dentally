@@ -3,32 +3,31 @@
 Working list. Created 2026-07-23; last updated 2026-07-27. IDs stable; reference by number.
 
 ## ✅ Done + tested on DEV — PENDING PROD PROMOTION
-Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label size · **#7** Acquisition x-axis title · **#5** Home Revenue → Dentist Hour (value + target) + Revenue ribbon · **#6 Cancellations Rebooked** (V111/V112: Short Notice→date-based fact flag, Dim reason flag dropped, `Cancellations_Rebooked` col + measure + target, wired onto Home + Schedule) · **Patient Growth** (Net Patient Growth) on Patient cards + replacing New/Lapsed on Home · **Home card bar-height** fix.
+Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow · **#3** navigator selected-label · **#7** Acquisition x-axis title · **#5** Home Revenue → Dentist Hour + Revenue ribbon · **#6 Cancellations Rebooked** · **Patient Growth** · **Home card bar-height** fix.
 
-**PROD promotion covers:** warehouse **V111 + V112** migrations (deploy to prod warehouse), **csx apply + model refresh** on the prod model, **PBI report re-publish/promote** to the prod workspace, and the **Day Book app wiring** (dev→main PR). Prod report GUIDs differ — Day Book needs `REPORT_ID_DAY_BOOK` set on `ca-analytically-prod` + `Access_Day_Book` there.
+**PROD promotion covers:** warehouse **V111 + V112 + V113**, **csx apply + model refresh** on prod, **PBI report re-publish/promote**, **Day Book app** dev→main PR (+ prod `REPORT_ID_DAY_BOOK` / `Access_Day_Book`).
 
-## Open — report-side, I can do solo
-- **#8 Recalls by Status** — active patients only; cap recall history at 2 years.
-- **#10 Cancellations "blanks"** — *diagnosis resolved:* `Is_Cancelled` is correct (`Cancelled_At IS NOT NULL`). The blanks = **10,363 cancellations (32%) with NO reason recorded at source** (raw `Cancellation_Reason_ID` NULL) — real gaps, not a filter/backend bug. **Fix:** relabel the `fk_Cancellation_Reason = -1` bucket to "No reason recorded" (or exclude it) on the by-reason visual. *Minor:* 752 rows have a reason but `Cancelled_At` NULL → `Is_Cancelled=0`; optionally widen `Is_Cancelled` to include `fk_Cancellation_Reason <> -1`.
-- **#12 Open Course Value** — split **With Appointment vs Without Appointment**.
+## ✅ Done on DEV this pass (republish / deploy to see)
+- **#1** KPI ribbon h=42 + navigator y=42 standardised (6 reports) — *republish*
+- **#2** App nav font → Arial — *app deploy (auto)*
+- **#4** Drill buttons → magnifier icon + un-inverted highlight (navy=available / grey=disabled) — *republish*
+- **#8** Recalls by Status (`59450b97`) → active-patients filter (`Retention Outlook In Scope=1`) — *republish* (2-yr window still TODO ↓)
+- **#10** Cancellations `-1` → "No reason recorded" — *deploy **V113** + Dim reload + refresh*
+- **#12** "Open Courses With Appointment Value" measure added — *csx apply* (split wiring TODO ↓)
+- **#15** Audit done — slicers consistent; only **Finance slicer (y=0)** off
 
-## Open — needs your OK / pairing
-- **#4 Detail drill button** — DECIDED (2026-07-27): **icon-only** button (▸ / magnifier glyph), **navy=active / grey=inactive** (fixes the inverted highlight), consistent placement on every report. Pairs with **#9 Patient Retention** detail + filter positioning. Ready to build.
+## 🔶 Small remainders
+- **#8 2-year window** on Recalls by Status — strict 2-yr window on `Due Date`. Best set in Desktop (filter pane → Due Date → **Relative date → is in the last 2 years**); the relative-date filter JSON is the one structure I won't risk authoring blind.
+- **#12 split wiring** — after the csx apply, add the With/Without split to **My Data** (`b1b2b3`) + **Clinical** (`4c5ed0` + detail). Already shown on Home. (Hold until measure is live, to avoid a resolve error.)
+- **#9 Patient Retention** detail + filter positioning — revisit after eyeballing #1/#4.
+- **Finance slicer y=0** — align to the standard if wanted (Finance has no KPI ribbon).
 
-## Confirmed — likely no change
-- **#11 Scheduling hours** — Diary Fill = scheduled hrs / worked hrs ✓; Chair Util = actual in-chair / worked hrs ✓; **no** forward Chair Util ✓. Clinical < Appointment hours is expected. Close unless a specific page is wrong.
+## 🏗️ Bigger builds
+- **#13 My Data** — Open Courses tab (course age + value, drill to patient list).
+- **#16 Day Book — REVISIT** — full revamp per `.claude/plans/day-book-spec.md`.
 
-## Bigger builds
-- **#13 My Data** — Open Courses tab (course age + value, drill-through to patient list).
-- **#16 Day Book — REVISIT** — straw man is wired into the dev app but needs a full revamp per **`.claude/plans/day-book-spec.md`**: unified task-flagged patient list + lens filters, hide no-issue patients, the DNA-risk + today's-appt data gaps, and a real Tracking measure.
-
-## Ready to build (direction agreed 2026-07-27)
-- **#2** App menu font → **change to Arial** to match the PBI navigator (`Web/index.html`).
-- **#1** KPI ribbon vs navigator bar → **match heights + tighten the gap**.
-- **#15** Filter/slicer inconsistencies → **I audit every report + propose one standard** (position/header/default text) for approval.
-
-## Parked / needs your input
+## Parked
 - **#14** Canvas height standardisation (per-report when we're in it).
 
 ## Closed
-- Top-N "(Blank)" — verify · My Data Patients-by-Plan donut — fixed · Slicer "All" → "All X" — wontfix (PBI limit).
+- Top-N "(Blank)" — verify · My Data Patients-by-Plan donut — fixed · Slicer "All"→"All X" — wontfix.
