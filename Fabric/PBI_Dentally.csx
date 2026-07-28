@@ -2385,3 +2385,26 @@ SWITCH ( TRUE (),
     rm.FormatString = "£#,##0";
     rm.DisplayFolder = "Revenue KPIs";
 }
+
+// ===================== Aged Open Plans -- Course Age Bucket (calc column) =====================
+{
+    var tp = Model.Tables["_Treatment Plans"];
+    var existing = tp.Columns.FirstOrDefault(c => c.Name == "Course Age Bucket");
+    if (existing != null) existing.Delete();
+    var col = tp.AddCalculatedColumn("Course Age Bucket", @"
+VAR d = DATEDIFF('_Treatment Plans'[Start Date], TODAY(), DAY)
+RETURN
+    IF(
+        ISBLANK('_Treatment Plans'[Start Date]),
+        BLANK(),
+        SWITCH(
+            TRUE(),
+            d < 15, ""0-15"",
+            d < 30, ""15-30"",
+            d < 60, ""30-60"",
+            d < 90, ""60-90"",
+            ""90+""
+        )
+    )");
+    col.DisplayFolder = "Aged Plans";
+}
