@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V115 -- Security.Application_Users = access-holders only
+# =====================================================================
+# The AppDB->WH access sync used to carry no-access users through as all-zero rows (UPSERT only,
+# "removal = no_access row"). That left Security.Application_Users cluttered with rows for people
+# without access. Now the sync holds ACCESS-HOLDERS ONLY: it never inserts a no-access row and
+# DELETEs the Security row when a user is downgraded to no-access (no module + Maintain_Targets=0).
+# Input.Application_Users still keeps the full record for the Team screen; auth is unchanged for
+# no-access users (no row and all-zeros row both = denied). Owners (all flags 1) are never deleted.
+#
+# APPLY: deploy the SP. It runs on the existing ~10-min access sync, so existing no-access rows
+# clear on the next sync (or EXEC Meta.usp_Sync_Access_From_AppDB). SP-only, no schema change.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V115__security_access_holders_only.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Sync_Access_From_AppDB.StoredProcedure.sql
+
+TEST
