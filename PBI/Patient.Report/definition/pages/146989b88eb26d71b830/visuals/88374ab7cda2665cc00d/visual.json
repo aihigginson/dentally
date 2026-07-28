@@ -6,7 +6,7 @@
     "y": 82,
     "z": 6000,
     "height": 33.839697859840534,
-    "width": 95.073436844313889,
+    "width": 95.07343684431389,
     "tabOrder": 6000
   },
   "visual": {
@@ -56,7 +56,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'🔍'"
+                  "Value": "'\ud83d\udd0d'"
                 }
               }
             },
@@ -124,9 +124,8 @@
               "solid": {
                 "color": {
                   "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 0,
-                      "Percent": -0.2
+                    "Literal": {
+                      "Value": "'#B04848'"
                     }
                   }
                 }
