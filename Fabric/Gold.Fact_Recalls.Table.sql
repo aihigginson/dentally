@@ -10,6 +10,7 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Tenant_ID]              [int]           NOT NULL,
 	[bk_Recall_ID]           [VARCHAR](50)   NOT NULL,
 	[fk_Patient]             [bigint]        NULL,
+	[fk_Practitioner]        [bigint]        NULL,
 	[fk_Date_Due]            [bigint]        NULL,
 	[fk_Date_Run]            [bigint]        NULL,
 	[fk_Date_First_Reminder] [bigint]        NULL,

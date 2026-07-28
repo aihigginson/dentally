@@ -80,6 +80,9 @@ BEGIN
             r.Tenant_ID                                                     AS Tenant_ID,
             r.Id                                                            AS bk_Recall_ID,
             ISNULL(dpat.pk_Patient, -1)                                     AS fk_Patient,
+            -- *NN fk_Practitioner: the patient's DENTIST or HYGIENIST (picked by recall type) so recalls
+            --     drill/filter by practitioner like the other facts. May go stale on patient reassignment (accepted).
+            ISNULL(dpr_recall.pk_Practitioner, -1)                          AS fk_Practitioner,
             dd_due.pk_Date                                                  AS fk_Date_Due,
             dd_run.pk_Date                                                  AS fk_Date_Run,
             dd_fr.pk_Date                                                   AS fk_Date_First_Reminder,
@@ -167,6 +170,11 @@ BEGIN
         INTO #src
         FROM Silver.Recalls r
         LEFT JOIN Gold.Dim_Patients dpat  ON dpat.Patient_ID  = r.Patient_ID  AND dpat.Tenant_ID = r.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr_recall
+               ON dpr_recall.Practitioner_ID = CASE WHEN NULLIF(TRIM(r.Recall_Type),'') LIKE '%ygien%'
+                                                    THEN dpat.Hygienist_Practitioner_ID
+                                                    ELSE dpat.Dentist_Practitioner_ID END
+              AND dpr_recall.Tenant_ID = r.Tenant_ID
         LEFT JOIN #next_appt na           ON na.Patient_ID    = r.Patient_ID  AND na.Tenant_ID   = r.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_ab     ON dd_ab.Full_Date  = TRY_CAST(NULLIF(TRIM(na.Pending_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_due    ON dd_due.Full_Date = CAST(r.Due_Date AS DATE)
@@ -185,6 +193,7 @@ BEGIN
         -- Update changed rows
         UPDATE tgt SET
             fk_Patient               = src.fk_Patient,
+            fk_Practitioner          = src.fk_Practitioner,
             fk_Date_Due              = src.fk_Date_Due,
             fk_Date_Run              = src.fk_Date_Run,
             fk_Date_First_Reminder   = src.fk_Date_First_Reminder,
@@ -221,6 +230,7 @@ BEGIN
         INNER JOIN #src src ON tgt.bk_Recall_ID = src.bk_Recall_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Patient]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Practitioner]        AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Due]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Run]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_First_Reminder] AS VARCHAR(500)), ''),
@@ -255,6 +265,7 @@ BEGIN
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Practitioner]        AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Due]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Run]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_First_Reminder] AS VARCHAR(500)), ''),
@@ -293,7 +304,7 @@ BEGIN
         INSERT INTO Gold.Fact_Recalls (
             Tenant_ID,
             bk_Recall_ID,
-            fk_Patient, fk_Date_Due, fk_Date_Run,
+            fk_Patient, fk_Practitioner, fk_Date_Due, fk_Date_Run,
             fk_Date_First_Reminder, fk_Date_Second_Reminder, fk_Date_Last_Reminded,
             Appointment_ID, Recall_Type, Recall_Method, Status, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_Type, Second_Reminder_Type, Latest_Reminder_Type,
@@ -307,7 +318,7 @@ BEGIN
         SELECT
             src.Tenant_ID,
             src.bk_Recall_ID,
-            src.fk_Patient, src.fk_Date_Due, src.fk_Date_Run,
+            src.fk_Patient, src.fk_Practitioner, src.fk_Date_Due, src.fk_Date_Run,
             src.fk_Date_First_Reminder, src.fk_Date_Second_Reminder, src.fk_Date_Last_Reminded,
             src.Appointment_ID, src.Recall_Type, src.Recall_Method, src.Status, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_Type, src.Second_Reminder_Type, src.Latest_Reminder_Type,
