@@ -7,7 +7,9 @@
     "targetVisualNames": [
       "5da3ff6fc7174dbebb17",
       "81e51d6d314b4d9ea4e5",
-      "c7d8e9f0a1b2c3d40056"
+      "c7d8e9f0a1b2c3d40056",
+      "e65b92cb285befc0124c",
+      "da38b36b81d54b7d0e6e"
     ],
     "suppressData": true
   },
@@ -571,6 +573,24 @@
                     }
                   }
                 ]
+              }
+            }
+          },
+          "e65b92cb285befc0124c": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "da38b36b81d54b7d0e6e": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
               }
             }
           }

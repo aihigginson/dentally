@@ -1,0 +1,65 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Aged Plans",
+  "name": "7dd4da274ae662befe69",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "5da3ff6fc7174dbebb17",
+      "81e51d6d314b4d9ea4e5",
+      "c7d8e9f0a1b2c3d40056",
+      "e65b92cb285befc0124c",
+      "da38b36b81d54b7d0e6e"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "146989b88eb26d71b830",
+    "sections": {
+      "146989b88eb26d71b830": {
+        "visualContainers": {
+          "5da3ff6fc7174dbebb17": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "81e51d6d314b4d9ea4e5": {
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "c7d8e9f0a1b2c3d40056": {
+            "singleVisual": {
+              "visualType": "donutChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "e65b92cb285befc0124c": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {}
+            }
+          },
+          "da38b36b81d54b7d0e6e": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "objects": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

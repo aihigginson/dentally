@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "428e44f43a455533d4b8",
+  "name": "da38b36b81d54b7d0e6e",
   "position": {
-    "x": 0,
-    "y": 77,
-    "z": 1000,
-    "height": 418,
-    "width": 415,
-    "tabOrder": 2000
+    "x": 648,
+    "y": 230,
+    "z": 5000,
+    "height": 366,
+    "width": 632,
+    "tabOrder": 4000
   },
   "visual": {
-    "visualType": "donutChart",
+    "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Treatments"
+                      "Entity": "_Treatment Plans"
                     }
                   },
-                  "Property": "Standard Treatment Category"
+                  "Property": "Course Age Bucket"
                 }
               },
-              "queryRef": "List Treatments.Standard Treatment Category",
-              "nativeQueryRef": "Standard Treatment Category",
+              "queryRef": "_Treatment Plans.Course Age Bucket",
+              "nativeQueryRef": "Course Age Bucket",
               "active": true
             }
           ]
@@ -39,14 +39,28 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Invoice Items"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue"
+                  "Property": "Open Courses"
                 }
               },
-              "queryRef": "_Invoice Items.Revenue",
-              "nativeQueryRef": "Revenue"
+              "queryRef": "_Measures.Open Courses",
+              "nativeQueryRef": "Open Courses"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Open Courses Without Appointment"
+                }
+              },
+              "queryRef": "_Measures.Open Courses Without Appointment",
+              "nativeQueryRef": "Open Courses Without Appointment"
             }
           ]
         }
@@ -55,29 +69,29 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Invoice Items"
+                    "Entity": "_Treatment Plans"
                   }
                 },
-                "Property": "Revenue"
+                "Property": "Course Age Bucket"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ],
         "isDefaultSort": true
       }
     },
     "objects": {
-      "legend": [
+      "categoryAxis": [
         {
           "properties": {
-            "fontSize": {
+            "showAxisTitle": {
               "expr": {
                 "Literal": {
-                  "Value": "8D"
+                  "Value": "false"
                 }
               }
             },
@@ -88,29 +102,58 @@
                 }
               }
             },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
             "bold": {
               "expr": {
                 "Literal": {
                   "Value": "false"
-                }
-              }
-            },
-            "labelColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
                 }
               }
             }
           }
         }
       ],
-      "labels": [
+      "valueAxis": [
+        {
+          "properties": {
+            "showAxisTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "legend": [
         {
           "properties": {
             "fontFamily": {
@@ -124,25 +167,6 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
-                }
-              }
-            },
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
                 }
               }
             }
@@ -157,7 +181,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Value'"
+                  "Value": "'Open Plan Count by Age'"
                 }
               }
             },
@@ -165,18 +189,6 @@
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
-                }
-              }
-            },
-            "fontColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
                 }
               }
             },

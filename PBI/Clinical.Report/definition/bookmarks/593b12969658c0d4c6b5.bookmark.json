@@ -83,10 +83,7 @@
           "d1bdea034a6ca3100284": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           },
           "e057c7a4f63b6a5aeddc": {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Other KPIs",
+  "displayName": "Open Courses",
   "name": "ccb8f0f314e1cf41ac72",
   "options": {
     "applyOnlyToTargetVisuals": true,
@@ -89,7 +89,10 @@
           "d1bdea034a6ca3100284": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "e057c7a4f63b6a5aeddc": {
@@ -113,19 +116,13 @@
           "35cc7bbf3ee1a9a11d8b": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           },
           "f5531afe5d96eb287460": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           }
         }
