@@ -39,14 +39,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Cancellation Reasons"
+                      "Entity": "_Appointments"
                     }
                   },
                   "Property": "Is Short Notice"
                 }
               },
-              "queryRef": "List Cancellation Reasons.Is Short Notice",
-              "nativeQueryRef": "Is Short Notice"
+              "queryRef": "_Appointments.Is Short Notice",
+              "nativeQueryRef": "Is Short Notice1"
             }
           ]
         },
@@ -284,7 +284,8 @@
             "Property": "Is Short Notice"
           }
         },
-        "type": "Categorical"
+        "type": "Categorical",
+        "howCreated": "User"
       },
       {
         "name": "511562e81a951bb2b460",
@@ -370,6 +371,20 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "349ed7c51d3993445d85",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Short Notice"
+          }
+        },
+        "type": "Categorical"
       }
     ],
     "filterSortOrder": "Custom"
