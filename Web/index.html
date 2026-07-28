@@ -2669,6 +2669,10 @@
         }
         selPract.value = opt.value;
         filterState.pract = opt.value;
+        // Clinician (My Data is their only report): LOCK the practitioner filter to their own
+        // name so they cannot switch to another practitioner. Full-access users (myDataLock=false)
+        // keep it changeable.
+        selPract.disabled = myDataLock;
         refreshBadge();
         applyFilters();
     }
