@@ -16,32 +16,7 @@
     "activeSection": "1404b201b55e6e36945b",
     "sections": {
       "1404b201b55e6e36945b": {
-        "visualContainers": {
-          "f42fb04be4f5e65396cd": {
-            "singleVisual": {
-              "visualType": "tableEx",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "700a88c7e13c697233ce": {
-            "singleVisual": {
-              "visualType": "columnChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "032ace68fe10021fc8ed": {
-            "singleVisual": {
-              "visualType": "columnChart",
-              "objects": {}
-            }
-          }
-        }
+        "visualContainers": {}
       }
     }
   }

@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "f42fb04be4f5e65396cd",
+  "name": "2791ed9d2e0e2c076750",
   "position": {
-    "x": 4,
-    "y": 98,
-    "z": 10,
-    "height": 494,
-    "width": 1272,
-    "tabOrder": 10
+    "x": 15.471074380165289,
+    "y": 15.471074380165289,
+    "z": 0,
+    "height": 590.28099173553721,
+    "width": 900.89256198347107,
+    "tabOrder": 0
   },
   "visual": {
     "visualType": "tableEx",
@@ -59,18 +59,31 @@
             },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Measures"
+                      "Entity": "_Treatment Plans"
                     }
                   },
-                  "Property": "Overdue Recalls"
+                  "Property": "Start Date"
                 }
               },
-              "queryRef": "_Measures.Overdue Recalls",
-              "nativeQueryRef": "Overdue Recalls",
-              "displayName": "Overdue Recalls"
+              "queryRef": "_Treatment Plans.Start Date",
+              "nativeQueryRef": "Start Date"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Treatment Plans"
+                    }
+                  },
+                  "Property": "Course Age Bucket"
+                }
+              },
+              "queryRef": "_Treatment Plans.Course Age Bucket",
+              "nativeQueryRef": "Course Age Bucket"
             },
             {
               "field": {
@@ -80,67 +93,38 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Open Courses Without Appointment"
+                  "Property": "Open Courses Value"
                 }
               },
-              "queryRef": "_Measures.Open Courses Without Appointment",
-              "nativeQueryRef": "Open Courses Without Appointment",
-              "displayName": "Open Courses Without Appointment"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Outstanding Invoices"
-                }
-              },
-              "queryRef": "_Measures.Outstanding Invoices",
-              "nativeQueryRef": "Outstanding Invoices",
-              "displayName": "Outstanding Invoices"
+              "queryRef": "_Measures.Open Courses Value",
+              "nativeQueryRef": "Open Courses Value"
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Measure": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "_Measures"
-                  }
-                },
-                "Property": "Outstanding Invoices"
-              }
-            },
-            "direction": "Descending"
-          }
-        ]
       }
     },
     "objects": {
-      "columnWidth": [
+      "columnHeaders": [
         {
           "properties": {
-            "value": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "247.44444444444446D"
+                  "Value": "8D"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
                 }
               }
             }
-          },
-          "selector": {
-            "metadata": "List Patients.Email Address"
           }
         }
       ],
-      "columnHeaders": [
+      "values": [
         {
           "properties": {
             "fontSize": {
@@ -172,36 +156,16 @@
             }
           }
         }
-      ],
-      "values": [
-        {
-          "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            }
-          }
-        }
       ]
     },
     "visualContainerObjects": {
       "title": [
         {
           "properties": {
-            "fontSize": {
+            "text": {
               "expr": {
                 "Literal": {
-                  "Value": "8D"
+                  "Value": "'Open Plans by Age -- Detail'"
                 }
               }
             },
@@ -211,33 +175,51 @@
                   "Value": "'Arial'"
                 }
               }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
             }
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   },
   "filterConfig": {
     "filters": [
       {
-        "name": "b0a105aedd62e050c765",
-        "ordinal": 0,
+        "name": "cca0eea1e7028d82e06d",
         "field": {
-          "Measure": {
+          "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "_Measures"
+                "Entity": "List Patients"
               }
             },
-            "Property": "Discounts"
+            "Property": "Full Name"
           }
         },
-        "type": "Advanced"
+        "type": "Categorical"
       },
       {
-        "name": "88b0e54c2ccb006ae893",
-        "ordinal": 1,
+        "name": "c338288b9406d0ec26e1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "4f4e13181b3e0a81d5da",
         "field": {
           "Column": {
             "Expression": {
@@ -251,38 +233,35 @@
         "type": "Categorical"
       },
       {
-        "name": "7b5f9638626c2d6c2a80",
-        "ordinal": 2,
+        "name": "3de43781c9942ab2ac75",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Patients"
+                "Entity": "_Treatment Plans"
               }
             },
-            "Property": "First Name"
+            "Property": "Start Date"
           }
         },
         "type": "Categorical"
       },
       {
-        "name": "d6ff9d243077cc47d83a",
-        "ordinal": 3,
+        "name": "0b0950cf0033b63dba54",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Patients"
+                "Entity": "_Treatment Plans"
               }
             },
-            "Property": "Last Name"
+            "Property": "Course Age Bucket"
           }
         },
         "type": "Categorical"
       },
       {
-        "name": "7f68c6b27c732bc2ab71",
-        "ordinal": 4,
+        "name": "633205f777062d602127",
         "field": {
           "Measure": {
             "Expression": {
@@ -290,62 +269,11 @@
                 "Entity": "_Measures"
               }
             },
-            "Property": "Discounts"
+            "Property": "Open Courses Value"
           }
         },
-        "type": "Advanced",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "_",
-              "Entity": "_Measures",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "Comparison": {
-                  "ComparisonKind": 1,
-                  "Left": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Source": "_"
-                        }
-                      },
-                      "Property": "Discounts"
-                    }
-                  },
-                  "Right": {
-                    "Literal": {
-                      "Value": "0L"
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "howCreated": "User"
-      },
-      {
-        "name": "61ebeeab6a8531eca7e8",
-        "ordinal": 5,
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Mobile Phone"
-          }
-        },
-        "type": "Categorical"
+        "type": "Advanced"
       }
-    ],
-    "filterSortOrder": "Custom"
+    ]
   }
 }
