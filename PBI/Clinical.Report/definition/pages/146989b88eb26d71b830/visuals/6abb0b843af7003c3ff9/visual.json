@@ -2,15 +2,15 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "6abb0b843af7003c3ff9",
   "position": {
-    "x": 382,
-    "y": 285,
+    "x": 381.91126279863482,
+    "y": 346.58703071672352,
     "z": 4000,
-    "height": 213,
-    "width": 393,
+    "height": 151.53583617747441,
+    "width": 393.17406143344709,
     "tabOrder": 3000
   },
   "visual": {
-    "visualType": "columnChart",
+    "visualType": "lineChart",
     "query": {
       "queryState": {
         "Category": {
@@ -188,5 +188,37 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "c884409b7a0a0d4321a7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "1cb5e1a1b6adab861e50",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Average Plan Value"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

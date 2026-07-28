@@ -3,9 +3,9 @@
   "name": "68933061c9095cb7c7be",
   "position": {
     "x": 0,
-    "y": 77,
+    "y": 76.791808873720129,
     "z": 0,
-    "height": 200,
+    "height": 269.79522184300339,
     "width": 388.5665529010239,
     "tabOrder": 0
   },
@@ -227,5 +227,37 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "c25673501db48008d77c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c7a1c167a9040005a46d",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Revenue Per Clinical Hour"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

@@ -3,14 +3,14 @@
   "name": "e057c7a4f63b6a5aeddc",
   "position": {
     "x": 0,
-    "y": 285,
+    "y": 346.58703071672352,
     "z": 4000,
-    "height": 213,
-    "width": 389,
+    "height": 151.53583617747441,
+    "width": 389.07849829351534,
     "tabOrder": 3000
   },
   "visual": {
-    "visualType": "columnChart",
+    "visualType": "lineChart",
     "query": {
       "queryState": {
         "Category": {
@@ -188,5 +188,37 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "7f8d59cd9eaa7c83ea69",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "9f347fab96430b10a8e1",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Revenue Per Clinical Hour"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

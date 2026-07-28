@@ -14,8 +14,7 @@
       "16c628af05cc9aac9ee2",
       "d1bdea034a6ca3100284",
       "e057c7a4f63b6a5aeddc",
-      "6abb0b843af7003c3ff9",
-      "6f1ebc6b08e1c0c87dca"
+      "6abb0b843af7003c3ff9"
     ],
     "suppressData": true
   },
@@ -98,15 +97,6 @@
             }
           },
           "6abb0b843af7003c3ff9": {
-            "singleVisual": {
-              "visualType": "columnChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "6f1ebc6b08e1c0c87dca": {
             "singleVisual": {
               "visualType": "columnChart",
               "objects": {},
