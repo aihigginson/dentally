@@ -6,7 +6,7 @@
     "y": 16,
     "z": 0,
     "height": 688,
-    "width": 1180,
+    "width": 900,
     "tabOrder": 0
   },
   "visual": {
@@ -28,6 +28,34 @@
               },
               "queryRef": "List Patients.Full Name",
               "nativeQueryRef": "Full Name"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Mobile Phone"
+                }
+              },
+              "queryRef": "List Patients.Mobile Phone",
+              "nativeQueryRef": "Mobile Phone"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Email Address"
+                }
+              },
+              "queryRef": "List Patients.Email Address",
+              "nativeQueryRef": "Email Address"
             },
             {
               "field": {
