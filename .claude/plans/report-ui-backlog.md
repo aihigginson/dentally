@@ -16,15 +16,20 @@ Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow 
 - **#12** "Open Courses With Appointment Value" measure added — *csx apply* (split wiring TODO ↓)
 - **#15** Audit done — slicers consistent; only **Finance slicer (y=0)** off
 
+## ✅ Unattended pass 2026-07-28
+- **Clinical weekly trend charts** — added under Rev/Clinical-Hour, Avg Plan Value, Open Courses Value (columnChart by Week Commencing, bookmark-gated to the Revenue lens). Published to dev. Cross-*highlight* only (see note under Small remainders re: hard filter).
+- **#8 2-year window** — DONE by user.
+- **#12 split** — found ALREADY wired: both `b1b2b3` (My Data) + `4c5ed0` (Clinical) cards carry `Open Courses With/Without Appointment Value`. Depends on those csx measures being live — CONFIRM on test.
+
 ## 🔶 Small remainders
-- **#8 2-year window** on Recalls by Status — strict 2-yr window on `Due Date`. Best set in Desktop (filter pane → Due Date → **Relative date → is in the last 2 years**); the relative-date filter JSON is the one structure I won't risk authoring blind.
-- **#12 split wiring** — after the csx apply, add the With/Without split to **My Data** (`b1b2b3`) + **Clinical** (`4c5ed0` + detail). Already shown on Home. (Hold until measure is live, to avoid a resolve error.)
+- **Clinical trends — hard filter** — currently default cross-highlight links the bars→trends. If you want a hard FILTER, it's one toggle in Desktop (Edit interactions) or I can add a `visualInteractions` block (no repo template, so I held off blind).
+- **Drill icon (disabled)** — DEFERRED: a single actionButton can't overlay a red X only when drill is unavailable (native limit). Options for you: recolour the disabled magnifier RED, or supply a magnifier-with-X image. Needs your call.
 - **#9 Patient Retention** detail + filter positioning — revisit after eyeballing #1/#4.
 - **Finance slicer y=0** — align to the standard if wanted (Finance has no KPI ribbon).
 
 ## 🏗️ Bigger builds
-- **#13 My Data** — Open Courses tab (course age + value, drill to patient list).
-- **#16 Day Book — REVISIT** — full revamp per `.claude/plans/day-book-spec.md`.
+- **#13 Aged Open Plans** — course-age buckets (0-15/15-30/30-60/60-90/90+) + value, drill to patient list. On **My Data AND Clinical** (user: "aged open plans report for My Data and Clinical").
+- **#16 Day Book — REDIRECTED 2026-07-28** — short-term = **fill the forwards diary**: opening screen = Forwards Availability (manager view, Practitioner Full Name per row) → links to **Open Plans No Appointments**, **Recalls Not Sent**, **Recalls Not Booked**. Long term = direct Dentally API integration. See `.claude/plans/day-book-spec.md` REDIRECT section.
 
 ## Parked
 - **#14** Canvas height standardisation (per-report when we're in it).

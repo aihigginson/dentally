@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V114 -- Dedup practitioner-diary breaks + floor Available at 0
+# =====================================================================
+# Real Dentally diary data repeats the SAME break (e.g. Lunch 13:00-14:00) dozens of times per
+# diary (no break Id at source, ingest not deduping) -- 40-72 identical rows seen on prod. That
+# inflated Break_Count/Total_Break_Mins (40x60=2400) and drove Available_Clinical_Mins hugely
+# negative (-1910), surfacing as negative worked hours in reports (e.g. Stephen Roberts -73.75).
+# The diary load now counts each DISTINCT (diary, name, start, end) break once and floors
+# Available_Clinical_Mins at 0. SP-only change (no schema).
+#
+# APPLY after deploy: reload the diary fact + downstream aggregate + refresh the model -- easiest via
+# Orchestrate_Build. (Or EXEC Gold.usp_Load_Fact_Practitioner_Diaries then the affected aggregates.)
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V114__diary_break_dedup.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql
+
+TEST

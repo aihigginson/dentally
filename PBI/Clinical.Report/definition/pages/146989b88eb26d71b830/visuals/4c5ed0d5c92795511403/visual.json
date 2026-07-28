@@ -6,7 +6,7 @@
     "y": 0,
     "z": 1000,
     "height": 42,
-    "width": 1279.863481228669,
+    "width": 1279.8634812286689,
     "tabOrder": 1000
   },
   "visual": {
@@ -42,8 +42,8 @@
                 }
               },
               "queryRef": "_Measures.Average Plan Value",
-              "nativeQueryRef": "Avg Plan \u00a3",
-              "displayName": "Avg Plan \u00a3"
+              "nativeQueryRef": "Avg Plan £",
+              "displayName": "Avg Plan £"
             },
             {
               "field": {
@@ -115,7 +115,7 @@
               },
               "queryRef": "_Measures.Open Courses With Appointment Value",
               "nativeQueryRef": "Open Courses With Appointment Value",
-              "displayName": "Open \u00a3 (Appt)"
+              "displayName": "Open £ (Appt)"
             },
             {
               "field": {
@@ -130,7 +130,7 @@
               },
               "queryRef": "_Measures.Open Courses Without Appointment Value",
               "nativeQueryRef": "Open Courses Without Appointment Value",
-              "displayName": "Open \u00a3 (No Appt)"
+              "displayName": "Open £ (No Appt)"
             }
           ]
         }

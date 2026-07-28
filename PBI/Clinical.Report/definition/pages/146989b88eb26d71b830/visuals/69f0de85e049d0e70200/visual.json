@@ -3,9 +3,9 @@
   "name": "69f0de85e049d0e70200",
   "position": {
     "x": 382.42320819112626,
-    "y": 76.792,
+    "y": 76.791808873720129,
     "z": 1000,
-    "height": 422.86689419795221,
+    "height": 269.79522184300339,
     "width": 392.66211604095565,
     "tabOrder": 1000
   },
@@ -220,5 +220,37 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "a3ea55143bae8d930da5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "64a4b235e1e5ac6b273d",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Average Plan Value"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

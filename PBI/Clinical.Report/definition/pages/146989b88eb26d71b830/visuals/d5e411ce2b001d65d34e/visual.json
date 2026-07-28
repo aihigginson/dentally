@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "d5e411ce2b001d65d34e",
   "position": {
-    "x": 764.9495875343722,
-    "y": 75.087,
+    "x": 764.84641638225253,
+    "y": 76.791808873720129,
     "z": 2000,
-    "height": 423.53803849679196,
-    "width": 347.27772685609534,
+    "height": 269.79522184300339,
+    "width": 347.61092150170646,
     "tabOrder": 2000
   },
   "visual": {
@@ -220,5 +220,37 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "d7b3b1c84ce104d20698",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "fa05ee9525703a50b05c",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Open Courses Value"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }
