@@ -1025,7 +1025,7 @@ _ACCESS_COLUMNS = [
 # profile's price (Config.Access_Profile). The Team screen assigns one profile per user.
 _PROFILES = {
     'full':         {'label': 'All reports',  'modules': {'Access_Home','Access_Revenue','Access_Patient','Access_Schedule','Access_Clinical','Access_NHS','Access_Day_Book','Access_Finance','Access_My_Data','Access_Marketing'}, 'maintain_targets': True,  'desc': 'Every report and dashboard.'},
-    'clinician':    {'label': 'Clinician',    'modules': {'Access_Home','Access_Clinical','Access_NHS','Access_Schedule','Access_Patient','Access_My_Data'}, 'maintain_targets': False, 'desc': 'Access to the clinician’s OWN data only.'},
+    'clinician':    {'label': 'Clinician',    'modules': {'Access_My_Data'}, 'maintain_targets': False, 'desc': 'The clinician’s OWN data only (My Data) — no other reports shown.'},
     'front_office': {'label': 'Front Office', 'modules': {'Access_Home','Access_Schedule','Access_Patient'}, 'maintain_targets': False, 'desc': 'Focuses on the tasks that help the practice run more efficiently.'},
     'no_access':    {'label': 'No Access',    'modules': set(), 'maintain_targets': False, 'desc': 'No access to the app.'},
 }
