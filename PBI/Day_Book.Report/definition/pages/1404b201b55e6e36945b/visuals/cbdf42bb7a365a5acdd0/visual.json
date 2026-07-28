@@ -1,8 +1,8 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "08d0475c7097706929ac",
+  "name": "cbdf42bb7a365a5acdd0",
   "position": {
-    "x": 636,
+    "x": 964,
     "y": 74,
     "z": 8000,
     "width": 160,
@@ -29,7 +29,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Open Plans'"
+                  "Value": "'DNAs'"
                 }
               }
             },
@@ -187,7 +187,7 @@
             "drillthroughSection": {
               "expr": {
                 "Literal": {
-                  "Value": "'be79b02c19996031a1e1'"
+                  "Value": "'bb331d3b6a27697986b8'"
                 }
               }
             },

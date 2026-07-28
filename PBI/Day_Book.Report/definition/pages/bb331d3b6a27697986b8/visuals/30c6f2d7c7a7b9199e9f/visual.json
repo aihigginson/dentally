@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "e7f084c9eb13adb946c6",
+  "name": "30c6f2d7c7a7b9199e9f",
   "position": {
     "x": 0,
     "y": 0,
@@ -133,7 +133,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Cancellations Detail'"
+                  "Value": "'DNAs -- Not Rebooked'"
                 }
               }
             },
@@ -160,7 +160,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "6f9d74cc0a710b58bd15",
+        "name": "4732482dfda6787ce41d",
         "ordinal": 0,
         "field": {
           "Column": {
@@ -169,7 +169,7 @@
                 "Entity": "_Appointments"
               }
             },
-            "Property": "Is Cancelled"
+            "Property": "Is DNA"
           }
         },
         "type": "Categorical",
@@ -194,7 +194,7 @@
                             "Source": "a"
                           }
                         },
-                        "Property": "Is Cancelled"
+                        "Property": "Is DNA"
                       }
                     }
                   ],
@@ -214,7 +214,7 @@
         }
       },
       {
-        "name": "2f60a126579851253697",
+        "name": "27da79f752d056f61d81",
         "ordinal": 1,
         "field": {
           "Column": {
