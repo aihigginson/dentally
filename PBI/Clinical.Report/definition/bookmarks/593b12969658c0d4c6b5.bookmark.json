@@ -12,7 +12,10 @@
       "4d89cbe3690b7d9e21ed",
       "fe0d6aaf08c303609304",
       "16c628af05cc9aac9ee2",
-      "d1bdea034a6ca3100284"
+      "d1bdea034a6ca3100284",
+      "e057c7a4f63b6a5aeddc",
+      "6abb0b843af7003c3ff9",
+      "6f1ebc6b08e1c0c87dca"
     ],
     "suppressData": true
   },
@@ -79,6 +82,33 @@
           "d1bdea034a6ca3100284": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "e057c7a4f63b6a5aeddc": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "6abb0b843af7003c3ff9": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "6f1ebc6b08e1c0c87dca": {
+            "singleVisual": {
+              "visualType": "columnChart",
               "objects": {},
               "display": {
                 "mode": "hidden"
