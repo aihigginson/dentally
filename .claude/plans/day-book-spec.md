@@ -3,6 +3,22 @@
 > Source of truth. Recovered 2026-07-23 after a straw man was built the wrong way.
 > Status: **business requirement, not yet a solved solution** (user's words: "still nebulous").
 
+## ⭐ REDIRECT 2026-07-28 — short-term focus = FILLING THE FORWARDS DIARY
+User steer: long term the Day Book is likely a **more integrated piece talking directly to the
+Dentally API** (two-way / live). **Short term, concentrate on filling the forwards diary.** Build:
+
+- **Opening screen = Forwards Availability** — reuse the *Forwards Availability* visual from the
+  **My Data** report, but as a **manager cross-practitioner view with `Practitioner Full Name` on
+  each row** (My Data is RLS-locked to self; the Day Book version lists all practitioners).
+- **Links through to three worklists** (drill/nav from the opening screen):
+  1. **Open Plans — No Appointments** (open treatment courses with no future appointment)
+  2. **Recalls Not Sent**
+  3. **Recalls Not Booked**
+
+This supersedes the 5-lens build below for now — the old "Filling Diary" lens is the centrepiece,
+reframed as: availability overview → the three "who to contact" lists that fill that availability.
+The Today's-Patients / Tracking / BBYL lenses are deferred (revisit with the API-integrated version).
+
 ## The requirement (user, verbatim, 2026-07-22)
 > "It wants to be a **single view of patients with different tasks**. Todays patients is to flag
 > any issues, namely missing emails, phone numbers, high risk DNA, outstanding balances. **Regular
