@@ -25,6 +25,12 @@
 --                            aggregate subtracted blocks, pushed dummy-day Diary Fill to ~145% / Chair
 --                            Util ~116%. Worked = booked -> Diary Fill 100% by design, Chair Util <=100%.
 --                            Pairs with aggregate *09 (no block subtraction on dummy days).
+--    *10     28/07/2026  AIH DEDUP BREAKS + floor Available at 0. Real Dentally data repeats the SAME
+--                            break (e.g. Lunch 13:00-14:00) dozens of times per diary (no break Id at
+--                            source, ingest not deduping): 40-72 identical rows seen, inflating
+--                            Break_Count/Total_Break_Mins (40x60=2400) and driving Available_Clinical_Mins
+--                            hugely negative (-1910) -> negative worked hours in reports. Count each
+--                            DISTINCT (diary, name, start, end) once; clamp Available_Clinical_Mins >= 0.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Practitioner_Diaries]    Script Date: 20/04/2026 10:15:06 ******/
@@ -81,10 +87,15 @@ BEGIN
             COALESCE(brk.Break_Count, 0)                                AS Break_Count,
             CASE WHEN CAST(ISNULL(pd.Available,0) AS BIT) = 1
                       AND NULLIF(TRIM(pd.Start_Time),'') IS NOT NULL AND NULLIF(TRIM(pd.Finish_Time),'') IS NOT NULL
-                 THEN DATEDIFF(MINUTE,
+                 -- *10 floor at 0: session minus breaks must never be negative (belt-and-suspenders on top of the break dedup)
+                 THEN CASE WHEN DATEDIFF(MINUTE,
                         TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Start_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Start_Time, CHARINDEX('T', pd.Start_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Start_Time),'') END AS TIME),
                         TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Finish_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Finish_Time, CHARINDEX('T', pd.Finish_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Finish_Time),'') END AS TIME))
-                      - COALESCE(brk.Total_Break_Mins, 0)
+                      - COALESCE(brk.Total_Break_Mins, 0) < 0 THEN 0
+                      ELSE DATEDIFF(MINUTE,
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Start_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Start_Time, CHARINDEX('T', pd.Start_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Start_Time),'') END AS TIME),
+                        TRY_CAST(CASE WHEN CHARINDEX('T', NULLIF(TRIM(pd.Finish_Time),'')) > 0 THEN LEFT(SUBSTRING(pd.Finish_Time, CHARINDEX('T', pd.Finish_Time)+1, 8), 5) + ':00' ELSE NULLIF(TRIM(pd.Finish_Time),'') END AS TIME))
+                      - COALESCE(brk.Total_Break_Mins, 0) END
                  ELSE 0 END                                             AS Available_Clinical_Mins,
             CAST(0 AS BIT)                                              AS Is_Dummy
         INTO #src
@@ -92,13 +103,20 @@ BEGIN
         LEFT JOIN Gold.Dim_Practitioners dpr ON dpr.Practitioner_ID = CAST(pd.Practitioner_ID AS INT) AND dpr.Tenant_ID = pd.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd           ON dd.Full_Date        = pd.Day
         LEFT JOIN (
+            -- *10 DEDUP: real Dentally data repeats the SAME break (e.g. Lunch 13:00-14:00) many times
+            -- per diary (no break Id at source, ingest not deduping) -- 40-72 identical rows seen. Count
+            -- each DISTINCT (diary, name, start, end) once, else Break_Count/Total_Break_Mins balloon and
+            -- Available_Clinical_Mins goes hugely negative.
             SELECT
                 Practitioner_Diary_ID,
                 SUM(DATEDIFF(MINUTE,
                     TRY_CAST(NULLIF(TRIM(Start_Time),'') AS datetime2(3)),
                     TRY_CAST(NULLIF(TRIM(End_Time),'') AS datetime2(3))))  AS Total_Break_Mins,
                 COUNT(*)                                                AS Break_Count
-            FROM Silver.Practitioner_Diary_Breaks
+            FROM (
+                SELECT DISTINCT Practitioner_Diary_ID, Break_Name, Start_Time, End_Time
+                FROM Silver.Practitioner_Diary_Breaks
+            ) b
             GROUP BY Practitioner_Diary_ID
         ) brk ON brk.Practitioner_Diary_ID = pd.Id
         -- DAYS WORKED ONLY. Dentally writes one diary row per practitioner per calendar day; a
