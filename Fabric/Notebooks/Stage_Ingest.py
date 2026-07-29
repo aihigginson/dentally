@@ -175,7 +175,6 @@ write_stage(fetch_all("/v1/practitioner_diary_breaks"),     "practitioner_diary_
 
 print("Transactional data...")
 write_stage(fetch_all("/v1/patients",                    incremental_params), "patients")
-write_stage(fetch_all("/v1/accounts"),                                        "accounts")
 write_stage(fetch_all("/v1/appointments",               incremental_params), "appointments")
 write_stage(fetch_all("/v1/invoices",                   incremental_params), "invoices")
 write_stage(fetch_all("/v1/invoice_items",              incremental_params), "invoice_items")

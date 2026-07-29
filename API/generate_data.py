@@ -2351,7 +2351,6 @@ def generate_tenant(tdef):
         "patient_stats":       patient_stats,
         "recalls":             recalls,
         "patient_referrals":   patient_referrals,
-        "accounts":            gen_accounts(patients, invoices, payments),
     }
 
 

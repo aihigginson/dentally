@@ -20,7 +20,7 @@ HEADERS = {"Authorization": "Bearer " + creds.DENTALLY_TOKEN, "Accept": "applica
 CAP = 60   # pages per entity (bounded)
 # (endpoint, extra params) -- the plain bulk-paged transactional entities
 ENTITIES = [
-    ("patients", {}), ("accounts", {}), ("invoices", {}), ("invoice_items", {}),
+    ("patients", {}), ("invoices", {}), ("invoice_items", {}),
     ("payments", {}), ("treatment_plans", {}), ("treatment_plan_items", {}),
     ("recalls", {}), ("nhs_claims", {}), ("treatment_appointments", {}),
     ("patient_referrals", {}), ("patient_stats", {}),

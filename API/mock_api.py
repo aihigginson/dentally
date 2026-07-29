@@ -297,39 +297,6 @@ def patient(patient_id):
     return jsonify({"patient": p})
 
 
-@app.route("/v1/accounts")
-def accounts():
-    data = g.data
-    plan_map = {pp["id"]: pp for pp in data["payment_plans"]}
-    inv_by_pat = {}
-    for i in data["invoices"]:
-        inv_by_pat.setdefault(i["patient_id"], []).append(i)
-    plan_by_pat = {}
-    for pl in data["treatment_plans"]:
-        plan_by_pat.setdefault(pl["patient_id"], []).append(pl)
-    result = []
-    for p in data["patients"]:
-        inv = inv_by_pat.get(p["id"], [])
-        outstanding = sum(float(i["amount_outstanding"]) for i in inv)
-        pp = plan_map.get(p["payment_plan_id"], {})
-        open_plans = [pl for pl in plan_by_pat.get(p["id"], []) if not pl.get("completed")]
-        nhs_val = sum(float(pl.get("nhs_uda_value") or 0) for pl in open_plans) if pp.get("nhs") else 0.0
-        priv_val = sum(float(pl.get("private_treatment_value") or 0) for pl in open_plans) if not pp.get("nhs") else 0.0
-        result.append({
-            "id": p["account_id"],
-            "patient_id": p["id"],
-            "patient_name": f"{p['first_name']} {p['last_name']}",
-            "current_balance": f"{-outstanding:.2f}",
-            "opening_balance": "0.00",
-            "planned_nhs_treatment_value": f"{nhs_val:.2f}",
-            "planned_private_treatment_value": f"{priv_val:.2f}",
-        })
-    if pid := request.args.get("patient_id"):
-        result = [a for a in result if str(a["patient_id"]) == pid]
-    page_data, meta = paginate(result)
-    return jsonify({"accounts": page_data, "meta": meta})
-
-
 @app.route("/v1/patient_stats")
 def patient_stats():
     result = list(g.data["patient_stats"])

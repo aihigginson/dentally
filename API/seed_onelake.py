@@ -537,7 +537,6 @@ def main():
         ('payment_explanations',       'payment_explanations',       False),
         ('treatment_appts',            'treatment_appointments',     False),
         ('patient_referrals',          'patient_referrals',         False),
-        ('accounts',                   'accounts',                  False),
     ]
 
     # ── Phase 1: generate all tenant data and tag with tenant_id ─────────────

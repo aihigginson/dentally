@@ -398,7 +398,6 @@ REGISTRY = [
     ("appointments",                     "appointments",          "txn", t_appointment),
     ("rota_practitioner_diaries",        "practitioner_diary_entries", "win", t_rota),
     ("patients",                         "patients",              "txn", t_patient),
-    ("accounts",                         "accounts",              "txn", passthrough),
     ("invoices",                         "invoices",              "txn", passthrough),
     ("invoice_items",                    "invoice_items",         "txn", passthrough),
     ("payments",                         "payments",              "txn", t_payment),
