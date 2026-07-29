@@ -31,9 +31,9 @@ Navigator rollout · My Data bookmark fix · Patient/Acquisition Deneb overflow 
 - **#13 Aged Open Plans** — course-age buckets (0-15/15-30/30-60/60-90/90+) + value, drill to patient list. On **My Data AND Clinical** (user: "aged open plans report for My Data and Clinical").
 - **#16 Day Book — REDIRECTED 2026-07-28** — short-term = **fill the forwards diary**: opening screen = Forwards Availability (manager view, Practitioner Full Name per row) → links to **Open Plans No Appointments**, **Recalls Not Sent**, **Recalls Not Booked**. Long term = direct Dentally API integration. See `.claude/plans/day-book-spec.md` REDIRECT section.
 
-## 🆕 Round 2026-07-29 — IN PROGRESS
-**✅ Done + published to dev:** Day Book bugs (DNA rebooked=data/V123, Open Plans Course-Status filter, Recall Is-Booked filter) · **#17** Full Name 8pt · **#19** Lifetime Value drop (Blank) · **#22** Overdue Band excludes booked · **#23** Short Notice filter=True · **#25** DNA rate→line · **#26** Short Notice = % appointments *(csx — NEEDS Tabular Editor apply + refresh; user updating target)*.
-**⏳ Blocked / needs your input:** **#18** (which buttons?) · **#20** (Journeys tab — hide how?) · **#21** (needs a Due-Week-Commencing calc column) · **#24** (Diary Fill: card exists, add a trend chart?) · **#27** (no page named "Availability" — where is it?).
+## ✅ Round 2026-07-29 — DONE + published to dev
+Day Book bugs (DNA rebooked=data/V123, Open Plans Course-Status filter, Recall Is-Booked filter) · **#17** Full Name 8pt · **#18** hid old lens bookmark-nav (drill buttons remain) · **#19** Lifetime Value drop (Blank) · **#20** Journeys reveal removed from bookmark index (content stays hidden) · **#21** Recalls by Status x-axis → List Date Unconstrained.Week Commencing Date · **#22** Overdue Band excludes booked · **#23** Short Notice filter=True · **#24** Diary Fill added as a line on the Chair-Util combo · **#25** DNA rate→line · **#26** Short Notice = % appointments · **#27** My Data Diary Fill matrix replaced with Day Book matrix def.
+**Still needs you:** **#26** apply the csx in Tabular Editor + refresh (target update yours). Verify #21 renders (assumes List Date Unconstrained has Week Commencing Date + relates on due date). The Day Book DNA data (#1) needs a model refresh to display.
 
 
 
