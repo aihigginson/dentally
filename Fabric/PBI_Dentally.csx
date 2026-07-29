@@ -1980,7 +1980,7 @@ add("Cancellation Frequency",
 add("Short Notice Cancellation Rate",
     @"DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[Short Notice Cancellations]),
-    SUM('Aggregate Site Patient Practitioner Daily'[Cancelled Appointments]))",
+    SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
 // Cancellations Rebooked: of cancelled appointments, the % rebooked into a future slot.

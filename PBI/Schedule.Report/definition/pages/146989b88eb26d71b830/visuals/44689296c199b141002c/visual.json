@@ -47,20 +47,6 @@
               },
               "queryRef": "_Measures.Cancellation Frequency",
               "nativeQueryRef": "Cancellation Frequency"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "DNA Rate"
-                }
-              },
-              "queryRef": "_Measures.DNA Rate",
-              "nativeQueryRef": "DNA Rate"
             }
           ]
         },
@@ -79,6 +65,20 @@
               },
               "queryRef": "_Measures.Short Notice Cancellation Rate",
               "nativeQueryRef": "Short Notice Cancellation Rate"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "DNA Rate"
+                }
+              },
+              "queryRef": "_Measures.DNA Rate",
+              "nativeQueryRef": "DNA Rate"
             }
           ]
         }
