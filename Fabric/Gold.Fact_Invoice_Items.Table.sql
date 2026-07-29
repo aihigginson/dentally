@@ -20,7 +20,6 @@ CREATE TABLE [Gold].[Fact_Invoice_Items](
     [fk_Payment_Plan]        [bigint]         NULL,
     [fk_Treatment_Plan]      [bigint]         NULL,
     [fk_Treatment]           [bigint]         NULL,
-    [fk_Account]             [bigint]         NULL,
     [fk_Practice_Site]       [bigint]         NULL,
     [fk_User]                [bigint]         NULL,
     [fk_Date_Invoice]        [bigint]         NULL,

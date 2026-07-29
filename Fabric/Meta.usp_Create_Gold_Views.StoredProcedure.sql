@@ -103,8 +103,6 @@ BEGIN
 
         -- Entity-specific WHERE clauses (e.g. exclude DW unknown/-1 rows)
         DECLARE @WhereClause NVARCHAR(500) = N'';
-        IF @TableName = 'Dim_Accounts'
-            SET @WhereClause = N' WHERE [Patient_ID] IS NOT NULL';
 
         -- Build column list (space-friendly aliases) from the SOURCE object's columns
         -- (sys.columns covers both tables and views).

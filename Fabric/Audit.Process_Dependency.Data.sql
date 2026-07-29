@@ -8,7 +8,6 @@ DELETE FROM Audit.Process_Dependency;
 GO
 
 -- Bronze -> Silver  (level 1)
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_ACCOUNTS', 'SILVER_ACCOUNTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_ACQUISITION_SOURCES', 'SILVER_ACQUISITION_SOURCES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_APPOINTMENTS', 'SILVER_APPOINTMENTS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_CANCELLATION_REASONS', 'SILVER_APPOINTMENT_CANCELLATION_REASONS', 'DATA', 1, 1);
@@ -48,7 +47,6 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_XERO_ORGS', 'SILVER_XERO_FINANCE_LINES', 'DATA', 2, 1);
 
 -- Silver -> Gold    (level 3)
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACCOUNTS', 'GOLD_DIM_ACCOUNTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACQUISITION_SOURCES', 'GOLD_DIM_ACQUISITION_SOURCES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_ACQUISITION_SOURCES', 'GOLD_FACT_APPOINTMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_APPOINTMENT_CANCELLATION_REASONS', 'GOLD_DIM_CANCELLATION_REASONS', 'DATA', 3, 1);
@@ -102,8 +100,6 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_XERO_FINANCE_LINES', 'GOLD_FACT_FINANCE', 'DATA', 3, 1);
 
 -- Gold Dim -> Fact  (level 4)
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_ACCOUNTS', 'GOLD_FACT_INVOICE_ITEMS', 'DATA', 4, 1);
-INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_ACCOUNTS', 'GOLD_FACT_INVOICES', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_CANCELLATION_REASONS', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_APPOINTMENTS', 'DATA', 4, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_FACT_CONTRACTS', 'DATA', 4, 1);

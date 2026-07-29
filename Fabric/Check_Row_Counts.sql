@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- Check_Row_Counts.sql
 -- Validates row counts across all three medallion layers.
 --
@@ -104,11 +104,6 @@ FROM (
         (SELECT COUNT(*) FROM Bronze.Treatments),
         (SELECT COUNT(*) FROM Silver.Treatments),
         (SELECT COUNT(*) FROM Gold.Dim_Treatments         WHERE Tenant_ID > 0)
-
-    UNION ALL SELECT 'Accounts', 'Dim',
-        (SELECT COUNT(*) FROM Bronze.Accounts),
-        (SELECT COUNT(*) FROM Silver.Accounts),
-        (SELECT COUNT(*) FROM Gold.Dim_Accounts           WHERE Tenant_ID > 0)
 
 ) src
 ORDER BY src.Type DESC, src.Entity;

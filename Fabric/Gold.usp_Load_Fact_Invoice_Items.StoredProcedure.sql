@@ -71,7 +71,6 @@ BEGIN
             ISNULL(dpp.pk_Payment_Plan, -1)                             AS fk_Payment_Plan,
             ISNULL(dtp.pk_Treatment_Plan, -1)                           AS fk_Treatment_Plan,
             ISNULL(dt.pk_Treatment, -1)                                 AS fk_Treatment,
-            ISNULL(dacc.pk_Account, -1)                                 AS fk_Account,
             ISNULL(dps.pk_Practice_Site, -1)                            AS fk_Practice_Site,
             ISNULL(du.pk_User, -1)                                      AS fk_User,
             dd_inv.pk_Date                                              AS fk_Date_Invoice,
@@ -101,7 +100,6 @@ BEGIN
         -- Sundry lines (no treatment-plan-item) fall through to fk_Treatment = -1.
         LEFT JOIN Silver.Treatment_Plan_Items tpi ON tpi.Id            = ii.Treatment_Plan_Item_ID AND tpi.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Treatments dt       ON dt.Treatment_ID      = tpi.Treatment_ID          AND dt.Tenant_ID  = ii.Tenant_ID
-        LEFT JOIN Gold.Dim_Accounts dacc       ON dacc.Account_ID       = CAST(inv.Account_ID AS INT)   AND dacc.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = NULLIF(TRIM(inv.Site_ID),'')  AND dps.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Users du            ON du.bk_User_ID         = TRY_CAST(NULLIF(TRIM(ii.User_ID),'') AS INT) AND du.Tenant_ID = ii.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_inv         ON dd_inv.Full_Date      = CAST(inv.Dated_On AS DATE)
@@ -124,7 +122,6 @@ BEGIN
             fk_Payment_Plan          = src.fk_Payment_Plan,
             fk_Treatment_Plan        = src.fk_Treatment_Plan,
             fk_Treatment             = src.fk_Treatment,
-            fk_Account               = src.fk_Account,
             fk_Practice_Site         = src.fk_Practice_Site,
             fk_User                  = src.fk_User,
             fk_Date_Invoice          = src.fk_Date_Invoice,
@@ -147,7 +144,6 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Payment_Plan]        AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Treatment_Plan]      AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Treatment]           AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[fk_Account]             AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_User]                AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Invoice]        AS VARCHAR(500)), ''),
@@ -168,7 +164,6 @@ BEGIN
            ISNULL(CAST(src.[fk_Payment_Plan]        AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Treatment_Plan]      AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Treatment]           AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[fk_Account]             AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_User]                AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Invoice]        AS VARCHAR(500)), ''),
@@ -188,7 +183,7 @@ BEGIN
         INSERT INTO Gold.Fact_Invoice_Items (
             Tenant_ID, bk_Invoice_Item_ID, fk_Invoice,
             fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Treatment_Plan, fk_Treatment,
-            fk_Account, fk_Practice_Site, fk_User,
+            fk_Practice_Site, fk_User,
             fk_Date_Invoice, fk_Date_Created,
             Invoice_ID, Treatment_Plan_Item_ID, Sundry_ID, Item_Name,
             Item_Price, Quantity, Total_Price, NHS_Charge,
@@ -197,7 +192,7 @@ BEGIN
         SELECT
             src.Tenant_ID, src.bk_Invoice_Item_ID, src.fk_Invoice,
             src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Treatment_Plan, src.fk_Treatment,
-            src.fk_Account, src.fk_Practice_Site, src.fk_User,
+            src.fk_Practice_Site, src.fk_User,
             src.fk_Date_Invoice, src.fk_Date_Created,
             src.Invoice_ID, src.Treatment_Plan_Item_ID, src.Sundry_ID, src.Item_Name,
             src.Item_Price, src.Quantity, src.Total_Price, src.NHS_Charge,
