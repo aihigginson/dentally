@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V122 -- Prod tenant-list cleanup (match dev: tenant-100-only)
+# =====================================================================
+# Re-seed Audit.Tenants to real tenant 100 only, so prod stops treating the synthetic mock/seed
+# tenants (1-4, 11-14) as active -- the nightly build would otherwise attempt to ingest them (no
+# prod API/tokens exist) and log failed loads. Audit.Tenants.Data.sql is DELETE + INSERT(100), so
+# this fully rebuilds the config; prod never seeded synthetic-tenant DATA, so there is nothing to
+# purge (Bronze/Silver/Gold are already tenant-100-only). Also ships the retired (empty) T11 Test
+# seeds so prod's Test schema matches dev.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V122__prod_tenant_cleanup.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Audit.Tenants.Data.sql
+DEPLOY   Fabric\Test.Metric_Definition.Data.sql
+DEPLOY   Fabric\Test.Comparison_Definition.Data.sql
+
+TEST
