@@ -62,6 +62,12 @@ BEGIN
                              CONVERT(datetime2(3), '1900-01-01'))
             END;
 
+        -- Safety net: if the fact table is EMPTY (e.g. a release just DROP/CREATE'd it), the stale
+        -- Load_Watermark would make the incremental reload only recently-changed rows and silently
+        -- under-load the table. An empty table => ignore the watermark and full-load.
+        IF NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoice_Items)
+            SET @Watermark = CONVERT(datetime2(3), '1900-01-01');
+
         SELECT
             ii.Tenant_ID                                                AS Tenant_ID,
             ii.Id                                                       AS bk_Invoice_Item_ID,

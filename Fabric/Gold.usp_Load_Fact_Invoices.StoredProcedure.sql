@@ -53,6 +53,11 @@ BEGIN
                              CONVERT(datetime2(3), '1900-01-01'))
             END;
 
+        -- Safety net: if the fact table is EMPTY (e.g. a release just DROP/CREATE'd it), the stale
+        -- Load_Watermark would only reload recently-changed rows and silently under-load. Full-load instead.
+        IF NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoices)
+            SET @Watermark = CONVERT(datetime2(3), '1900-01-01');
+
         ;WITH inv_lines AS (
             -- Per-invoice line roll-up: representative clinician (prefer dentist/ortho/
             -- specialist, else any line practitioner) + total of line Total Price.

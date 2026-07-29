@@ -33,25 +33,6 @@
             }
           ]
         },
-        "Rows": {
-          "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Full Name"
-                }
-              },
-              "queryRef": "List Practitioners.Full Name",
-              "nativeQueryRef": "Full Name",
-              "active": true
-            }
-          ]
-        },
         "Values": {
           "projections": [
             {
