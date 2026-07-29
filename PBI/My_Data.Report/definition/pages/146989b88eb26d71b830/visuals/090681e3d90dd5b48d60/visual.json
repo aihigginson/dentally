@@ -5,8 +5,8 @@
     "x": 0,
     "y": 117.74744027303754,
     "z": 1001,
-    "height": 88.566552901023883,
-    "width": 1273.2081911262799,
+    "height": 88.56655290102388,
+    "width": 1279.863481228669,
     "tabOrder": 1001
   },
   "visual": {
@@ -30,6 +30,25 @@
               "nativeQueryRef": "Full Date1",
               "active": true,
               "format": "d/M/yy"
+            }
+          ]
+        },
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Practitioners"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Practitioners.Full Name",
+              "nativeQueryRef": "Full Name",
+              "active": true
             }
           ]
         },
@@ -177,7 +196,7 @@
                 "color": {
                   "expr": {
                     "ThemeDataColor": {
-                      "ColorId": 0,
+                      "ColorId": 2,
                       "Percent": 0
                     }
                   }
@@ -199,6 +218,18 @@
               }
             },
             "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 0,
+                      "Percent": 0
+                    }
+                  }
+                }
+              }
+            },
+            "backColorSecondary": {
               "solid": {
                 "color": {
                   "expr": {
@@ -246,7 +277,7 @@
                           "mid": {
                             "color": {
                               "Literal": {
-                                "Value": "'#f3d0a5'"
+                                "Value": "'#F3D0A5'"
                               }
                             },
                             "value": {
@@ -270,7 +301,7 @@
                           "nullColoringStrategy": {
                             "strategy": {
                               "Literal": {
-                                "Value": "'asZero'"
+                                "Value": "'noColor'"
                               }
                             }
                           }
@@ -389,6 +420,26 @@
               "expr": {
                 "Literal": {
                   "Value": "1D"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "blankRows": [
+        {
+          "properties": {
+            "showBlankRows": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }

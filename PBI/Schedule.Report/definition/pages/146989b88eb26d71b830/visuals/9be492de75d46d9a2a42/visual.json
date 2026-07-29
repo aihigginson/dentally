@@ -5,7 +5,7 @@
     "x": 0,
     "y": 76.792,
     "z": 0,
-    "height": 470.47781569965872,
+    "height": 470.4778156996587,
     "width": 1280.3754266211604,
     "tabOrder": 0
   },
@@ -79,6 +79,20 @@
               },
               "queryRef": "_Measures.Chair Utilisation",
               "nativeQueryRef": "Chair Utilisation"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Diary Fill"
+                }
+              },
+              "queryRef": "_Measures.Diary Fill",
+              "nativeQueryRef": "Diary Fill"
             }
           ]
         }
