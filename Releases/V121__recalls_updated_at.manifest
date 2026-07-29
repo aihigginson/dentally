@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V121 -- Recalls incremental extract (updated_after watermark)
+# =====================================================================
+# Recalls was the last "full load every run" Dentally entity. The API returns updated_at (already in
+# Stage.Recalls); Bronze now stores it, and the ingest WM dict keys recalls on Updated_At so it pulls
+# only recalls changed since the last run -- like every other txn entity. MIGRATE adds the column via
+# ALTER (preserves existing rows; first run cold-bootstraps the watermark), then the load SP captures it.
+#
+# NOTE: the extract change itself lives in the Ingest_Dentally notebook (WM dict) -- takes effect once
+# that notebook is re-imported to the workspace. This manifest ships the warehouse side (column + load).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V121__recalls_updated_at.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V121__recalls_updated_at.sql
+DEPLOY   Fabric\Bronze.usp_Load_Recalls.StoredProcedure.sql
+
+TEST

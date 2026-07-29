@@ -449,15 +449,16 @@ def log_ingest(entity, phase, rows=None, detail=None):
 # --- per-entity, per-tenant Bronze high-watermark (replaces the old blanket 24h lookback) --------
 # Each incremental (txn) entity pulls updated_after = MAX(Updated_At already consumed by Bronze for
 # THIS tenant) minus a 4h overlap, so a missed/failed run self-heals (next cutoff is simply older).
-# Only entities whose Bronze table stores Updated_At are listed; accounts/payments/recalls have none
-# so they full-pull each run (recalls is delete-heavy by design). Cold start (no Bronze rows yet)
-# falls back to history_floor (windowed) for the big tables, else a plain full pull.
+# Only entities whose Bronze table stores a usable timestamp are listed. Cold start (no Bronze rows
+# yet, or Updated_At not yet populated) falls back to history_floor (windowed) for the big tables,
+# else a plain full pull -- which self-bootstraps the watermark for the next run.
 # WM entry: (Bronze table, Bronze column, API filter param, kind). kind "dt" = an updated_at
 # datetime column filtered by updated_after (4h overlap); kind "d" = a DATE column filtered by a
 # date param -- payments is strictly transactional (no updates) so it keys on dated_on/dated_after
-# with a 1-day overlap. Entities not listed have no usable Bronze timestamp -> full-pull each run
-# (accounts has no date column; recalls is delete-heavy by design; appointments Bronze lacks
-# Updated_At -- needs it adding through the transform before it can be watermarked).
+# with a 1-day overlap. recalls keys on Updated_At like the txn entities (the API returns updated_at
+# and Bronze now stores it, V121); its keep-latest prune means a delta may occasionally re-pull a row
+# whose newer sibling was pruned -- harmless (idempotent upsert, absorbed by the 4h overlap).
+# Entities not listed have no usable Bronze timestamp -> full-pull each run.
 WM = {
     "patients":               ("Patients",               "Updated_At", "updated_after", "dt"),
     "appointments":           ("Appointments",           "Updated_At", "updated_after", "dt"),
@@ -469,6 +470,7 @@ WM = {
     "nhs_claims":             ("NHS_Claims",             "Updated_At", "updated_after", "dt"),
     "patient_referrals":      ("Patient_Referrals",      "Updated_At", "updated_after", "dt"),
     "payments":               ("Payments",               "Dated_On",   "dated_after",   "d"),
+    "recalls":                ("Recalls",                "Updated_At", "updated_after", "dt"),
 }
 WM_OVERLAP_HOURS = 4
 # Per-entity extra query params merged into every appointments pull. cancelled=true is REQUIRED or
@@ -477,7 +479,7 @@ PULL_EXTRA = {"appointments": {"cancelled": "true"}, "treatment_appointments": {
 def bronze_watermark(tenant_id, stage_name):
     if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
         return None
-    if stage_name not in WM:         # no usable Bronze timestamp -> full pull (accounts / recalls)
+    if stage_name not in WM:         # no usable Bronze timestamp -> full pull
         return None
     tbl, col, param, kind = WM[stage_name]
     if updated_after:                # explicit param = manual override; honour the entity's filter
