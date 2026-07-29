@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V119 -- Remove the last Dentally patient-Accounts leftovers (V117 follow-up)
+# =====================================================================
+# The build's integrity-check step failed with "Invalid object name 'Gold.Dim_Accounts'" because the
+# RI-check config still asserted fk_Account -> Dim_Accounts on both invoice facts (dropped in V117).
+# Fixes that + a stale fk_Account FK-null test metric + an orphaned Stage.Accounts view. Xero GL
+# Account family untouched.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V119__remove_accounts_leftovers.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V119__remove_accounts_leftovers.sql
+DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
+DEPLOY   Fabric\Test.Metric_Definition.Data.sql
+DEPLOY   Fabric\Stage.Views.sql
+
+TEST
