@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V120 -- Audit.Unified_Log view (single monitorable run-log surface)
+# =====================================================================
+# One timeline over the two existing logs (Process_Execution_Log + Ingest_Log), so a build/ingest
+# run is watchable live in one place: procedures, ingest and the Orchestrate_Build notebook
+# heartbeat interleaved by time. No new writers. Pairs with the build_log() heartbeat added to
+# Orchestrate_Build (Entity='Orchestrate_Build' -> Source='NOTEBOOK'); those rows appear once the
+# notebook is re-imported to the workspace.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V120__unified_log_view.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Audit.Unified_Log.View.sql
+
+TEST
