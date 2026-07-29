@@ -149,7 +149,6 @@ print("  endpoint synced -- safe to build.")
     # 6 -- STEP 5: build -------------------------------------------------------
     (r'''print("\nSTEP 5  BUILD Bronze..Gold (build-only; stage populated + endpoint synced)")
 mssparkutils.notebook.run("Orchestrate_Build", build_timeout, {
-    "run_stage_ingest":       False,
     "full_refresh":           False,
     "refresh_semantic_model": refresh_model,
 })

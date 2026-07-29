@@ -6,11 +6,11 @@ We never hand-edit the .ipynb JSON: source must be a list-of-lines and manual ed
 have corrupted these notebooks before. Cell sources are plain Python strings here and
 this script emits valid nbformat-4 JSON (source split to lines).
 
-This is the REAL Dentally Stage_Ingest (task B). It reads the practice token(s) from
+This is the REAL Dentally API->Stage ingest. It reads the practice token(s) from
 Key Vault (dentally-tokens-<env>), pulls every warehouse entity from api.dentally.co,
 applies the DENTALLY_RECONCILIATION.md transforms (flatten nested .user/.site +
 payment.explanations[] + rota.breaks[]; DROP patient PII/free-text per DPIA V011/V012;
-handle nulls), and lands the SAME stage_* table names the mock Stage_Ingest produced so
+handle nulls), and lands the SAME stage_* table names the original mock ingest produced so
 the existing Bronze/Silver/Gold build runs unchanged. Transforms mirror -- and were
 validated against real sample data by -- API/dentally_transform.py.
 """
@@ -352,7 +352,7 @@ def passthrough(r):
 
 def write_stage(records, table_name, tenant_id):
     # Lands stage_<table_name>; all values strings (Bronze does the typing). Scoped to
-    # this tenant so multiple practices coexist. Same shape/names as the mock Stage_Ingest.
+    # this tenant so multiple practices coexist. Same shape/names as the original mock ingest.
     full = "stage_" + table_name
     if not records:
         print("  " + table_name + ": 0 rows")
