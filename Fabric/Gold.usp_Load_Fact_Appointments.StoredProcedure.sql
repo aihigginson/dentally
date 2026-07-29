@@ -23,6 +23,8 @@
 --                            Appointment_Reason computed here; retired the separate
 --                            Silver.Appointment_Journey_Attributes table/proc/pipeline step.
 --    *10     22/06/2026  AIH Add Rebooked_Status: 'Rebooked'/'Not Rebooked' for cancelled appts
+--    *11     29/07/2026  AIH Rebooked_Status now also covers DNAs (keyed on Did_Not_Attend_At) so the
+--                            Day Book "DNAs Not Rebooked" list populates (was NULL for all DNAs)
 --                            (NULL otherwise) -- patient booked another appt (Pending_At, the
 --                            Dentally booking timestamp; created_at is not in the API) after this
 --                            one's Cancelled_At. Forward-looking attr (a later booking flips an
@@ -204,12 +206,17 @@ BEGIN
 
             ja.Booking                                                  AS Booking,
             ja.Appointment_Reason                                       AS Appointment_Reason,
-            -- Rebooked_Status: only meaningful for cancelled appointments (NULL otherwise).
+            -- Rebooked_Status: for cancelled OR DNA appointments (NULL for other appts). "Rebooked" =
+            -- the patient booked a later appointment after the cancellation / DNA event (keyed on the
+            -- event's own timestamp -- Cancelled_At for a cancellation, Did_Not_Attend_At for a DNA).
             CASE
-                WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NULL THEN NULL
-                WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
-                                                                                       THEN 'Rebooked'
-                ELSE 'Not Rebooked'
+                WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NOT NULL
+                    THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
+                              THEN 'Rebooked' ELSE 'Not Rebooked' END
+                WHEN TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3)) IS NOT NULL
+                    THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3))
+                              THEN 'Rebooked' ELSE 'Not Rebooked' END
+                ELSE NULL
             END                                                         AS Rebooked_Status
         INTO #src
         FROM Silver.Appointments a

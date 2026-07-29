@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "2791ed9d2e0e2c076750",
   "position": {
-    "x": 15.471074380165289,
-    "y": 15.471074380165289,
+    "x": 15.47107438016529,
+    "y": 15.47107438016529,
     "z": 0,
-    "height": 590.28099173553721,
-    "width": 900.89256198347107,
+    "height": 590.2809917355372,
+    "width": 900.8925619834711,
     "tabOrder": 0
   },
   "visual": {
@@ -273,6 +273,67 @@
           }
         },
         "type": "Advanced"
+      },
+      {
+        "name": "b496591744f54628b8c7",
+        "ordinal": 1,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Course Status"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "t",
+              "Entity": "_Treatment Plans",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "t"
+                          }
+                        },
+                        "Property": "Course Status"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'In Progress'"
+                        }
+                      }
+                    ],
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'Open - No Appointment'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
       }
     ]
   }
