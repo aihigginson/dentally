@@ -54,6 +54,12 @@ run_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 import sempy.fabric as fabric
 _ws_id = fabric.get_workspace_id()
+# Follow the workspace: a non-DEV workspace name => prod token set, so the SAME notebook
+# onboards on dev or prod with no per-promotion edit (matches Orchestrate_Build).
+_ws_nm = fabric.FabricRestClient().get("/v1/workspaces/" + _ws_id).json()["displayName"]
+if "DEV" not in _ws_nm.upper():
+    dentally_env = "prod"
+print("Env follows workspace '" + _ws_nm + "': dentally_env=" + dentally_env)
 _whs   = fabric.FabricRestClient().get("/v1/workspaces/" + _ws_id + "/warehouses").json()["value"]
 _wh    = next((w for w in _whs if w["displayName"] == warehouse_name), None)
 if _wh is None:
