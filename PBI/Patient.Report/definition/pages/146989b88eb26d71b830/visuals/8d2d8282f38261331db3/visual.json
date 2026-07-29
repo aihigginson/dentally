@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "8d2d8282f38261331db3",
   "position": {
-    "x": 537.03071672354952,
+    "x": 537.0307167235495,
     "y": 328.669,
     "z": 3000,
     "height": 246.75767918088738,
-    "width": 537.03071672354952,
+    "width": 537.0307167235495,
     "tabOrder": 3000
   },
   "visual": {
@@ -432,6 +432,60 @@
             }
           ]
         }
+      },
+      {
+        "name": "170fe96e9c0648a199a0",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Is Booked"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "r",
+              "Entity": "_Recalls",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "r"
+                          }
+                        },
+                        "Property": "Is Booked"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "false"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "ordinal": 1
       }
     ],
     "filterSortOrder": "Custom"
