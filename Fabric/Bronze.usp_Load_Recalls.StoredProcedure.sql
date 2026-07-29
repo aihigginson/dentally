@@ -14,6 +14,9 @@
 --                            remove interval_months, notes, created_at, updated_at (not in API)
 --    *06     19/05/2026  AIH Add First_Reminder_ID, Second_Reminder_ID
 --    *07     20/05/2026  AIH Add first_reminder_id/second_reminder_id (NULL) to gen_recalls() output
+--    *08     29/07/2026  AIH Prune to latest DENTIST + latest HYGIENE recall per patient (drop older/
+--                            actioned cycles) -- Dentally deletes a recall on reattendance so history
+--                            has no ongoing value; keeps Bronze + downstream Fact_Recalls at ~2 rows/patient
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Recalls]
 GO
@@ -107,6 +110,25 @@ BEGIN
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Recalls tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
 
+        -- Keep only the CURRENT cycle: the latest DENTIST + latest HYGIENE recall per patient, dropping
+        -- older/actioned cycles. Dentally deletes a recall once the patient reattends for that type, so
+        -- historical cycles carry no ongoing signal; retaining one-per-type holds Bronze (and every
+        -- downstream Fact_Recalls row) at ~2 rows/patient. Type split matches Fact_Recalls: anything
+        -- mentioning 'hygien' is the hygiene recall, everything else (incl. plain 'Dentist') is the
+        -- dentist recall. "Latest" = furthest-out Due_Date (the active cycle); ID is a stable tiebreak.
+        ;WITH ranked AS (
+            SELECT ID,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY Tenant_ID, Patient_ID,
+                                    CASE WHEN Recall_Type LIKE '%ygien%' THEN 'H' ELSE 'D' END
+                       ORDER BY TRY_CAST(Due_Date AS date) DESC, ID DESC) AS rn
+            FROM Bronze.Recalls
+            WHERE Tenant_ID = @Tenant_ID
+        )
+        DELETE FROM Bronze.Recalls
+        WHERE Tenant_ID = @Tenant_ID
+          AND ID IN (SELECT ID FROM ranked WHERE rn > 1);
+        SET @My_Deletes = @@ROWCOUNT;
 
         DROP TABLE IF EXISTS #src;
 

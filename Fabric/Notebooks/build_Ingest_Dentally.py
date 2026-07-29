@@ -523,9 +523,20 @@ for tid, cfg in TOKENS.items():
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
             elif kind == "win":
-                # rota requires a bounded after/before window and has NO updated_after (can't delta).
-                # Tile by diary date so a large span doesn't deep-offset-413; each tile keeps after+before.
-                raw_rows = fetch_windowed(base, headers, ep, WINDOW["after"], WINDOW["before"],
+                # rota: NO updated_after (can't delta), so pull a ROLLING diary window instead of the full
+                # 2022->2030 span (the diary barely changes for past dates). ~1 month back (catches
+                # recent-past edits / self-heals a missed run) to DIARY_FWD_MONTHS forward. The forward
+                # bound MUST cover the Day Book forward-availability horizon (how far ahead the practice
+                # books) -- bump the constant if bookings go further out. Onboarding (full_refresh) still
+                # pulls the full historical WINDOW. Still tiled to avoid deep-offset 413s.
+                DIARY_BACK_DAYS, DIARY_FWD_MONTHS = 31, 3
+                _now = datetime.utcnow()
+                _w_after  = _win_fmt(_now - timedelta(days=DIARY_BACK_DAYS))
+                _w_before = _win_fmt(_now + timedelta(days=DIARY_FWD_MONTHS * 31))
+                if full_refresh:
+                    _w_after, _w_before = WINDOW["after"], WINDOW["before"]
+                log_ingest(ep, "WIN", detail=_w_after[:10] + ".." + _w_before[:10])
+                raw_rows = fetch_windowed(base, headers, ep, _w_after, _w_before,
                                           step_days=window_days, cap=cap, after_key="after", before_key="before")
             elif kind == "txn":
                 extra = PULL_EXTRA.get(stage_name, {})                 # e.g. appointments -> cancelled=true
