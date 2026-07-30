@@ -1961,6 +1961,40 @@ add("Days Until Next 30 Minute Free",
     @"MIN('Aggregate Site Practitioner Current'[Days Until Next 30 Mins])",
     "#,##0");
 
+// -- Day Book grid drill-counts: per-practitioner counts that MATCH each detail page's filter, so
+// the grid cell equals the number of rows shown on drill-through. Respect the row's practitioner +
+// the report's period/site context. -----------------------------------------------------------
+add("Open Plans Count",
+    @"CALCULATE(
+    COUNTROWS('_Treatment Plans'),
+    '_Treatment Plans'[Course Status] IN {""In Progress"", ""Open - No Appointment""}
+)",
+    "#,##0");
+
+add("Cancellations Not Rebooked",
+    @"CALCULATE(
+    COUNTROWS('_Appointments'),
+    '_Appointments'[Is Cancelled] = TRUE(),
+    '_Appointments'[Rebooked Status] = ""Not Rebooked""
+)",
+    "#,##0");
+
+add("DNAs Not Rebooked",
+    @"CALCULATE(
+    COUNTROWS('_Appointments'),
+    '_Appointments'[Is DNA] = TRUE(),
+    '_Appointments'[Rebooked Status] = ""Not Rebooked""
+)",
+    "#,##0");
+
+add("Recalls To Action",
+    @"CALCULATE(
+    COUNTROWS('_Recalls'),
+    '_Recalls'[Retention Outlook In Scope] = 1,
+    '_Recalls'[Is Booked] = FALSE()
+)",
+    "#,##0");
+
 add("Book Before You Leave",
     @"DIVIDE(
     SUM('Aggregate Site Patient Practitioner Daily'[BBYL Appointments]),
