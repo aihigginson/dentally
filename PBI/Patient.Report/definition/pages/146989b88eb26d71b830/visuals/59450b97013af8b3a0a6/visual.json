@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "59450b97013af8b3a0a6",
   "position": {
-    "x": 537.03071672354952,
+    "x": 537.0307167235495,
     "y": 80.375,
     "z": 0,
     "height": 242.15017064846415,
-    "width": 542.15017064846415,
+    "width": 542.1501706484642,
     "tabOrder": 0
   },
   "visual": {
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Recalls"
+                      "Entity": "List Date Unconstrained"
                     }
                   },
-                  "Property": "Due Date"
+                  "Property": "Week Commencing Date"
                 }
               },
-              "queryRef": "_Recalls.Due Date",
-              "nativeQueryRef": "Due Date",
+              "queryRef": "List Date Unconstrained.Week Commencing Date",
+              "nativeQueryRef": "Week Commencing Date",
               "active": true
             }
           ]

@@ -1,0 +1,23 @@
+# =====================================================================
+# Release V116 -- Open-plans exclusions + Recall fk_Practitioner
+# =====================================================================
+# 1) Open Courses must NOT count zero-value or inactive-patient plans as open. Fact_Treatment_Plans
+#    Course_Status now reclassifies a would-be-open plan to 'Closed - Excluded' when it has no
+#    outstanding private value OR the patient is inactive -- so every Open Courses measure + report
+#    (which filter Course_Status IN 'In Progress'/'Open - No Appointment') drops them automatically.
+# 2) Fact_Recalls gains fk_Practitioner = the patient's DENTIST or HYGIENIST (chosen by recall type),
+#    so recalls drill/filter by practitioner like the other facts. Table is DROP/CREATE -> reload
+#    populates it fresh. NOTE: still needs the MODEL relationship _Recalls.fk Practitioner ->
+#    List Practitioners (add via Tabular Editor/Desktop) for the drill-through to bite.
+#
+# APPLY: after deploy, Orchestrate_Build reloads Fact_Treatment_Plans (hash-updates the reclassified
+# Course_Status) + repopulates Fact_Recalls, and regenerates the PBI views (fk_Practitioner surfaces).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V116__open_plans_exclusions_recall_practitioner.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Recalls.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

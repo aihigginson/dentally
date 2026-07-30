@@ -6,11 +6,11 @@ We never hand-edit the .ipynb JSON: source must be a list-of-lines and manual ed
 have corrupted these notebooks before. Cell sources are plain Python strings here and
 this script emits valid nbformat-4 JSON (source split to lines).
 
-This is the REAL Dentally Stage_Ingest (task B). It reads the practice token(s) from
+This is the REAL Dentally API->Stage ingest. It reads the practice token(s) from
 Key Vault (dentally-tokens-<env>), pulls every warehouse entity from api.dentally.co,
 applies the DENTALLY_RECONCILIATION.md transforms (flatten nested .user/.site +
 payment.explanations[] + rota.breaks[]; DROP patient PII/free-text per DPIA V011/V012;
-handle nulls), and lands the SAME stage_* table names the mock Stage_Ingest produced so
+handle nulls), and lands the SAME stage_* table names the original mock ingest produced so
 the existing Bronze/Silver/Gold build runs unchanged. Transforms mirror -- and were
 validated against real sample data by -- API/dentally_transform.py.
 """
@@ -352,7 +352,7 @@ def passthrough(r):
 
 def write_stage(records, table_name, tenant_id):
     # Lands stage_<table_name>; all values strings (Bronze does the typing). Scoped to
-    # this tenant so multiple practices coexist. Same shape/names as the mock Stage_Ingest.
+    # this tenant so multiple practices coexist. Same shape/names as the original mock ingest.
     full = "stage_" + table_name
     if not records:
         print("  " + table_name + ": 0 rows")
@@ -398,7 +398,6 @@ REGISTRY = [
     ("appointments",                     "appointments",          "txn", t_appointment),
     ("rota_practitioner_diaries",        "practitioner_diary_entries", "win", t_rota),
     ("patients",                         "patients",              "txn", t_patient),
-    ("accounts",                         "accounts",              "txn", passthrough),
     ("invoices",                         "invoices",              "txn", passthrough),
     ("invoice_items",                    "invoice_items",         "txn", passthrough),
     ("payments",                         "payments",              "txn", t_payment),
@@ -450,15 +449,16 @@ def log_ingest(entity, phase, rows=None, detail=None):
 # --- per-entity, per-tenant Bronze high-watermark (replaces the old blanket 24h lookback) --------
 # Each incremental (txn) entity pulls updated_after = MAX(Updated_At already consumed by Bronze for
 # THIS tenant) minus a 4h overlap, so a missed/failed run self-heals (next cutoff is simply older).
-# Only entities whose Bronze table stores Updated_At are listed; accounts/payments/recalls have none
-# so they full-pull each run (recalls is delete-heavy by design). Cold start (no Bronze rows yet)
-# falls back to history_floor (windowed) for the big tables, else a plain full pull.
+# Only entities whose Bronze table stores a usable timestamp are listed. Cold start (no Bronze rows
+# yet, or Updated_At not yet populated) falls back to history_floor (windowed) for the big tables,
+# else a plain full pull -- which self-bootstraps the watermark for the next run.
 # WM entry: (Bronze table, Bronze column, API filter param, kind). kind "dt" = an updated_at
 # datetime column filtered by updated_after (4h overlap); kind "d" = a DATE column filtered by a
 # date param -- payments is strictly transactional (no updates) so it keys on dated_on/dated_after
-# with a 1-day overlap. Entities not listed have no usable Bronze timestamp -> full-pull each run
-# (accounts has no date column; recalls is delete-heavy by design; appointments Bronze lacks
-# Updated_At -- needs it adding through the transform before it can be watermarked).
+# with a 1-day overlap. recalls keys on Updated_At like the txn entities (the API returns updated_at
+# and Bronze now stores it, V121); its keep-latest prune means a delta may occasionally re-pull a row
+# whose newer sibling was pruned -- harmless (idempotent upsert, absorbed by the 4h overlap).
+# Entities not listed have no usable Bronze timestamp -> full-pull each run.
 WM = {
     "patients":               ("Patients",               "Updated_At", "updated_after", "dt"),
     "appointments":           ("Appointments",           "Updated_At", "updated_after", "dt"),
@@ -470,6 +470,7 @@ WM = {
     "nhs_claims":             ("NHS_Claims",             "Updated_At", "updated_after", "dt"),
     "patient_referrals":      ("Patient_Referrals",      "Updated_At", "updated_after", "dt"),
     "payments":               ("Payments",               "Dated_On",   "dated_after",   "d"),
+    "recalls":                ("Recalls",                "Updated_At", "updated_after", "dt"),
 }
 WM_OVERLAP_HOURS = 4
 # Per-entity extra query params merged into every appointments pull. cancelled=true is REQUIRED or
@@ -478,7 +479,7 @@ PULL_EXTRA = {"appointments": {"cancelled": "true"}, "treatment_appointments": {
 def bronze_watermark(tenant_id, stage_name):
     if full_refresh:                 # onboarding / forced full -> no watermark (cold path)
         return None
-    if stage_name not in WM:         # no usable Bronze timestamp -> full pull (accounts / recalls)
+    if stage_name not in WM:         # no usable Bronze timestamp -> full pull
         return None
     tbl, col, param, kind = WM[stage_name]
     if updated_after:                # explicit param = manual override; honour the entity's filter
@@ -524,9 +525,20 @@ for tid, cfg in TOKENS.items():
             if kind == "one":
                 raw_rows = [fetch_one(base, headers, ep)]
             elif kind == "win":
-                # rota requires a bounded after/before window and has NO updated_after (can't delta).
-                # Tile by diary date so a large span doesn't deep-offset-413; each tile keeps after+before.
-                raw_rows = fetch_windowed(base, headers, ep, WINDOW["after"], WINDOW["before"],
+                # rota: NO updated_after (can't delta), so pull a ROLLING diary window instead of the full
+                # 2022->2030 span (the diary barely changes for past dates). ~1 month back (catches
+                # recent-past edits / self-heals a missed run) to DIARY_FWD_MONTHS forward. The forward
+                # bound MUST cover the Day Book forward-availability horizon (how far ahead the practice
+                # books) -- bump the constant if bookings go further out. Onboarding (full_refresh) still
+                # pulls the full historical WINDOW. Still tiled to avoid deep-offset 413s.
+                DIARY_BACK_DAYS, DIARY_FWD_MONTHS = 31, 3
+                _now = datetime.utcnow()
+                _w_after  = _win_fmt(_now - timedelta(days=DIARY_BACK_DAYS))
+                _w_before = _win_fmt(_now + timedelta(days=DIARY_FWD_MONTHS * 31))
+                if full_refresh:
+                    _w_after, _w_before = WINDOW["after"], WINDOW["before"]
+                log_ingest(ep, "WIN", detail=_w_after[:10] + ".." + _w_before[:10])
+                raw_rows = fetch_windowed(base, headers, ep, _w_after, _w_before,
                                           step_days=window_days, cap=cap, after_key="after", before_key="before")
             elif kind == "txn":
                 extra = PULL_EXTRA.get(stage_name, {})                 # e.g. appointments -> cancelled=true

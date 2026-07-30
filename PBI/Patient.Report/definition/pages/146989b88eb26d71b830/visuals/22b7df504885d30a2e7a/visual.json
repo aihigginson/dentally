@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "22b7df504885d30a2e7a",
   "position": {
-    "x": 607.16723549488052,
+    "x": 607.1672354948805,
     "y": 80.375,
     "z": 4000,
     "height": 232.42320819112626,
-    "width": 596.41638225255974,
+    "width": 596.4163822525597,
     "tabOrder": 4000
   },
   "visual": {
@@ -385,6 +385,60 @@
           }
         },
         "type": "Categorical"
+      },
+      {
+        "name": "98583b4cc0944ba7a861",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Short Notice"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "a",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "a"
+                          }
+                        },
+                        "Property": "Is Short Notice"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "ordinal": 4
       }
     ],
     "filterSortOrder": "Custom"

@@ -1,0 +1,13 @@
+# =====================================================================
+# Release V123 -- DNA Rebooked_Status (Day Book "DNAs Not Rebooked" fix)
+# =====================================================================
+# Rebooked_Status was computed only for cancelled appointments (NULL for DNAs), so the Day Book
+# "DNAs Not Rebooked" list was near-empty (3,071 of 3,144 DNAs had NULL status). It now also keys
+# DNAs on Did_Not_Attend_At. DEPLOY re-creates the load SP; the next Fact_Appointments reload
+# (this manifest's build, or a manual EXCE) recomputes the hash-gated Rebooked_Status for DNAs.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V123__dna_rebooked_status.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+
+TEST

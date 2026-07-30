@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/reportExtension/1.0.0/schema.json",
+  "name": "extension",
+  "entities": [
+    {
+      "name": "_Effective Targets",
+      "measures": [
+        {
+          "name": "Debug Targets",
+          "dataType": "Double",
+          "expression": "\n  VAR sel_site   = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)\n  VAR sel_tenant = SELECTEDVALUE('List Practice Sites'[Tenant ID])\n  VAR fy_key     = [_Target FY Key]\n  VAR row_count       = CALCULATE(\n      COUNTROWS('_Effective Targets'),\n      '_Effective Targets'[Tenant ID]        = sel_tenant,\n      '_Effective Targets'[Metric]           = \"chair_utilisation\",\n      '_Effective Targets'[Period Value]     = fy_key,\n      '_Effective Targets'[fk Practice Site] = sel_site)\n  RETURN\n      \"tenant=\" & sel_tenant &\n      \" site=\"   & sel_site   &\n      \" fy=\"     & fy_key     &\n      \" rows=\"   & row_count",
+          "references": {
+            "measures": [
+              {
+                "entity": "_Measures",
+                "name": "_Target FY Key"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

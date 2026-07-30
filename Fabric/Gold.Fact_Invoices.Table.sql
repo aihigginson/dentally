@@ -16,7 +16,6 @@ CREATE TABLE [Gold].[Fact_Invoices](
     [bk_Invoice_ID]               [int]            NOT NULL,
     [fk_Invoice]                  [bigint]         NULL,
     [fk_Patient]                  [bigint]         NULL,
-    [fk_Account]                  [bigint]         NULL,
     [fk_Practice_Site]            [bigint]         NULL,
     [fk_User]                     [bigint]         NULL,
     [fk_Practitioner]             [bigint]         NULL,   -- representative clinician on the invoice's lines (for per-practitioner attribution)

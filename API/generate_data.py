@@ -2068,6 +2068,10 @@ def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed)
     last_reminded  = second_sent_at if has_second else first_sent_at
     latest_type    = ("Letter" if has_second else "SMS") if (has_first or has_second) else None
     times_contacted = (2 if has_second else 1) if has_first else 0
+    # created ~2 weeks before the first-reminder window; updated = last activity. Mirrors the real
+    # API's created_at/updated_at, which the Bronze recalls load reads for the updated_after watermark.
+    created_at = _iso(due_date - reminder_lead - timedelta(days=14))
+    updated_at = last_reminded if last_reminded else created_at
     return {
         "id":                      _u5(id_seed, tid, pid),
         "patient_id":              pid,
@@ -2090,6 +2094,8 @@ def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed)
         "workflow_stage_id":       None,
         "first_reminder_id":       None,
         "second_reminder_id":      None,
+        "created_at":              created_at,
+        "updated_at":              updated_at,
     }
 
 
@@ -2351,7 +2357,6 @@ def generate_tenant(tdef):
         "patient_stats":       patient_stats,
         "recalls":             recalls,
         "patient_referrals":   patient_referrals,
-        "accounts":            gen_accounts(patients, invoices, payments),
     }
 
 

@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V124 -- Fix invoice-fact under-load (revenue collapsed to one date) + prevent recurrence
+# =====================================================================
+# V117 DROP/CREATE'd the invoice facts but left their Load_Watermark, so the incremental reload only
+# picked up recently-changed rows (22/57 vs 49,523/91,208). MIGRATE resets the watermark (next load
+# full-reloads); the redeployed load SPs add an empty-table safety net so a DROP/CREATE can never
+# silently under-load again.
+#
+# APPLY: after deploy, the invoice facts are watermark-reset -- the next Orchestrate_Build reloads
+# them in full and rebuilds the revenue aggregates + refreshes the model. RUN A BUILD after this.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V124__fix_invoice_underload.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V124__reset_invoice_watermarks.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoices.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+
+TEST

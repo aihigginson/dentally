@@ -76,6 +76,11 @@ BEGIN
                 WHEN ISNULL(tp.Completed,0) = 1                                              THEN 'Complete'
                 WHEN ISNULL(itm.Has_Completed_Item,0) = 1 AND ISNULL(itm.Has_Open_Item,0) = 0 THEN 'Effectively Complete'
                 WHEN ISNULL(itm.Has_Completed_Item,0) = 0 AND ISNULL(itm.Has_Open_Item,0) = 1 THEN 'Proposed'
+                -- *03 A would-be-OPEN plan (started + unfinished) must NOT count as an open course when it has
+                --     NO outstanding private value OR the patient is INACTIVE. Reclassify so every Open Courses
+                --     measure + report drops it (they filter Course_Status IN 'In Progress'/'Open - No Appointment').
+                WHEN ISNULL(itm.Has_Completed_Item,0) = 1 AND ISNULL(itm.Has_Open_Item,0) = 1
+                     AND (ISNULL(itm.Private_Treatment_Value_Outstanding,0) <= 0 OR ISNULL(dpat.Active,0) = 0) THEN 'Closed - Excluded'
                 WHEN ISNULL(itm.Has_Completed_Item,0) = 1 AND ISNULL(itm.Has_Open_Item,0) = 1
                      AND fap.Treatment_Plan_ID IS NOT NULL                                   THEN 'In Progress'
                 WHEN ISNULL(itm.Has_Completed_Item,0) = 1 AND ISNULL(itm.Has_Open_Item,0) = 1 THEN 'Open - No Appointment'

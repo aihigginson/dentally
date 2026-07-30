@@ -14,6 +14,11 @@
 --                            remove interval_months, notes, created_at, updated_at (not in API)
 --    *06     19/05/2026  AIH Add First_Reminder_ID, Second_Reminder_ID
 --    *07     20/05/2026  AIH Add first_reminder_id/second_reminder_id (NULL) to gen_recalls() output
+--    *08     29/07/2026  AIH Prune to latest DENTIST + latest HYGIENE recall per patient (drop older/
+--                            actioned cycles) -- Dentally deletes a recall on reattendance so history
+--                            has no ongoing value; keeps Bronze + downstream Fact_Recalls at ~2 rows/patient
+--    *09     29/07/2026  AIH Capture Updated_At from Stage so the ingest can pull recalls incrementally
+--                            (updated_after watermark) instead of a full load -- see build_Ingest WM dict
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Recalls]
 GO
@@ -55,6 +60,7 @@ BEGIN
             , LEFT(workflow_stage_id,         255)             AS Workflow_Stage_ID
             , LEFT(first_reminder_id,         255)            AS First_Reminder_ID
             , LEFT(second_reminder_id,        255)            AS Second_Reminder_ID
+            , LEFT(updated_at,                255)            AS Updated_At
         INTO #src
         FROM Stage.Recalls
         WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
@@ -79,6 +85,7 @@ BEGIN
             , tgt.Workflow_Stage_ID       = src.Workflow_Stage_ID
             , tgt.First_Reminder_ID       = src.First_Reminder_ID
             , tgt.Second_Reminder_ID      = src.Second_Reminder_ID
+            , tgt.Updated_At              = src.Updated_At
             , tgt.DW_Loaded_At            = SYSUTCDATETIME()
         FROM Bronze.Recalls AS tgt
         INNER JOIN #src AS src ON tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID;
@@ -92,6 +99,7 @@ BEGIN
             Last_Reminded_At, Latest_Reminder_Type,
             Times_Contacted, Run_Date, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_ID, Second_Reminder_ID,
+            Updated_At,
             DW_Loaded_At
         )
         SELECT
@@ -102,11 +110,31 @@ BEGIN
             src.Last_Reminded_At, src.Latest_Reminder_Type,
             src.Times_Contacted, src.Run_Date, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_ID, src.Second_Reminder_ID,
+            src.Updated_At,
             SYSUTCDATETIME()
         FROM #src AS src
         WHERE NOT EXISTS (SELECT 1 FROM Bronze.Recalls tgt WHERE tgt.Tenant_ID = src.Tenant_ID AND tgt.ID = src.ID);
         SET @My_Inserts = @@ROWCOUNT;
 
+        -- Keep only the CURRENT cycle: the latest DENTIST + latest HYGIENE recall per patient, dropping
+        -- older/actioned cycles. Dentally deletes a recall once the patient reattends for that type, so
+        -- historical cycles carry no ongoing signal; retaining one-per-type holds Bronze (and every
+        -- downstream Fact_Recalls row) at ~2 rows/patient. Type split matches Fact_Recalls: anything
+        -- mentioning 'hygien' is the hygiene recall, everything else (incl. plain 'Dentist') is the
+        -- dentist recall. "Latest" = furthest-out Due_Date (the active cycle); ID is a stable tiebreak.
+        ;WITH ranked AS (
+            SELECT ID,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY Tenant_ID, Patient_ID,
+                                    CASE WHEN Recall_Type LIKE '%ygien%' THEN 'H' ELSE 'D' END
+                       ORDER BY TRY_CAST(Due_Date AS date) DESC, ID DESC) AS rn
+            FROM Bronze.Recalls
+            WHERE Tenant_ID = @Tenant_ID
+        )
+        DELETE FROM Bronze.Recalls
+        WHERE Tenant_ID = @Tenant_ID
+          AND ID IN (SELECT ID FROM ranked WHERE rn > 1);
+        SET @My_Deletes = @@ROWCOUNT;
 
         DROP TABLE IF EXISTS #src;
 

@@ -11,7 +11,6 @@ ALTER TABLE Bronze.Practitioners       ADD Tenant_ID INT NULL, DW_Loaded_At DATE
 ALTER TABLE Bronze.Payment_Plans       ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
 ALTER TABLE Bronze.Treatments          ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
 ALTER TABLE Bronze.Patients            ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
-ALTER TABLE Bronze.Accounts            ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
 ALTER TABLE Bronze.Appointments        ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
 ALTER TABLE Bronze.Invoices            ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO
 ALTER TABLE Bronze.Invoice_Items       ADD Tenant_ID INT NULL, DW_Loaded_At DATETIME2(3) NULL; GO

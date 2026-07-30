@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V117 -- Remove the Dentally patient-Accounts concept (pre-go-live surgical excision)
+# =====================================================================
+# Verified: no report/measure uses the Dentally patient Account dimension (the Finance reports use
+# the UNRELATED Xero 'List GL Account'). fk_Account on the invoice facts degraded via ISNULL(...,-1)
+# and is now removed. Removes Bronze/Silver/Dim Accounts + load procs + PBI view, drops fk_Account
+# from the invoice facts (DROP/CREATE re-deploy), and drops the BRONZE/SILVER/GOLD_DIM_ACCOUNTS jobs
+# from Process_Config/Dependency (re-seeded via the Data files). Xero GL Account family untouched.
+#
+# APPLY: after deploy, Orchestrate_Build reloads the invoice facts (now without fk_Account).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V117__remove_accounts.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V117__remove_accounts.sql
+DEPLOY   Fabric\Gold.Fact_Invoices.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoices.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Invoice_Items.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoice_Items.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

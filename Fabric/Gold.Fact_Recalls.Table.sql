@@ -10,6 +10,8 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Tenant_ID]              [int]           NOT NULL,
 	[bk_Recall_ID]           [VARCHAR](50)   NOT NULL,
 	[fk_Patient]             [bigint]        NULL,
+	[fk_Practitioner]        [bigint]        NULL,
+	[fk_Practice_Site]       [bigint]        NULL,
 	[fk_Date_Due]            [bigint]        NULL,
 	[fk_Date_Run]            [bigint]        NULL,
 	[fk_Date_First_Reminder] [bigint]        NULL,
@@ -27,6 +29,7 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Times_Contacted]        [int]           NULL,
 	[Due_Date]               [date]          NULL,
 	[Run_Date]               [date]          NULL,
+	[First_Reminder_Sent_Date] [date]        NULL,  -- date the first recall reminder was sent
 	[Days_Overdue]           [int]           NULL,
 	-- Pre-computed flags: replace heavy DAX set operations in Retention Outlook
 	[Is_In_Scope]            [bit]           NULL,  -- first reminder sent OR due within [-24m, +1m] of ETL run

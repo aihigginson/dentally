@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Invoices] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Invoices] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Invoices
 --  Author           :  AIH
@@ -53,6 +53,11 @@ BEGIN
                              CONVERT(datetime2(3), '1900-01-01'))
             END;
 
+        -- Safety net: if the fact table is EMPTY (e.g. a release just DROP/CREATE'd it), the stale
+        -- Load_Watermark would only reload recently-changed rows and silently under-load. Full-load instead.
+        IF NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoices)
+            SET @Watermark = CONVERT(datetime2(3), '1900-01-01');
+
         ;WITH inv_lines AS (
             -- Per-invoice line roll-up: representative clinician (prefer dentist/ortho/
             -- specialist, else any line practitioner) + total of line Total Price.
@@ -71,7 +76,6 @@ BEGIN
             CAST(inv.Id AS INT)                                        AS bk_Invoice_ID,
             ISNULL(dinv.pk_Invoice, -1)                               AS fk_Invoice,
             ISNULL(dpat.pk_Patient, -1)                               AS fk_Patient,
-            ISNULL(dacc.pk_Account, -1)                               AS fk_Account,
             ISNULL(dps.pk_Practice_Site, -1)                          AS fk_Practice_Site,
             ISNULL(du.pk_User, -1)                                    AS fk_User,
             ISNULL(il.fk_Practitioner, -1)                           AS fk_Practitioner,
@@ -90,7 +94,6 @@ BEGIN
         LEFT JOIN inv_lines il                ON il.Invoice_ID       = inv.Id                       AND il.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Invoices dinv      ON dinv.bk_Invoice_ID  = CAST(inv.Id AS INT)         AND dinv.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_ID AS INT) AND dpat.Tenant_ID = inv.Tenant_ID
-        LEFT JOIN Gold.Dim_Accounts dacc      ON dacc.Account_ID     = CAST(inv.Account_ID AS INT) AND dacc.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID         = NULLIF(TRIM(inv.Site_ID),'') AND dps.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Users du           ON du.bk_User_ID       = TRY_CAST(NULLIF(TRIM(inv.User_ID),'') AS INT) AND du.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_inv        ON dd_inv.Full_Date    = CAST(inv.Dated_On AS DATE)
@@ -113,7 +116,6 @@ BEGIN
         UPDATE tgt SET
             fk_Invoice                 = src.fk_Invoice,
             fk_Patient                 = src.fk_Patient,
-            fk_Account                 = src.fk_Account,
             fk_Practice_Site           = src.fk_Practice_Site,
             fk_User                    = src.fk_User,
             fk_Practitioner            = src.fk_Practitioner,
@@ -131,7 +133,6 @@ BEGIN
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Invoice]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Patient]                 AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[fk_Account]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practice_Site]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_User]                    AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practitioner]            AS VARCHAR(500)), ''),
@@ -147,7 +148,6 @@ BEGIN
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Invoice]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Patient]                 AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[fk_Account]                 AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practice_Site]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_User]                    AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practitioner]            AS VARCHAR(500)), ''),
@@ -164,13 +164,13 @@ BEGIN
 
         -- Insert new rows
         INSERT INTO Gold.Fact_Invoices (
-            Tenant_ID, bk_Invoice_ID, fk_Invoice, fk_Patient, fk_Account,
+            Tenant_ID, bk_Invoice_ID, fk_Invoice, fk_Patient,
             fk_Practice_Site, fk_User, fk_Practitioner, fk_Date_Invoice, fk_Date_Due, fk_Date_Paid,
             Invoice_Amount, Discount_Amount, Invoice_Amount_Outstanding, Invoice_NHS_Amount, Is_Invoice_Outstanding,
             DW_Created_At, DW_Updated_At
         )
         SELECT
-            src.Tenant_ID, src.bk_Invoice_ID, src.fk_Invoice, src.fk_Patient, src.fk_Account,
+            src.Tenant_ID, src.bk_Invoice_ID, src.fk_Invoice, src.fk_Patient,
             src.fk_Practice_Site, src.fk_User, src.fk_Practitioner, src.fk_Date_Invoice, src.fk_Date_Due, src.fk_Date_Paid,
             src.Invoice_Amount, src.Discount_Amount, src.Invoice_Amount_Outstanding, src.Invoice_NHS_Amount, src.Is_Invoice_Outstanding,
             SYSUTCDATETIME(), SYSUTCDATETIME()

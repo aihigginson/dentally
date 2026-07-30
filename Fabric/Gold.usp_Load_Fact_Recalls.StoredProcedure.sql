@@ -24,6 +24,10 @@
 --    *10     13/07/2026  AIH Retention Outlook / Overdue Recalls scoped to ACTIVE patients:
 --                            Is_In_Scope + Retention_Outlook_In_Scope now require Dim_Patients.Active=1
 --                            (the recall KPIs were including inactive patients).
+--    *12     30/07/2026  AIH Add First_Reminder_Sent_Date (raw date the first reminder was sent) for
+--                            the Day Book Recall detail list ("sent date").
+--    *11     30/07/2026  AIH Add fk_Practice_Site (derived from the patient's site) so recalls split
+--                            by site like the other facts -- Dentally holds no site on the recall.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Fact_Recalls @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 /****** Object:  StoredProcedure [Gold].[usp_Load_Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
@@ -80,6 +84,12 @@ BEGIN
             r.Tenant_ID                                                     AS Tenant_ID,
             r.Id                                                            AS bk_Recall_ID,
             ISNULL(dpat.pk_Patient, -1)                                     AS fk_Patient,
+            -- *NN fk_Practitioner: the patient's DENTIST or HYGIENIST (picked by recall type) so recalls
+            --     drill/filter by practitioner like the other facts. May go stale on patient reassignment (accepted).
+            ISNULL(dpr_recall.pk_Practitioner, -1)                          AS fk_Practitioner,
+            -- fk_Practice_Site: the patient's registered site, so recalls split by site like the other
+            -- facts (Dentally holds no site on the recall itself -- derived from the patient here).
+            ISNULL(dps.pk_Practice_Site, -1)                                AS fk_Practice_Site,
             dd_due.pk_Date                                                  AS fk_Date_Due,
             dd_run.pk_Date                                                  AS fk_Date_Run,
             dd_fr.pk_Date                                                   AS fk_Date_First_Reminder,
@@ -97,6 +107,7 @@ BEGIN
             ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) AS Times_Contacted,
             CAST(r.Due_Date AS DATE)                                        AS Due_Date,
             TRY_CAST(r.Run_Date AS DATE)                                    AS Run_Date,
+            TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE)     AS First_Reminder_Sent_Date,
             CASE WHEN r.Due_Date IS NOT NULL
                       AND NULLIF(TRIM(r.Status),'') NOT IN ('booked','completed')
                  THEN DATEDIFF(DAY, r.Due_Date, @Today)
@@ -167,6 +178,12 @@ BEGIN
         INTO #src
         FROM Silver.Recalls r
         LEFT JOIN Gold.Dim_Patients dpat  ON dpat.Patient_ID  = r.Patient_ID  AND dpat.Tenant_ID = r.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dpr_recall
+               ON dpr_recall.Practitioner_ID = CASE WHEN NULLIF(TRIM(r.Recall_Type),'') LIKE '%ygien%'
+                                                    THEN dpat.Hygienist_Practitioner_ID
+                                                    ELSE dpat.Dentist_Practitioner_ID END
+              AND dpr_recall.Tenant_ID = r.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID = dpat.Site_ID AND dps.Tenant_ID = r.Tenant_ID
         LEFT JOIN #next_appt na           ON na.Patient_ID    = r.Patient_ID  AND na.Tenant_ID   = r.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_ab     ON dd_ab.Full_Date  = TRY_CAST(NULLIF(TRIM(na.Pending_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_due    ON dd_due.Full_Date = CAST(r.Due_Date AS DATE)
@@ -185,6 +202,8 @@ BEGIN
         -- Update changed rows
         UPDATE tgt SET
             fk_Patient               = src.fk_Patient,
+            fk_Practitioner          = src.fk_Practitioner,
+            fk_Practice_Site         = src.fk_Practice_Site,
             fk_Date_Due              = src.fk_Date_Due,
             fk_Date_Run              = src.fk_Date_Run,
             fk_Date_First_Reminder   = src.fk_Date_First_Reminder,
@@ -202,6 +221,7 @@ BEGIN
             Times_Contacted          = src.Times_Contacted,
             Due_Date                 = src.Due_Date,
             Run_Date                 = src.Run_Date,
+            First_Reminder_Sent_Date = src.First_Reminder_Sent_Date,
             Days_Overdue             = src.Days_Overdue,
             Is_In_Scope              = src.Is_In_Scope,
             Is_Reminder_Sent         = src.Is_Reminder_Sent,
@@ -221,6 +241,8 @@ BEGIN
         INNER JOIN #src src ON tgt.bk_Recall_ID = src.bk_Recall_ID AND tgt.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[fk_Patient]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Practitioner]        AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Due]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Run]            AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_First_Reminder] AS VARCHAR(500)), ''),
@@ -238,6 +260,7 @@ BEGIN
            ISNULL(CAST(tgt.[Times_Contacted]        AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Due_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Run_Date]               AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[First_Reminder_Sent_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Days_Overdue]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
@@ -255,6 +278,8 @@ BEGIN
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Patient]             AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Practitioner]        AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Practice_Site]       AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Due]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Run]            AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_First_Reminder] AS VARCHAR(500)), ''),
@@ -272,6 +297,7 @@ BEGIN
            ISNULL(CAST(src.[Times_Contacted]        AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Due_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Run_Date]               AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[First_Reminder_Sent_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Days_Overdue]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
@@ -293,11 +319,11 @@ BEGIN
         INSERT INTO Gold.Fact_Recalls (
             Tenant_ID,
             bk_Recall_ID,
-            fk_Patient, fk_Date_Due, fk_Date_Run,
+            fk_Patient, fk_Practitioner, fk_Practice_Site, fk_Date_Due, fk_Date_Run,
             fk_Date_First_Reminder, fk_Date_Second_Reminder, fk_Date_Last_Reminded,
             Appointment_ID, Recall_Type, Recall_Method, Status, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_Type, Second_Reminder_Type, Latest_Reminder_Type,
-            Times_Contacted, Due_Date, Run_Date, Days_Overdue,
+            Times_Contacted, Due_Date, Run_Date, First_Reminder_Sent_Date, Days_Overdue,
             Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked,
             Retention_Outlook_In_Scope, Retention_Outlook_Booked,
             Overdue_Band, Recall_Status,
@@ -307,11 +333,11 @@ BEGIN
         SELECT
             src.Tenant_ID,
             src.bk_Recall_ID,
-            src.fk_Patient, src.fk_Date_Due, src.fk_Date_Run,
+            src.fk_Patient, src.fk_Practitioner, src.fk_Practice_Site, src.fk_Date_Due, src.fk_Date_Run,
             src.fk_Date_First_Reminder, src.fk_Date_Second_Reminder, src.fk_Date_Last_Reminded,
             src.Appointment_ID, src.Recall_Type, src.Recall_Method, src.Status, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_Type, src.Second_Reminder_Type, src.Latest_Reminder_Type,
-            src.Times_Contacted, src.Due_Date, src.Run_Date, src.Days_Overdue,
+            src.Times_Contacted, src.Due_Date, src.Run_Date, src.First_Reminder_Sent_Date, src.Days_Overdue,
             src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked,
             src.Retention_Outlook_In_Scope, src.Retention_Outlook_Booked,
             src.Overdue_Band, src.Recall_Status,

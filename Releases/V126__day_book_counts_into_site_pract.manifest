@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V126 -- Fold Day Book action counts into Aggregate_Site_Practitioner_Current
+#                 + add fk_Practice_Site to Fact_Recalls
+# =====================================================================
+# The per-practitioner Day Book counts (Open Plans / Cancellations to rebook / DNAs to rebook /
+# Recalls to action + Days-until-30-min text) now live on Gold.Aggregate_Site_Practitioner_Current,
+# SPLIT BY SITE, replacing the short-lived separate Aggregate_Practitioner_Day_Book table (V125).
+# To split recalls by site, Fact_Recalls gains fk_Practice_Site (derived from the patient's site --
+# Dentally holds no site on the recall record). The aggregate spine is now home-site UNION any site
+# with outstanding actions, so multi-site practitioners split correctly; availability metrics stay on
+# the home-site row only. Counts are held as TEXT for the diary matrix ROW area (Stepped Layout = Off).
+#
+# Fact_Recalls + the aggregate are DROP/CREATE, so they empty on deploy -- reload after (the next
+# Orchestrate_Build does this; or EXEC the two loads directly). Meta.usp_Create_Gold_Views regenerates
+# PBI.[Aggregate Site Practitioner Current] with the new count columns.
+#
+# MODEL (user, in Desktop): drop the text count columns from [Aggregate Site Practitioner Current]
+# into the Day Book diary matrix Rows.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V126__day_book_counts_into_site_pract.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V126__retire_day_book_table.sql
+DEPLOY   Fabric\Gold.Fact_Recalls.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Aggregate_Site_Practitioner_Current.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

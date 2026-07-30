@@ -27,6 +27,7 @@ CREATE TABLE [Bronze].[Recalls](
     [Workflow_Stage_ID]       [VARCHAR](255)  NULL,
     [First_Reminder_ID]       [VARCHAR](255)  NULL,
     [Second_Reminder_ID]      [VARCHAR](255)  NULL,
+    [Updated_At]              [VARCHAR](255)  NULL,
     [DW_Loaded_At]            [datetime2](3)  NULL
 )
 GO

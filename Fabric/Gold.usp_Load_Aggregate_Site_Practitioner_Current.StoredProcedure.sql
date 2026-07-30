@@ -6,16 +6,22 @@
 --  History          :
 --    *01     07/05/2026  AIH  Initial Release
 --    *02     11/06/2026  AIH  Add Next_7_Days_Available_Mins / Next_7_Days_Booked_Mins
+--    *03     30/07/2026  AIH  Fold in Day Book action counts (Open Plans / Cancellations /
+--                             DNAs / Recalls to action + Days Until 30-min text), split by
+--                             site. Spine now = home site UNION any site with outstanding
+--                             actions, so multi-site practitioners split. Retires the separate
+--                             Aggregate_Practitioner_Day_Book table.
 --  Notes:
---    Grain  : Site × Practitioner × Tenant  (current forward-looking diary availability)
+--    Grain  : Site × Practitioner × Tenant  (current forward-looking diary availability + actions)
 --    Pattern: Full DELETE + INSERT each run.
 --    pk      generated via ROW_NUMBER() — no IDENTITY column.
 --    Days_Until_Next_30_Mins    : days from today until the practitioner's first future diary
 --                                 day where (Available_Clinical_Mins - booked appointment mins) >= 30.
 --    Days_Until_Next_1_Hour_Free: same threshold at 60 minutes.
---    Site is derived from Dim_Practitioners.Site_ID (the practitioner's home site).
---    If a practitioner works across multiple sites, only the home site is represented;
---    extend via Fact_Appointments site attribution if cross-site coverage is needed.
+--    Availability (Days_Until_*, Next_7_Days_*) belongs to the practitioner's diary, so it is
+--    attached to the HOME-site row only (NULL on other-site rows) to avoid double-counting.
+--    Action counts are split by the fact's own fk_Practice_Site (recalls via Fact_Recalls.
+--    fk_Practice_Site, derived from the patient's site).
 --  To Run: DECLARE @i BIGINT,@u BIGINT,@d BIGINT;
 --          EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current
 --               @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
@@ -120,24 +126,89 @@ BEGIN
           AND dd.Full_Date <  @Week_End
         GROUP BY fpd.fk_Practitioner, fpd.Tenant_ID;
 
-        -- ── Site spine from Dim_Practitioners ───────────────────────────────
+        -- ── Home (primary) site per practitioner ─────────────────────────────
+        -- Availability metrics belong to the practitioner's diary, not a site;
+        -- they are attached to this home-site row only (see #src CASE below).
         SELECT
-            dps.pk_Practice_Site                        AS fk_Site,
             dpr.pk_Practitioner                         AS fk_Practitioner,
             dpr.Tenant_ID,
-            s.Days_Until_Next_30_Mins,
-            s.Days_Until_Next_1_Hour_Free,
-            w.Available_Mins_7d             AS Next_7_Days_Available_Mins,
-            w.Booked_Mins_7d                AS Next_7_Days_Booked_Mins
-        INTO #src
+            ISNULL(dps.pk_Practice_Site, -1)            AS fk_Home_Site
+        INTO #home
         FROM Gold.Dim_Practitioners dpr
         LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID   = dpr.Site_ID
                                               AND dps.Tenant_ID = dpr.Tenant_ID
-        LEFT JOIN #slots s ON s.fk_Practitioner = dpr.pk_Practitioner
-                           AND s.Tenant_ID       = dpr.Tenant_ID
-        LEFT JOIN #week  w ON w.fk_Practitioner = dpr.pk_Practitioner
-                           AND w.Tenant_ID       = dpr.Tenant_ID
         WHERE dpr.pk_Practitioner > 0;   -- exclude unknown (-1) seed row
+
+        -- ── Day Book action counts per (site × practitioner) ─────────────────
+        -- Each matches its Day Book detail-page filter. Split by the fact's own
+        -- fk_Practice_Site so a multi-site practitioner's actions land at the
+        -- right site (recalls now carry fk_Practice_Site, derived from the patient).
+        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
+        INTO #op
+        FROM Gold.Fact_Treatment_Plans
+        WHERE Course_Status IN ('In Progress', 'Open - No Appointment')
+        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+
+        -- Active patients only (exclude inactive) -- matches the detail-page filter.
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
+        INTO #cx
+        FROM Gold.Fact_Appointments a
+        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        WHERE a.Is_Cancelled = 1 AND a.Rebooked_Status = 'Not Rebooked'
+        GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
+
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
+        INTO #dn
+        FROM Gold.Fact_Appointments a
+        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        WHERE a.Is_DNA = 1 AND a.Rebooked_Status = 'Not Rebooked'
+        GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
+
+        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
+        INTO #rc
+        FROM Gold.Fact_Recalls
+        WHERE Retention_Outlook_In_Scope = 1 AND Is_Booked = 0
+        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+
+        -- ── Site × practitioner spine ────────────────────────────────────────
+        -- Union of the home site (for availability) with any site where the
+        -- practitioner has outstanding Day Book actions, so multi-site
+        -- practitioners split correctly.
+        SELECT DISTINCT Tenant_ID, fk_Site, fk_Practitioner
+        INTO #spine
+        FROM (
+            SELECT Tenant_ID, fk_Home_Site AS fk_Site, fk_Practitioner FROM #home
+            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #op
+            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #cx
+            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #dn
+            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #rc
+        ) u
+        WHERE fk_Practitioner > 0;
+
+        SELECT
+            sp.fk_Site,
+            sp.fk_Practitioner,
+            sp.Tenant_ID,
+            -- availability on the home-site row only (not double-counted across sites)
+            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN s.Days_Until_Next_30_Mins     END AS Days_Until_Next_30_Mins,
+            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN s.Days_Until_Next_1_Hour_Free END AS Days_Until_Next_1_Hour_Free,
+            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN w.Available_Mins_7d           END AS Next_7_Days_Available_Mins,
+            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN w.Booked_Mins_7d              END AS Next_7_Days_Booked_Mins,
+            CAST(ISNULL(op.cnt, 0) AS VARCHAR(10))                                       AS Open_Plans,
+            CAST(ISNULL(cx.cnt, 0) AS VARCHAR(10))                                       AS Cancellations_To_Rebook,
+            CAST(ISNULL(dn.cnt, 0) AS VARCHAR(10))                                       AS DNAs_To_Rebook,
+            CAST(ISNULL(rc.cnt, 0) AS VARCHAR(10))                                       AS Recalls_To_Action,
+            CASE WHEN sp.fk_Site = h.fk_Home_Site
+                 THEN CAST(s.Days_Until_Next_30_Mins AS VARCHAR(10)) END                 AS Days_Until_Next_30_Free
+        INTO #src
+        FROM #spine sp
+        LEFT JOIN #home  h ON h.fk_Practitioner = sp.fk_Practitioner AND h.Tenant_ID = sp.Tenant_ID
+        LEFT JOIN #slots s ON s.fk_Practitioner = sp.fk_Practitioner AND s.Tenant_ID = sp.Tenant_ID
+        LEFT JOIN #week  w ON w.fk_Practitioner = sp.fk_Practitioner AND w.Tenant_ID = sp.Tenant_ID
+        LEFT JOIN #op op ON op.Tenant_ID=sp.Tenant_ID AND op.fk_Site=sp.fk_Site AND op.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #cx cx ON cx.Tenant_ID=sp.Tenant_ID AND cx.fk_Site=sp.fk_Site AND cx.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #dn dn ON dn.Tenant_ID=sp.Tenant_ID AND dn.fk_Site=sp.fk_Site AND dn.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #rc rc ON rc.Tenant_ID=sp.Tenant_ID AND rc.fk_Site=sp.fk_Site AND rc.fk_Practitioner=sp.fk_Practitioner;
 
         -- ── Full rebuild ─────────────────────────────────────────────────────
         DELETE FROM Gold.Aggregate_Site_Practitioner_Current;
@@ -148,6 +219,8 @@ BEGIN
             fk_Site, fk_Practitioner, Tenant_ID,
             Days_Until_Next_30_Mins, Days_Until_Next_1_Hour_Free,
             Next_7_Days_Available_Mins, Next_7_Days_Booked_Mins,
+            Open_Plans, Cancellations_To_Rebook, DNAs_To_Rebook,
+            Recalls_To_Action, Days_Until_Next_30_Free,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -160,12 +233,23 @@ BEGIN
             s.Days_Until_Next_1_Hour_Free,
             s.Next_7_Days_Available_Mins,
             s.Next_7_Days_Booked_Mins,
+            s.Open_Plans,
+            s.Cancellations_To_Rebook,
+            s.DNAs_To_Rebook,
+            s.Recalls_To_Action,
+            s.Days_Until_Next_30_Free,
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #src s;
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+        DROP TABLE #spine;
+        DROP TABLE #home;
+        DROP TABLE #op;
+        DROP TABLE #cx;
+        DROP TABLE #dn;
+        DROP TABLE #rc;
         DROP TABLE #slots;
         DROP TABLE #week;
         DROP TABLE #free;

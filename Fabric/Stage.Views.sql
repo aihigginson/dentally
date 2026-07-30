@@ -38,12 +38,6 @@ CREATE VIEW [Stage].[Patients] AS
 SELECT * FROM LH_Dentally.dbo.stage_patients
 GO
 
-DROP VIEW IF EXISTS [Stage].[Accounts]
-GO
-CREATE VIEW [Stage].[Accounts] AS
-SELECT * FROM LH_Dentally.dbo.stage_accounts
-GO
-
 DROP VIEW IF EXISTS [Stage].[Appointments]
 GO
 CREATE VIEW [Stage].[Appointments] AS

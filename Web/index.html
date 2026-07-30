@@ -2467,6 +2467,7 @@
             window.powerbi.reset(slot);
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
+            r._section = sectionKey;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
         });
@@ -2606,6 +2607,7 @@
             window.powerbi.reset(slot);
             const r = window.powerbi.embed(slot, cfg);
             embeddedReports[sectionKey] = r;
+            r._section = sectionKey;
             attachEmbedOverlay(slot, r);
             attachReportHandlers(r, sectionKey);
             return r;
@@ -2743,11 +2745,18 @@
         if (filterState.pract !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Full Name' }, operator: 'In', values: [selPract.options[selPract.selectedIndex].text], filterType: 1 });
         }
-        if (filterState.period !== 'all') {
-            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Date Grouping', column: 'Date Grouping' }, operator: 'In', values: [filterState.period], filterType: 1 });
-        }
+        // Period (date) filter is applied to every report EXCEPT Day Book: the Day Book's lists are
+        // current/forward-state operational (recalls to action, open plans, cancellations/DNAs to
+        // rebook) and must show all outstanding items, not just those in the selected period.
+        const periodFilter = (filterState.period !== 'all')
+            ? { $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Date Grouping', column: 'Date Grouping' }, operator: 'In', values: [filterState.period], filterType: 1 }
+            : null;
         const targets = report ? [report] : Object.values(embeddedReports);
-        targets.forEach(r => r.setFilters(filters).catch(() => {}));
+        targets.forEach(r => {
+            const f = filters.slice();
+            if (periodFilter && r._section !== 'day_book') f.push(periodFilter);
+            r.setFilters(f).catch(() => {});
+        });
     }
 
     // ── Page name helper ────────────────────────────────────────────────────

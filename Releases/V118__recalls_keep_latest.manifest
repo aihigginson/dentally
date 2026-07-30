@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V118 -- Recalls: keep only the CURRENT cycle in Bronze
+# =====================================================================
+# Bronze.usp_Load_Recalls previously upserted and NEVER deleted, so every actioned/historical recall
+# cycle accumulated forever. It now prunes to the latest DENTIST + latest HYGIENE recall per patient
+# (furthest-out Due_Date = the active cycle). Dentally itself deletes a recall once the patient
+# reattends for that type, so the older cycles carry no ongoing signal -- this holds Bronze (and every
+# downstream Fact_Recalls row) at ~2 rows/patient. Type split matches Fact_Recalls (LIKE '%ygien%').
+#
+# NOTE (metric): Retention Outlook / recall-conversion read the CURRENT-cycle recalls -- historical
+# 'Completed'/'Missed' cycles that were already >24m out are out-of-scope anyway, so the flag metrics
+# are unaffected in the normal case. A patient carrying two in-scope cycles of the same type keeps only
+# the latest, a small denominator change the user has accepted ("ok with stale historical recalls").
+#
+# APPLY: takes effect on the next Bronze.usp_Load_Recalls run (Orchestrate_Build / nightly ingest),
+# which prunes the accumulated backlog on first execution.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V118__recalls_keep_latest.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Recalls.StoredProcedure.sql
+
+TEST
