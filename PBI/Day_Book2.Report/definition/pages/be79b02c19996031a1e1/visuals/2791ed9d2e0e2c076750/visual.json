@@ -250,7 +250,92 @@
               }
             }
           ]
-        }
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "83b021a753be43205b30",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d210f5fa7e9e0ad48dd7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ac201247ddcaa992a47b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d8a8de8c29edb779c63b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Start Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "4eadcc644a88aa40eca8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Course Age Bucket"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8662279736abd1b06a01",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Open Courses Value"
+          }
+        },
+        "type": "Advanced"
       }
     ]
   }

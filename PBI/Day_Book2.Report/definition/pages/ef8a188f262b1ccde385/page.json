@@ -1,14 +1,14 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
-  "name": "855029fbb93a04443961",
-  "displayName": "Cancellation Details",
+  "name": "ef8a188f262b1ccde385",
+  "displayName": "Recall Details",
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
   "filterConfig": {
     "filters": [
       {
-        "name": "43263b744c055dececba",
+        "name": "14c8f3c580559a726009",
         "field": {
           "Column": {
             "Expression": {
@@ -20,56 +20,17 @@
           }
         },
         "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "l",
-              "Entity": "List Practitioners",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "In": {
-                  "Expressions": [
-                    {
-                      "Column": {
-                        "Expression": {
-                          "SourceRef": {
-                            "Source": "l"
-                          }
-                        },
-                        "Property": "Full Name"
-                      }
-                    }
-                  ],
-                  "Values": [
-                    [
-                      {
-                        "Literal": {
-                          "Value": "'Lily McFarland'"
-                        }
-                      }
-                    ]
-                  ]
-                }
-              }
-            }
-          ]
-        },
         "howCreated": "Drillthrough"
       }
     ]
   },
   "pageBinding": {
-    "name": "752ec2bdde6a467c0439",
+    "name": "57238910371479b144a5",
     "type": "Drillthrough",
     "parameters": [
       {
-        "name": "8199875a32a0861702a0",
-        "boundFilter": "43263b744c055dececba",
+        "name": "a1959cfd08150135e80d",
+        "boundFilter": "14c8f3c580559a726009",
         "fieldExpr": {
           "Column": {
             "Expression": {

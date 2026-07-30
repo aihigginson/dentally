@@ -5,8 +5,8 @@
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 589.14675767918084,
-    "width": 991.53583617747438,
+    "height": 588.97009966777409,
+    "width": 881.328903654485,
     "tabOrder": 0
   },
   "visual": {
@@ -56,6 +56,20 @@
               },
               "queryRef": "_Recalls.Recall Status",
               "nativeQueryRef": "Recall Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Date Unconstrained"
+                    }
+                  },
+                  "Property": "Full Date"
+                }
+              },
+              "queryRef": "List Date Unconstrained.Full Date",
+              "nativeQueryRef": "Full Date"
             },
             {
               "field": {
@@ -131,9 +145,42 @@
             }
           ]
         }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "List Patients"
+                  }
+                },
+                "Property": "Email Address"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
       }
     },
     "objects": {
+      "columnWidth": [
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "112.14617014364549D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "List Date Unconstrained.Full Date"
+          }
+        }
+      ],
       "columnHeaders": [
         {
           "properties": {}
@@ -280,8 +327,7 @@
               }
             }
           ]
-        },
-        "howCreated": "User"
+        }
       }
     ],
     "filterSortOrder": "Custom"

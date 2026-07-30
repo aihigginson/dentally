@@ -5,7 +5,7 @@
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 588.7372013651877,
+    "height": 588.73720136518773,
     "width": 1009.5563139931741,
     "tabOrder": 0
   },
@@ -116,6 +116,23 @@
             }
           ]
         }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "List Cancellation Reasons"
+                  }
+                },
+                "Property": "Reason"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
       }
     },
     "objects": {
@@ -272,60 +289,6 @@
                       {
                         "Literal": {
                           "Value": "'Not Rebooked'"
-                        }
-                      }
-                    ]
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "name": "0038713a468e044f168c",
-        "ordinal": 2,
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Active"
-          }
-        },
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "p",
-              "Entity": "List Patients",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "In": {
-                  "Expressions": [
-                    {
-                      "Column": {
-                        "Expression": {
-                          "SourceRef": {
-                            "Source": "p"
-                          }
-                        },
-                        "Property": "Active"
-                      }
-                    }
-                  ],
-                  "Values": [
-                    [
-                      {
-                        "Literal": {
-                          "Value": "true"
                         }
                       }
                     ]

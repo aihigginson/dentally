@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "d445bd8beb27d2060e3b",
+  "name": "e7f084c9eb13adb946c6",
   "position": {
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 589.14675767918084,
-    "width": 991.53583617747438,
+    "height": 588.73720136518773,
+    "width": 1009.5563139931741,
     "tabOrder": 0
   },
   "visual": {
@@ -34,28 +34,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Recalls"
+                      "Entity": "List Cancellation Reasons"
                     }
                   },
-                  "Property": "Recall Type"
+                  "Property": "Reason"
                 }
               },
-              "queryRef": "_Recalls.Recall Type",
-              "nativeQueryRef": "Recall Type"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Recalls"
-                    }
-                  },
-                  "Property": "Recall Status"
-                }
-              },
-              "queryRef": "_Recalls.Recall Status",
-              "nativeQueryRef": "Recall Status"
+              "queryRef": "List Cancellation Reasons.Reason",
+              "nativeQueryRef": "Reason"
             },
             {
               "field": {
@@ -104,29 +90,28 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Recalls"
+                      "Entity": "_Appointments"
                     }
                   },
-                  "Property": "Due Date"
+                  "Property": "Is Short Notice"
                 }
               },
-              "queryRef": "_Recalls.Due Date",
-              "nativeQueryRef": "Due Date",
-              "format": "dd/MM/yyyy"
+              "queryRef": "_Appointments.Is Short Notice",
+              "nativeQueryRef": "Is Short Notice"
             },
             {
               "field": {
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Recalls"
+                      "Entity": "_Appointments"
                     }
                   },
-                  "Property": "First Reminder Sent Date"
+                  "Property": "Start Time"
                 }
               },
-              "queryRef": "_Recalls.First Reminder Sent Date",
-              "nativeQueryRef": "First Reminder Sent Date",
+              "queryRef": "_Appointments.Start Time",
+              "nativeQueryRef": "Start Time",
               "format": "dd/MM/yyyy"
             }
           ]
@@ -138,6 +123,22 @@
         {
           "properties": {}
         }
+      ],
+      "columnWidth": [
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "141.9078447932745D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "List Patients.Full Name"
+          }
+        }
       ]
     },
     "visualContainerObjects": {
@@ -147,7 +148,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Retention Outlook (status of recalls due within a month)'"
+                  "Value": "'Cancellations Detail'"
                 }
               }
             },
@@ -174,16 +175,124 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "08249597aa834f01854a",
+        "name": "6f9d74cc0a710b58bd15",
+        "ordinal": 0,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Cancelled"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "a",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "a"
+                          }
+                        },
+                        "Property": "Is Cancelled"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "2f60a126579851253697",
+        "ordinal": 1,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Rebooked Status"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "a",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "a"
+                          }
+                        },
+                        "Property": "Rebooked Status"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'Not Rebooked'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "ff4c61c362194b1d7374",
         "ordinal": 2,
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "_Recalls"
+                "Entity": "List Patients"
               }
             },
-            "Property": "Retention Outlook In Scope"
+            "Property": "Active"
           }
         },
         "type": "Categorical",
@@ -191,8 +300,8 @@
           "Version": 2,
           "From": [
             {
-              "Name": "_",
-              "Entity": "_Recalls",
+              "Name": "p",
+              "Entity": "List Patients",
               "Type": 0
             }
           ],
@@ -205,10 +314,10 @@
                       "Column": {
                         "Expression": {
                           "SourceRef": {
-                            "Source": "_"
+                            "Source": "p"
                           }
                         },
-                        "Property": "Retention Outlook In Scope"
+                        "Property": "Active"
                       }
                     }
                   ],
@@ -216,7 +325,7 @@
                     [
                       {
                         "Literal": {
-                          "Value": "1L"
+                          "Value": "true"
                         }
                       }
                     ]
@@ -225,65 +334,8 @@
               }
             }
           ]
-        },
-        "howCreated": "User"
-      },
-      {
-        "name": "4b337899dc81431a9eb7",
-        "ordinal": 3,
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Recalls"
-              }
-            },
-            "Property": "Is Booked"
-          }
-        },
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "r",
-              "Entity": "_Recalls",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "In": {
-                  "Expressions": [
-                    {
-                      "Column": {
-                        "Expression": {
-                          "SourceRef": {
-                            "Source": "r"
-                          }
-                        },
-                        "Property": "Is Booked"
-                      }
-                    }
-                  ],
-                  "Values": [
-                    [
-                      {
-                        "Literal": {
-                          "Value": "false"
-                        }
-                      }
-                    ]
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        "howCreated": "User"
+        }
       }
-    ],
-    "filterSortOrder": "Custom"
+    ]
   }
 }
