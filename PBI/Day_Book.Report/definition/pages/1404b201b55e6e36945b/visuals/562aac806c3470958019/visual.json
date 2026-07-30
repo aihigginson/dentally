@@ -298,7 +298,7 @@
                           "min": {
                             "color": {
                               "Literal": {
-                                "Value": "'minColor'"
+                                "Value": "'#c0392b'"
                               }
                             },
                             "value": {
@@ -447,7 +447,7 @@
                           "min": {
                             "color": {
                               "Literal": {
-                                "Value": "'minColor'"
+                                "Value": "'#c0392b'"
                               }
                             },
                             "value": {
