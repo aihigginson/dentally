@@ -5,6 +5,84 @@
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "5fb687863d7012161b63",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "l",
+              "Entity": "List Practitioners",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "l"
+                          }
+                        },
+                        "Property": "Full Name"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'Katie Roddy'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "85966d099dc48438e49a",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "7168bba1c20753989e63",
+        "boundFilter": "5fb687863d7012161b63",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        }
+      }
+    ]
+  },
   "objects": {
     "background": [
       {
@@ -31,44 +109,5 @@
       }
     ]
   },
-  "visibility": "HiddenInViewMode",
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "fe3fff2f4c535503f367",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Full Name"
-          }
-        },
-        "type": "Categorical",
-        "howCreated": "Drillthrough"
-      }
-    ]
-  },
-  "pageBinding": {
-    "name": "85966d099dc48438e49a",
-    "type": "Drillthrough",
-    "parameters": [
-      {
-        "name": "222996869a70941d9d0c",
-        "boundFilter": "fe3fff2f4c535503f367",
-        "fieldExpr": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Full Name"
-          }
-        }
-      }
-    ]
-  }
+  "visibility": "HiddenInViewMode"
 }

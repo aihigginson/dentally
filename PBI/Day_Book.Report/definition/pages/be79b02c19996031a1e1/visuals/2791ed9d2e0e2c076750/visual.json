@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "2791ed9d2e0e2c076750",
   "position": {
-    "x": 15.47107438016529,
-    "y": 15.47107438016529,
+    "x": 15.471074380165289,
+    "y": 15.471074380165289,
     "z": 0,
-    "height": 590.2809917355372,
-    "width": 900.8925619834711,
+    "height": 590.28099173553721,
+    "width": 900.89256198347107,
     "tabOrder": 0
   },
   "visual": {
@@ -69,7 +69,8 @@
                 }
               },
               "queryRef": "_Treatment Plans.Start Date",
-              "nativeQueryRef": "Start Date"
+              "nativeQueryRef": "Start Date",
+              "format": "dd/MM/yyyy"
             },
             {
               "field": {
@@ -191,90 +192,6 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "cca0eea1e7028d82e06d",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Full Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "c338288b9406d0ec26e1",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Mobile Phone"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "4f4e13181b3e0a81d5da",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Email Address"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "3de43781c9942ab2ac75",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Treatment Plans"
-              }
-            },
-            "Property": "Start Date"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "0b0950cf0033b63dba54",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Treatment Plans"
-              }
-            },
-            "Property": "Course Age Bucket"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "633205f777062d602127",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Open Courses Value"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
         "name": "b496591744f54628b8c7",
         "ordinal": 1,
         "field": {
@@ -333,7 +250,92 @@
               }
             }
           ]
-        }
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "83b021a753be43205b30",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d210f5fa7e9e0ad48dd7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ac201247ddcaa992a47b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d8a8de8c29edb779c63b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Start Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "4eadcc644a88aa40eca8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Course Age Bucket"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8662279736abd1b06a01",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Open Courses Value"
+          }
+        },
+        "type": "Advanced"
       }
     ]
   }

@@ -1,0 +1,13 @@
+# =====================================================================
+# Release V130 -- Day Book Cancellation/DNA counts exclude inactive patients
+# =====================================================================
+# The front-page Cancellations-to-rebook and DNAs-to-rebook counts (on the aggregate, surfaced via
+# List Practitioners) now join Dim_Patients and require Active=1, matching the detail-page filter so
+# the card and the drill-through list agree. Aggregate is full DELETE+INSERT; reload after deploy.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V130__daybook_counts_active_patients.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

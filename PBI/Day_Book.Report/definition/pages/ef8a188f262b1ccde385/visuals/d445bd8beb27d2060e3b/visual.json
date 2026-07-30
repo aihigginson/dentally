@@ -5,7 +5,7 @@
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 588.9700996677741,
+    "height": 588.97009966777409,
     "width": 881.328903654485,
     "tabOrder": 0
   },
@@ -112,6 +112,36 @@
               },
               "queryRef": "List Patients.Mobile Phone",
               "nativeQueryRef": "Mobile Phone"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Due Date"
+                }
+              },
+              "queryRef": "_Recalls.Due Date",
+              "nativeQueryRef": "Due Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "First Reminder Sent Date"
+                }
+              },
+              "queryRef": "_Recalls.First Reminder Sent Date",
+              "nativeQueryRef": "First Reminder Sent Date",
+              "format": "dd/MM/yyyy"
             }
           ]
         }

@@ -98,6 +98,21 @@
               },
               "queryRef": "_Appointments.Is Short Notice",
               "nativeQueryRef": "Is Short Notice"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Appointments"
+                    }
+                  },
+                  "Property": "Start Time"
+                }
+              },
+              "queryRef": "_Appointments.Start Time",
+              "nativeQueryRef": "Start Time",
+              "format": "dd/MM/yyyy"
             }
           ]
         }
@@ -257,6 +272,60 @@
                       {
                         "Literal": {
                           "Value": "'Not Rebooked'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "0038713a468e044f168c",
+        "ordinal": 2,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Active"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "p",
+              "Entity": "List Patients",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "p"
+                          }
+                        },
+                        "Property": "Active"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
                         }
                       }
                     ]

@@ -149,17 +149,20 @@ BEGIN
         WHERE Course_Status IN ('In Progress', 'Open - No Appointment')
         GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
 
-        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
+        -- Active patients only (exclude inactive) -- matches the detail-page filter.
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #cx
-        FROM Gold.Fact_Appointments
-        WHERE Is_Cancelled = 1 AND Rebooked_Status = 'Not Rebooked'
-        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+        FROM Gold.Fact_Appointments a
+        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        WHERE a.Is_Cancelled = 1 AND a.Rebooked_Status = 'Not Rebooked'
+        GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
-        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #dn
-        FROM Gold.Fact_Appointments
-        WHERE Is_DNA = 1 AND Rebooked_Status = 'Not Rebooked'
-        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+        FROM Gold.Fact_Appointments a
+        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        WHERE a.Is_DNA = 1 AND a.Rebooked_Status = 'Not Rebooked'
+        GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
         SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
         INTO #rc

@@ -5,6 +5,45 @@
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "14c8f3c580559a726009",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "57238910371479b144a5",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "a1959cfd08150135e80d",
+        "boundFilter": "14c8f3c580559a726009",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        }
+      }
+    ]
+  },
   "objects": {
     "background": [
       {
@@ -31,44 +70,5 @@
       }
     ]
   },
-  "visibility": "HiddenInViewMode",
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "c377b7851ec7f1454145",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Full Name"
-          }
-        },
-        "type": "Categorical",
-        "howCreated": "Drillthrough"
-      }
-    ]
-  },
-  "pageBinding": {
-    "name": "7fa8c311cc121ae1084d",
-    "type": "Drillthrough",
-    "parameters": [
-      {
-        "name": "9638c7c0aa4fa92ef5a8",
-        "boundFilter": "c377b7851ec7f1454145",
-        "fieldExpr": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Full Name"
-          }
-        }
-      }
-    ]
-  }
+  "visibility": "HiddenInViewMode"
 }
