@@ -1,0 +1,23 @@
+# =====================================================================
+# Release V125 -- Per-practitioner Day Book action counts (for the diary matrix Row area)
+# =====================================================================
+# New GOLD_AGG table Gold.Aggregate_Practitioner_Day_Book holds per-practitioner counts as TEXT
+# (Open Plans / Cancellations to rebook / DNAs to rebook / Recalls to action / Days until next 30
+# free), each matching its Day Book detail-page filter. Held as text so they can go in the matrix
+# ROW area beside Full Name (Stepped Layout = Off) and scroll WITH the diary heatmap in one visual.
+# Process_Config + regenerated dependencies order it after the facts + Aggregate_Site_Practitioner_
+# Current; Meta.usp_Create_Gold_Views generates PBI.[Aggregate Practitioner Day Book].
+#
+# AFTER DEPLOY: the nightly build maintains it. MODEL: relate [Aggregate Practitioner Day Book].
+# fk Practitioner -> [List Practitioners].pk Practitioner, then drop the text columns into the
+# Day Book matrix Rows.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V125__practitioner_day_book_counts.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Aggregate_Practitioner_Day_Book.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practitioner_Day_Book.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
