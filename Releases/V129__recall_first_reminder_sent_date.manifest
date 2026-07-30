@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V129 -- Recall First_Reminder_Sent_Date (the "sent date" for the Day Book list)
+# =====================================================================
+# Fact_Recalls gains a raw First_Reminder_Sent_Date (date the first recall reminder was sent,
+# from source First_Reminder_Sent_At) so the Day Book Recall detail can show a meaningful sent
+# date (Run Date was not it). Fact_Recalls is DROP/CREATE, so it empties on deploy -- reload after
+# (the next Orchestrate_Build does this, or EXEC the load directly). Meta.usp_Create_Gold_Views
+# regenerates PBI.[_Recalls] with [First Reminder Sent Date].
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V129__recall_first_reminder_sent_date.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Recalls.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

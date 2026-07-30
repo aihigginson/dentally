@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V127 -- Day Book counts as a Site x Practitioner DIMENSION view
+# =====================================================================
+# Follow-up to V126. The Day Book action counts + availability live on the GOLD_AGG
+# Aggregate_Site_Practitioner_Current, but an Aggregate/fact-role view's column dropped into a
+# matrix ROW area groups-by and fans out. Gold.vw_Dim_Site_Practitioner_Current presents them as a
+# DIMENSION (same base name as the aggregate it draws from), enriched with the full practitioner
+# attribute set + site label, held as TEXT for the Row area. The view generator wraps it into
+# PBI.[List Site Practitioner Current] (vw_Dim_ -> a List/dimension view). Grain = site x
+# practitioner (1-1 with the aggregate); all practitioners are single-site today so the diary
+# matrix relates on fk_Practitioner. MIGRATE drops the interim vw_Dim_Practitioner_Day_Book.
+#
+# MODEL (user, in Desktop): relate [List Site Practitioner Current].fk Practitioner to the diary
+# fact's fk Practitioner (one-to-many), then drop [Full Name] + the count text columns into the
+# Day Book diary matrix Rows (Stepped Layout = Off).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V127__practitioner_day_book_dimension_view.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V127__rename_day_book_dimension_view.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

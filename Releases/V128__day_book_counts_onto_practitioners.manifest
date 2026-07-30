@@ -1,0 +1,25 @@
+# =====================================================================
+# Release V128 -- Day Book action counts onto the practitioners dimension
+# =====================================================================
+# Supersedes the interim vw_Dim_Site_Practitioner_Current (V127). Gold.vw_Dim_Practitioners adds the
+# Day Book action counts (Open Plans / Cancellations to rebook / DNAs to rebook / Recalls to action +
+# Days-until-30-min text) as columns on List Practitioners itself, summed to practitioner grain from
+# the GOLD_AGG Aggregate_Site_Practitioner_Current. The diary matrix then anchors its Rows on
+# List Practitioners[Full Name] -- the field every fact and every Day Book drill-through page already
+# keys on -- with the counts riding along as columns on the SAME table. No second practitioner
+# dimension and no cross-dimension relationship (which would pollute filter propagation model-wide),
+# so drill-through fires and no other report is affected.
+#
+# MIGRATE drops the interim views. Meta.usp_Create_Gold_Views wraps vw_Dim_Practitioners into
+# PBI.[List Practitioners] (superseding the table's own view).
+#
+# MODEL (user, in Desktop): matrix Rows = List Practitioners[Full Name] + the new count columns
+# (all on List Practitioners now); drill-through buttons work unchanged.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V128__day_book_counts_onto_practitioners.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V128__day_book_counts_onto_practitioners.sql
+DEPLOY   Fabric\Gold.vw_Dim_Practitioners.View.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
