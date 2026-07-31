@@ -713,7 +713,7 @@
 
             <div class="settings-pane" id="stab-plans">
                 <div class="defs-item">
-                    <div class="defs-item-desc">The monthly membership fee for each plan &mdash; used to value plan (capitation) revenue. Set an early &ldquo;from&rdquo; date so it covers historical months. Pick one plan as the <strong>default</strong> &mdash; it values lapsed members whose original plan Dentally no longer records. Leave a plan blank to exclude it.</div>
+                    <div class="defs-item-desc">The monthly membership fee for each plan, <strong>over time</strong> &mdash; add a row for each fee change (a fee applies from its date until the next one). Make the earliest date early enough to cover historical months. Pick one plan as the <strong>default</strong> &mdash; it values lapsed members whose original plan Dentally no longer records. Leave a plan with no rate to exclude it.</div>
                     <div class="settings-save-bar"><button id="plans-save-top" class="settings-save" style="margin-top:0">Save</button></div>
                     <div id="plans-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="plans-save" class="settings-save" style="display:none">Save</button>
@@ -1916,6 +1916,14 @@
     }
 
     // Plan capitation rates --------------------------------------------------
+    // Each plan holds a collection of (effective-from, monthly fee) rows -- the fee-over-time history.
+    function _planRateRowHtml(eff, val) {
+        return '<div class="plan-rate-row" style="display:flex;align-items:center;gap:6px;margin:3px 0">'
+            + '<input type="date" class="plan-eff" title="Fee applies from this month onward" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + (eff || '') + '">'
+            + '£<input type="number" min="0" step="0.01" class="plan-val" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (val != null && val !== '' ? val : '') + '">'
+            + '<button type="button" class="plan-rate-del" title="Remove this rate" style="border:none;background:none;color:#b3261e;cursor:pointer;font-size:16px;line-height:1;padding:0 4px">&times;</button>'
+            + '</div>';
+    }
     async function loadPlanRates() {
         const list = document.getElementById('plans-list'), saveBtn = document.getElementById('plans-save');
         list.textContent = 'Loading…'; saveBtn.style.display = 'none';
@@ -1926,39 +1934,59 @@
             if (!plans || !plans.length) { list.textContent = 'No membership plans found.'; return; }
             let html = '';
             for (const p of plans) {
-                html += '<div class="roles-row" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '">'
-                    + '<span style="font-size:13px">' + escHtml(p.name)
-                    + ' <span style="color:#aaa;font-size:11px">' + p.current_patients + ' active</span></span>'
-                    + '<span style="white-space:nowrap">'
-                    + '£<input type="number" min="0" step="0.01" class="plan-val" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (p.monthly_value != null ? p.monthly_value : '') + '">'
-                    + ' <input type="date" class="plan-eff" title="Rate applies from this month" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + (p.effective_from || '') + '">'
-                    + ' <label style="font-size:11px;margin-left:6px" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def"' + (p.is_default ? ' checked' : '') + '> default</label>'
-                    + '</span></div>';
+                const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '' }];
+                html += '<div class="plan-block" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '" style="padding:10px 0;border-bottom:1px solid #eee">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center">'
+                    + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name)
+                    + ' <span style="color:#aaa;font-size:11px;font-weight:400">' + p.current_patients + ' active</span></span>'
+                    + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + p.payment_plan_id + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
+                    + '</div>'
+                    + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value)).join('') + '</div>'
+                    + '<button type="button" class="plan-add-rate" style="margin-top:2px;border:none;background:none;color:#0b3d5c;cursor:pointer;font-size:12px;padding:0">+ add a rate change</button>'
+                    + '</div>';
             }
             list.innerHTML = html;
             saveBtn.style.display = '';
-            list.querySelectorAll('.plan-val,.plan-eff').forEach(i => i.addEventListener('input', markDirty));
-            list.querySelectorAll('.plan-def').forEach(i => i.addEventListener('change', markDirty));
         } catch (e) { list.textContent = 'Could not load plans.'; }
     }
     async function savePlanRates() {
         const saveBtn = document.getElementById('plans-save'), msg = document.getElementById('plans-msg');
-        const rows = [];
-        document.querySelectorAll('#plans-list .roles-row[data-pid]').forEach(r => {
-            const val = r.querySelector('.plan-val').value;
-            rows.push({ tenant_id: +r.dataset.tid, payment_plan_id: +r.dataset.pid,
-                        monthly_value: val === '' ? null : +val,
-                        effective_from: r.querySelector('.plan-eff').value || null,
-                        is_default: !!(r.querySelector('.plan-def') && r.querySelector('.plan-def').checked) });
+        const rates = [];
+        const def = document.querySelector('#plans-list .plan-def:checked');
+        const default_plan_id = def ? +def.value : null;
+        document.querySelectorAll('#plans-list .plan-block').forEach(block => {
+            const tid = +block.dataset.tid, pid = +block.dataset.pid;
+            block.querySelectorAll('.plan-rate-row').forEach(row => {
+                const eff = row.querySelector('.plan-eff').value;
+                const val = row.querySelector('.plan-val').value;
+                if (eff && val !== '') rates.push({ tenant_id: tid, payment_plan_id: pid, effective_from: eff, monthly_value: +val });
+            });
         });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
-            const res = await authFetch('/api/plan-capitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates: rows }) });
+            const res = await authFetch('/api/plan-capitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates, default_plan_id }) });
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
+    // Delegated events for the plan-rates screen (add/remove rate rows, dirty tracking).
+    { const _pl = document.getElementById('plans-list');
+      if (_pl) {
+        _pl.addEventListener('input',  e => { if (e.target.matches('.plan-val,.plan-eff')) markDirty(); });
+        _pl.addEventListener('change', e => { if (e.target.matches('.plan-def')) markDirty(); });
+        _pl.addEventListener('click',  e => {
+            if (e.target.matches('.plan-add-rate')) {
+                e.target.closest('.plan-block').querySelector('.plan-rates').insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                markDirty();
+            } else if (e.target.matches('.plan-rate-del')) {
+                const cont = e.target.closest('.plan-rates');
+                e.target.closest('.plan-rate-row').remove();
+                if (!cont.querySelector('.plan-rate-row')) cont.insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                markDirty();
+            }
+        });
+      } }
 
     // Targets grid -----------------------------------------------------------
     // Draft persistence: unsaved target edits are mirrored to localStorage on every keystroke, so a

@@ -1771,23 +1771,26 @@ def get_plan_capitation():
                 f"  AND pp.Standard_Payment_Plan NOT IN ('NHS','Private','Referral','Private Children','IRH Fees') "
                 f"  AND NULLIF(LTRIM(RTRIM(pp.Standard_Payment_Plan)),'') IS NOT NULL "
                 f"  AND ISNULL(ac.cnt, 0) > 0 "
-                f"ORDER BY ISNULL(ac.cnt, 0) DESC", tids)
+                f"ORDER BY pp.Payment_Plan_Name", tids)
             plans = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
-                      'current_patients': r[4], 'monthly_value': None, 'effective_from': None,
-                      'is_default': False} for r in cur.fetchall()]
+                      'current_patients': r[4], 'is_default': False, 'rates': []} for r in cur.fetchall()]
         conn.close()
         if tids and plans:
             ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default "
-                         f"FROM Input.Plan_Capitation_Rate WHERE Tenant_ID IN ({ph})", tids)
-            rates = {(r[0], r[1]): (float(r[2]), r[3], bool(r[4])) for r in acur.fetchall()}
+                         f"FROM Input.Plan_Capitation_Rate WHERE Tenant_ID IN ({ph}) "
+                         f"ORDER BY Effective_From_Date", tids)
+            by_plan, defaults = {}, set()
+            for r in acur.fetchall():
+                by_plan.setdefault((r[0], r[1]), []).append(
+                    {'effective_from': r[3].isoformat() if r[3] else None, 'monthly_value': float(r[2])})
+                if r[4]:
+                    defaults.add((r[0], r[1]))
             ac.close()
             for p in plans:
-                rt = rates.get((p['tenant_id'], p['payment_plan_id']))
-                if rt:
-                    p['monthly_value']  = rt[0]
-                    p['effective_from'] = rt[1].isoformat() if rt[1] else None
-                    p['is_default']     = rt[2]
+                key = (p['tenant_id'], p['payment_plan_id'])
+                p['rates']      = by_plan.get(key, [])
+                p['is_default'] = key in defaults
         return jsonify({'plans': plans})
     except Exception as e:
         return _server_error(e, 'get_plan_capitation')
@@ -1795,8 +1798,10 @@ def get_plan_capitation():
 
 @app.route('/api/plan-capitation', methods=['POST'])
 def save_plan_capitation():
-    """Replace the tenant's plan capitation rates in AppDB.Input.Plan_Capitation_Rate (v1: one open
-    rate row per plan). Blank/zero value clears the plan. At most one Is_Default across the set."""
+    """Replace the tenant's plan capitation rates in AppDB.Input.Plan_Capitation_Rate. Each plan can
+    carry MANY effective-dated (Effective_From_Date, Monthly_Value) rows -- the fee-over-time history.
+    Blank/zero value or blank date skips that row. `default_plan_id` flags every row of the one plan
+    that values lapsed members. Duplicate dates within a plan are de-duped (last wins)."""
     upn, err = _auth()
     if err:
         return err
@@ -1811,8 +1816,11 @@ def save_plan_capitation():
         body    = request.get_json(force=True) or {}
         allowed = set(tids)
         rows    = body.get('rates') or []
-        valid   = []
-        seen_default = False
+        try:
+            default_pid = int(body.get('default_plan_id'))
+        except (TypeError, ValueError):
+            default_pid = None
+        seen         = {}   # (tid, pid, eff) -> (tid, pid, eff, value, is_default)  [de-dupe by date]
         payload_tids = set()
         for r in rows:
             try:
@@ -1822,20 +1830,18 @@ def save_plan_capitation():
             if tid not in allowed:
                 continue
             payload_tids.add(tid)
-            mv = r.get('monthly_value')
-            if mv in (None, ''):
-                continue  # blank clears (no insert)
+            mv  = r.get('monthly_value')
+            eff = str(r.get('effective_from') or '').strip()
+            if mv in (None, '') or not eff:
+                continue  # a row needs BOTH a date and a value
             try:
                 mvf = float(mv)
             except (TypeError, ValueError):
                 continue
             if mvf <= 0:
                 continue
-            eff   = (str(r.get('effective_from') or '').strip()) or '2000-01-01'
-            isdef = bool(r.get('is_default')) and not seen_default
-            if isdef:
-                seen_default = True
-            valid.append((tid, pid, eff, mvf, 1 if isdef else 0))
+            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, 1 if pid == default_pid else 0)
+        valid = list(seen.values())
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         for t in payload_tids:
             acur.execute("DELETE FROM Input.Plan_Capitation_Rate WHERE Tenant_ID = ?", t)
