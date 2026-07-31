@@ -34,6 +34,21 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
+                      "Entity": "_Appointments"
+                    }
+                  },
+                  "Property": "Start Time"
+                }
+              },
+              "queryRef": "_Appointments.Start Time",
+              "nativeQueryRef": "Start Time",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
                       "Entity": "List Cancellation Reasons"
                     }
                   },
@@ -48,14 +63,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Appointments"
                     }
                   },
-                  "Property": "Total Paid"
+                  "Property": "Is Short Notice"
                 }
               },
-              "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Total Paid"
+              "queryRef": "_Appointments.Is Short Notice",
+              "nativeQueryRef": "Is Short Notice"
             },
             {
               "field": {
@@ -90,29 +105,15 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Appointments"
+                      "Entity": "List Patients"
                     }
                   },
-                  "Property": "Is Short Notice"
+                  "Property": "Total Paid"
                 }
               },
-              "queryRef": "_Appointments.Is Short Notice",
-              "nativeQueryRef": "Is Short Notice"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Appointments"
-                    }
-                  },
-                  "Property": "Start Time"
-                }
-              },
-              "queryRef": "_Appointments.Start Time",
-              "nativeQueryRef": "Start Time",
-              "format": "dd/MM/yyyy"
+              "queryRef": "List Patients.Total Paid",
+              "nativeQueryRef": "Lifetime Value",
+              "displayName": "Lifetime Value"
             }
           ]
         }
@@ -283,6 +284,104 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "be7948814506e5d25007",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "68ea0db41b0d03128e21",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Cancellation Reasons"
+              }
+            },
+            "Property": "Reason"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0c171e709209067001c0",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d62c3bb662d0a904012d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "f6f44dae87a180ee2201",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Start Time"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e20edbb435619454c97b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Is Short Notice"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "6f6649ac627671083860",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Total Paid"
+          }
+        },
+        "type": "Advanced"
       }
     ]
   }

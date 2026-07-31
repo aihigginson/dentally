@@ -42,7 +42,8 @@
           }
         }
       }
-    ]
+    ],
+    "acceptsFilterContext": "None"
   },
   "objects": {
     "background": [

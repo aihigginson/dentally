@@ -10,7 +10,7 @@
     "tabOrder": 2000
   },
   "visual": {
-    "visualType": "lineClusteredColumnComboChart",
+    "visualType": "columnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -282,86 +282,6 @@
                   }
                 }
               }
-            },
-            "secShow": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "secFontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "secFontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "secLabelColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            },
-            "secBold": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleFontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "secTitleItalic": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleBold": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleFontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "secTitleColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
             }
           }
         }
@@ -516,21 +436,6 @@
         "howCreated": "User"
       },
       {
-        "name": "b486b439365574257bb5",
-        "ordinal": 4,
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Date"
-              }
-            },
-            "Property": "Week Commencing Date"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
         "name": "bbcaf471698a08a81ad9",
         "ordinal": 5,
         "field": {
@@ -581,8 +486,21 @@
         "howCreated": "User"
       },
       {
-        "name": "62349f6c30b5c0538ca8",
-        "ordinal": 6,
+        "name": "88de9b20ab55e90131dc",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c61dc8338c32dede4807",
         "field": {
           "Column": {
             "Expression": {
@@ -596,8 +514,7 @@
         "type": "Categorical"
       },
       {
-        "name": "6e144af07d0000772e1e",
-        "ordinal": 7,
+        "name": "86665a8c6560bdb741da",
         "field": {
           "Measure": {
             "Expression": {

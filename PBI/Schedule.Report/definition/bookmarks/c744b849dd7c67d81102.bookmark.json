@@ -4,7 +4,6 @@
   "name": "c744b849dd7c67d81102",
   "options": {
     "applyOnlyToTargetVisuals": true,
-    "suppressData": true,
     "targetVisualNames": [
       "9be492de75d46d9a2a42",
       "44689296c199b141002c",
@@ -15,7 +14,8 @@
       "56e58c2930642ad7d04e",
       "a1b11d25c0ee82de129e",
       "f1d4784d3a00b09db074"
-    ]
+    ],
+    "suppressData": true
   },
   "explorationState": {
     "version": "1.3",
@@ -56,42 +56,6 @@
           "562aac806c3470958019": {
             "singleVisual": {
               "visualType": "pivotTable",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "5067b86607613e911275": {
-            "singleVisual": {
-              "visualType": "actionButton",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "56e58c2930642ad7d04e": {
-            "singleVisual": {
-              "visualType": "actionButton",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "a1b11d25c0ee82de129e": {
-            "singleVisual": {
-              "visualType": "actionButton",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "f1d4784d3a00b09db074": {
-            "singleVisual": {
-              "visualType": "actionButton",
               "objects": {},
               "display": {
                 "mode": "hidden"
