@@ -1,0 +1,24 @@
+# =====================================================================
+# Release V134 -- Plan capitation fact (Phase 2)
+# =====================================================================
+# Monthly membership (capitation) revenue: Gold.Fact_Plan_Capitation = one row per member x month at
+# the plan's effective-dated fee. Rates are owner-curated in the AppDB (Input.Plan_Capitation_Rate,
+# fed by the Plan rates screen) and synced to WH by Meta.usp_Sync_Input_From_AppDB. Tenure endpoints
+# come from plan-style (uncharged, non-NHS Exam/Hygiene) treatment-plan courses; every calendar month
+# between is billed; active members roll to the current month; former members valued at the default
+# plan rate (>=2-month tenure only). Full rebuild each run. Classified GOLD_AGG (reads Gold facts) so
+# the nightly orders it after them. Regenerated Process_Dependency adds 6 edges into it.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V134__plan_capitation_fact.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Input.Plan_Capitation_Rate.Table.sql
+DEPLOY   Fabric\Gold.Fact_Plan_Capitation.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Plan_Capitation.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Meta.usp_Sync_Input_From_AppDB @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Plan_Capitation @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
