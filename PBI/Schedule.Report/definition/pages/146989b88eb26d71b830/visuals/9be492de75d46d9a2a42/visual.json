@@ -4,10 +4,10 @@
   "position": {
     "x": 0,
     "y": 76.792,
-    "z": 0,
-    "height": 470.4778156996587,
+    "z": 3000,
+    "height": 470.47781569965872,
     "width": 1280.3754266211604,
-    "tabOrder": 0
+    "tabOrder": 3000
   },
   "visual": {
     "visualType": "lineClusteredColumnComboChart",
@@ -416,5 +416,79 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "edd382244de14eb1cb79",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "3ce1290a145028a06c39",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Practitioner Diaries"
+              }
+            },
+            "Property": "Clinical Hours"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "8adbd9924a0e25395b22",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Appointment Hours"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "6c259a4e5e244a4d7388",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Chair Utilisation"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "53cfdb80e233d1d9b5e0",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Diary Fill"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

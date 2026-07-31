@@ -4,14 +4,18 @@
   "name": "bb7aa37c73a405a5614f",
   "options": {
     "applyOnlyToTargetVisuals": true,
+    "suppressData": true,
     "targetVisualNames": [
       "9be492de75d46d9a2a42",
       "44689296c199b141002c",
+      "ef66449a50017e1d01ce",
       "060fbf437d24bb8c76d3",
-      "25e61f6e51009862a1c9",
-      "acc667495ee9c32ecbd0"
-    ],
-    "suppressData": true
+      "562aac806c3470958019",
+      "5067b86607613e911275",
+      "56e58c2930642ad7d04e",
+      "a1b11d25c0ee82de129e",
+      "f1d4784d3a00b09db074"
+    ]
   },
   "explorationState": {
     "version": "1.0",
@@ -37,6 +41,15 @@
               }
             }
           },
+          "ef66449a50017e1d01ce": {
+            "singleVisual": {
+              "visualType": "lineChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
           "060fbf437d24bb8c76d3": {
             "singleVisual": {
               "visualType": "lineClusteredColumnComboChart",
@@ -46,15 +59,33 @@
               }
             }
           },
-          "25e61f6e51009862a1c9": {
+          "562aac806c3470958019": {
             "singleVisual": {
-              "visualType": "clusteredBarChart",
+              "visualType": "pivotTable",
               "objects": {}
             }
           },
-          "acc667495ee9c32ecbd0": {
+          "5067b86607613e911275": {
             "singleVisual": {
-              "visualType": "clusteredBarChart",
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "56e58c2930642ad7d04e": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "a1b11d25c0ee82de129e": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "f1d4784d3a00b09db074": {
+            "singleVisual": {
+              "visualType": "actionButton",
               "objects": {}
             }
           }

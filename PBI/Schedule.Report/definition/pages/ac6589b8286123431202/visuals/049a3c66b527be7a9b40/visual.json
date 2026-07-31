@@ -3,10 +3,10 @@
   "name": "049a3c66b527be7a9b40",
   "position": {
     "x": 0,
-    "y": 34.40273037542662,
+    "y": 34.402730375426621,
     "z": 0,
-    "height": 420.2047781569966,
-    "width": 294.2662116040956,
+    "height": 420.20477815699661,
+    "width": 294.26621160409559,
     "tabOrder": 1000
   },
   "visual": {
@@ -1541,93 +1541,5 @@
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "f46937ab715e0d163777",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Diary Fill"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "14c7a8714d7ae35bb234",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "DNA Rate"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "8a517a6d3ea3dbe60aba",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Cancellation Frequency"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "b2268a53382e25e3680a",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Short Notice Cancellation Rate"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "77e3a231047e95c0ad09",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Book Before You Leave"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "ea96af97e40143b8a076",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Days Until Next 30 Minute Free"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

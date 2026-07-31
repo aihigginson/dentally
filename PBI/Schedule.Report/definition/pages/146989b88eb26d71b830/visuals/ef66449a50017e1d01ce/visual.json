@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "25e61f6e51009862a1c9",
+  "name": "ef66449a50017e1d01ce",
   "position": {
-    "x": 0,
-    "y": 76.792,
-    "z": 0,
-    "height": 450,
-    "width": 487.88395904436857,
-    "tabOrder": 0
+    "x": 651.30016051364373,
+    "y": 77.046548956661326,
+    "z": 1500,
+    "height": 483.85232744783309,
+    "width": 610.20866773675766,
+    "tabOrder": 7001
   },
   "visual": {
-    "visualType": "clusteredBarChart",
+    "visualType": "lineChart",
     "query": {
       "queryState": {
         "Category": {
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Practitioners"
+                      "Entity": "List Date"
                     }
                   },
-                  "Property": "Full Name"
+                  "Property": "Week Commencing Date"
                 }
               },
-              "queryRef": "List Practitioners.Full Name",
-              "nativeQueryRef": "Full Name",
+              "queryRef": "List Date.Week Commencing Date",
+              "nativeQueryRef": "Week Commencing Date",
               "active": true
             }
           ]
@@ -42,11 +42,25 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Days Until Next 30 Minute Free"
+                  "Property": "Short Notice Cancellation Rate"
                 }
               },
-              "queryRef": "_Measures.Days Until Next 30 Minute Free",
-              "nativeQueryRef": "Days Until Next 30 Minute Free"
+              "queryRef": "_Measures.Short Notice Cancellation Rate",
+              "nativeQueryRef": "Short Notice Cancellation Rate"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "DNA Rate"
+                }
+              },
+              "queryRef": "_Measures.DNA Rate",
+              "nativeQueryRef": "DNA Rate"
             }
           ]
         }
@@ -55,16 +69,16 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Measures"
+                    "Entity": "List Date"
                   }
                 },
-                "Property": "Days Until Next 30 Minute Free"
+                "Property": "Week Commencing Date"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ],
         "isDefaultSort": true
@@ -74,17 +88,17 @@
       "categoryAxis": [
         {
           "properties": {
-            "showAxisTitle": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
             "fontFamily": {
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
                 }
               }
             },
@@ -107,48 +121,28 @@
                 }
               }
             },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "valueAxis": [
-        {
-          "properties": {
-            "showAxisTitle": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
+            "titleFontFamily": {
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
                 }
               }
             },
-            "bold": {
+            "titleBold": {
               "expr": {
                 "Literal": {
                   "Value": "false"
                 }
               }
             },
-            "labelColor": {
+            "titleFontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "titleColor": {
               "solid": {
                 "color": {
                   "expr": {
@@ -166,13 +160,6 @@
       "legend": [
         {
           "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
             "fontFamily": {
               "expr": {
                 "Literal": {
@@ -184,6 +171,13 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
                 }
               }
             },
@@ -208,6 +202,78 @@
             }
           }
         }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 2,
+                      "Percent": 0
+                    }
+                  }
+                }
+              }
+            },
+            "titleBold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "titleFontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "titleFontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "titleColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 2,
+                      "Percent": 0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "visualContainerObjects": {
@@ -217,7 +283,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Utilisation'"
+                  "Value": "'Short Notice and DNA'"
                 }
               }
             },
@@ -256,21 +322,8 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "9b308f337dde1c0d34d8",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Full Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "ef8bd49d3901d3bc28d7",
+        "name": "952286e955b002300824",
+        "ordinal": 0,
         "field": {
           "Measure": {
             "Expression": {
@@ -278,12 +331,106 @@
                 "Entity": "_Measures"
               }
             },
-            "Property": "Days Until Next 30 Minute Free"
+            "Property": "Cancellation Frequency"
+          }
+        },
+        "type": "Advanced",
+        "howCreated": "User"
+      },
+      {
+        "name": "bbcaf471698a08a81ad9",
+        "ordinal": 4,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Relative Day"
+          }
+        },
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "l",
+              "Entity": "List Date",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 3,
+                  "Left": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Source": "l"
+                        }
+                      },
+                      "Property": "Relative Day"
+                    }
+                  },
+                  "Right": {
+                    "Literal": {
+                      "Value": "0L"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "1e73322f90bd130adac4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "266648cd48c11a458d21",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Short Notice Cancellation Rate"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "947070816161231a2092",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "DNA Rate"
           }
         },
         "type": "Advanced"
       }
-    ]
+    ],
+    "filterSortOrder": "Custom"
   },
   "isHidden": true
 }
