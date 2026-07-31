@@ -5,7 +5,7 @@
     "x": 0,
     "y": 76.9098712446352,
     "z": 6000,
-    "height": 522.98712446351931,
+    "height": 522.9871244635193,
     "width": 1280,
     "tabOrder": 6000
   },
@@ -944,5 +944,6 @@
       }
     ],
     "filterSortOrder": "Custom"
-  }
+  },
+  "isHidden": true
 }
