@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V131 -- "Days Until Next 30/60 Free" counted in SESSION days
+# =====================================================================
+# Days_Until_Next_30_Mins / Days_Until_Next_1_Hour_Free on
+# Aggregate_Site_Practitioner_Current now count the practitioner's own session days (their Nth
+# working day with a free slot) rather than calendar days -- so a part-time, fully-booked
+# practitioner reads a small realistic number, not tens of calendar days. #free is now session
+# days only (Available_Clinical_Mins > 0). Aggregate is full DELETE+INSERT; reload after deploy.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V131__days_until_free_session_days.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST
