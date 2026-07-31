@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V132 -- Rebooked_Status also true when the patient has a future appointment
+# =====================================================================
+# A cancellation/DNA is now "Rebooked" if the patient booked a later appointment after the event OR
+# already has any FUTURE non-cancelled appointment -- so patients with an upcoming appointment drop
+# off the Day Book "to rebook" lists (was showing ~595 already-covered cancellations). Reload
+# Fact_Appointments (recompute Rebooked_Status) + the aggregate (counts) after deploy.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V132__rebooked_future_appointment.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

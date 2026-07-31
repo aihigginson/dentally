@@ -25,6 +25,9 @@
 --    *10     22/06/2026  AIH Add Rebooked_Status: 'Rebooked'/'Not Rebooked' for cancelled appts
 --    *11     29/07/2026  AIH Rebooked_Status now also covers DNAs (keyed on Did_Not_Attend_At) so the
 --                            Day Book "DNAs Not Rebooked" list populates (was NULL for all DNAs)
+--    *12     31/07/2026  AIH Rebooked_Status also 'Rebooked' when the patient has ANY future
+--                            non-cancelled appointment (not just a booking after the event) -- drops
+--                            cancellations/DNAs off the "to rebook" list when an upcoming appt exists.
 --                            (NULL otherwise) -- patient booked another appt (Pending_At, the
 --                            Dentally booking timestamp; created_at is not in the API) after this
 --                            one's Cancelled_At. Forward-looking attr (a later booking flips an
@@ -144,6 +147,16 @@ BEGIN
         WHERE Appointment_ID IS NOT NULL AND Patient_ID IS NOT NULL
         GROUP BY Tenant_ID, Patient_ID;
 
+        -- Patients who already have a FUTURE non-cancelled appointment don't need rebooking,
+        -- regardless of when it was booked (matches the recall Is_Booked signal).
+        DROP TABLE IF EXISTS #has_future;
+        SELECT DISTINCT Tenant_ID, Patient_ID
+        INTO #has_future
+        FROM Silver.Appointments
+        WHERE Patient_ID IS NOT NULL
+          AND NULLIF(TRIM(Cancelled_At),'') IS NULL
+          AND TRY_CAST(NULLIF(TRIM(Start_Time),'') AS datetime2(3)) > SYSUTCDATETIME();
+
         SELECT
             a.Tenant_ID                                                 AS Tenant_ID,
             CAST(a.Appointment_ID AS INT)                               AS bk_Appointment_ID,
@@ -207,14 +220,18 @@ BEGIN
             ja.Booking                                                  AS Booking,
             ja.Appointment_Reason                                       AS Appointment_Reason,
             -- Rebooked_Status: for cancelled OR DNA appointments (NULL for other appts). "Rebooked" =
-            -- the patient booked a later appointment after the cancellation / DNA event (keyed on the
-            -- event's own timestamp -- Cancelled_At for a cancellation, Did_Not_Attend_At for a DNA).
+            -- the patient booked a later appointment after the cancellation / DNA event, OR the patient
+            -- already has a FUTURE non-cancelled appointment (they don't need rebooking regardless of
+            -- when that appointment was booked -- fixes cancellations that showed as "to rebook" even
+            -- though the patient had an upcoming appointment).
             CASE
                 WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NOT NULL
                     THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
+                                OR hf.Patient_ID IS NOT NULL
                               THEN 'Rebooked' ELSE 'Not Rebooked' END
                 WHEN TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3)) IS NOT NULL
                     THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3))
+                                OR hf.Patient_ID IS NOT NULL
                               THEN 'Rebooked' ELSE 'Not Rebooked' END
                 ELSE NULL
             END                                                         AS Rebooked_Status
@@ -231,6 +248,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
         LEFT JOIN #journey ja                   ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
         LEFT JOIN #last_booked lb               ON lb.Patient_ID       = a.Patient_ID     AND lb.Tenant_ID = a.Tenant_ID
+        LEFT JOIN #has_future hf                ON hf.Patient_ID       = a.Patient_ID     AND hf.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_ID IS NOT NULL;
 
         -- Remove rows no longer in source
