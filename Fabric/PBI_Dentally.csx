@@ -1677,8 +1677,15 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
+// Membership (capitation) revenue is a monthly direct debit, NOT invoiced -- plan patients have no
+// clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
+// month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
+add("Plan Capitation Revenue",
+    @"SUM('_Plan Capitation'[Monthly Value])",
+    "£#,##0");
+
 add("Total Revenue",
-    @"SUM('_Invoice Items'[Total Price])",
+    @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
     "£#,##0");
 
 // Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
