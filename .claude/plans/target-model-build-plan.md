@@ -149,3 +149,18 @@ collapse Supports_Site/Supports_Practitioner + the measure-shape zoo.
   target can be set. Its measure + Fact_Metric_Actuals num/den still need building (ties to Rebooked_Status
   / Pending_At, V025).
 - Open decision: exact FTE_Scaled metric set (Open Courses Value in/out?).
+
+## Wave B progress (2026-07-15)
+- DONE #1 sync wired into build (V095) + verified on dev; Dim_Practitioners.FTE (V096) on dev.
+- DONE #3 C# measure rewrite -- all 4 scripts (Revenue/Clinical/Patients/Scheduling) now read
+  Fact_Daily_Targets via '_Daily Targets', resolve Target_Level = COALESCE(SELECTEDVALUE(
+  'List Practitioners'[Custom Role]),"Practice"), and FTE-scale (open_courses*/revenues) by
+  SUM('List Practitioners'[FTE]). Committed dev; UNTESTED until model #2 + TE apply.
+- TODO #2 (USER, Desktop) then apply the .csx in Tabular Editor:
+    1. Repoint '_Daily Targets' at Gold.Fact_Daily_Targets (cols Target Level / Daily Target Value /
+       Annual Target Value / Variance / fk Date); relationship fk Date -> List Date[pk Date].
+    2. Add 'Custom Role' to List Practitioners (Dim_Practitioners.Custom_Role).
+    3. Add 'FTE' to List Practitioners (Dim_Practitioners.FTE).
+    4. Drop '_Effective Targets' (+ old site-grain _Daily Targets).
+    5. Run the 4 TabularEditor_*.csx, refresh, sanity-check a card per page.
+- TODO prod: deploy warehouse V095/V096 to prod once verified; app already live.
