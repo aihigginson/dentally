@@ -1936,10 +1936,10 @@
             for (const p of plans) {
                 const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '' }];
                 html += '<div class="plan-block" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '" style="padding:10px 0;border-bottom:1px solid #eee">'
-                    + '<div style="display:flex;justify-content:space-between;align-items:center">'
-                    + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name)
-                    + ' <span style="color:#aaa;font-size:11px;font-weight:400">' + p.current_patients + ' active</span></span>'
+                    + '<div style="display:flex;align-items:center;gap:14px">'
+                    + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name) + '</span>'
                     + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + p.payment_plan_id + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
+                    + '<span style="color:#aaa;font-size:11px">' + p.current_patients + ' active</span>'
                     + '</div>'
                     + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value)).join('') + '</div>'
                     + '<button type="button" class="plan-add-rate" style="margin-top:2px;border:none;background:none;color:#0b3d5c;cursor:pointer;font-size:12px;padding:0">+ add a rate change</button>'

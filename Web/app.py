@@ -1742,10 +1742,11 @@ def save_variances():
 
 @app.route('/api/plan-capitation', methods=['GET'])
 def get_plan_capitation():
-    """Capitation (membership) plan catalogue with current active member counts + the owner's saved
-    monthly rate / effective-from / default flag (AppDB). Owner-only. The rate drives
-    Fact_Plan_Capitation; a plan with no rate generates no records. Non-membership standard plans
-    (NHS/Private/Referral/etc) are excluded from the list."""
+    """Catalogue of ALL in-use payment plans (>=1 active member) with member counts + the owner's saved
+    effective-dated rates / default flag (AppDB). Owner-only. We do NOT guess which plans are capitation
+    -- naming varies by practice (Denplan/Den/Tabeo/Patient Plan/...) -- so the whole list is shown and
+    the owner enters rates only against the capitation ones. Plans left with no rate (Private, NHS, ...)
+    generate no records. The rate drives Fact_Plan_Capitation."""
     upn, err = _auth()
     if err:
         return err
@@ -1768,8 +1769,7 @@ def get_plan_capitation():
                 f"           WHERE Active = 1 GROUP BY Tenant_ID, Payment_Plan_ID) ac "
                 f"       ON ac.Tenant_ID = pp.Tenant_ID AND ac.Payment_Plan_ID = pp.Payment_Plan_ID "
                 f"WHERE pp.Tenant_ID IN ({ph}) "
-                f"  AND pp.Standard_Payment_Plan NOT IN ('NHS','Private','Referral','Private Children','IRH Fees') "
-                f"  AND NULLIF(LTRIM(RTRIM(pp.Standard_Payment_Plan)),'') IS NOT NULL "
+                f"  AND NULLIF(LTRIM(RTRIM(pp.Payment_Plan_Name)),'') IS NOT NULL "
                 f"  AND ISNULL(ac.cnt, 0) > 0 "
                 f"ORDER BY pp.Payment_Plan_Name", tids)
             plans = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
