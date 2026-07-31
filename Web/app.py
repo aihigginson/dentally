@@ -1740,6 +1740,117 @@ def save_variances():
         return _server_error(e, 'save_variances')
 
 
+@app.route('/api/plan-capitation', methods=['GET'])
+def get_plan_capitation():
+    """Capitation (membership) plan catalogue with current active member counts + the owner's saved
+    monthly rate / effective-from / default flag (AppDB). Owner-only. The rate drives
+    Fact_Plan_Capitation; a plan with no rate generates no records. Non-membership standard plans
+    (NHS/Private/Referral/etc) are excluded from the list."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage plan rates'}), 403
+        plans = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT pp.Tenant_ID, pp.Payment_Plan_ID, pp.Payment_Plan_Name, pp.Standard_Payment_Plan, "
+                f"       ISNULL(ac.cnt, 0) AS current_patients "
+                f"FROM Gold.Dim_Payment_Plans pp "
+                f"LEFT JOIN (SELECT Tenant_ID, Payment_Plan_ID, COUNT(*) cnt FROM Gold.Dim_Patients "
+                f"           WHERE Active = 1 GROUP BY Tenant_ID, Payment_Plan_ID) ac "
+                f"       ON ac.Tenant_ID = pp.Tenant_ID AND ac.Payment_Plan_ID = pp.Payment_Plan_ID "
+                f"WHERE pp.Tenant_ID IN ({ph}) "
+                f"  AND pp.Standard_Payment_Plan NOT IN ('NHS','Private','Referral','Private Children','IRH Fees') "
+                f"  AND NULLIF(LTRIM(RTRIM(pp.Standard_Payment_Plan)),'') IS NOT NULL "
+                f"  AND ISNULL(ac.cnt, 0) > 0 "
+                f"ORDER BY ISNULL(ac.cnt, 0) DESC", tids)
+            plans = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
+                      'current_patients': r[4], 'monthly_value': None, 'effective_from': None,
+                      'is_default': False} for r in cur.fetchall()]
+        conn.close()
+        if tids and plans:
+            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
+            acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default "
+                         f"FROM Input.Plan_Capitation_Rate WHERE Tenant_ID IN ({ph})", tids)
+            rates = {(r[0], r[1]): (float(r[2]), r[3], bool(r[4])) for r in acur.fetchall()}
+            ac.close()
+            for p in plans:
+                rt = rates.get((p['tenant_id'], p['payment_plan_id']))
+                if rt:
+                    p['monthly_value']  = rt[0]
+                    p['effective_from'] = rt[1].isoformat() if rt[1] else None
+                    p['is_default']     = rt[2]
+        return jsonify({'plans': plans})
+    except Exception as e:
+        return _server_error(e, 'get_plan_capitation')
+
+
+@app.route('/api/plan-capitation', methods=['POST'])
+def save_plan_capitation():
+    """Replace the tenant's plan capitation rates in AppDB.Input.Plan_Capitation_Rate (v1: one open
+    rate row per plan). Blank/zero value clears the plan. At most one Is_Default across the set."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can manage plan rates'}), 403
+        body    = request.get_json(force=True) or {}
+        allowed = set(tids)
+        rows    = body.get('rates') or []
+        valid   = []
+        seen_default = False
+        payload_tids = set()
+        for r in rows:
+            try:
+                tid = int(r['tenant_id']); pid = int(r['payment_plan_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if tid not in allowed:
+                continue
+            payload_tids.add(tid)
+            mv = r.get('monthly_value')
+            if mv in (None, ''):
+                continue  # blank clears (no insert)
+            try:
+                mvf = float(mv)
+            except (TypeError, ValueError):
+                continue
+            if mvf <= 0:
+                continue
+            eff   = (str(r.get('effective_from') or '').strip()) or '2000-01-01'
+            isdef = bool(r.get('is_default')) and not seen_default
+            if isdef:
+                seen_default = True
+            valid.append((tid, pid, eff, mvf, 1 if isdef else 0))
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        for t in payload_tids:
+            acur.execute("DELETE FROM Input.Plan_Capitation_Rate WHERE Tenant_ID = ?", t)
+        if valid:
+            acur.fast_executemany = True
+            acur.executemany(
+                "INSERT INTO Input.Plan_Capitation_Rate (Tenant_ID, Payment_Plan_ID, Effective_From_Date, "
+                "Monthly_Value, Is_Default, Updated_At, Updated_By) VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, e, m, d, upn) for t, p, e, m, d in valid])
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_plan_capitation')
+
+
 @app.route('/api/target-grid', methods=['GET'])
 def get_target_grid():
     """The target grid for an FY: metric catalogue (with definition, per-metric sample and the

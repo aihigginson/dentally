@@ -110,6 +110,25 @@ CREATE TABLE Input.Practitioner_Pay (
 );
 GO
 
+-- Per-plan monthly capitation fee, EFFECTIVE-DATED. Owner enters one open row per Denplan variant on
+-- the Plan Capitation screen; set an early Effective_From_Date to cover history. Reprice by adding a
+-- new row with a later Effective_From_Date. Fact_Plan_Capitation values each member-month at the row
+-- whose Effective_From_Date <= that month (latest wins); a month with no covering rate gets NO record.
+-- Is_Default = the ONE fallback plan whose rate values former members (their true old plan is
+-- unrecoverable from Dentally). One default per tenant.
+IF OBJECT_ID('Input.Plan_Capitation_Rate') IS NULL
+CREATE TABLE Input.Plan_Capitation_Rate (
+    Tenant_ID           INT           NOT NULL,
+    Payment_Plan_ID     BIGINT        NOT NULL,   -- Dentally payment plan id (business key)
+    Effective_From_Date DATE          NOT NULL,   -- rate applies from this month onward
+    Monthly_Value       DECIMAL(9,2)  NOT NULL,   -- per-patient monthly capitation fee for this plan
+    Is_Default          BIT           NOT NULL CONSTRAINT DF_Plan_Cap_Rate_Default DEFAULT 0,
+    Updated_At          DATETIME2(3)  NOT NULL CONSTRAINT DF_Plan_Cap_Rate_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By          VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Plan_Capitation_Rate PRIMARY KEY (Tenant_ID, Payment_Plan_ID, Effective_From_Date)
+);
+GO
+
 -- Per-tenant billing contact, set on the Subscriptions screen. Primary_Email = the billing owner /
 -- primary account (a staff login); Invoice_Email = where the PDF invoice goes (may be an external
 -- address, e.g. the practice's accountant -- not necessarily a Dentally user). The invoice mailer
