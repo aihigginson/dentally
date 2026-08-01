@@ -1569,7 +1569,7 @@
             const res = await authFetch('/api/practice-config', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fy_start_month: +document.getElementById('fy-start-month').value }) });
             if (!res.ok) throw new Error('status ' + res.status);
-            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
         finally { btn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
     }
