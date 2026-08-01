@@ -521,9 +521,6 @@
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
-            <option value="FY26 (YTD)">FY26 (YTD)</option>
-            <option value="FY25">FY25</option>
-            <option value="FY24">FY24</option>
             <option value="Last 12 Months">Last 12 Months</option>
             <option value="Last 3 Months" selected>Last 3 Months</option>
         </select>
@@ -2837,6 +2834,14 @@
                         o.value = role; o.textContent = role;
                         selRole.appendChild(o);
                     });
+                    // Period options are per-tenant (Last 3 Months, Last 12 Months, then the practice FYs).
+                    if (data.periods && data.periods.length) {
+                        const _cur = filterState.period;
+                        selPeriod.innerHTML = data.periods.map(p => '<option value="' + escHtml(p) + '">' + escHtml(p) + '</option>').join('');
+                        selPeriod.value = data.periods.indexOf(_cur) >= 0 ? _cur
+                                        : (data.periods.indexOf('Last 3 Months') >= 0 ? 'Last 3 Months' : data.periods[0]);
+                        filterState.period = selPeriod.value;
+                    }
                 }
                 if (myDataLock) {
                     // Single-report "My Data": the practitioner list is just this user.

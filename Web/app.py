@@ -503,8 +503,18 @@ def filters():
             tids,
         )
         roles = [r[0] for r in cur.fetchall()]
+        # Period options = the tenant's date groupings (Last 3 Months, Last 12 Months, then the practice
+        # FYs cutover..current). Per-tenant + FYyy labels -> driven by the warehouse, not hardcoded.
+        cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({placeholders})", tids)
+        _pv = [r[0] for r in cur.fetchall()]
+        def _prank(v):
+            if v == 'Last 3 Months':  return (0, 0)
+            if v == 'Last 12 Months': return (1, 0)
+            m = re.match(r'FY(\d+)', v or '')          # FYyy -> newest first
+            return (2, -(int(m.group(1)) if m else 0))
+        periods = sorted(_pv, key=_prank)
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles})
+        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.

@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V138 -- Period options = Last 3M, Last 12M, practice FYs (cutover..current)
+# =====================================================================
+# Dim_Date_Grouping now emits a bucket per practice FY from the cutover (first FY with real data,
+# >=100 appts, from Fact_Appointments) to the current FY; current FY is YTD but labelled just FYyy
+# (no "(YTD)"). Reads a fact -> reclassified GOLD_AGG (renamed process GOLD_AGG_DATE_GROUPING;
+# dependency regen wires Fact_Appointments -> it). App drives the period dropdown from these labels
+# (/api/filters returns periods) instead of hardcoded years. Table schema unchanged (Tenant_ID from V137).
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V138__date_grouping_periods.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
