@@ -510,8 +510,8 @@ def filters():
         def _prank(v):
             if v == 'Last 3 Months':  return (0, 0)
             if v == 'Last 12 Months': return (1, 0)
-            m = re.match(r'FY(\d+)', v or '')          # FYyy -> newest first
-            return (2, -(int(m.group(1)) if m else 0))
+            yy = (v or '')[2:]                          # 'FY26' -> '26'; FYyy newest first
+            return (2, -(int(yy) if yy.isdigit() else 0))
         periods = sorted(_pv, key=_prank)
         conn.close()
         return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
