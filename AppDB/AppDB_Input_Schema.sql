@@ -110,6 +110,20 @@ CREATE TABLE Input.Practitioner_Pay (
 );
 GO
 
+-- Per-tenant practice configuration (general owner-set settings). FY_Start_Month = the calendar
+-- month (1-12) the practice's FINANCIAL YEAR starts; default 4 (April, UK standard). Drives the FY
+-- boundaries + labels used by targets and year-to-date figures. Jan (1) = a calendar-year FY
+-- (label "FYyy", not "FYyy-yy+1").
+IF OBJECT_ID('Input.Practice_Config') IS NULL
+CREATE TABLE Input.Practice_Config (
+    Tenant_ID        INT           NOT NULL,
+    FY_Start_Month   TINYINT       NOT NULL CONSTRAINT DF_Practice_Config_FYSM DEFAULT 4,
+    Updated_At       DATETIME2(3)  NOT NULL CONSTRAINT DF_Practice_Config_UA DEFAULT SYSUTCDATETIME(),
+    Updated_By       VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Practice_Config PRIMARY KEY (Tenant_ID)
+);
+GO
+
 -- Per-plan monthly capitation fee, EFFECTIVE-DATED. Owner enters one open row per Denplan variant on
 -- the Plan Capitation screen; set an early Effective_From_Date to cover history. Reprice by adding a
 -- new row with a later Effective_From_Date. Fact_Plan_Capitation values each member-month at the row

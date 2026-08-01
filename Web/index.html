@@ -651,6 +651,19 @@
                     <div class="defs-item-desc" id="xero-status-desc">Checking&hellip;</div>
                     <button id="xero-connect-btn" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#13b5ea;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Xero</button>
                 </div>
+                <div class="defs-group">Financial year</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">The month your practice financial year starts &mdash; used for targets and year-to-date figures. Most UK practices run April&ndash;March. (NHS UDA/UOA years always run April&ndash;March and are unaffected by this.)</div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+                        <label style="font-size:13px">First month
+                            <select id="fy-start-month" style="margin-left:6px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"></select>
+                        </label>
+                        <span id="fy-last-month" style="font-size:12px;color:#666"></span>
+                        <span id="fy-label-preview" style="font-size:12px;color:#0b3d5c;font-weight:600"></span>
+                        <button id="fy-save" class="settings-btn">Save</button>
+                        <span id="fy-msg" style="font-size:12px"></span>
+                    </div>
+                </div>
                 <div class="defs-group">Associate pay (% of production)</div>
                 <div class="defs-item">
                     <div class="defs-item-desc">Each fee-earner's share of their own production &mdash; used for practitioner contribution / P&amp;L. Leave blank if not an associate.</div>
@@ -1525,6 +1538,42 @@
         }
     }
 
+    // Financial year (practice FY start month) -------------------------------
+    const _FY_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    function _fyPopulate() {
+        const sel = document.getElementById('fy-start-month');
+        if (!sel.options.length) sel.innerHTML = _FY_MONTHS.map((m,i) => '<option value="' + (i+1) + '">' + m + '</option>').join('');
+    }
+    function _updateFyDisplay() {
+        const m = +document.getElementById('fy-start-month').value;      // 1-12
+        const lastM = ((m + 10) % 12) + 1;                              // the month before the start month
+        document.getElementById('fy-last-month').textContent = '→ ends ' + _FY_MONTHS[lastM - 1];
+        const now = new Date();
+        const startYear = ((now.getMonth() + 1) >= m) ? now.getFullYear() : now.getFullYear() - 1;
+        const yy = String(startYear).slice(2);
+        // Jan start = a calendar-year FY -> single-year label "FYyy"; otherwise "FYyy-yy+1".
+        const label = (m === 1) ? ('FY' + yy) : ('FY' + yy + '-' + String(startYear + 1).slice(2));
+        document.getElementById('fy-label-preview').textContent = 'e.g. ' + label;
+    }
+    async function loadFYConfig() {
+        _fyPopulate();
+        let m = 4;
+        try { const res = await authFetch('/api/practice-config'); if (res.ok) { const j = await res.json(); m = j.fy_start_month || 4; } } catch (e) {}
+        document.getElementById('fy-start-month').value = m;
+        _updateFyDisplay();
+    }
+    async function saveFYConfig() {
+        const msg = document.getElementById('fy-msg'), btn = document.getElementById('fy-save');
+        btn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/practice-config', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fy_start_month: +document.getElementById('fy-start-month').value }) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { btn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+    }
+
     async function loadPractitionerPay() {
         const list = document.getElementById('assoc-pay-list');
         const saveBtn = document.getElementById('assoc-pay-save');
@@ -1590,6 +1639,8 @@
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
     { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
+    { const _fm = document.getElementById('fy-start-month'); if (_fm) _fm.addEventListener('change', _updateFyDisplay);
+      const _fs = document.getElementById('fy-save'); if (_fs) _fs.addEventListener('click', saveFYConfig); }
 
     // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
     let _varTenants = [];
@@ -1597,7 +1648,7 @@
     function showSettingsTab(name) {
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.stab === name));
         document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
-        if (name === 'finance')   { loadXeroStatus(); loadPractitionerPay(); }
+        if (name === 'finance')   { loadXeroStatus(); loadFYConfig(); loadPractitionerPay(); }
         else if (name === 'roles')     loadRoles();
         else if (name === 'variances') loadVariances();
         else if (name === 'plans')     loadPlanRates();

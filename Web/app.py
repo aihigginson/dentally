@@ -1163,6 +1163,65 @@ def save_targets():
 
 # ── Associate pay (per-practitioner %) — admin Settings screen ────────────────
 
+@app.route('/api/practice-config', methods=['GET'])
+def get_practice_config():
+    """Per-tenant practice settings. FY_Start_Month = the month (1-12) the practice financial year
+    starts (default 4 = April). NHS FY is always Apr-Mar and is NOT affected by this. Owner-only."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can view settings'}), 403
+        fy_start = 4
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor()
+            acur.execute("SELECT FY_Start_Month FROM Input.Practice_Config WHERE Tenant_ID = ?", tids[0])
+            row = acur.fetchone(); ac.close()
+            if row and row[0]:
+                fy_start = int(row[0])
+        return jsonify({'fy_start_month': fy_start})
+    except Exception as e:
+        return _server_error(e, 'get_practice_config')
+
+
+@app.route('/api/practice-config', methods=['POST'])
+def save_practice_config():
+    """Set the practice financial-year start month (1-12) for the tenant(s). Owner-only."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can change settings'}), 403
+        body = request.get_json(force=True) or {}
+        try:
+            m = int(body.get('fy_start_month'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid month'}), 400
+        if not (1 <= m <= 12):
+            return jsonify({'error': 'Month must be 1-12'}), 400
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        for t in tids:
+            acur.execute("DELETE FROM Input.Practice_Config WHERE Tenant_ID = ?", t)
+            acur.execute("INSERT INTO Input.Practice_Config (Tenant_ID, FY_Start_Month, Updated_At, Updated_By) "
+                         "VALUES (?, ?, SYSUTCDATETIME(), ?)", t, m, upn)
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_practice_config')
+
+
 @app.route('/api/practitioner-pay', methods=['GET'])
 def get_practitioner_pay():
     """Active fee-earners for the tenant(s) + their current associate % (or null)."""
