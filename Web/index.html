@@ -2077,7 +2077,9 @@
             const res = await authFetch('/api/target-grid' + (fy ? '?fy=' + fy : ''));
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json();
-            const years = new Set([data.fy - 1, data.fy, data.fy + 1, ...(data.available_fys || [])]);
+            // Full practice FY range (cutover..current + next year) so historical + next-year targets
+            // can be set; fall back to a 3-year window if the range is unavailable.
+            const years = new Set([...(data.fy_options && data.fy_options.length ? data.fy_options : [data.fy - 1, data.fy, data.fy + 1]), ...(data.available_fys || [])]);
             document.getElementById('targets-fy').innerHTML = [...years].sort((a, b) => a - b)
                 .map(y => '<option value="' + y + '"' + (y === data.fy ? ' selected' : '') + '>' + _fyLabel(y) + '</option>').join('');
             document.getElementById('targets-copy-fy').innerHTML = '<option value="">Copy from…</option>'

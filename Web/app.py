@@ -1947,6 +1947,19 @@ def get_target_grid():
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage targets'}), 403
 
+        # Year picker = the practice FYs from the cutover to the current FY (same as the app's period
+        # FYs, from Gold.Dim_Date_Grouping) PLUS next year, so targets can be set historically (so
+        # prior-year reports have targets) and for next year. FY label year = 2000 + the FYyy digits.
+        fy_options = []
+        if tids:
+            _ph = ','.join(['?'] * len(tids))
+            cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
+            _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
+            if _yrs:
+                fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
+        if not fy:
+            fy = (max(fy_options) - 1) if fy_options else fy       # current practice FY = newest option minus the +1
+
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
             "ISNULL(Supports_Practitioner, 0), Long_Description, Sample_Value, ISNULL(FTE_Scaled, 0) "
@@ -2003,7 +2016,7 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
-        return jsonify({'fy': fy, 'available_fys': available_fys,
+        return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
                         'metrics': metrics, 'tenants': list(tenants.values())})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
