@@ -1,0 +1,27 @@
+# =====================================================================
+# Release V137 -- Tenant-specific financial year (atomic cutover)
+# =====================================================================
+# Practice FY (per-tenant, from Input.Practice_Config.FY_Start_Month) drives targets + FY period
+# options; NHS stays ALWAYS Apr-Mar. Outcome B: vw_Dim_Date is a BACK-END helper (excluded from the
+# PBI views); the practice FY reaches the model only via the tenant-specific, RLS'd Dim_Date_Grouping.
+#   - Gold.vw_Dim_Date : per-tenant practice FY (label/end year, FYyy) + NHS_Financial_Year (Apr-Mar).
+#   - Dim_Date_Grouping: +Tenant_ID; practice-FY period buckets (FYyy / FYyy (YTD)) per tenant.
+#   - Fact_Daily_Targets: practice metrics over the practice FY; nhs% + contract UDA/UOA over Apr-Mar.
+#   - Create_Gold_Views excludes vw_Dim_Date; regenerated so List Date Grouping carries Tenant_ID.
+# PRE-STEP (run BEFORE this manifest, per env): the target FY+1 migration on the AppDB --
+#   python Scripts/Migrate_Targets_To_Label_Year.py --env <env> --tenant 100 --confirm
+# so the sync below copies the label-year targets. In Desktop: RLS on List Date Grouping by Tenant_ID.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V137__tenant_financial_year.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
+DEPLOY   Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Daily_Targets.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Meta.usp_Sync_Input_From_AppDB @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

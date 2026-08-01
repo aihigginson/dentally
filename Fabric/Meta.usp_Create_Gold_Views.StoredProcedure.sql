@@ -80,6 +80,7 @@ BEGIN
         FROM sys.views v
         INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
         WHERE s.name = 'Gold'
+          AND v.name <> 'vw_Dim_Date'   -- back-end-only per-tenant date helper; must NOT become PBI.[List Date]
     ) src;
 
     SET @Row     = 1;

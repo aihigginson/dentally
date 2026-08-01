@@ -64,7 +64,8 @@ def main():
     if not a.confirm:
         print("DRY RUN (no changes). Re-run with --confirm to apply (FY += 1)."); c.close(); return
 
-    cur.execute("UPDATE Input.Targets SET FY = FY + 1 WHERE Tenant_ID = ?", a.tenant)
+    # NHS metrics (nhs%) stay on the Apr-Mar year -- only practice metrics move to the label year.
+    cur.execute("UPDATE Input.Targets SET FY = FY + 1 WHERE Tenant_ID = ? AND Metric NOT LIKE 'nhs%'", a.tenant)
     n = cur.rowcount
     cur.execute("INSERT INTO Input.Migration_Applied (Migration_Key, Tenant_ID) VALUES (?, ?)", MIGRATION_KEY, a.tenant)
     print(f"APPLIED: {n} target rows shifted FY += 1.  AFTER:", [tuple(r) for r in dist()])

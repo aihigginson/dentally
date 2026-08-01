@@ -1663,7 +1663,7 @@
         if ((fmt || '').toLowerCase().includes('currency')) return '£' + Math.round(v).toLocaleString();
         return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
     }
-    function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
+    function _fyLabel(y) { return 'FY' + String(y).slice(2); }   // stored FY is the label/end year -> FYyy
     function _sampleVal(m) {
         if (m.sample) return 'e.g. ' + m.sample;      // per-metric example from Config.Metric_Definitions
         const f = (m.format_type || '').toLowerCase();
