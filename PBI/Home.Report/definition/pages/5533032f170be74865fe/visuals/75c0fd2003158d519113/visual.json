@@ -3,10 +3,10 @@
   "name": "75c0fd2003158d519113",
   "position": {
     "x": 0,
-    "y": 0.31547546374824975,
+    "y": 0,
     "z": 0,
-    "height": 366.0409556313993,
-    "width": 250,
+    "height": 420.23854362837409,
+    "width": 249.89328311362209,
     "tabOrder": 0
   },
   "visual": {
@@ -28,21 +28,6 @@
               },
               "queryRef": "_Measures.Total Revenue",
               "nativeQueryRef": "Total Revenue"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Revenue Per Dentist Hour"
-                }
-              },
-              "queryRef": "_Measures.Revenue Per Dentist Hour",
-              "nativeQueryRef": "Revenue Per Dentist Hour",
-              "displayName": "Rev/Dentist Hr"
             },
             {
               "field": {
@@ -85,6 +70,21 @@
               },
               "queryRef": "_Measures.NHS Revenue",
               "nativeQueryRef": "NHS Revenue"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Revenue Per Dentist Hour"
+                }
+              },
+              "queryRef": "_Measures.Revenue Per Dentist Hour",
+              "nativeQueryRef": "Revenue Per Dentist Hour",
+              "displayName": "Rev/Dentist Hr"
             },
             {
               "field": {
