@@ -16,6 +16,8 @@ USING (VALUES
         'Revenue earned from NHS activity in the period — the value of NHS claims and contracted UDA/UOA work delivered. Excludes all privately funded treatment. With Private Revenue it makes up Total Revenue.'),
     ('private_revenue',            'Private Revenue',                    'revenue',    'currency', 'Revenue from private treatment',                                          1, 1, 1, 12, 'above', 'cumulative',
         'Revenue from privately funded treatment in the period, including private, care-plan and premium-plan work. Excludes all NHS-funded activity. With NHS Revenue it makes up Total Revenue.'),
+    ('plan_capitation_revenue',     'Plan Capitation Revenue',            'revenue',    'currency', 'Monthly membership (capitation) plan fees',                               1, 1, 1, 13, 'above', 'cumulative',
+        'Recurring monthly membership-plan (capitation) fees recognised in the period - one charge per plan patient per month at the plan''s current rate. Part of Total Revenue but not invoiced, so tracked in its own fact.'),
     ('revenue_per_patient',        'Revenue per Patient',                'revenue',    'currency', 'Average revenue generated per active patient',                            1, 1, 1, 13, 'above', 'rate',
         'Total revenue in the period divided by the number of active patients — the average value each patient relationship produces. Lets you compare productivity independently of how big the patient base is.'),
     ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',
@@ -156,6 +158,7 @@ UPDATE Config.Metric_Definitions SET Sample_Value = CASE Metric_Key
     WHEN 'total_revenue' THEN '£600,000'
     WHEN 'nhs_revenue' THEN '£150,000'
     WHEN 'private_revenue' THEN '£450,000'
+    WHEN 'plan_capitation_revenue' THEN '£120,000'
     WHEN 'revenue_per_patient' THEN '£220'
     WHEN 'revenue_per_clinical_hour' THEN '£160'
     WHEN 'revenue_per_dentist_hour' THEN '£220'
@@ -224,7 +227,7 @@ UPDATE Config.Metric_Definitions SET Card_Label = CASE Metric_Key
     ELSE Card_Label END;
 GO
 UPDATE Config.Metric_Definitions SET FTE_Scaled = CASE WHEN Metric_Key IN (
-        'total_revenue','nhs_revenue','private_revenue',
+        'total_revenue','nhs_revenue','private_revenue','plan_capitation_revenue',
         'open_courses','open_courses_without_appt','open_courses_without_appt_value','open_courses_value'
     ) THEN 1 ELSE 0 END;
 GO
