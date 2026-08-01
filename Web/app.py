@@ -224,18 +224,29 @@ def _fabric_conn(autocommit=False):
 
 def _appdb_conn(autocommit=False):
     """Connection to the AppDB Fabric SQL Database (target-model Input tables). Same SP token as the
-    warehouse; the SP/managed identity must be granted a user in AppDB (see AppDB/README.md)."""
-    token        = _fabric_access_token()
-    token_bytes  = token.encode('utf-16-le')
-    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+    warehouse; the SP/managed identity must be granted a user in AppDB (see AppDB/README.md).
+    The AppDB (Fabric SQL DB) can PAUSE when idle -- the first connection triggers a resume that may
+    time out -- so use a longer connect timeout and retry a couple of times to ride out the wake-up
+    rather than instantly 500ing the request."""
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={APPDB_SERVER},1433;"
         f"Database={APPDB_DB};"
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
+        f"Connection Timeout=30;"
     )
-    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
+    last = None
+    for attempt in range(3):
+        token_bytes  = _fabric_access_token().encode('utf-16-le')
+        token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+        try:
+            return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
+        except pyodbc.Error as e:
+            last = e
+            if attempt < 2:
+                time.sleep(5)
+    raise last
 
 # Is the Fabric capacity up? When it's PAUSED (to save cost pre-revenue) the warehouse is
 # unreachable and PBI embeds fail, so we show a holding page rather than a broken app. Cached
@@ -505,14 +516,20 @@ def filters():
         roles = [r[0] for r in cur.fetchall()]
         # Period options = the tenant's date groupings (Last 3 Months, Last 12 Months, then the practice
         # FYs cutover..current). Per-tenant + FYyy labels -> driven by the warehouse, not hardcoded.
-        cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({placeholders})", tids)
-        _pv = [r[0] for r in cur.fetchall()]
-        def _prank(v):
-            if v == 'Last 3 Months':  return (0, 0)
-            if v == 'Last 12 Months': return (1, 0)
-            yy = (v or '')[2:]                          # 'FY26' -> '26'; FYyy newest first
-            return (2, -(int(yy) if yy.isdigit() else 0))
-        periods = sorted(_pv, key=_prank)
+        # Resilient: a warehouse not yet on the tenant-FY grouping (no Tenant_ID column) must NOT break
+        # the whole filter payload -> fall back to [] and the app keeps its static period options.
+        periods = []
+        try:
+            cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({placeholders})", tids)
+            _pv = [r[0] for r in cur.fetchall()]
+            def _prank(v):
+                if v == 'Last 3 Months':  return (0, 0)
+                if v == 'Last 12 Months': return (1, 0)
+                yy = (v or '')[2:]                      # 'FY26' -> '26'; FYyy newest first
+                return (2, -(int(yy) if yy.isdigit() else 0))
+            periods = sorted(_pv, key=_prank)
+        except Exception:
+            periods = []
         conn.close()
         return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
 
@@ -1950,15 +1967,20 @@ def get_target_grid():
         # Year picker = the practice FYs from the cutover to the current FY (same as the app's period
         # FYs, from Gold.Dim_Date_Grouping) PLUS next year, so targets can be set historically (so
         # prior-year reports have targets) and for next year. FY label year = 2000 + the FYyy digits.
+        # Resilient: a warehouse not yet on the tenant-FY grouping (no Tenant_ID column) falls back to
+        # an empty range + the existing Apr-Mar default, so the Targets screen never 500s.
         fy_options = []
         if tids:
             _ph = ','.join(['?'] * len(tids))
-            cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
-            _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
-            if _yrs:
-                fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
-        if not fy:
-            fy = (max(fy_options) - 1) if fy_options else fy       # current practice FY = newest option minus the +1
+            try:
+                cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
+                _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
+                if _yrs:
+                    fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
+            except Exception:
+                fy_options = []
+        if fy_options and not request.args.get('fy'):
+            fy = max(fy_options) - 1       # default to the practice current FY (overrides the Apr-Mar guess)
 
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
