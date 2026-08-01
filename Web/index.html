@@ -2153,15 +2153,17 @@
     function _refreshCopyEnabled() {
         // Copy is allowed only onto a BLANK year; the button also needs a source year chosen, so it's
         // only ever clickable when a copy will actually happen (no silent no-op / no guard surprise).
-        const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '');
+        // NHS metrics live on the Apr-Mar year, not the practice FY -- ignore them for the blank/copy
+        // logic so a year holding only an NHS target still counts as blank for practice targets.
+        const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '' && !(i.dataset.metric || '').startsWith('nhs'));
         const src = document.getElementById('targets-copy-fy').value;
         document.getElementById('targets-copy-fy').disabled = anyVal;
         document.getElementById('targets-copy-btn').disabled = anyVal || !src;
         document.getElementById('targets-clear-btn').disabled = !anyVal;   // nothing to clear on a blank year
     }
     function clearTargetGrid() {
-        const inputs = [...document.querySelectorAll('#targets-grid input')];
-        if (!inputs.some(i => i.value !== '')) return;   // already blank
+        const inputs = [...document.querySelectorAll('#targets-grid input')].filter(i => !(i.dataset.metric || '').startsWith('nhs'));
+        if (!inputs.some(i => i.value !== '')) return;   // already blank (ignoring NHS, which lives on the Apr-Mar year)
         const fyLbl = _fyLabel(+document.getElementById('targets-fy').value);
         if (!confirm('Clear ALL targets for ' + fyLbl + '?\n\nThis empties every box for the year. '
             + 'Once you Save, the cleared targets cannot be recovered — you would have to re-enter or copy them again.')) return;
@@ -2210,7 +2212,7 @@
         const src = +document.getElementById('targets-copy-fy').value;
         if (!src) return;
         const msg = document.getElementById('targets-msg');
-        if ([...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '')) {
+        if ([...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '' && !(i.dataset.metric || '').startsWith('nhs'))) {
             msg.style.color = '#b3261e'; msg.textContent = 'Copy only onto a blank year.'; return;
         }
         try {
@@ -2218,7 +2220,7 @@
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json(); const t = (data.tenants || [])[0]; if (!t) return;
             document.querySelectorAll('#targets-grid input').forEach(i => {
-                if (i.disabled) return;
+                if (i.disabled || (i.dataset.metric || '').startsWith('nhs')) return;   // don't copy NHS (Apr-Mar) targets across practice FYs
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';
             });
