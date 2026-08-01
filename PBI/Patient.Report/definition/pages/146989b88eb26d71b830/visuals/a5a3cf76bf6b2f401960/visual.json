@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "ecd102b2cc2d7f949ada",
+  "name": "a5a3cf76bf6b2f401960",
   "position": {
-    "x": 0,
+    "x": 639.93174061433444,
     "y": 80.375426621160415,
-    "z": 0,
+    "z": 10,
     "height": 423.89078498293514,
     "width": 639.93174061433444,
-    "tabOrder": 0
+    "tabOrder": 10
   },
   "visual": {
     "visualType": "columnChart",
@@ -32,42 +32,6 @@
             }
           ]
         },
-        "Series": {
-          "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Acquisition Sources"
-                    }
-                  },
-                  "Property": "Name"
-                }
-              },
-              "queryRef": "List Acquisition Sources.Name",
-              "nativeQueryRef": "Name"
-            }
-          ]
-        },
-        "Tooltips": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
-                  "Property": "Lifetime Value"
-                }
-              },
-              "queryRef": "List Patients.Lifetime Value",
-              "nativeQueryRef": "Lifetime Value"
-            }
-          ]
-        },
         "Y": {
           "projections": [
             {
@@ -78,11 +42,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "New Patients"
+                  "Property": "Avg First Plan Value"
                 }
               },
-              "queryRef": "_Measures.New Patients",
-              "nativeQueryRef": "New Patients"
+              "queryRef": "_Measures.Avg First Plan Value",
+              "nativeQueryRef": "Avg First Plan Value"
             }
           ]
         }
@@ -285,7 +249,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'New Patients'"
+                  "Value": "'Avg First Plan Value'"
                 }
               }
             },
@@ -336,7 +300,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "525172a258e94ee0c02e",
+        "name": "2be59b7051d350011d7d",
         "field": {
           "Column": {
             "Expression": {
@@ -350,35 +314,7 @@
         "type": "Categorical"
       },
       {
-        "name": "3a5262bd96031e8aac59",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Acquisition Sources"
-              }
-            },
-            "Property": "Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "dae3d81d390967e117c5",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Lifetime Value"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "c9856a35b9801ec38a55",
+        "name": "9f0bb5b8803ea13e377e",
         "field": {
           "Measure": {
             "Expression": {
@@ -386,7 +322,7 @@
                 "Entity": "_Measures"
               }
             },
-            "Property": "New Patients"
+            "Property": "Avg First Plan Value"
           }
         },
         "type": "Advanced"

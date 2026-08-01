@@ -2,8 +2,8 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "06737ef0e34891dddb0b",
   "position": {
-    "x": 668.08873720136512,
-    "y": 80.375,
+    "x": 0,
+    "y": 80.375426621160415,
     "z": 5000,
     "height": 423.89078498293514,
     "width": 611.77474402730377,
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Acquisition Sources"
+                      "Entity": "List Payment Plans"
                     }
                   },
-                  "Property": "Name"
+                  "Property": "Payment Plan Name"
                 }
               },
-              "queryRef": "List Acquisition Sources.Name",
-              "nativeQueryRef": "Name",
+              "queryRef": "List Payment Plans.Payment Plan Name",
+              "nativeQueryRef": "Payment Plan Name",
               "active": true
             }
           ]
@@ -39,14 +39,14 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Lifetime Invoice Items"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Lifetime Price"
+                  "Property": "Revenue Per Diary Hour"
                 }
               },
-              "queryRef": "_Lifetime Invoice Items.Lifetime Price",
-              "nativeQueryRef": "Lifetime Price"
+              "queryRef": "_Measures.Revenue Per Diary Hour",
+              "nativeQueryRef": "Revenue Per Diary Hour"
             }
           ]
         }
@@ -58,10 +58,10 @@
               "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Lifetime Invoice Items"
+                    "Entity": "_Measures"
                   }
                 },
-                "Property": "Lifetime Price"
+                "Property": "Revenue Per Diary Hour"
               }
             },
             "direction": "Descending"
@@ -249,7 +249,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Lifetime Value'"
+                  "Value": "'Average Revenue Per Diary Hour'"
                 }
               }
             },
@@ -300,58 +300,34 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "81c1dbc5ca8e4444b8c2",
+        "name": "06a43d1da239e74ac807",
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Acquisition Sources"
+                "Entity": "List Payment Plans"
               }
             },
-            "Property": "Name"
+            "Property": "Payment Plan Name"
           }
         },
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "s",
-              "Entity": "List Acquisition Sources",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "Not": {
-                  "Expression": {
-                    "Comparison": {
-                      "ComparisonKind": 0,
-                      "Left": {
-                        "Column": {
-                          "Expression": {
-                            "SourceRef": {
-                              "Source": "s"
-                            }
-                          },
-                          "Property": "Name"
-                        }
-                      },
-                      "Right": {
-                        "Literal": {
-                          "Value": "null"
-                        }
-                      }
-                    }
-                  }
-                }
+        "type": "Categorical"
+      },
+      {
+        "name": "95ea1a5962747ec5e2ca",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
               }
-            }
-          ]
+            },
+            "Property": "Revenue Per Diary Hour"
+          }
         },
-        "ordinal": 0
+        "type": "Advanced"
       }
     ]
-  }
+  },
+  "isHidden": true
 }
