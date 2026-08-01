@@ -224,18 +224,29 @@ def _fabric_conn(autocommit=False):
 
 def _appdb_conn(autocommit=False):
     """Connection to the AppDB Fabric SQL Database (target-model Input tables). Same SP token as the
-    warehouse; the SP/managed identity must be granted a user in AppDB (see AppDB/README.md)."""
-    token        = _fabric_access_token()
-    token_bytes  = token.encode('utf-16-le')
-    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+    warehouse; the SP/managed identity must be granted a user in AppDB (see AppDB/README.md).
+    The AppDB (Fabric SQL DB) can PAUSE when idle -- the first connection triggers a resume that may
+    time out -- so use a longer connect timeout and retry a couple of times to ride out the wake-up
+    rather than instantly 500ing the request."""
     conn_str = (
         f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={APPDB_SERVER},1433;"
         f"Database={APPDB_DB};"
         f"Encrypt=yes;"
         f"TrustServerCertificate=no;"
+        f"Connection Timeout=30;"
     )
-    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
+    last = None
+    for attempt in range(3):
+        token_bytes  = _fabric_access_token().encode('utf-16-le')
+        token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+        try:
+            return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, autocommit=autocommit)
+        except pyodbc.Error as e:
+            last = e
+            if attempt < 2:
+                time.sleep(5)
+    raise last
 
 # Is the Fabric capacity up? When it's PAUSED (to save cost pre-revenue) the warehouse is
 # unreachable and PBI embeds fail, so we show a holding page rather than a broken app. Cached
