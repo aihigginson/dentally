@@ -1,0 +1,23 @@
+# =====================================================================
+# Release V143 -- Fact_Lapsed_Patients + fk_Payment_Plan on Fact_New_Patients
+# =====================================================================
+# Gold.Fact_Lapsed_Patients: one row per lapsed patient (Lapsed_Type set), dated by the lapse date so a
+# patient-level lapsed report slices natively by Period/Site/Practitioner/Payment Plan (star-schema
+# alternative to date-relating the patient dimension). GOLD_AGG (reads Dim_Patients + dims); PBI view
+# _Lapsed Patients. Also adds fk_Payment_Plan to Fact_New_Patients (patient's current plan) so the
+# Clinical "1st Appointments" lens can slice Avg First Plan Value / retention by Payment Plan. Both
+# facts are full-rebuild DROP/CREATE.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V143__lapsed_patients_fact.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Lapsed_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Lapsed_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_New_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_New_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_New_Patients @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

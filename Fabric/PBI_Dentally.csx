@@ -290,6 +290,19 @@ add("Average Plan Value",
 )",
     "£#,##0");
 
+// Avg First Plan Value + New Patient Retention -- display-only Clinical metrics off Gold.Fact_New_Patients
+// ('_New Patients'). Flags are INT (0/1) so both are a plain SUM. No target/BG (Has_Target = 0).
+//   First Plan Value = plan(s) created at the patient's FIRST appointment (via Treatment_Appointments);
+//   Has First Plan   = 1 when a plan existed there  -> average is over new patients who GOT a plan.
+//   Retained         = 1 when the patient returned for a second exam ever (Last Exam > First Exam).
+add("Avg First Plan Value",
+    @"DIVIDE(SUM('_New Patients'[First Plan Value]), SUM('_New Patients'[Has First Plan]))",
+    "£#,##0");
+
+add("New Patient Retention",
+    @"DIVIDE(SUM('_New Patients'[Retained]), SUM('_New Patients'[New Patient Count]))",
+    "0.0%");
+
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
 // acceptance_rate           → above + percent  → absolute pp
 // open_courses              → below + count    → relative %  (lower is better)
@@ -1333,21 +1346,12 @@ RETURN CALCULATE(
 )",
     "#,##0");
 
+// Net Patient Growth = New - Lapsed, using the SAME measures the cards show so the three reconcile.
+// (Previously recomputed lapsed inline with a 24-month-exam-clock rule that pre-dated the V050
+// migration of Lapsed Patients to _Metric Actuals -- that gave 517 vs the card's 1,470 and broke the
+// New - Lapsed identity. Lapsed Patients = deactivated + 730-day-silent is the canonical definition.)
 add("Net Patient Growth",
-    @"VAR period_start = MIN('List Date'[Full Date])
-VAR period_end   = MAX('List Date'[Full Date])
-VAR lapsed_flow  =
-    COUNTROWS(
-        FILTER(
-            ALL('List Patients'),
-            NOT ISBLANK('List Patients'[Last Exam Date])
-            && EDATE('List Patients'[Last Exam Date], 24) >= period_start
-            && EDATE('List Patients'[Last Exam Date], 24) <= period_end
-            && NOT ISBLANK('List Patients'[First Appointment Date])
-            && 'List Patients'[First Appointment Date] < period_start
-        )
-    )
-RETURN [New Patients] - lapsed_flow",
+    @"[New Patients] - [Lapsed Patients]",
     "#,##0");
 
 // Recall model (two sources): Dentist/Hygiene Retention Outlook (FORWARD, patient recall dates) and
@@ -1757,6 +1761,22 @@ SUMMARIZE(
 VAR total_worked = SUMX(by_prac_day, [WH])
 VAR dentist_rev  = CALCULATE([Total Revenue], KEEPFILTERS('List Practitioners'[Role] = ""dentist""))
 RETURN DIVIDE(dentist_rev, total_worked)",
+    "£#,##0");
+
+// Revenue Per Diary Hour -- actual-only, drillable by Patient / Practitioner / Day. Diary Hours =
+// COMPLETED appointment duration only (future Confirmed/Pending excluded: their block durations are
+// anomalous and generated no revenue). [Total Revenue] already slices by practitioner/patient/date,
+// and '_Appointments' relates to List Patients / List Practitioners / List Date -- so the ratio drills
+// on all three. No target (Has_Target = 0). NOTE: hours are dated by appointment day, revenue by
+// invoice day -- they align at the practice/period level; a single-Day drill assumes same-day billing.
+add("Diary Hours",
+    @"DIVIDE(
+    CALCULATE(SUM('_Appointments'[Duration Mins]), '_Appointments'[Is Completed] = TRUE()),
+    60)",
+    "#,##0.0");
+
+add("Revenue Per Diary Hour",
+    @"DIVIDE([Total Revenue], [Diary Hours])",
     "£#,##0");
 
 add("DNA Revenue Lost",

@@ -1,0 +1,23 @@
+# =====================================================================
+# Release V140 -- New-patient Clinical metrics: Avg First Plan Value + New Patient Retention
+# =====================================================================
+# Two display-only Clinical metrics on a new patient-grain fact Gold.Fact_New_Patients (one row per
+# new patient, cohort-dated by the first appointment):
+#   avg_first_plan_value  -- avg Private Treatment Value of the plan(s) created at the first appointment
+#                            (linked via Fact_Treatment_Appointments), over new patients who got a plan.
+#   new_patient_retention -- % of new patients who returned for a SECOND exam ever (Last>First Exam Date).
+# GOLD_AGG (reads Dim_Patients/Dim_Date/Fact_Appointments/Fact_Treatment_Appointments/Fact_Treatment_Plans).
+# Both Has_Target = 0 (display-only, not in the Targets grid). Model: add the '_New Patients' table +
+# active rel to List Date (fk_Date_First_Appointment) + List Practitioners + tenant RLS, then run the csx.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V140__new_patient_clinical_metrics.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_New_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_New_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_New_Patients @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
