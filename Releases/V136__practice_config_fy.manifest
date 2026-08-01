@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V136 -- Practice config (FY start month) foundation
+# =====================================================================
+# Foundation for the tenant-specific financial year: WH Input.Practice_Config (per-tenant
+# FY_Start_Month) + a copy block in the AppDB->WH sync. Nothing consumes it yet -- the heavy cutover
+# (tenant-specific Dim_Date_Grouping, vw_Dim_Date, Fact_Daily_Targets, FYyy naming, _fyLabel, and the
+# Input.Targets FY+1 migration) lands together as a later atomic release. NHS FY (Apr-Mar) untouched.
+# Design: .claude/plans/tenant-financial-year.md
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V136__practice_config_fy.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Input.Practice_Config.Table.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Meta.usp_Sync_Input_From_AppDB @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST
