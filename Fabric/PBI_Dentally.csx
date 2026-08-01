@@ -1793,6 +1793,7 @@ add("Discounts",
 kpi("Total Revenue",             "£#,##0", tCumFTE("total_revenue"),            vPct("Total Revenue"),             bgHigherRefF("Total Revenue", "total_revenue"));
 kpi("NHS Revenue",               "£#,##0", tCumFTE("nhs_revenue"),              vPct("NHS Revenue"),               bgHigherRefF("NHS Revenue", "nhs_revenue"));
 kpi("Private Revenue",           "£#,##0", tCumFTE("private_revenue"),          vPct("Private Revenue"),           bgHigherRefF("Private Revenue", "private_revenue"));
+kpi("Plan Capitation Revenue",   "£#,##0", tCumFTE("plan_capitation_revenue"),  vPct("Plan Capitation Revenue"),   bgHigherRefF("Plan Capitation Revenue", "plan_capitation_revenue"));
 kpi("Outstanding Invoices",      "£#,##0", tRate("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tRate("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tRate("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));
