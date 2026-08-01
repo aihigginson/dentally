@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Open Courses",
-  "name": "ccb8f0f314e1cf41ac72",
+  "displayName": "1st Appointments",
+  "name": "040254def63c304ef18f",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -87,7 +87,10 @@
           "16c628af05cc9aac9ee2": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "d1bdea034a6ca3100284": {
@@ -120,46 +123,46 @@
           "35cc7bbf3ee1a9a11d8b": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "f5531afe5d96eb287460": {
             "singleVisual": {
               "visualType": "clusteredColumnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "487ee07330dfcf70def5": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "21442f768b77f9380245": {
             "singleVisual": {
               "visualType": "clusteredBarChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           },
           "96f10e50a87f38b8d196": {
             "singleVisual": {
               "visualType": "clusteredBarChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           },
           "778515253097092d7201": {
             "singleVisual": {
               "visualType": "slicer",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           }
         }
