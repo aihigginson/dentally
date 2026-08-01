@@ -42,6 +42,23 @@ double-increment) -- gate on a marker or run exactly once per env.
 - Practice measures using `'List Date'[Financial Year]` become practice-FY automatically (view swap).
 - The ~4 NHS FY-YTD measures switch to `[NHS Financial Year]`.
 
+## DECISION 2026-08-01: OUTCOME B (PBI won't accept the per-tenant view as List Date)
+- `vw_Dim_Date` = BACK-END HELPER ONLY (grouping SP + Fact_Daily_Targets read it for the practice FY).
+  MUST NOT become PBI.[List Date] -> ensure Meta.usp_Create_Gold_Views EXCLUDES it (or it supersedes).
+- `List Date` stays = Dim_Date (Apr-Mar; NHS). The practice FY reaches the model ONLY via the RLS'd,
+  tenant-specific `Dim_Date_Grouping` (Period slicer). Measures get the practice FY **from the selected
+  Period** (grouping) -> drop the `'List Date'[Financial Year] = selectedFY` filter; sum Daily_Targets /
+  actuals over the current date context (the period's dates). Relies on a Period being selected.
+
+## Progress (this build)
+- DONE + deployed: WH Input.Practice_Config + sync (V136); tenant 100 set to Jan (FY_Start_Month=1).
+- DONE (committed, undeployed): Gold.vw_Dim_Date (math verified); tenant-specific Dim_Date_Grouping SP.
+- TODO before the atomic manifest: (a) guard vw_Dim_Date out of Create_Gold_Views; (b) Dim_Date_Grouping
+  Table.sql +Tenant_ID; (c) Fact_Daily_Targets on practice-FY working days (read vw_Dim_Date); (d) FYyy
+  naming sweep; (e) app _fyLabel -> 'FY'+2-digit + /api/target-grid returns fy_start_month; (f) csx: drop
+  [Financial Year] filter from the target/FY-YTD measures (period-based); (g) run FY+1 migration on dev;
+  (h) one manifest -> deploy dev -> test; model: RLS on List Date Grouping by Tenant_ID (Desktop).
+
 ## Open / verify in Desktop
-- The `List Date` -> `vw_Dim_Date` relationship uniqueness under RLS (A vs B).
+- RLS on `List Date Grouping` by Tenant_ID; the period-based target measures behave with a Period selected.
 - Idempotency of the target migration (run once per env).
