@@ -1,0 +1,26 @@
+# =====================================================================
+# Release V135 -- Plan capitation: role attribution + target metric (Phase 3)
+# =====================================================================
+# Makes Plan Capitation Revenue a target metric "just like Total Revenue":
+#  - Fact_Plan_Capitation gains fk_Practitioner = the patient's assigned dentist
+#    (Dim_Patients.Dentist_Practitioner_ID) so the actual splits by role.
+#  - Registered in Config.Metric_Definitions (plan_capitation_revenue: currency, cumulative,
+#    supports site + practitioner, FTE-scaled) -> Practice + Role columns in the Targets grid.
+#  - Materialised into Fact_Metric_Actuals at global/site/practitioner grain (monthly), so the
+#    target-vs-actual card prorates correctly for any period (cumulative, like Total Revenue).
+# Rates already synced (V134). Rebuilds the fact, then metric-actuals, then regenerates the PBI view.
+# Regenerated Process_Dependency adds the GOLD_DIM_PRACTITIONERS edge + the agg->agg edge to
+# Fact_Metric_Actuals. Enter the annual per-role targets on the Targets screen; run the csx for the card.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V135__plan_capitation_role_target.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Gold.Fact_Plan_Capitation.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Plan_Capitation.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Plan_Capitation @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

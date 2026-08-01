@@ -1677,8 +1677,15 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
+// Membership (capitation) revenue is a monthly direct debit, NOT invoiced -- plan patients have no
+// clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
+// month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
+add("Plan Capitation Revenue",
+    @"SUM('_Plan Capitation'[Monthly Value])",
+    "£#,##0");
+
 add("Total Revenue",
-    @"SUM('_Invoice Items'[Total Price])",
+    @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
     "£#,##0");
 
 // Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
@@ -1786,6 +1793,7 @@ add("Discounts",
 kpi("Total Revenue",             "£#,##0", tCumFTE("total_revenue"),            vPct("Total Revenue"),             bgHigherRefF("Total Revenue", "total_revenue"));
 kpi("NHS Revenue",               "£#,##0", tCumFTE("nhs_revenue"),              vPct("NHS Revenue"),               bgHigherRefF("NHS Revenue", "nhs_revenue"));
 kpi("Private Revenue",           "£#,##0", tCumFTE("private_revenue"),          vPct("Private Revenue"),           bgHigherRefF("Private Revenue", "private_revenue"));
+kpi("Plan Capitation Revenue",   "£#,##0", tCumFTE("plan_capitation_revenue"),  vPct("Plan Capitation Revenue"),   bgHigherRefF("Plan Capitation Revenue", "plan_capitation_revenue"));
 kpi("Outstanding Invoices",      "£#,##0", tRate("outstanding_invoices"),    vPctGrey("Outstanding Invoices"),  bgLowerEffF("Outstanding Invoices", "outstanding_invoices", true));
 kpi("Revenue Per Patient",       "£#,##0", tRate("revenue_per_patient"),        vPct("Revenue Per Patient"),       bgHigherEffF("Revenue Per Patient", "revenue_per_patient"));
 kpi("Revenue Per Clinical Hour", "£#,##0", tRate("revenue_per_clinical_hour"),  vPct("Revenue Per Clinical Hour"), bgHigherEffF("Revenue Per Clinical Hour", "revenue_per_clinical_hour"));

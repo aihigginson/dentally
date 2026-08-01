@@ -6,6 +6,8 @@
 --  History          :
 --    *01     07/05/2026  AIH  Initial Release
 --    *02     11/06/2026  AIH  Add Next_7_Days_Available_Mins / Next_7_Days_Booked_Mins
+--    *04     31/07/2026  AIH  Days_Until_Next_30/60 counted in SESSION days (practitioner's own
+--                             working days) not calendar days; #free now session days only.
 --    *03     30/07/2026  AIH  Fold in Day Book action counts (Open Plans / Cancellations /
 --                             DNAs / Recalls to action + Days Until 30-min text), split by
 --                             site. Spine now = home site UNION any site with outstanding
@@ -15,8 +17,9 @@
 --    Grain  : Site × Practitioner × Tenant  (current forward-looking diary availability + actions)
 --    Pattern: Full DELETE + INSERT each run.
 --    pk      generated via ROW_NUMBER() — no IDENTITY column.
---    Days_Until_Next_30_Mins    : days from today until the practitioner's first future diary
---                                 day where (Available_Clinical_Mins - booked appointment mins) >= 30.
+--    Days_Until_Next_30_Mins    : the practitioner's SESSION-day count until the first future
+--                                 diary day where (Available_Clinical_Mins - booked appointment
+--                                 mins) >= 30 -- i.e. their Nth working day, not calendar days.
 --    Days_Until_Next_1_Hour_Free: same threshold at 60 minutes.
 --    Availability (Days_Until_*, Next_7_Days_*) belongs to the practitioner's diary, so it is
 --    attached to the HOME-site row only (NULL on other-site rows) to avoid double-counting.
@@ -84,20 +87,29 @@ BEGIN
                             AND b.fk_Date         = fpd.fk_Date_Day
                             AND b.Tenant_ID       = fpd.Tenant_ID
         WHERE fpd.Unavailable = 0
+          AND ISNULL(fpd.Available_Clinical_Mins, 0) > 0   -- session days only (has clinical time)
           AND dd.Full_Date > @Today;
 
-        -- ── Earliest free slot per practitioner ──────────────────────────────
+        -- ── Earliest free slot per practitioner (counted in SESSION days) ─────
+        -- "Days Until Next 30/60 Free" = the position of the first future session day
+        -- with >= the threshold of free clinical time, counting only the days the
+        -- practitioner actually has sessions (diary rows) -- NOT calendar days. So a
+        -- 2-day-a-week practitioner booked for weeks reads e.g. 12 (their 12th session)
+        -- rather than 52 calendar days.
         SELECT
-            f.fk_Practitioner,
-            f.Tenant_ID,
-            MIN(CASE WHEN f.Free_Mins >= 30
-                     THEN DATEDIFF(DAY, @Today, dd.Full_Date) END) AS Days_Until_Next_30_Mins,
-            MIN(CASE WHEN f.Free_Mins >= 60
-                     THEN DATEDIFF(DAY, @Today, dd.Full_Date) END) AS Days_Until_Next_1_Hour_Free
+            r.fk_Practitioner,
+            r.Tenant_ID,
+            MIN(CASE WHEN r.Free_Mins >= 30 THEN r.session_rank END) AS Days_Until_Next_30_Mins,
+            MIN(CASE WHEN r.Free_Mins >= 60 THEN r.session_rank END) AS Days_Until_Next_1_Hour_Free
         INTO #slots
-        FROM #free f
-        JOIN Gold.Dim_Date dd ON dd.pk_Date = f.fk_Date
-        GROUP BY f.fk_Practitioner, f.Tenant_ID;
+        FROM (
+            SELECT f.fk_Practitioner, f.Tenant_ID, f.Free_Mins,
+                   ROW_NUMBER() OVER (PARTITION BY f.fk_Practitioner, f.Tenant_ID
+                                      ORDER BY dd.Full_Date) AS session_rank
+            FROM #free f
+            JOIN Gold.Dim_Date dd ON dd.pk_Date = f.fk_Date
+        ) r
+        GROUP BY r.fk_Practitioner, r.Tenant_ID;
 
         -- ── Next-7-day available and booked minutes per practitioner ────────
         -- Includes today; sums diary availability and non-cancelled booked mins.

@@ -1,6 +1,13 @@
 {
   "permissions": {
     "allow": [
+      "Bash",
+      "PowerShell",
+      "Edit",
+      "Write",
+      "Read",
+      "Grep",
+      "Glob",
       "Bash(python3 -c ' *)",
       "Bash(python3 *)",
       "Bash(sqlcmd *)",

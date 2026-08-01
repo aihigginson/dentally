@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V133 -- Billing.Profile_Pricing date-ranged columns to PROD
+# =====================================================================
+# PROD still had the LEGACY Billing.Profile_Pricing (Year_Month only) -- the date-ranged
+# Valid_From/Valid_To columns (commit ad13618) were only ever folded into the Table.sql file and
+# relied on re-running V101, which is already marked applied on prod so the ALTER never ran there.
+# Result: the Subscriptions form 500s ("Invalid column name 'Valid_From'" -> "Could not load the
+# team"). This re-runs the idempotent table script (adds the two columns + backfills Valid_From from
+# Year_Month) and reseeds the date-ranged prices. Idempotent; safe to re-apply.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V133__billing_pricing_date_ranged.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Profile_Pricing.Table.sql
+DEPLOY   Fabric\Billing.Profile_Pricing.Data.sql
+
+TEST

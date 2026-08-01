@@ -62,14 +62,30 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Recalls"
                     }
                   },
-                  "Property": "Total Paid"
+                  "Property": "Due Date"
                 }
               },
-              "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Total Paid"
+              "queryRef": "_Recalls.Due Date",
+              "nativeQueryRef": "Due Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "First Reminder Sent Date"
+                }
+              },
+              "queryRef": "_Recalls.First Reminder Sent Date",
+              "nativeQueryRef": "First Reminder Sent Date",
+              "format": "dd/MM/yyyy"
             },
             {
               "field": {
@@ -104,30 +120,15 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Recalls"
+                      "Entity": "List Patients"
                     }
                   },
-                  "Property": "Due Date"
+                  "Property": "Total Paid"
                 }
               },
-              "queryRef": "_Recalls.Due Date",
-              "nativeQueryRef": "Due Date",
-              "format": "dd/MM/yyyy"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Recalls"
-                    }
-                  },
-                  "Property": "First Reminder Sent Date"
-                }
-              },
-              "queryRef": "_Recalls.First Reminder Sent Date",
-              "nativeQueryRef": "First Reminder Sent Date",
-              "format": "dd/MM/yyyy"
+              "queryRef": "List Patients.Total Paid",
+              "nativeQueryRef": "Lifetime Value",
+              "displayName": "Lifetime Value"
             }
           ]
         }
@@ -137,6 +138,22 @@
       "columnHeaders": [
         {
           "properties": {}
+        }
+      ],
+      "columnWidth": [
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "103.15702005673637D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Recalls.First Reminder Sent Date"
+          }
         }
       ]
     },
@@ -282,6 +299,118 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "4fca70004e8aeab53cda",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "7803fbf126016d2b074c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Recall Type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "545ac33d6ebb4218b4b4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Recall Status"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "fdd85b30850c02e0e90a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2d9da3f139cc583b0448",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "a05f86232e54cb1d8762",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Due Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e49d3e2cb822d791e510",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "First Reminder Sent Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2823d80a10230b0e1c85",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Total Paid"
+          }
+        },
+        "type": "Advanced"
       }
     ],
     "filterSortOrder": "Custom"

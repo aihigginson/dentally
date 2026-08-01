@@ -110,6 +110,39 @@ CREATE TABLE Input.Practitioner_Pay (
 );
 GO
 
+-- Per-tenant practice configuration (general owner-set settings). FY_Start_Month = the calendar
+-- month (1-12) the practice's FINANCIAL YEAR starts; default 4 (April, UK standard). Drives the FY
+-- boundaries + labels used by targets and year-to-date figures. Jan (1) = a calendar-year FY
+-- (label "FYyy", not "FYyy-yy+1").
+IF OBJECT_ID('Input.Practice_Config') IS NULL
+CREATE TABLE Input.Practice_Config (
+    Tenant_ID        INT           NOT NULL,
+    FY_Start_Month   TINYINT       NOT NULL CONSTRAINT DF_Practice_Config_FYSM DEFAULT 4,
+    Updated_At       DATETIME2(3)  NOT NULL CONSTRAINT DF_Practice_Config_UA DEFAULT SYSUTCDATETIME(),
+    Updated_By       VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Practice_Config PRIMARY KEY (Tenant_ID)
+);
+GO
+
+-- Per-plan monthly capitation fee, EFFECTIVE-DATED. Owner enters one open row per Denplan variant on
+-- the Plan Capitation screen; set an early Effective_From_Date to cover history. Reprice by adding a
+-- new row with a later Effective_From_Date. Fact_Plan_Capitation values each member-month at the row
+-- whose Effective_From_Date <= that month (latest wins); a month with no covering rate gets NO record.
+-- Is_Default = the ONE fallback plan whose rate values former members (their true old plan is
+-- unrecoverable from Dentally). One default per tenant.
+IF OBJECT_ID('Input.Plan_Capitation_Rate') IS NULL
+CREATE TABLE Input.Plan_Capitation_Rate (
+    Tenant_ID           INT           NOT NULL,
+    Payment_Plan_ID     BIGINT        NOT NULL,   -- Dentally payment plan id (business key)
+    Effective_From_Date DATE          NOT NULL,   -- rate applies from this month onward
+    Monthly_Value       DECIMAL(9,2)  NOT NULL,   -- per-patient monthly capitation fee for this plan
+    Is_Default          BIT           NOT NULL CONSTRAINT DF_Plan_Cap_Rate_Default DEFAULT 0,
+    Updated_At          DATETIME2(3)  NOT NULL CONSTRAINT DF_Plan_Cap_Rate_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By          VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Plan_Capitation_Rate PRIMARY KEY (Tenant_ID, Payment_Plan_ID, Effective_From_Date)
+);
+GO
+
 -- Per-tenant billing contact, set on the Subscriptions screen. Primary_Email = the billing owner /
 -- primary account (a staff login); Invoice_Email = where the PDF invoice goes (may be an external
 -- address, e.g. the practice's accountant -- not necessarily a Dentally user). The invoice mailer

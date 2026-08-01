@@ -521,9 +521,6 @@
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
-            <option value="FY 2026-27 (YTD)">FY 2026-27 (YTD)</option>
-            <option value="FY 2025-26">FY 2025-26</option>
-            <option value="FY 2024-25">FY 2024-25</option>
             <option value="Last 12 Months">Last 12 Months</option>
             <option value="Last 3 Months" selected>Last 3 Months</option>
         </select>
@@ -639,6 +636,7 @@
                 <button class="settings-tab" data-stab="roles">Roles</button>
                 <button class="settings-tab" data-stab="targets">Targets</button>
                 <button class="settings-tab" data-stab="variances">Variances</button>
+                <button class="settings-tab" data-stab="plans">Plan rates</button>
                 <button class="settings-tab" data-stab="team">Subscriptions</button>
                 <button class="settings-tab" data-stab="invoices">Invoices</button>
             </div>
@@ -649,6 +647,19 @@
                     <div class="defs-item-name">Connection <span class="defs-badge" id="xero-status-badge" style="display:none"></span></div>
                     <div class="defs-item-desc" id="xero-status-desc">Checking&hellip;</div>
                     <button id="xero-connect-btn" style="display:none;margin-top:12px;padding:8px 16px;border:none;border-radius:4px;background:#13b5ea;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Xero</button>
+                </div>
+                <div class="defs-group">Financial year</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">The month your practice financial year starts &mdash; used for targets and year-to-date figures. Most UK practices run April&ndash;March. (NHS UDA/UOA years always run April&ndash;March and are unaffected by this.)</div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+                        <label style="font-size:13px">First month
+                            <select id="fy-start-month" style="margin-left:6px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"></select>
+                        </label>
+                        <span id="fy-last-month" style="font-size:12px;color:#666"></span>
+                        <span id="fy-label-preview" style="font-size:12px;color:#0b3d5c;font-weight:600"></span>
+                        <button id="fy-save" class="settings-btn">Save</button>
+                        <span id="fy-msg" style="font-size:12px"></span>
+                    </div>
                 </div>
                 <div class="defs-group">Associate pay (% of production)</div>
                 <div class="defs-item">
@@ -707,6 +718,16 @@
                     <div id="variances-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="variances-save" class="settings-save" style="display:none">Save</button>
                     <span id="variances-msg" class="settings-msg"></span>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-plans">
+                <div class="defs-item">
+                    <div class="defs-item-desc">The monthly membership fee for each plan, <strong>over time</strong> &mdash; add a row for each fee change (a fee applies from its date until the next one). Make the earliest date early enough to cover historical months. Pick one plan as the <strong>default</strong> &mdash; it values lapsed members whose original plan Dentally no longer records. Leave a plan with no rate to exclude it.</div>
+                    <div class="settings-save-bar"><button id="plans-save-top" class="settings-save" style="margin-top:0">Save</button></div>
+                    <div id="plans-list" style="margin-top:10px">Loading&hellip;</div>
+                    <button id="plans-save" class="settings-save" style="display:none">Save</button>
+                    <span id="plans-msg" class="settings-msg"></span>
                 </div>
             </div>
 
@@ -1514,6 +1535,42 @@
         }
     }
 
+    // Financial year (practice FY start month) -------------------------------
+    const _FY_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    function _fyPopulate() {
+        const sel = document.getElementById('fy-start-month');
+        if (!sel.options.length) sel.innerHTML = _FY_MONTHS.map((m,i) => '<option value="' + (i+1) + '">' + m + '</option>').join('');
+    }
+    function _updateFyDisplay() {
+        const m = +document.getElementById('fy-start-month').value;      // 1-12
+        const lastM = ((m + 10) % 12) + 1;                              // the month before the start month
+        document.getElementById('fy-last-month').textContent = '→ ends ' + _FY_MONTHS[lastM - 1];
+        const now = new Date();
+        const startYear = ((now.getMonth() + 1) >= m) ? now.getFullYear() : now.getFullYear() - 1;
+        const yy = String(startYear).slice(2);
+        // Jan start = a calendar-year FY -> single-year label "FYyy"; otherwise "FYyy-yy+1".
+        const label = (m === 1) ? ('FY' + yy) : ('FY' + yy + '-' + String(startYear + 1).slice(2));
+        document.getElementById('fy-label-preview').textContent = 'e.g. ' + label;
+    }
+    async function loadFYConfig() {
+        _fyPopulate();
+        let m = 4;
+        try { const res = await authFetch('/api/practice-config'); if (res.ok) { const j = await res.json(); m = j.fy_start_month || 4; } } catch (e) {}
+        document.getElementById('fy-start-month').value = m;
+        _updateFyDisplay();
+    }
+    async function saveFYConfig() {
+        const msg = document.getElementById('fy-msg'), btn = document.getElementById('fy-save');
+        btn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/practice-config', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fy_start_month: +document.getElementById('fy-start-month').value }) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { btn.disabled = false; setTimeout(() => msg.textContent = '', 4000); }
+    }
+
     async function loadPractitionerPay() {
         const list = document.getElementById('assoc-pay-list');
         const saveBtn = document.getElementById('assoc-pay-save');
@@ -1579,6 +1636,8 @@
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
     { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
+    { const _fm = document.getElementById('fy-start-month'); if (_fm) _fm.addEventListener('change', _updateFyDisplay);
+      const _fs = document.getElementById('fy-save'); if (_fs) _fs.addEventListener('click', saveFYConfig); }
 
     // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
     let _varTenants = [];
@@ -1586,9 +1645,10 @@
     function showSettingsTab(name) {
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.stab === name));
         document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
-        if (name === 'finance')   { loadXeroStatus(); loadPractitionerPay(); }
+        if (name === 'finance')   { loadXeroStatus(); loadFYConfig(); loadPractitionerPay(); }
         else if (name === 'roles')     loadRoles();
         else if (name === 'variances') loadVariances();
+        else if (name === 'plans')     loadPlanRates();
         else if (name === 'targets')   loadTargetGrid();
         else if (name === 'team')      loadTeam();
         else if (name === 'invoices')  loadInvoices();
@@ -1600,7 +1660,7 @@
         if ((fmt || '').toLowerCase().includes('currency')) return '£' + Math.round(v).toLocaleString();
         return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
     }
-    function _fyLabel(y) { return 'FY ' + y + '-' + String(y + 1).slice(2); }
+    function _fyLabel(y) { return 'FY' + String(y).slice(2); }   // stored FY is the label/end year -> FYyy
     function _sampleVal(m) {
         if (m.sample) return 'e.g. ' + m.sample;      // per-metric example from Config.Metric_Definitions
         const f = (m.format_type || '').toLowerCase();
@@ -1628,7 +1688,7 @@
     let _dirty = false;
     const _SAVE_BTN_IDS = ['targets-save','targets-save-top','roles-save','roles-save-top',
                            'variances-save','variances-save-top','assoc-pay-save','assoc-pay-save-top',
-                           'team-save','team-save-top'];
+                           'plans-save','plans-save-top','team-save','team-save-top'];
     // Save buttons grey out while there are no unsaved changes (feedback that a save landed).
     function _syncSaveButtons() { _SAVE_BTN_IDS.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !_dirty; }); }
     function markDirty() { _dirty = true; _syncSaveButtons(); }
@@ -1903,6 +1963,79 @@
         finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
     }
 
+    // Plan capitation rates --------------------------------------------------
+    // Each plan holds a collection of (effective-from, monthly fee) rows -- the fee-over-time history.
+    function _planRateRowHtml(eff, val) {
+        return '<div class="plan-rate-row" style="display:flex;align-items:center;gap:6px;margin:3px 0">'
+            + '<input type="date" class="plan-eff" title="Fee applies from this month onward" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + (eff || '') + '">'
+            + '£<input type="number" min="0" step="0.01" class="plan-val" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (val != null && val !== '' ? val : '') + '">'
+            + '<button type="button" class="plan-rate-del" title="Remove this rate" style="border:none;background:none;color:#b3261e;cursor:pointer;font-size:16px;line-height:1;padding:0 4px">&times;</button>'
+            + '</div>';
+    }
+    async function loadPlanRates() {
+        const list = document.getElementById('plans-list'), saveBtn = document.getElementById('plans-save');
+        list.textContent = 'Loading…'; saveBtn.style.display = 'none';
+        try {
+            const res = await authFetch('/api/plan-capitation');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const { plans } = await res.json();
+            if (!plans || !plans.length) { list.textContent = 'No membership plans found.'; return; }
+            let html = '';
+            for (const p of plans) {
+                const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '' }];
+                html += '<div class="plan-block" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '" style="padding:10px 0;border-bottom:1px solid #eee">'
+                    + '<div style="display:flex;align-items:center;gap:14px">'
+                    + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name) + '</span>'
+                    + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + p.payment_plan_id + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
+                    + '<span style="color:#aaa;font-size:11px">' + p.current_patients + ' active</span>'
+                    + '</div>'
+                    + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value)).join('') + '</div>'
+                    + '<button type="button" class="plan-add-rate" style="margin-top:2px;border:none;background:none;color:#0b3d5c;cursor:pointer;font-size:12px;padding:0">+ add a rate change</button>'
+                    + '</div>';
+            }
+            list.innerHTML = html;
+            saveBtn.style.display = '';
+        } catch (e) { list.textContent = 'Could not load plans.'; }
+    }
+    async function savePlanRates() {
+        const saveBtn = document.getElementById('plans-save'), msg = document.getElementById('plans-msg');
+        const rates = [];
+        const def = document.querySelector('#plans-list .plan-def:checked');
+        const default_plan_id = def ? +def.value : null;
+        document.querySelectorAll('#plans-list .plan-block').forEach(block => {
+            const tid = +block.dataset.tid, pid = +block.dataset.pid;
+            block.querySelectorAll('.plan-rate-row').forEach(row => {
+                const eff = row.querySelector('.plan-eff').value;
+                const val = row.querySelector('.plan-val').value;
+                if (eff && val !== '') rates.push({ tenant_id: tid, payment_plan_id: pid, effective_from: eff, monthly_value: +val });
+            });
+        });
+        saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
+        try {
+            const res = await authFetch('/api/plan-capitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates, default_plan_id }) });
+            if (!res.ok) throw new Error('status ' + res.status);
+            clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
+        finally { _syncSaveButtons(); setTimeout(() => msg.textContent = '', 4000); }
+    }
+    // Delegated events for the plan-rates screen (add/remove rate rows, dirty tracking).
+    { const _pl = document.getElementById('plans-list');
+      if (_pl) {
+        _pl.addEventListener('input',  e => { if (e.target.matches('.plan-val,.plan-eff')) markDirty(); });
+        _pl.addEventListener('change', e => { if (e.target.matches('.plan-def')) markDirty(); });
+        _pl.addEventListener('click',  e => {
+            if (e.target.matches('.plan-add-rate')) {
+                e.target.closest('.plan-block').querySelector('.plan-rates').insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                markDirty();
+            } else if (e.target.matches('.plan-rate-del')) {
+                const cont = e.target.closest('.plan-rates');
+                e.target.closest('.plan-rate-row').remove();
+                if (!cont.querySelector('.plan-rate-row')) cont.insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                markDirty();
+            }
+        });
+      } }
+
     // Targets grid -----------------------------------------------------------
     // Draft persistence: unsaved target edits are mirrored to localStorage on every keystroke, so a
     // token-expiry redirect, accidental refresh or crash can't lose them -- they're restored (with a
@@ -1944,7 +2077,9 @@
             const res = await authFetch('/api/target-grid' + (fy ? '?fy=' + fy : ''));
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json();
-            const years = new Set([data.fy - 1, data.fy, data.fy + 1, ...(data.available_fys || [])]);
+            // Full practice FY range (cutover..current + next year) so historical + next-year targets
+            // can be set; fall back to a 3-year window if the range is unavailable.
+            const years = new Set([...(data.fy_options && data.fy_options.length ? data.fy_options : [data.fy - 1, data.fy, data.fy + 1]), ...(data.available_fys || [])]);
             document.getElementById('targets-fy').innerHTML = [...years].sort((a, b) => a - b)
                 .map(y => '<option value="' + y + '"' + (y === data.fy ? ' selected' : '') + '>' + _fyLabel(y) + '</option>').join('');
             document.getElementById('targets-copy-fy').innerHTML = '<option value="">Copy from…</option>'
@@ -2018,15 +2153,17 @@
     function _refreshCopyEnabled() {
         // Copy is allowed only onto a BLANK year; the button also needs a source year chosen, so it's
         // only ever clickable when a copy will actually happen (no silent no-op / no guard surprise).
-        const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '');
+        // NHS metrics live on the Apr-Mar year, not the practice FY -- ignore them for the blank/copy
+        // logic so a year holding only an NHS target still counts as blank for practice targets.
+        const anyVal = [...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '' && !(i.dataset.metric || '').startsWith('nhs'));
         const src = document.getElementById('targets-copy-fy').value;
         document.getElementById('targets-copy-fy').disabled = anyVal;
         document.getElementById('targets-copy-btn').disabled = anyVal || !src;
         document.getElementById('targets-clear-btn').disabled = !anyVal;   // nothing to clear on a blank year
     }
     function clearTargetGrid() {
-        const inputs = [...document.querySelectorAll('#targets-grid input')];
-        if (!inputs.some(i => i.value !== '')) return;   // already blank
+        const inputs = [...document.querySelectorAll('#targets-grid input')].filter(i => !(i.dataset.metric || '').startsWith('nhs'));
+        if (!inputs.some(i => i.value !== '')) return;   // already blank (ignoring NHS, which lives on the Apr-Mar year)
         const fyLbl = _fyLabel(+document.getElementById('targets-fy').value);
         if (!confirm('Clear ALL targets for ' + fyLbl + '?\n\nThis empties every box for the year. '
             + 'Once you Save, the cleared targets cannot be recovered — you would have to re-enter or copy them again.')) return;
@@ -2075,7 +2212,7 @@
         const src = +document.getElementById('targets-copy-fy').value;
         if (!src) return;
         const msg = document.getElementById('targets-msg');
-        if ([...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '')) {
+        if ([...document.querySelectorAll('#targets-grid input')].some(i => i.value !== '' && !(i.dataset.metric || '').startsWith('nhs'))) {
             msg.style.color = '#b3261e'; msg.textContent = 'Copy only onto a blank year.'; return;
         }
         try {
@@ -2083,7 +2220,7 @@
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json(); const t = (data.tenants || [])[0]; if (!t) return;
             document.querySelectorAll('#targets-grid input').forEach(i => {
-                if (i.disabled) return;
+                if (i.disabled || (i.dataset.metric || '').startsWith('nhs')) return;   // don't copy NHS (Apr-Mar) targets across practice FYs
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';
             });
@@ -2108,6 +2245,8 @@
     document.getElementById('role-add-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addRole(); } });
     document.getElementById('variances-save').addEventListener('click', saveVariances);
     document.getElementById('variances-save-top').addEventListener('click', saveVariances);
+    document.getElementById('plans-save').addEventListener('click', savePlanRates);
+    document.getElementById('plans-save-top').addEventListener('click', savePlanRates);
     document.getElementById('targets-save').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-save-top').addEventListener('click', saveTargetGrid);
     document.getElementById('targets-copy-btn').addEventListener('click', copyFromFY);
@@ -2699,6 +2838,14 @@
                         o.value = role; o.textContent = role;
                         selRole.appendChild(o);
                     });
+                    // Period options are per-tenant (Last 3 Months, Last 12 Months, then the practice FYs).
+                    if (data.periods && data.periods.length) {
+                        const _cur = filterState.period;
+                        selPeriod.innerHTML = data.periods.map(p => '<option value="' + escHtml(p) + '">' + escHtml(p) + '</option>').join('');
+                        selPeriod.value = data.periods.indexOf(_cur) >= 0 ? _cur
+                                        : (data.periods.indexOf('Last 3 Months') >= 0 ? 'Last 3 Months' : data.periods[0]);
+                        filterState.period = selPeriod.value;
+                    }
                 }
                 if (myDataLock) {
                     // Single-report "My Data": the practitioner list is just this user.

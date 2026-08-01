@@ -34,6 +34,35 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
+                      "Entity": "_Treatment Plans"
+                    }
+                  },
+                  "Property": "Course Age Bucket"
+                }
+              },
+              "queryRef": "_Treatment Plans.Course Age Bucket",
+              "nativeQueryRef": "Course Age Bucket"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Treatment Plans"
+                    }
+                  },
+                  "Property": "Start Date"
+                }
+              },
+              "queryRef": "_Treatment Plans.Start Date",
+              "nativeQueryRef": "Start Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
                       "Entity": "List Patients"
                     }
                   },
@@ -56,35 +85,6 @@
               },
               "queryRef": "List Patients.Email Address",
               "nativeQueryRef": "Email Address"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Treatment Plans"
-                    }
-                  },
-                  "Property": "Start Date"
-                }
-              },
-              "queryRef": "_Treatment Plans.Start Date",
-              "nativeQueryRef": "Start Date",
-              "format": "dd/MM/yyyy"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Treatment Plans"
-                    }
-                  },
-                  "Property": "Course Age Bucket"
-                }
-              },
-              "queryRef": "_Treatment Plans.Course Age Bucket",
-              "nativeQueryRef": "Course Age Bucket"
             },
             {
               "field": {
@@ -250,7 +250,92 @@
               }
             }
           ]
-        }
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "9fcc39d9062999b50157",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "a8681bec5710ce78ddcb",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "cbc37d891356c9a0606b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c76127f6db5019503695",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Open Courses Value"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "168814a1730d3e97049a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Course Age Bucket"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c5141b3705476a76b9a1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Treatment Plans"
+              }
+            },
+            "Property": "Start Date"
+          }
+        },
+        "type": "Categorical"
       }
     ]
   }

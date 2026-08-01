@@ -6,7 +6,7 @@
     "y": 0,
     "z": 3000,
     "height": 42,
-    "width": 1279.8634812286689,
+    "width": 1279.863481228669,
     "tabOrder": 8000
   },
   "visual": {
@@ -42,6 +42,20 @@
               },
               "queryRef": "_Measures.Private Revenue",
               "nativeQueryRef": "Private Revenue"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Plan Capitation Revenue"
+                }
+              },
+              "queryRef": "_Measures.Plan Capitation Revenue",
+              "nativeQueryRef": "Plan Capitation Revenue"
             },
             {
               "field": {
@@ -377,6 +391,20 @@
           },
           "selector": {
             "metadata": "_Measures.Private Revenue"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1000D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Plan Capitation Revenue"
           }
         }
       ],
@@ -1279,6 +1307,106 @@
             "id": "field-7d568852-d7f0-8eaa-9239-a021e8c8968f",
             "order": 1
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Plan Capitation Revenue vs Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Plan Capitation Revenue",
+            "id": "field-d4259e97-beac-46ab-921a-ae37e24b3ab2",
+            "order": 0
+          }
+        },
+        {
+          "properties": {
+            "backgroundColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Measures"
+                        }
+                      },
+                      "Property": "Plan Capitation Revenue BG"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Plan Capitation Revenue"
+          }
+        },
+        {
+          "properties": {
+            "backgroundTransparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Plan Capitation Revenue"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Plan Capitation Revenue Target"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "dataViewWildcard": {
+                  "matchingOption": 0
+                }
+              }
+            ],
+            "metadata": "_Measures.Plan Capitation Revenue",
+            "id": "field-bdd5a039-391f-4364-bc84-1ed0df0d6204",
+            "order": 1
+          }
         }
       ],
       "referenceLabelTitle": [
@@ -1385,6 +1513,20 @@
           },
           "selector": {
             "metadata": "_Measures.Revenue Per Dentist Hour"
+          }
+        },
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Plan Capitation Revenue"
           }
         }
       ],

@@ -3,14 +3,14 @@
   "name": "44689296c199b141002c",
   "position": {
     "x": 0,
-    "y": 76.792,
-    "z": 0,
-    "height": 483.78839590443687,
-    "width": 1047.4402730375427,
-    "tabOrder": 0
+    "y": 77.046548956661326,
+    "z": 2000,
+    "height": 483.85232744783309,
+    "width": 651.30016051364373,
+    "tabOrder": 2000
   },
   "visual": {
-    "visualType": "lineClusteredColumnComboChart",
+    "visualType": "columnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -32,6 +32,24 @@
             }
           ]
         },
+        "Series": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Cancellation Reasons"
+                    }
+                  },
+                  "Property": "Reason"
+                }
+              },
+              "queryRef": "List Cancellation Reasons.Reason",
+              "nativeQueryRef": "Reason"
+            }
+          ]
+        },
         "Y": {
           "projections": [
             {
@@ -39,46 +57,14 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Measures"
+                      "Entity": "_Appointments"
                     }
                   },
-                  "Property": "Cancellation Frequency"
+                  "Property": "Patient Count"
                 }
               },
-              "queryRef": "_Measures.Cancellation Frequency",
-              "nativeQueryRef": "Cancellation Frequency"
-            }
-          ]
-        },
-        "Y2": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Short Notice Cancellation Rate"
-                }
-              },
-              "queryRef": "_Measures.Short Notice Cancellation Rate",
-              "nativeQueryRef": "Short Notice Cancellation Rate"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "DNA Rate"
-                }
-              },
-              "queryRef": "_Measures.DNA Rate",
-              "nativeQueryRef": "DNA Rate"
+              "queryRef": "_Appointments.Patient Count",
+              "nativeQueryRef": "Patient Count"
             }
           ]
         }
@@ -217,6 +203,13 @@
                   "Value": "false"
                 }
               }
+            },
+            "position": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
             }
           }
         }
@@ -289,86 +282,6 @@
                   }
                 }
               }
-            },
-            "secShow": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "secFontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "secFontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "secLabelColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            },
-            "secBold": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleFontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "secTitleItalic": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleBold": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "secTitleFontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "secTitleColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
             }
           }
         }
@@ -381,7 +294,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Cancellations and DNA'"
+                  "Value": "'Cancellations'"
                 }
               }
             },
@@ -432,7 +345,8 @@
             "Property": "Cancellation Frequency"
           }
         },
-        "type": "Advanced"
+        "type": "Advanced",
+        "howCreated": "User"
       },
       {
         "name": "30f2eba443705ea00dee",
@@ -447,7 +361,8 @@
             "Property": "DNA Rate"
           }
         },
-        "type": "Advanced"
+        "type": "Advanced",
+        "howCreated": "User"
       },
       {
         "name": "29fa1d8a2030d3a94cc3",
@@ -462,26 +377,67 @@
             "Property": "Short Notice Cancellation Rate"
           }
         },
-        "type": "Advanced"
+        "type": "Advanced",
+        "howCreated": "User"
       },
       {
-        "name": "b486b439365574257bb5",
+        "name": "e7fa31c8ce3d8422704a",
         "ordinal": 3,
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Date"
+                "Entity": "_Appointments"
               }
             },
-            "Property": "Week Commencing Date"
+            "Property": "Is Cancelled"
           }
         },
-        "type": "Categorical"
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "_",
+              "Entity": "_Appointments",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "_"
+                          }
+                        },
+                        "Property": "Is Cancelled"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
       },
       {
         "name": "bbcaf471698a08a81ad9",
-        "ordinal": 4,
+        "ordinal": 5,
         "field": {
           "Column": {
             "Expression": {
@@ -528,6 +484,48 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "88de9b20ab55e90131dc",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c61dc8338c32dede4807",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Cancellation Reasons"
+              }
+            },
+            "Property": "Reason"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "86665a8c6560bdb741da",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Appointments"
+              }
+            },
+            "Property": "Patient Count"
+          }
+        },
+        "type": "Advanced"
       }
     ],
     "filterSortOrder": "Custom"

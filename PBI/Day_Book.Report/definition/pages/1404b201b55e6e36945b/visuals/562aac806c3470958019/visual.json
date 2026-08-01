@@ -3,10 +3,10 @@
   "name": "562aac806c3470958019",
   "position": {
     "x": 0,
-    "y": 76.9098712446352,
+    "y": 74.3801652892562,
     "z": 6000,
-    "height": 522.98712446351931,
-    "width": 1280,
+    "height": 525.61983471074382,
+    "width": 1280.3305785123966,
     "tabOrder": 6000
   },
   "visual": {
@@ -298,7 +298,7 @@
                           "min": {
                             "color": {
                               "Literal": {
-                                "Value": "'minColor'"
+                                "Value": "'#c0392b'"
                               }
                             },
                             "value": {
@@ -447,7 +447,7 @@
                           "min": {
                             "color": {
                               "Literal": {
-                                "Value": "'minColor'"
+                                "Value": "'#c0392b'"
                               }
                             },
                             "value": {
@@ -826,7 +826,7 @@
                       },
                       "Right": {
                         "Literal": {
-                          "Value": "29L"
+                          "Value": "24L"
                         }
                       }
                     }

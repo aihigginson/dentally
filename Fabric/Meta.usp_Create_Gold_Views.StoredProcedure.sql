@@ -72,7 +72,7 @@ BEGIN
         WHERE s.name = 'Gold'
           AND NOT EXISTS (SELECT 1 FROM sys.views v
                           INNER JOIN sys.schemas sv ON v.schema_id = sv.schema_id
-                          WHERE sv.name = 'Gold' AND v.name = 'vw_' + t.name)
+                          WHERE sv.name = 'Gold' AND v.name = 'vw_' + t.name AND v.name <> 'vw_Dim_Date')   -- vw_Dim_Date is back-end only; do NOT let it supersede Dim_Date -> List Date
         UNION ALL
         -- Gold views: vw_<X> drives entity <X>; any other Gold view maps by its own name
         SELECT v.name,
@@ -80,6 +80,7 @@ BEGIN
         FROM sys.views v
         INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
         WHERE s.name = 'Gold'
+          AND v.name <> 'vw_Dim_Date'   -- back-end-only per-tenant date helper; must NOT become PBI.[List Date]
     ) src;
 
     SET @Row     = 1;

@@ -503,8 +503,18 @@ def filters():
             tids,
         )
         roles = [r[0] for r in cur.fetchall()]
+        # Period options = the tenant's date groupings (Last 3 Months, Last 12 Months, then the practice
+        # FYs cutover..current). Per-tenant + FYyy labels -> driven by the warehouse, not hardcoded.
+        cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({placeholders})", tids)
+        _pv = [r[0] for r in cur.fetchall()]
+        def _prank(v):
+            if v == 'Last 3 Months':  return (0, 0)
+            if v == 'Last 12 Months': return (1, 0)
+            yy = (v or '')[2:]                          # 'FY26' -> '26'; FYyy newest first
+            return (2, -(int(yy) if yy.isdigit() else 0))
+        periods = sorted(_pv, key=_prank)
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles})
+        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.
@@ -1163,6 +1173,65 @@ def save_targets():
 
 # ── Associate pay (per-practitioner %) — admin Settings screen ────────────────
 
+@app.route('/api/practice-config', methods=['GET'])
+def get_practice_config():
+    """Per-tenant practice settings. FY_Start_Month = the month (1-12) the practice financial year
+    starts (default 4 = April). NHS FY is always Apr-Mar and is NOT affected by this. Owner-only."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can view settings'}), 403
+        fy_start = 4
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor()
+            acur.execute("SELECT FY_Start_Month FROM Input.Practice_Config WHERE Tenant_ID = ?", tids[0])
+            row = acur.fetchone(); ac.close()
+            if row and row[0]:
+                fy_start = int(row[0])
+        return jsonify({'fy_start_month': fy_start})
+    except Exception as e:
+        return _server_error(e, 'get_practice_config')
+
+
+@app.route('/api/practice-config', methods=['POST'])
+def save_practice_config():
+    """Set the practice financial-year start month (1-12) for the tenant(s). Owner-only."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can change settings'}), 403
+        body = request.get_json(force=True) or {}
+        try:
+            m = int(body.get('fy_start_month'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid month'}), 400
+        if not (1 <= m <= 12):
+            return jsonify({'error': 'Month must be 1-12'}), 400
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        for t in tids:
+            acur.execute("DELETE FROM Input.Practice_Config WHERE Tenant_ID = ?", t)
+            acur.execute("INSERT INTO Input.Practice_Config (Tenant_ID, FY_Start_Month, Updated_At, Updated_By) "
+                         "VALUES (?, ?, SYSUTCDATETIME(), ?)", t, m, upn)
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_practice_config')
+
+
 @app.route('/api/practitioner-pay', methods=['GET'])
 def get_practitioner_pay():
     """Active fee-earners for the tenant(s) + their current associate % (or null)."""
@@ -1740,6 +1809,123 @@ def save_variances():
         return _server_error(e, 'save_variances')
 
 
+@app.route('/api/plan-capitation', methods=['GET'])
+def get_plan_capitation():
+    """Catalogue of ALL in-use payment plans (>=1 active member) with member counts + the owner's saved
+    effective-dated rates / default flag (AppDB). Owner-only. We do NOT guess which plans are capitation
+    -- naming varies by practice (Denplan/Den/Tabeo/Patient Plan/...) -- so the whole list is shown and
+    the owner enters rates only against the capitation ones. Plans left with no rate (Private, NHS, ...)
+    generate no records. The rate drives Fact_Plan_Capitation."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            conn.close(); return jsonify({'error': 'Only a practice admin can manage plan rates'}), 403
+        plans = []
+        if tids:
+            ph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT pp.Tenant_ID, pp.Payment_Plan_ID, pp.Payment_Plan_Name, pp.Standard_Payment_Plan, "
+                f"       ISNULL(ac.cnt, 0) AS current_patients "
+                f"FROM Gold.Dim_Payment_Plans pp "
+                f"LEFT JOIN (SELECT Tenant_ID, Payment_Plan_ID, COUNT(*) cnt FROM Gold.Dim_Patients "
+                f"           WHERE Active = 1 GROUP BY Tenant_ID, Payment_Plan_ID) ac "
+                f"       ON ac.Tenant_ID = pp.Tenant_ID AND ac.Payment_Plan_ID = pp.Payment_Plan_ID "
+                f"WHERE pp.Tenant_ID IN ({ph}) "
+                f"  AND NULLIF(LTRIM(RTRIM(pp.Payment_Plan_Name)),'') IS NOT NULL "
+                f"  AND ISNULL(ac.cnt, 0) > 0 "
+                f"ORDER BY pp.Payment_Plan_Name", tids)
+            plans = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
+                      'current_patients': r[4], 'is_default': False, 'rates': []} for r in cur.fetchall()]
+        conn.close()
+        if tids and plans:
+            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
+            acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default "
+                         f"FROM Input.Plan_Capitation_Rate WHERE Tenant_ID IN ({ph}) "
+                         f"ORDER BY Effective_From_Date", tids)
+            by_plan, defaults = {}, set()
+            for r in acur.fetchall():
+                by_plan.setdefault((r[0], r[1]), []).append(
+                    {'effective_from': r[3].isoformat() if r[3] else None, 'monthly_value': float(r[2])})
+                if r[4]:
+                    defaults.add((r[0], r[1]))
+            ac.close()
+            for p in plans:
+                key = (p['tenant_id'], p['payment_plan_id'])
+                p['rates']      = by_plan.get(key, [])
+                p['is_default'] = key in defaults
+        return jsonify({'plans': plans})
+    except Exception as e:
+        return _server_error(e, 'get_plan_capitation')
+
+
+@app.route('/api/plan-capitation', methods=['POST'])
+def save_plan_capitation():
+    """Replace the tenant's plan capitation rates in AppDB.Input.Plan_Capitation_Rate. Each plan can
+    carry MANY effective-dated (Effective_From_Date, Monthly_Value) rows -- the fee-over-time history.
+    Blank/zero value or blank date skips that row. `default_plan_id` flags every row of the one plan
+    that values lapsed members. Duplicate dates within a plan are de-duped (last wins)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None:
+            return jsonify({'error': 'Forbidden'}), 403
+        if not maintain:
+            return jsonify({'error': 'Only a practice admin can manage plan rates'}), 403
+        body    = request.get_json(force=True) or {}
+        allowed = set(tids)
+        rows    = body.get('rates') or []
+        try:
+            default_pid = int(body.get('default_plan_id'))
+        except (TypeError, ValueError):
+            default_pid = None
+        seen         = {}   # (tid, pid, eff) -> (tid, pid, eff, value, is_default)  [de-dupe by date]
+        payload_tids = set()
+        for r in rows:
+            try:
+                tid = int(r['tenant_id']); pid = int(r['payment_plan_id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if tid not in allowed:
+                continue
+            payload_tids.add(tid)
+            mv  = r.get('monthly_value')
+            eff = str(r.get('effective_from') or '').strip()
+            if mv in (None, '') or not eff:
+                continue  # a row needs BOTH a date and a value
+            try:
+                mvf = float(mv)
+            except (TypeError, ValueError):
+                continue
+            if mvf <= 0:
+                continue
+            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, 1 if pid == default_pid else 0)
+        valid = list(seen.values())
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        for t in payload_tids:
+            acur.execute("DELETE FROM Input.Plan_Capitation_Rate WHERE Tenant_ID = ?", t)
+        if valid:
+            acur.fast_executemany = True
+            acur.executemany(
+                "INSERT INTO Input.Plan_Capitation_Rate (Tenant_ID, Payment_Plan_ID, Effective_From_Date, "
+                "Monthly_Value, Is_Default, Updated_At, Updated_By) VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, e, m, d, upn) for t, p, e, m, d in valid])
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_plan_capitation')
+
+
 @app.route('/api/target-grid', methods=['GET'])
 def get_target_grid():
     """The target grid for an FY: metric catalogue (with definition, per-metric sample and the
@@ -1760,6 +1946,19 @@ def get_target_grid():
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
         if not maintain:
             conn.close(); return jsonify({'error': 'Only a practice admin can manage targets'}), 403
+
+        # Year picker = the practice FYs from the cutover to the current FY (same as the app's period
+        # FYs, from Gold.Dim_Date_Grouping) PLUS next year, so targets can be set historically (so
+        # prior-year reports have targets) and for next year. FY label year = 2000 + the FYyy digits.
+        fy_options = []
+        if tids:
+            _ph = ','.join(['?'] * len(tids))
+            cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
+            _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
+            if _yrs:
+                fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
+        if not fy:
+            fy = (max(fy_options) - 1) if fy_options else fy       # current practice FY = newest option minus the +1
 
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
@@ -1817,7 +2016,7 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
-        return jsonify({'fy': fy, 'available_fys': available_fys,
+        return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
                         'metrics': metrics, 'tenants': list(tenants.values())})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
