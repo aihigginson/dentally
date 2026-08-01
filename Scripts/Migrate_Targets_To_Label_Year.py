@@ -19,7 +19,8 @@ import argparse, struct, subprocess, sys, pyodbc
 APPDB = {
     "dev":  ("emeh72n2ntdufpj4q665b2lzx4-4i26eirspjiujnltrvplquzkem.database.fabric.microsoft.com",
              "AppDB-4c31e989-45ca-456c-a319-1a7a262c8aa3"),
-    # "prod": ("<prod-appdb-server>.database.fabric.microsoft.com", "<prod-appdb-name>"),
+    "prod": ("emeh72n2ntdufpj4q665b2lzx4-eljzajgm5cpe5i64szgon7sej4.database.fabric.microsoft.com",
+             "AppDB-95d9076d-59d0-4e0c-a2c2-7963d74305ff"),
 }
 MIGRATION_KEY = "targets_fy_to_label_year_v1"
 
