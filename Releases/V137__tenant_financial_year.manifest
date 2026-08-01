@@ -14,6 +14,7 @@
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V137__tenant_financial_year.manifest -SkipTests
 # =====================================================================
 
+MIGRATE  Migrations\V137__date_grouping_tenant.sql
 DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
 DEPLOY   Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
 DEPLOY   Fabric\Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql
