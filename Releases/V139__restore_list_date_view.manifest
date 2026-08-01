@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V139 -- Restore PBI.[List Date] (broke in V137)
+# =====================================================================
+# V137 excluded vw_Dim_Date from Create_Gold_Views' VIEW enumeration, but the TABLE enumeration still
+# treated vw_Dim_Date as an override for Dim_Date and skipped it -- so NEITHER produced PBI.[List Date].
+# The model's List Date + List Date Unconstrained tables read it, so every model refresh was FAILING
+# ("key didn't match any rows ... Item = List Date"). Fix: the table-supersede check now ignores
+# vw_Dim_Date, so Dim_Date -> PBI.[List Date] again (Apr-Mar; outcome B). vw_Dim_Date stays back-end only.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V139__restore_list_date_view.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
