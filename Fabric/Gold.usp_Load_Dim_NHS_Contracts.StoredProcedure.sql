@@ -77,10 +77,14 @@ BEGIN
             FROM   Gold.Dim_Date GROUP BY Financial_Year
         ),
         claim_yr AS (
-            SELECT DISTINCT cl.Tenant_ID, dps.Site_ID, d.Financial_Year
-            FROM   Gold.Fact_NHS_Claims cl
-            JOIN   Gold.Dim_Date d             ON d.pk_Date            = cl.fk_Date_Submitted
-            JOIN   Gold.Dim_Practice_Sites dps ON dps.pk_Practice_Site = cl.fk_Practice_Site
+            -- V146: source submission years from Silver (loaded before ALL Gold) instead of
+            -- Gold.Fact_NHS_Claims. A GOLD_DIM must not read a Gold FACT (ordered after it) --
+            -- on a fresh build the fact is empty when this Dim runs, so the roll-forward would
+            -- silently miss years. Silver.NHS_Claims carries the same submission dates + Site_ID.
+            SELECT DISTINCT cl.Tenant_ID, cl.Site_ID, d.Financial_Year
+            FROM   Silver.NHS_Claims cl
+            JOIN   Gold.Dim_Date d ON d.Full_Date = cl.Submitted_Date
+            WHERE  cl.Submitted_Date IS NOT NULL
         ),
         covered AS (
             SELECT DISTINCT s.Tenant_ID, s.Site_ID, d.Financial_Year
