@@ -50,10 +50,73 @@ BEGIN
             c.Target                                 AS UDA_Target,
             c.UDA_Value,
             c.UOA_Target,
-            c.UOA_Value
+            c.UOA_Value,
+            CAST(0 AS BIT)                           AS Is_Rolled_Forward
         INTO #src
         FROM Silver.Contracts c
         WHERE c.Id IS NOT NULL;
+
+        -- Roll-forward (V145): NHS contracts often lag the source. For each site with a real contract,
+        -- if a later Apr-Mar year has NHS claims (submissions) but NO contract, synthesize one from that
+        -- site's LATEST real contract, dated to the missing year and flagged Is_Rolled_Forward = 1 (never
+        -- mistaken for a real source row). Built into #src so the MERGE persists it and auto-removes it
+        -- once a real contract supersedes it; deterministic bk_Contract_ID (RF-<orig>-<FY>) = idempotent.
+        DECLARE @Current_NHS_Year INT =
+            (SELECT MAX(Financial_Year) FROM Gold.Dim_Date WHERE Full_Date <= CAST(SYSUTCDATETIME() AS DATE));
+
+        ;WITH latest AS (
+            SELECT s.Tenant_ID, s.Site_ID, s.bk_Contract_ID, s.Contract_Number, s.Contract_Name,
+                   s.Active, s.PDS_Plus, s.NHS_Location_ID, s.NHS_Site_ID,
+                   s.UDA_Target, s.UDA_Value, s.UOA_Target, s.UOA_Value, s.End_Date,
+                   ROW_NUMBER() OVER (PARTITION BY s.Tenant_ID, s.Site_ID ORDER BY s.End_Date DESC) AS rn
+            FROM   #src s
+            WHERE  s.End_Date IS NOT NULL AND ISNULL(s.UDA_Target, 0) > 0
+        ),
+        ny AS (
+            SELECT Financial_Year, MIN(Full_Date) AS FY_Start, MAX(Full_Date) AS FY_End
+            FROM   Gold.Dim_Date GROUP BY Financial_Year
+        ),
+        claim_yr AS (
+            SELECT DISTINCT cl.Tenant_ID, dps.Site_ID, d.Financial_Year
+            FROM   Gold.Fact_NHS_Claims cl
+            JOIN   Gold.Dim_Date d             ON d.pk_Date            = cl.fk_Date_Submitted
+            JOIN   Gold.Dim_Practice_Sites dps ON dps.pk_Practice_Site = cl.fk_Practice_Site
+        ),
+        covered AS (
+            SELECT DISTINCT s.Tenant_ID, s.Site_ID, d.Financial_Year
+            FROM   #src s
+            JOIN   Gold.Dim_Date d ON d.Full_Date BETWEEN s.Start_Date AND s.End_Date
+            WHERE  s.Start_Date IS NOT NULL AND s.End_Date IS NOT NULL
+        )
+        SELECT
+            l.Tenant_ID,
+            'RF-' + l.bk_Contract_ID + '-' + CAST(ny.Financial_Year AS VARCHAR(10)) AS bk_Contract_ID,
+            l.Contract_Number,
+            LEFT(ISNULL(l.Contract_Name, 'NHS Contract') + ' (rolled forward)', 255) AS Contract_Name,
+            l.Site_ID, l.Active, l.PDS_Plus, l.NHS_Location_ID, l.NHS_Site_ID,
+            ny.FY_Start AS Start_Date, ny.FY_End AS End_Date,
+            l.UDA_Target, l.UDA_Value, l.UOA_Target, l.UOA_Value,
+            CAST(1 AS BIT) AS Is_Rolled_Forward
+        INTO   #rollfwd
+        FROM   latest l
+        JOIN   claim_yr cy ON cy.Tenant_ID = l.Tenant_ID AND cy.Site_ID = l.Site_ID
+        JOIN   ny          ON ny.Financial_Year = cy.Financial_Year
+        WHERE  l.rn = 1
+          AND  ny.FY_Start > l.End_Date
+          AND  ny.Financial_Year <= @Current_NHS_Year
+          AND  NOT EXISTS (SELECT 1 FROM covered cv
+                           WHERE cv.Tenant_ID = l.Tenant_ID AND cv.Site_ID = l.Site_ID
+                             AND cv.Financial_Year = ny.Financial_Year);
+
+        INSERT INTO #src (Tenant_ID, bk_Contract_ID, Contract_Number, Contract_Name, Site_ID, Active,
+                          PDS_Plus, NHS_Location_ID, NHS_Site_ID, Start_Date, End_Date,
+                          UDA_Target, UDA_Value, UOA_Target, UOA_Value, Is_Rolled_Forward)
+        SELECT Tenant_ID, bk_Contract_ID, Contract_Number, Contract_Name, Site_ID, Active,
+               PDS_Plus, NHS_Location_ID, NHS_Site_ID, Start_Date, End_Date,
+               UDA_Target, UDA_Value, UOA_Target, UOA_Value, Is_Rolled_Forward
+        FROM   #rollfwd;
+
+        DROP TABLE #rollfwd;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -77,6 +140,7 @@ BEGIN
             UDA_Value           = src.UDA_Value,
             UOA_Target          = src.UOA_Target,
             UOA_Value           = src.UOA_Value,
+            Is_Rolled_Forward   = src.Is_Rolled_Forward,
             DW_Updated_At       = SYSUTCDATETIME()
         FROM Gold.Dim_NHS_Contracts tgt
         INNER JOIN #src src ON tgt.bk_Contract_ID = src.bk_Contract_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -93,7 +157,8 @@ BEGIN
            ISNULL(CAST(tgt.[UDA_Target] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[UDA_Value] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[UOA_Target] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[UOA_Value] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[UOA_Value] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_Rolled_Forward] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Contract_Number] AS VARCHAR(500)), ''),
@@ -108,7 +173,8 @@ BEGIN
            ISNULL(CAST(src.[UDA_Target] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[UDA_Value] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[UOA_Target] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[UOA_Value] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[UOA_Value] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_Rolled_Forward] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -119,7 +185,7 @@ BEGIN
             pk_NHS_Contract, Tenant_ID, bk_Contract_ID,
             Contract_Number, Contract_Name, Site_ID, Active, PDS_Plus,
             NHS_Location_ID, NHS_Site_ID, Start_Date, End_Date,
-            UDA_Target, UDA_Value, UOA_Target, UOA_Value,
+            UDA_Target, UDA_Value, UOA_Target, UOA_Value, Is_Rolled_Forward,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -127,7 +193,7 @@ BEGIN
             src.Tenant_ID, src.bk_Contract_ID,
             src.Contract_Number, src.Contract_Name, src.Site_ID, src.Active, src.PDS_Plus,
             src.NHS_Location_ID, src.NHS_Site_ID, src.Start_Date, src.End_Date,
-            src.UDA_Target, src.UDA_Value, src.UOA_Target, src.UOA_Value,
+            src.UDA_Target, src.UDA_Value, src.UOA_Target, src.UOA_Value, ISNULL(src.Is_Rolled_Forward, CAST(0 AS BIT)),
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_NHS_Contracts tgt WHERE tgt.bk_Contract_ID = src.bk_Contract_ID AND tgt.Tenant_ID = src.Tenant_ID);
