@@ -9,7 +9,7 @@ from pathlib import Path
 
 random.seed(42)
 TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
-START   = TODAY.replace(year=TODAY.year - 3)
+START   = TODAY.replace(year=TODAY.year - 6)
 FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
 
@@ -1212,7 +1212,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
         recall_months = 6 if is_nhs else 12
         months_in_practice = max(recall_months, (TODAY - pat_start).days // 30)
         n_exams = (months_in_practice // recall_months) + rng.randint(0, 1)
-        n_exams = min(n_exams, (36 // recall_months) + 2)  # cap at ~3.5 years
+        n_exams = min(n_exams, (72 // recall_months) + 2)  # cap at ~6.5 years
 
         # Spread exams across START..TODAY
         exam_codes_used = []
