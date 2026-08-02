@@ -16,10 +16,13 @@ name: DW Tests
 # Notes:
 # - windows-latest + shell: powershell (Windows PowerShell 5.1) so the harness'
 #   System.Data.SqlClient usage resolves (matches local dev).
-# - The harness re-seeds the Test schema each run, so the enforced gate is the
-#   RECONCILE checks (FK NULLs, revenue split, cross-layer counts, sentinel) +
-#   zero capture errors. Regression-vs-baseline drift needs a persisted
-#   baseline (a separate roadmap item) and is not enforced here yet.
+# - The harness re-seeds the Test schema each run and captures against the
+#   persisted Test.Capture_Baseline. Enforced gates (Run_Tests exits 1 on any):
+#   RECONCILE checks (FK NULLs, revenue split, cross-layer counts, sentinel),
+#   zero capture errors, AND regression-vs-baseline drift (every metric must
+#   match the promoted baseline; 'NEW (no baseline)' stays benign). Baseline
+#   re-established 2026-08-02 on the rebuilt deterministic T11 fixture, so
+#   regression enforcement is now LIVE (was dormant while T11 was retired).
 # - Same-repo PRs only get the secrets; fork PRs will skip auth (by design).
 
 on:
