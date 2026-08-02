@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Cancellations",
-  "name": "5d6bf565dd625ca54b88",
+  "displayName": "Payment Plans",
+  "name": "7187f406f482118be57b",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -36,10 +36,7 @@
           "06737ef0e34891dddb0b": {
             "singleVisual": {
               "visualType": "clusteredBarChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           },
           "83f92fe5b9c7d8893816": {
@@ -153,25 +150,37 @@
           "22b7df504885d30a2e7a": {
             "singleVisual": {
               "visualType": "columnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "67cccb5341cab2987d15": {
             "singleVisual": {
               "visualType": "columnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "88374ab7cda2665cc00d": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "8d4c05675301407396e7": {
             "singleVisual": {
               "visualType": "columnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "a5a3cf76bf6b2f401960": {
@@ -186,10 +195,7 @@
           "94294a5d04392a4daf69": {
             "singleVisual": {
               "visualType": "clusteredBarChart",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           }
         }

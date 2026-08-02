@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "06737ef0e34891dddb0b",
+  "name": "21442f768b77f9380245",
   "position": {
     "x": 0,
-    "y": 80.375426621160415,
-    "z": 5000,
-    "height": 423.89078498293514,
-    "width": 611.77474402730377,
-    "tabOrder": 5000
+    "y": 90,
+    "z": 100,
+    "height": 440,
+    "width": 630,
+    "tabOrder": 100
   },
   "visual": {
     "visualType": "clusteredBarChart",
@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Payment Plans"
+                      "Entity": "List Practitioners"
                     }
                   },
-                  "Property": "Payment Plan Name"
+                  "Property": "Full Name"
                 }
               },
-              "queryRef": "List Payment Plans.Payment Plan Name",
-              "nativeQueryRef": "Payment Plan Name",
+              "queryRef": "List Practitioners.Full Name",
+              "nativeQueryRef": "Full Name",
               "active": true
             }
           ]
@@ -42,11 +42,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue Per Diary Hour"
+                  "Property": "Avg First Plan Value"
                 }
               },
-              "queryRef": "_Measures.Revenue Per Diary Hour",
-              "nativeQueryRef": "Revenue Per Diary Hour"
+              "queryRef": "_Measures.Avg First Plan Value",
+              "nativeQueryRef": "Avg First Plan Value"
             }
           ]
         }
@@ -61,7 +61,7 @@
                     "Entity": "_Measures"
                   }
                 },
-                "Property": "Revenue Per Diary Hour"
+                "Property": "Avg First Plan Value"
               }
             },
             "direction": "Descending"
@@ -71,9 +71,23 @@
       }
     },
     "objects": {
-      "legend": [
+      "categoryAxis": [
         {
           "properties": {
+            "showAxisTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
             "fontFamily": {
               "expr": {
                 "Literal": {
@@ -113,66 +127,6 @@
                 }
               }
             },
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "bold": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "labelColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      ],
-      "categoryAxis": [
-        {
-          "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
             "bold": {
               "expr": {
                 "Literal": {
@@ -192,49 +146,41 @@
                 }
               }
             },
-            "titleFontFamily": {
+            "fontFamily": {
               "expr": {
                 "Literal": {
-                  "Value": "'''Segoe UI Light'', wf_segoe-ui_light, helvetica, arial, sans-serif'"
+                  "Value": "'Arial'"
                 }
               }
             },
-            "titleColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            },
-            "titleBold": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "showAxisTitle": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
+                  "Value": "8D"
                 }
               }
             }
           }
         }
       ],
-      "general": [
+      "dataPoint": [
         {
           "properties": {
-            "responsive": {
+            "defaultColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1A527A'"
+                    }
+                  }
+                }
+              }
+            },
+            "showAllDataPoints": {
               "expr": {
                 "Literal": {
-                  "Value": "false"
+                  "Value": "true"
                 }
               }
             }
@@ -246,21 +192,24 @@
       "title": [
         {
           "properties": {
-            "text": {
+            "show": {
               "expr": {
                 "Literal": {
-                  "Value": "'Average Revenue Per Diary Hour'"
+                  "Value": "true"
                 }
               }
             },
-            "fontColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#1A527A'"
-                    }
-                  }
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Avg First Plan Value'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
                 }
               }
             },
@@ -268,6 +217,18 @@
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 2,
+                      "Percent": 0
+                    }
+                  }
                 }
               }
             },
@@ -280,54 +241,9 @@
             }
           }
         }
-      ],
-      "lockAspect": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        }
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "06a43d1da239e74ac807",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Payment Plans"
-              }
-            },
-            "Property": "Payment Plan Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "95ea1a5962747ec5e2ca",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Measures"
-              }
-            },
-            "Property": "Revenue Per Diary Hour"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   },
   "isHidden": true
 }
