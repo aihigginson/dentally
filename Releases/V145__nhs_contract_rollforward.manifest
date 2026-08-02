@@ -1,0 +1,20 @@
+# =====================================================================
+# Release V145 -- NHS contract roll-forward (synthesise missing-year contracts)
+# =====================================================================
+# NHS contracts often lag in Dentally. Where a site has NHS claims (submissions) in an Apr-Mar year
+# but no contract covering it, usp_Load_Dim_NHS_Contracts now synthesises a Dim_NHS_Contracts row from
+# the site's LATEST real contract (same UDA/UOA targets, dated to the missing year), flagged
+# Is_Rolled_Forward = 1 so it is never confused with a real source contract. Built into the load's
+# #src, so the MERGE persists it and auto-removes it once a real contract supersedes it. MIGRATE adds
+# the flag column (ALTER, no drop). Then rebuild Fact_NHS_Contract_Week so the weekly UDA targets pick
+# up the new contracts.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V145__nhs_contract_rollforward.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V145__nhs_contract_rollforward.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_NHS_Contracts.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_NHS_Contracts @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
