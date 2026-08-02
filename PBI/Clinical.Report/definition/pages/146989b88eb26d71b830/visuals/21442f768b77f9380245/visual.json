@@ -176,13 +176,6 @@
                   }
                 }
               }
-            },
-            "showAllDataPoints": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
             }
           }
         }
