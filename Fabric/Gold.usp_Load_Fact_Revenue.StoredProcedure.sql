@@ -11,6 +11,9 @@
 --                             re-sourced from Silver.Treatment_Plans/Items (pk_Patient resolved up
 --                             front; everything downstream identical). Retires Fact_Invoice_Items +
 --                             Fact_Plan_Capitation. Output must reconcile to Stage 1 to the penny.
+--    *03     2026-08-10  AIH  Capitation: WORKING days only (fee/working-days-in-month) and only from
+--                             Audit.Tenants.Cutover_Date (per-tenant Dentally go-live) -- drops the pre-
+--                             go-live phantom capitation (imported historical plans back to 2010).
 --  Purpose          :  One row per revenue unit (invoice line OR capitation member-day). Revenue is
 --                      defined once here so header/line/category totals cannot diverge. Full rebuild.
 --  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue
@@ -155,6 +158,11 @@ BEGIN
             JOIN   [Input].[Plan_Capitation_Rate] rr
                    ON rr.Tenant_ID = m.Tenant_ID AND rr.Payment_Plan_ID = m.attributed_plan_id
                   AND rr.Effective_From_Date <= m.Month_Commencing_Date
+        ),
+        wdays AS (   -- working days per calendar month (England) -- capitation spreads across these only
+            SELECT Month_Commencing_Date, COUNT(*) AS wd
+            FROM   [Gold].[Dim_Date] WHERE Is_Working_Day_England = 1
+            GROUP BY Month_Commencing_Date
         )
         INSERT INTO [Gold].[Fact_Revenue]
             (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
@@ -163,16 +171,20 @@ BEGIN
         SELECT p.Tenant_ID, 'Capitation', 'Plan Capitation',
                -1, p.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
-               dday.pk_Date, p.Monthly_Value / DAY(EOMONTH(p.Month_Commencing_Date)), 0,
+               dday.pk_Date, p.Monthly_Value / wd.wd, 0,
                p.is_estimated, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
         FROM   priced p
         JOIN   [Gold].[Dim_Patients] pat ON pat.pk_Patient = p.fk_Patient
         LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = p.Tenant_ID AND dpp.Payment_Plan_ID = p.attributed_plan_id
         LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = p.Tenant_ID AND dpr.Practitioner_ID = pat.Dentist_Practitioner_ID
         LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = p.Tenant_ID AND dps.Site_ID = pat.Site_ID
+        JOIN      wdays wd ON wd.Month_Commencing_Date = p.Month_Commencing_Date
+        JOIN      [Audit].[Tenants] tn ON tn.Tenant_ID = p.Tenant_ID
         JOIN      [Gold].[Dim_Date] dday ON dday.Month_Commencing_Date = p.Month_Commencing_Date
+                                        AND dday.Is_Working_Day_England = 1
         WHERE  p.rn = 1
-          AND  dday.Full_Date <= CAST(SYSUTCDATETIME() AS DATE);
+          AND  dday.Full_Date <= CAST(SYSUTCDATETIME() AS DATE)
+          AND  dday.Full_Date >= tn.Cutover_Date;   -- from the tenant's Dentally go-live only
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
     END TRY
