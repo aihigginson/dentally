@@ -1699,14 +1699,20 @@ add("Total Revenue",
 // (e.g. "Last 3 Months") -- otherwise a 12M trailing average would be truncated to the filtered range
 // and ramp up at the left edge. The anchor (_hi) is captured in the CURRENT context first (the week
 // being plotted), then the window is re-imposed via FILTER(ALL('List Date'), ...) -- the model's
-// existing date-window idiom (matches the current-state date-leak fix). Days-based (not the FY-week
-// join) to avoid the Dim_Date Sun-Sat vs Monday week fan-out. Site/practitioner/role slicers still
-// apply (we only clear the date tables), so the window reaches back in TIME but stays in the selected
-// practice/practitioner. _days self-adjusts at the very start of history (can't fabricate weeks that
-// pre-date the practice). 3M = 91 days (13 wk); 12M = 364 days (52 wk).
+// existing date-window idiom (matches the current-state date-leak fix). Site/practitioner/role slicers
+// still apply (we only clear the date tables), so the window reaches back in TIME but stays in the
+// selected practice/practitioner. _days self-adjusts at the very start of history (can't fabricate
+// weeks that pre-date the practice).
+//   MONTH-ALIGNED window (EDATE, not a fixed 91/364 days): Total Revenue folds in Plan Capitation,
+//   which is STRICTLY monthly (one lump per member on the 1st of each month). A fixed-day window
+//   straddles month boundaries and would catch 3-or-4 (or 12-or-13) capitation lumps depending on the
+//   anchor day -- re-spiking the very component we're smoothing. EDATE(_hi,-3)/-12 gives an exact
+//   calendar-month span, so a half-open window always contains EXACTLY 3 / 12 monthly points (verified:
+//   capitation fk_Date is day-1, one per month). Invoices (daily) get exactly 3/12 months too. The
+//   _days divisor (avg-weekly scaling) adapts to the actual 89-92 / 365-366 day count.
 add("Total Revenue Rolling 3M",
     @"VAR _hi = MAX('List Date'[Full Date])
-VAR _lo = _hi - 91
+VAR _lo = EDATE(_hi, -3)
 VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
 VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
 VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
@@ -1715,7 +1721,7 @@ RETURN DIVIDE(_rev * 7, _days)",
 
 add("Total Revenue Rolling 12M",
     @"VAR _hi = MAX('List Date'[Full Date])
-VAR _lo = _hi - 364
+VAR _lo = EDATE(_hi, -12)
 VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
 VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
 VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
