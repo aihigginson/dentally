@@ -1692,40 +1692,30 @@ add("Total Revenue",
     @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
     "£#,##0");
 
-// Rolling (trailing-average-weekly) Total Revenue to smooth the spiky by-week charts.
-// Value = average weekly revenue over the trailing N days -> SAME £ scale as the weekly bars, so it
-// drops straight onto a by-week chart as a smoothed line/overlay. Key trick: REMOVEFILTERS('List Date')
-// + REMOVEFILTERS('List Date Grouping') so the window can reach BEYOND the page date/period filter
-// (e.g. "Last 3 Months") -- otherwise a 12M trailing average would be truncated to the filtered range
-// and ramp up at the left edge. The anchor (_hi) is captured in the CURRENT context first (the week
-// being plotted), then the window is re-imposed via FILTER(ALL('List Date'), ...) -- the model's
-// existing date-window idiom (matches the current-state date-leak fix). Site/practitioner/role slicers
-// still apply (we only clear the date tables), so the window reaches back in TIME but stays in the
-// selected practice/practitioner. _days self-adjusts at the very start of history (can't fabricate
-// weeks that pre-date the practice).
-//   MONTH-ALIGNED window (EDATE, not a fixed 91/364 days): Total Revenue folds in Plan Capitation,
-//   which is STRICTLY monthly (one lump per member on the 1st of each month). A fixed-day window
-//   straddles month boundaries and would catch 3-or-4 (or 12-or-13) capitation lumps depending on the
-//   anchor day -- re-spiking the very component we're smoothing. EDATE(_hi,-3)/-12 gives an exact
-//   calendar-month span, so a half-open window always contains EXACTLY 3 / 12 monthly points (verified:
-//   capitation fk_Date is day-1, one per month). Invoices (daily) get exactly 3/12 months too. The
-//   _days divisor (avg-weekly scaling) adapts to the actual 89-92 / 365-366 day count.
-add("Total Revenue Rolling 3M",
-    @"VAR _hi = MAX('List Date'[Full Date])
-VAR _lo = EDATE(_hi, -3)
-VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
-VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
-VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
-RETURN DIVIDE(_rev * 7, _days)",
-    "£#,##0");
-
+// Rolling 12-MONTH (TTM) Total Revenue to smooth the spiky by-week charts. Deliberately 12-month
+// ONLY, NOT 3-month: a quarter is shorter than a seasonal cycle, so a 3-month rolling number wavers
+// as it slides seasonal months in/out (Christmas in, Christmas out) -- it smears seasonality rather
+// than removing it, and its day count varies (90-92) which biases the level. A trailing 12 calendar
+// months contains every month exactly once, so seasonality is fully averaged out (classic TTM).
+// Residual noise is tiny: leap years add one Feb-29 of invoices (~+0.3%; capitation unaffected);
+// Easter drifts date so a year-window near April can catch 0/1/2 Easters (a fraction of a week's
+// revenue) -- both an order of magnitude below the weekly spikes being removed.
+//   Window is EXACTLY 12 calendar months via EDATE (not 364 days), so the STRICTLY-monthly Plan
+//   Capitation component (one lump/member on the 1st) lands exactly 12 times regardless of anchor day.
+//   Divisor is a FIXED 52 weeks (not actual days) -> no day-count wobble; result = average weekly
+//   revenue over the trailing year, SAME £ scale as the weekly bars (drop-in overlay). Swap 52 -> 12
+//   for an average-MONTHLY (TTM/12) figure instead.
+//   REMOVEFILTERS('List Date')+('List Date Grouping') lets the window reach BEYOND a page date/period
+//   filter (e.g. "Last 3 Months") so the year isn't truncated + ramped at the left edge -- the model's
+//   date-window idiom (matches the current-state date-leak fix). Anchor (_hi) captured in current
+//   context first; site/practitioner/role slicers still apply, so it reaches back in TIME but stays in
+//   the selected practice/practitioner.
 add("Total Revenue Rolling 12M",
     @"VAR _hi = MAX('List Date'[Full Date])
 VAR _lo = EDATE(_hi, -12)
 VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
-VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
-VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
-RETURN DIVIDE(_rev * 7, _days)",
+VAR _rev = CALCULATE([Total Revenue], REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+RETURN DIVIDE(_rev, 52)",
     "£#,##0");
 
 // Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
