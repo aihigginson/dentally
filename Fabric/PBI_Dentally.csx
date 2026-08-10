@@ -2269,10 +2269,10 @@ RETURN IF(selected <> """", selected, cur_fy)",
 //   *03  21/05/2026  AIH  Ratio architecture: all individual = ratio vs per-prac target
 //   *04  08/06/2026  AIH  Real DAX for Discounts and Deposit Value (was hardcoded 1)
 //   *05  09/06/2026  AIH  Fix: compute actual via TREATAS so Deneb row context correctly
-//                         isolates per-practitioner figures from _Invoice Items / _Payments
+//                         isolates per-practitioner figures from _Revenue / _Payments
 //   *06  09/06/2026  AIH  Fix: Plan Value denominator → practice average (not target) for
 //                         meaningful per-practitioner variance; Outstanding Invoices axis
-//                         replaced with per-practitioner _Invoice Items[Invoice Amount
+//                         replaced with per-practitioner _Revenue[Amount]
 //                         Outstanding] as snapshot-based measure cannot split by practitioner
 //   *07  09/06/2026  AIH  Fix: tenant scope was using VALUES('List Practice Sites'[Tenant ID])
 //                         which has no RLS filter; changed to VALUES('List Practitioners'[Tenant ID])
@@ -2552,4 +2552,21 @@ RETURN
         cm.DisplayFolder = g;
         cm.FormatString = "#,##0.0";
     }
+}
+
+
+// ============ Diagnostics ============
+// Row-count checks. Delete-by-name (any folder) first so this cleanly replaces older copies that
+// still referenced the retired invoice-items table (cutover -> unified _Revenue).
+{
+    var t = Model.Tables["_Measures"];
+    string g = "Diagnostics";
+    foreach (var m in t.Measures.Where(m => m.Name == "Diag Invoice Rows" || m.Name == "Diag Capitation Rows" || m.Name == "Diag Revenue Rows").ToList())
+        m.Delete();
+    var d0 = t.AddMeasure("Diag Revenue Rows",    @"COUNTROWS ( '_Revenue' )");
+    d0.DisplayFolder = g; d0.FormatString = "#,##0";
+    var d1 = t.AddMeasure("Diag Invoice Rows",    @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Invoice"" )");
+    d1.DisplayFolder = g; d1.FormatString = "#,##0";
+    var d2 = t.AddMeasure("Diag Capitation Rows", @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Capitation"" )");
+    d2.DisplayFolder = g; d2.FormatString = "#,##0";
 }
