@@ -1685,7 +1685,7 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 // clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
 // month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
 add("Plan Capitation Revenue",
-    @"SUM('_Plan Capitation'[Monthly Value])",
+    @"SUM('_Plan Capitation'[Daily Value])",
     "£#,##0");
 
 add("Total Revenue",
