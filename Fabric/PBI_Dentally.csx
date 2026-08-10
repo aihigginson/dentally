@@ -2496,3 +2496,47 @@ RETURN
     )");
     col.DisplayFolder = "Aged Plans";
 }
+
+
+// ============ 12-Month Rolling smoothers (trailing-year, period-filter-proof) ============
+// Same pattern as Total Revenue Rolling 12M: an EXACT 12-calendar-month window (EDATE) ending at the
+// visible point, with REMOVEFILTERS('List Date')+('List Date Grouping') so a page/embed Period filter
+// can't truncate the trailing year. ADDITIVE metrics -> trailing sum / 52 (avg weekly, overlay scale);
+// RATIO metrics -> evaluate the whole measure over the window, which yields the pooled
+// SUM(numerator)/SUM(denominator) for the year (correct -- NOT an average of weekly ratios).
+// (Recalls + Cancellations deliberately omitted -- need the exact base measure chosen first.)
+{
+    var t = Model.Tables["_Measures"];
+    string g = "Rolling 12M";
+    foreach (var existing in t.Measures.Where(m => m.DisplayFolder == g).ToList()) existing.Delete();
+
+    Func<string,bool,string> body = (baseM, isRatio) => {
+        string w = "VAR _hi = MAX ( 'List Date'[Full Date] )\n"
+                 + "VAR _lo = EDATE ( _hi, -12 )\n"
+                 + "VAR _win = FILTER ( ALL ( 'List Date' ), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi )\n"
+                 + "VAR _v = CALCULATE ( [" + baseM + "], REMOVEFILTERS ( 'List Date' ), REMOVEFILTERS ( 'List Date Grouping' ), _win )\n"
+                 + "RETURN ";
+        return w + (isRatio ? "_v" : "DIVIDE ( _v, 52 )");
+    };
+    Action<string,string,bool,string> roll12 = (name, baseM, isRatio, fmt) => {
+        var m = t.AddMeasure(name + " Rolling 12M", body(baseM, isRatio));
+        m.DisplayFolder = g;
+        if (fmt != "") m.FormatString = fmt;
+    };
+
+    // Additive -> avg weekly (trailing sum / 52)
+    roll12("Xero Revenue",             "Total Revenue (PL)", false, "£#,##0");
+    roll12("Xero Costs",               "Total Costs",        false, "£#,##0");
+    roll12("New Patients",             "New Patients",       false, "#,##0.0");
+    roll12("Lapsed Patients",          "Lapsed Patients",    false, "#,##0.0");
+    roll12("Net Patient Growth",       "Net Patient Growth", false, "#,##0.0");
+    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+
+    // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
+    roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
+    roll12("Diary Fill",               "Diary Fill",               true, "#,##0.0%");
+    roll12("Avg First Plan Value",     "Avg First Plan Value",     true, "£#,##0");
+    roll12("Revenue Per Diary Hour",   "Revenue Per Diary Hour",   true, "£#,##0");
+    roll12("Revenue Per Clinical Hour","Revenue Per Clinical Hour",true, "£#,##0");
+    roll12("Revenue Per Dentist Hour", "Revenue Per Dentist Hour", true, "£#,##0");
+}
