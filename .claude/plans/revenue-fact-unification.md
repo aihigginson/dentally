@@ -111,14 +111,18 @@ sacrificed but ~2.75M rows rebuilds in ~1 min — acceptable). GOLD_FACT.
    refresh; retire `_Invoice Items` / `_Plan Capitation` tables + their views once nothing references them.
 4. Drop the retired facts/views last, after the model no longer reads them.
 
-## Open decisions
-1. **`[Revenue]` base measure** — find its definition (model-level, not in csx) before repointing.
-2. **Sundry / unmapped-treatment category** — `'Sundries'` vs fold into `'Other'`?
-3. **Aggregate_Practitioner_Contribution** — include capitation in production, or invoice-only? (It's
-   "production", so probably invoice-only → filter `Revenue_Type='Invoice'`.)
-4. **Keep invoice-line detail columns** (Item_Name/Quantity/Item_Price) on the unified fact, or trim?
-5. Full-rebuild vs preserve invoice-items incrementality (leaning full-rebuild for simplicity; revisit if
-   volume grows).
+## Decisions (resolved 2026-08-10)
+1. **`[Revenue]`** is currently `SUM('_Invoice Items'[Total Price])` (invoice-only). Repoint to
+   `SUM('_Revenue'[Amount])` so the Top-N/category chart includes capitation as the "Plan Capitation"
+   category. (After unification `[Revenue]` and `[Total Revenue]` converge — both = SUM(Amount).)
+2. **Sundries = their own category** → `Revenue_Category = 'Sundries'` (unmapped treatments still → `'Other'`).
+3. **Contribution INCLUDES capitation** → `Aggregate_Practitioner_Contribution` sums all `Fact_Revenue`
+   (no `Revenue_Type` filter); capitation counts toward each practitioner's production (attributed by the
+   patient's dentist, `fk_Practitioner`).
+4. **Keep invoice-line detail columns** (Item_Name / Quantity / Item_Price) on the unified fact (null for
+   capitation) — cheap, preserves line-level drill. [default]
+5. **Full rebuild** (DROP/CREATE) — capitation needs it and ~2.75M rows rebuilds in ~1 min; drop invoice-
+   items incrementality for simplicity, revisit if volume grows. [default]
 
 ## Risks
 - Model relationship rewiring is manual (Desktop) — the biggest hands-on step; brief window where revenue
