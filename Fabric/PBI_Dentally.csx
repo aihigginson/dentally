@@ -2539,4 +2539,17 @@ RETURN
     roll12("Revenue Per Diary Hour",   "Revenue Per Diary Hour",   true, "£#,##0");
     roll12("Revenue Per Clinical Hour","Revenue Per Clinical Hour",true, "£#,##0");
     roll12("Revenue Per Dentist Hour", "Revenue Per Dentist Hour", true, "£#,##0");
+
+    // Cancellations (total count, avg weekly). No standalone base measure exists -- inline the
+    // Aggregate's Cancelled Appointments column (the same total the 'Cancellations Rebooked' rate uses).
+    {
+        var cm = t.AddMeasure("Cancellations Rolling 12M",
+              "VAR _hi = MAX ( 'List Date'[Full Date] )\n"
+            + "VAR _lo = EDATE ( _hi, -12 )\n"
+            + "VAR _win = FILTER ( ALL ( 'List Date' ), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi )\n"
+            + "VAR _v = CALCULATE ( SUM ( 'Aggregate Site Patient Practitioner Daily'[Cancelled Appointments] ), REMOVEFILTERS ( 'List Date' ), REMOVEFILTERS ( 'List Date Grouping' ), _win )\n"
+            + "RETURN DIVIDE ( _v, 52 )");
+        cm.DisplayFolder = g;
+        cm.FormatString = "#,##0.0";
+    }
 }
