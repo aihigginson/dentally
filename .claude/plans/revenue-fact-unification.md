@@ -1,6 +1,17 @@
 # Revenue Fact Unification — subsume Invoice Items + Plan Capitation into one `Fact_Revenue`
 
-**Status:** DESIGN (agreed direction, not built). Prereq done: capitation is daily pro-rata (V147).
+**Status:** IN PROGRESS on dev. Prereq done: capitation daily pro-rata (V147).
+DONE (dev): `Fact_Revenue` built + Silver-sourced (GOLD_FACT), reconciles BYTE-IDENTICAL to the two
+source facts (Invoice Δ£0.00 / 91,311 rows; Capitation Δ£0.00 / 2,659,041 rows); `_Revenue` view
+regenerated; `Aggregate_Practitioner_Contribution` repointed → Fact_Revenue (production now incl
+capitation, £7.31M→£9.87M); `GOLD_FACT_REVENUE` registered in Process_Config seed. Old facts kept
+building (identical numbers) during transition — nothing double-counts.
+REMAINING: (1) `Generate_Process_Dependencies.ps1` regen so the automated build orders Fact_Revenue
+after its dims (currently built manually on dev). (2) `Fact_Metric_Actuals` repoint (5 invoice reads +
+capitation; watch total-vs-capitation double-count) — deferred, numerically identical meanwhile.
+(3) MODEL cutover: csx measures (Total Revenue/[Revenue]→SUM Amount, Private→Type=Invoice&NHS=0,
+Category Bucket→Revenue_Category) + Desktop rewire (_Invoice Items→_Revenue, retire _Plan Capitation).
+(4) Retire Fact_Invoice_Items + Fact_Plan_Capitation once nothing reads them.
 
 ## Why
 Capitation is invoiced revenue — just billed outside Dentally (membership DD). Today it lives in a
