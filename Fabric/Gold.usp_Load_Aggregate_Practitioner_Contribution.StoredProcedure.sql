@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practitioner_Contribution] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practitioner_Contribution] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Practitioner_Contribution
 --  Author           :  AIH
@@ -46,12 +46,12 @@ BEGIN
             ii.Tenant_ID,
             ii.fk_Practitioner,
             ii.fk_Practice_Site,
-            ii.fk_Date_Invoice                      AS fk_Date,
-            SUM(ISNULL(ii.Total_Price, 0))          AS Production
+            ii.fk_Date                              AS fk_Date,
+            SUM(ISNULL(ii.Amount, 0))               AS Production
         INTO #prod
-        FROM Gold.Fact_Invoice_Items ii
+        FROM Gold.Fact_Revenue ii
         WHERE ii.fk_Practitioner IS NOT NULL AND ii.fk_Practitioner > 0
-        GROUP BY ii.Tenant_ID, ii.fk_Practitioner, ii.fk_Practice_Site, ii.fk_Date_Invoice;
+        GROUP BY ii.Tenant_ID, ii.fk_Practitioner, ii.fk_Practice_Site, ii.fk_Date;
 
         -- ── Full rebuild: apply each practitioner's associate % ───────────────
         DELETE FROM Gold.Aggregate_Practitioner_Contribution;
