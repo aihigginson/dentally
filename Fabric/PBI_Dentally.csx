@@ -1692,6 +1692,36 @@ add("Total Revenue",
     @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
     "£#,##0");
 
+// Rolling (trailing-average-weekly) Total Revenue to smooth the spiky by-week charts.
+// Value = average weekly revenue over the trailing N days -> SAME £ scale as the weekly bars, so it
+// drops straight onto a by-week chart as a smoothed line/overlay. Key trick: REMOVEFILTERS('List Date')
+// + REMOVEFILTERS('List Date Grouping') so the window can reach BEYOND the page date/period filter
+// (e.g. "Last 3 Months") -- otherwise a 12M trailing average would be truncated to the filtered range
+// and ramp up at the left edge. The anchor (_hi) is captured in the CURRENT context first (the week
+// being plotted), then the window is re-imposed via FILTER(ALL('List Date'), ...) -- the model's
+// existing date-window idiom (matches the current-state date-leak fix). Days-based (not the FY-week
+// join) to avoid the Dim_Date Sun-Sat vs Monday week fan-out. Site/practitioner/role slicers still
+// apply (we only clear the date tables), so the window reaches back in TIME but stays in the selected
+// practice/practitioner. _days self-adjusts at the very start of history (can't fabricate weeks that
+// pre-date the practice). 3M = 91 days (13 wk); 12M = 364 days (52 wk).
+add("Total Revenue Rolling 3M",
+    @"VAR _hi = MAX('List Date'[Full Date])
+VAR _lo = _hi - 91
+VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
+VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+RETURN DIVIDE(_rev * 7, _days)",
+    "£#,##0");
+
+add("Total Revenue Rolling 12M",
+    @"VAR _hi = MAX('List Date'[Full Date])
+VAR _lo = _hi - 364
+VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
+VAR _rev  = CALCULATE([Total Revenue],        REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+VAR _days = CALCULATE(COUNTROWS('List Date'), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+RETURN DIVIDE(_rev * 7, _days)",
+    "£#,##0");
+
 // Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
 // in Gold.Aggregate_Practitioner_Contribution[Associate_Pay] (= Production * Associate_Pct/100 from
 // admin-entered Input.Practitioner_Pay), so this is a straight SUM. Reads 0 until the owner enters
