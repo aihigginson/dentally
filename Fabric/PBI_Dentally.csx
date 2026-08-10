@@ -1037,7 +1037,7 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // -- Financial cohorts: distinct patients tied to an invoice/payment condition --
 
 add("Patients With Discount",
-    @"CALCULATE(DISTINCTCOUNT('_Invoice Items'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
+    @"CALCULATE(DISTINCTCOUNT('_Revenue'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
     "#,##0");
 
 add("Patients With Outstanding Invoice",
@@ -1685,11 +1685,11 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 // clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
 // month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
 add("Plan Capitation Revenue",
-    @"SUM('_Plan Capitation'[Daily Value])",
+    @"CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Capitation"")",
     "£#,##0");
 
 add("Total Revenue",
-    @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
+    @"SUM('_Revenue'[Amount])",
     "£#,##0");
 
 // Rolling 12-MONTH (TTM) Total Revenue to smooth the spiky by-week charts. Deliberately 12-month
@@ -1728,14 +1728,14 @@ add("Earnings",
 
 add("NHS Revenue",
     @"CALCULATE(
-    SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] > 0)",
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[NHS Charge] > 0)",
     "£#,##0");
 
 add("Private Revenue",
     @"CALCULATE(
-    SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] = 0)",
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[Revenue Type] = ""Invoice"", '_Revenue'[NHS Charge] = 0)",
     "£#,##0");
 
 add("Outstanding Invoices",
@@ -2296,7 +2296,7 @@ foreach (var existing in Model.Tables[table].Measures
 
 add("Spider Rev Total Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [Total Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2306,7 +2306,7 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
 
 add("Spider Rev Private Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] = 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Invoice"", '_Revenue'[NHS Charge] = 0, TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [Private Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2316,7 +2316,7 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
 
 add("Spider Rev NHS Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] > 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[NHS Charge] > 0, TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [NHS Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2363,7 +2363,7 @@ RETURN IFERROR(DIVIDE(actual, IF(practice_avg > 0, practice_avg, 1)), 0)",
 // actual = 0 → no discounts at all → perfect score (2); BLANK → no invoice data → neutral (1)
 add("Spider Rev Discounts",
     @"VAR prac_pks  = VALUES('List Practitioners'[pk Practitioner])
-VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_rev  = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR prac_disc = CALCULATE(SUM('_Invoices'[Discount Amount]), TREATAS(prac_pks, '_Invoices'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_disc, prac_rev)
 VAR tgt       = [Discounts Target]
@@ -2380,7 +2380,7 @@ RETURN IF(
 add("Spider Rev Deposit Value",
     @"VAR prac_pks = VALUES('List Practitioners'[pk Practitioner])
 VAR prac_dep  = CALCULATE(SUM('_Payments'[Deposit Amount]), TREATAS(prac_pks, '_Payments'[fk Practitioner]))
-VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_rev  = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_dep, prac_rev)
 VAR tgt       = [Deposit Value Target]
 VAR fallback  = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Deposit Value])
@@ -2438,7 +2438,7 @@ add("Spider Rev Avg Deposit Value",
     // collides with the synthetic "Other" (two identical "Other" series, same value). The real
     // "Other"'s revenue is folded into the synthetic bucket by the measure (OtherNames) below.
     var bucketDax = @"UNION (
-    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
+    SELECTCOLUMNS ( FILTER ( DISTINCT ( '_Revenue'[Revenue Category] ), NOT ISBLANK ( '_Revenue'[Revenue Category] ) && '_Revenue'[Revenue Category] <> ""Other"" ), ""Category"", '_Revenue'[Revenue Category], ""Sort Order"", 0 ),
     ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
 )";
     var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
@@ -2458,15 +2458,15 @@ add("Spider Rev Avg Deposit Value",
     var mt = Model.Tables["_Measures"];
     var topDax = @"VAR N = 8
 VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
-VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ), ""@Total"", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) ) )
+VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( '_Revenue'[Revenue Category] ), ""@Total"", CALCULATE ( SUM ( '_Revenue'[Amount] ), REMOVEFILTERS ( 'List Date' ) ) )
 VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
-VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
-VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || 'List Treatments'[Standard Treatment Category] = ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && '_Revenue'[Revenue Category] <> ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || '_Revenue'[Revenue Category] = ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
 RETURN
 SWITCH ( TRUE (),
-    NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
-    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
-    CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
+    NOT ISINSCOPE ( 'Category Bucket'[Category] ), SUM ( '_Revenue'[Amount] ),
+    SelBucket = ""Other"", CALCULATE ( SUM ( '_Revenue'[Amount] ), TREATAS ( OtherNames, '_Revenue'[Revenue Category] ) ),
+    CALCULATE ( SUM ( '_Revenue'[Amount] ), TREATAS ( { SelBucket }, '_Revenue'[Revenue Category] ), KEEPFILTERS ( TREATAS ( TopNames, '_Revenue'[Revenue Category] ) ) )
 )";
     var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
     if (rm == null) rm = mt.AddMeasure("Revenue (Top N)", topDax); else rm.Expression = topDax;
