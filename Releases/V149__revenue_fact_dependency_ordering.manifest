@@ -1,0 +1,15 @@
+# =====================================================================
+# Release V149 -- wave-order GOLD_FACT_REVENUE behind its Silver sources + dims
+# =====================================================================
+# V148 added Gold.Fact_Revenue but its build ordering wasn't wired, so Load_All scheduled it in the
+# first Gold wave -- it ran BEFORE this build's Silver refresh and its dims (observed on dev: Fact_Revenue
+# at 20:29:27 vs Silver.Invoice_Items 20:30:21, Dim_Patients 20:33:00), reading last cycle's data.
+# Regenerated Audit.Process_Dependency (Generate_Process_Dependencies.ps1) now that usp_Load_Fact_Revenue
+# exists + GOLD_FACT_REVENUE is in Process_Config: it derives 5 Silver gates (level 3) + 7 dim gates
+# (level 4) and GOLD_FACT_REVENUE -> GOLD_AGG_PRACT_CONTRIBUTION (level 5). Reseed the dependency table.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V149__revenue_fact_dependency_ordering.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+TEST
