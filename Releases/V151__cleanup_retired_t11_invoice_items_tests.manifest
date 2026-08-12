@@ -1,0 +1,17 @@
+# =====================================================================
+# Release V151 -- clean up retired-T11 Test rows that referenced the dropped Fact_Invoice_Items
+# =====================================================================
+# V150 dropped Gold.Fact_Invoice_Items, but the retired T11 regression suite still defined 14 metric
+# rows querying it (row count, total/nhs/private revenue, 8 FK-null checks, patients-with-discount) plus
+# 9 comparison rows referencing those metrics. Tenant 11 no longer exists and deploys run -SkipTests, so
+# these never executed -- but they named a dropped table. Removed them and renormalised the leading-comma
+# VALUES lists (first row no comma, rest comma; verified balanced). Kept the INVITEM-named rows that
+# actually read Gold.Fact_Invoices (Date_Due / Date_Paid FK-null) and the ACTUALS_* metrics that read
+# Gold.Fact_Metric_Actuals -- both still valid.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V151__cleanup_retired_t11_invoice_items_tests.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Test.Metric_Definition.Data.sql
+DEPLOY   Fabric\Test.Comparison_Definition.Data.sql
+
+TEST

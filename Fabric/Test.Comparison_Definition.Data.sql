@@ -11,31 +11,30 @@ INSERT INTO [Test].[Comparison_Definition]
     ([Comparison_Name], [Metric_A], [Metric_B], [Expected_Difference], [Description], [Is_Active])
 VALUES
 -- -- Patients ----------------------------------------------------------------
+-- -- Appointments ------------------------------------------------------------
+-- -- Treatment Appointments --------------------------------------------------
+-- -- Invoice Items -----------------------------------------------------------
+-- -- Recalls -----------------------------------------------------------------
+-- -- Practitioners -----------------------------------------------------------
+-- -- Treatments --------------------------------------------------------------
+-- -- Sites -------------------------------------------------------------------
+-- -- Invoices header + control total -----------------------------------------
  ('CMP_BS_PATIENTS','BRONZE_PATIENTS_T11','SILVER_PATIENTS_T11',0,'Bronze = Silver patient rows',1)
 ,('CMP_SG_PATIENTS','SILVER_PATIENTS_T11','GOLD_PATIENTS_T11',0,'Silver = Gold patient rows (sentinel excluded)',1)
 ,('CMP_SENTINEL_PATIENTS','SILVER_PATIENTS_T11','GOLD_PATIENTS_T11_INC_SENTINEL',-1,'Silver one fewer than Gold incl the -1 sentinel; demonstrates a constant offset',1)
--- -- Appointments ------------------------------------------------------------
 ,('CMP_BS_APPOINTMENTS','BRONZE_APPOINTMENTS_T11','SILVER_APPOINTMENTS_T11',0,'Bronze = Silver appointment rows',1)
 ,('CMP_SG_APPOINTMENTS','SILVER_APPOINTMENTS_T11','GOLD_APPOINTMENTS_T11',0,'Silver = Gold appointment rows',1)
--- -- Treatment Appointments --------------------------------------------------
 ,('CMP_BS_TREATMENT_APPOINTMENTS','BRONZE_TREATMENT_APPOINTMENTS_T11','SILVER_TREATMENT_APPOINTMENTS_T11',0,'Bronze = Silver treatment appointment rows',1)
 ,('CMP_SG_TREATMENT_APPOINTMENTS','SILVER_TREATMENT_APPOINTMENTS_T11','GOLD_TREATMENT_APPOINTMENTS_T11',0,'Silver = Gold treatment appointment rows',1)
--- -- Invoice Items -----------------------------------------------------------
 ,('CMP_BS_INVOICE_ITEMS','BRONZE_INVOICE_ITEMS_T11','SILVER_INVOICE_ITEMS_T11',0,'Bronze = Silver invoice item rows',1)
-,('CMP_SG_INVOICE_ITEMS','SILVER_INVOICE_ITEMS_T11','GOLD_INVOICE_ITEMS_T11',0,'Silver = Gold invoice item rows',1)
--- -- Recalls -----------------------------------------------------------------
 ,('CMP_BS_RECALLS','BRONZE_RECALLS_T11','SILVER_RECALLS_T11',0,'Bronze = Silver recall rows',1)
 ,('CMP_SG_RECALLS','SILVER_RECALLS_T11','GOLD_RECALLS_T11',0,'Silver = Gold recall rows',1)
--- -- Practitioners -----------------------------------------------------------
 ,('CMP_BS_PRACTITIONERS','BRONZE_PRACTITIONERS_T11','SILVER_PRACTITIONERS_T11',0,'Bronze = Silver practitioner rows',1)
 ,('CMP_SG_PRACTITIONERS','SILVER_PRACTITIONERS_T11','GOLD_PRACTITIONERS_T11',0,'Silver = Gold practitioner rows',1)
--- -- Treatments --------------------------------------------------------------
 ,('CMP_BS_TREATMENTS','BRONZE_TREATMENTS_T11','SILVER_TREATMENTS_T11',0,'Bronze = Silver treatment rows',1)
 ,('CMP_SG_TREATMENTS','SILVER_TREATMENTS_T11','GOLD_TREATMENTS_T11',0,'Silver = Gold treatment rows',1)
--- -- Sites -------------------------------------------------------------------
 ,('CMP_BS_SITES','BRONZE_SITES_T11','SILVER_SITES_T11',0,'Bronze = Silver site rows',1)
 ,('CMP_SG_SITES','SILVER_SITES_T11','GOLD_SITES_T11',0,'Silver = Gold site rows',1)
--- -- Invoices header + control total -----------------------------------------
 ,('CMP_BS_INVOICES','BRONZE_INVOICES_T11','SILVER_INVOICES_T11',0,'Bronze = Silver invoice header rows',1)
 ,('CMP_BS_INVOICED_AMOUNT','BRONZE_INVOICED_AMOUNT_T11','SILVER_INVOICED_AMOUNT_T11',0,'Bronze = Silver total invoiced amount',1)
 GO
@@ -51,17 +50,12 @@ INSERT INTO [Test].[Comparison_Definition]
 VALUES
 -- Revenue split: Total Revenue must equal NHS + Private (i.e. every invoice
 -- item has a non-null NHS Charge). A non-zero result flags NULL NHS_Charge rows.
- ('CMP_REVENUE_SPLIT','GOLD_TOTAL_REVENUE_T11','GOLD_REVENUE_NHS_OR_PRIVATE_INV_T11',0,'Total Revenue = NHS + Private (no invoice items with NULL NHS Charge)',1)
 -- Metric Actuals oracle: materialised Fact_Metric_Actuals must equal the source each DAX measure sums.
-,('CMP_ACTUALS_TOTAL_REVENUE','ACTUALS_TOTAL_REVENUE_T11','GOLD_TOTAL_REVENUE_T11',0,'Materialised total_revenue = SUM(Invoice Items Total Price)',1)
-,('CMP_ACTUALS_NHS_REVENUE','ACTUALS_NHS_REVENUE_T11','GOLD_NHS_REVENUE_INV_T11',0,'Materialised nhs_revenue = invoice items with NHS Charge > 0',1)
-,('CMP_ACTUALS_PRIVATE_REVENUE','ACTUALS_PRIVATE_REVENUE_T11','GOLD_PRIVATE_REVENUE_INV_T11',0,'Materialised private_revenue = invoice items with NHS Charge = 0',1)
-,('CMP_ACTUALS_NEW_PATIENTS','ACTUALS_NEW_PATIENTS_T11','GOLD_AGG_NEW_PATIENTS_T11',0,'Materialised new_patients = distinct New_Patient in the daily aggregate',1)
 -- Cross-layer control total candidate: Bronze invoice header Amount vs Gold
 -- invoice-item Total Price. DISABLED -- header Amount and summed item Total
 -- Price may legitimately differ (NHS handling, rounding). Verify the real
 -- offset on a known-good run, set Expected_Difference, then enable.
-,('CMP_INVOICE_AMOUNT_BRONZE_VS_GOLD_ITEMS','BRONZE_INVOICED_AMOUNT_T11','GOLD_TOTAL_REVENUE_T11',0,'Bronze invoice Amount vs Gold invoice-item Total Price (verify offset then enable)',0)
+ ('CMP_ACTUALS_NEW_PATIENTS','ACTUALS_NEW_PATIENTS_T11','GOLD_AGG_NEW_PATIENTS_T11',0,'Materialised new_patients = distinct New_Patient in the daily aggregate',1)
 GO
 
 -- =====================================================================
@@ -76,9 +70,6 @@ VALUES
  ('CMP_FKNULL_APPT_PATIENT','GOLD_FKNULL_APPT_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Fact_Appointments must have no NULLs',1)
 ,('CMP_FKNULL_APPT_PRACTITIONER','GOLD_FKNULL_APPT_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Fact_Appointments must have no NULLs',1)
 ,('CMP_FKNULL_APPT_PRACTICE_SITE','GOLD_FKNULL_APPT_PRACTICE_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Fact_Appointments must have no NULLs',1)
-,('CMP_FKNULL_INVITEM_PATIENT','GOLD_FKNULL_INVITEM_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Fact_Invoice_Items must have no NULLs',1)
-,('CMP_FKNULL_INVITEM_PRACTITIONER','GOLD_FKNULL_INVITEM_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Fact_Invoice_Items must have no NULLs',1)
-,('CMP_FKNULL_INVITEM_PRACTICE_SITE','GOLD_FKNULL_INVITEM_PRACTICE_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Fact_Invoice_Items must have no NULLs',1)
 ,('CMP_FKNULL_PAY_PATIENT','GOLD_FKNULL_PAY_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Fact_Payments must have no NULLs',1)
 ,('CMP_FKNULL_PAY_PRACTITIONER','GOLD_FKNULL_PAY_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Fact_Payments must have no NULLs',1)
 ,('CMP_FKNULL_PAY_PRACTICE_SITE','GOLD_FKNULL_PAY_PRACTICE_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Fact_Payments must have no NULLs',1)
