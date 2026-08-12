@@ -1,0 +1,41 @@
+# =====================================================================
+# Release V150 -- Retire Fact_Invoice_Items + Fact_Plan_Capitation (full repoint to Fact_Revenue)
+# =====================================================================
+# The unified Gold.Fact_Revenue (V148) subsumes both old facts, but three loaders still read them.
+# This release repoints every consumer to Fact_Revenue and DROPS the old facts + their loaders + the
+# PBI views. No parallel old fact remains, so any future divergence surfaces on the next build rather
+# than lying hidden behind an identical shadow copy.
+#
+# Repoints (verified on dev BEFORE deploy, old-fact vs new-fact aggregation computed from live data):
+#   * Fact_Metric_Actuals: invoice metrics -> Fact_Revenue WHERE Revenue_Type='Invoice' AND fk_Date<>-1
+#       (Total_Price->Amount, fk_Date_Invoice->fk_Date). BYTE-IDENTICAL at site x prac x date x NHS grain
+#       (grand + bidirectional EXCEPT = 0). plan_capitation_revenue -> Revenue_Type='Capitation'
+#       (Daily_Value->Amount) -- CHANGES intentionally to the working-days-from-Cutover_Date figure
+#       (dropped pre-go-live phantom capitation; ~29% fewer rows, GBP2.586M -> GBP2.572M on dev).
+#   * Aggregate_Site_Patient_Practitioner_Daily: -> Fact_Revenue WHERE Revenue_Type='Invoice'
+#       (NULLIF(fk_Date,-1) preserves the old NULL-date grouping).
+#   * Fact_KPI_Snapshot: #charged re-sourced from Silver.Invoice_Items + Silver.Invoices (MIN Dated_On) --
+#       IDENTICAL (121,409 tpi, 0 mismatches). Outstanding practitioner now Fact_Invoices.fk_Practitioner
+#       (same dentist-preference rule) -- IDENTICAL (0 mismatches). Drops the Fact_Invoice_Items join.
+#   * Aggregate_Practitioner_Contribution already read Fact_Revenue (V148); only stale config text fixed.
+#
+# Config: removed GOLD_FACT_INVOICE_ITEMS + GOLD_AGG_PLAN_CAPITATION from Process_Config (Load_All would
+# EXEC dropped SPs), the 10 Fact_Invoice_Items rows from RI_Check_Config (post-build RI gate), and
+# regenerated Process_Dependency. Deferred: retired-T11 Test.*_Definition rows (behind -SkipTests).
+# The PBI model was cut over to _Revenue and no longer reads _Invoice Items / _Plan Capitation.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V150__retire_invoice_items_plan_capitation_facts.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_KPI_Snapshot.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+MIGRATE  Migrations\V150__retire_invoice_items_plan_capitation_facts.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_KPI_Snapshot @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

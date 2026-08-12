@@ -178,20 +178,21 @@ BEGIN
             ii.fk_Practice_Site                                AS fk_Site,
             ii.fk_Patient,
             ii.fk_Practitioner,
-            ii.fk_Date_Invoice                                 AS fk_Date,
+            NULLIF(ii.fk_Date, -1)                                 AS fk_Date,
             ii.Tenant_ID,
             -- Line-grain revenue (NHS_Charge is a 0/1 flag, not an amount): attribute
             -- each line's Total_Price to its practitioner. Invoice header totals are no
             -- longer folded onto lines, so multi-line invoices no longer double-count.
-            SUM(CASE WHEN ii.NHS_Charge > 0      THEN ii.Total_Price ELSE 0 END)  AS NHS_Revenue,
-            SUM(CASE WHEN ISNULL(ii.NHS_Charge,0) = 0 THEN ii.Total_Price ELSE 0 END) AS Private_Revenue
+            SUM(CASE WHEN ii.NHS_Charge > 0      THEN ii.Amount ELSE 0 END)  AS NHS_Revenue,
+            SUM(CASE WHEN ISNULL(ii.NHS_Charge,0) = 0 THEN ii.Amount ELSE 0 END) AS Private_Revenue
         INTO #rev_agg
-        FROM Gold.Fact_Invoice_Items ii
+        FROM Gold.Fact_Revenue ii
+        WHERE ii.Revenue_Type = 'Invoice'
         GROUP BY
             ii.fk_Practice_Site,
             ii.fk_Patient,
             ii.fk_Practitioner,
-            ii.fk_Date_Invoice,
+            NULLIF(ii.fk_Date, -1),
             ii.Tenant_ID;
 
         -- ── Treatment plan items ─────────────────────────────────────────────

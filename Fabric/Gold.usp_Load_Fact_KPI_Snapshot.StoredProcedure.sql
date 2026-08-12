@@ -172,12 +172,13 @@ BEGIN
         SELECT
             CAST(fii.[Treatment_Plan_Item_ID] AS VARCHAR(50))  AS bk_Treatment_Plan_Item_ID,
             fii.[Tenant_ID],
-            MIN(dd.Full_Date)                                  AS First_Invoice_Date
+            MIN(TRY_CAST(inv.Dated_On AS DATE))                AS First_Invoice_Date
         INTO #charged
-        FROM [Gold].[Fact_Invoice_Items] fii
-        INNER JOIN [Gold].[Dim_Date] dd
-            ON dd.pk_Date = fii.[fk_Date_Invoice]
+        FROM [Silver].[Invoice_Items] fii
+        INNER JOIN [Silver].[Invoices] inv
+            ON inv.Id = fii.Invoice_ID AND inv.Tenant_ID = fii.Tenant_ID
         WHERE fii.[Treatment_Plan_Item_ID] IS NOT NULL
+          AND TRY_CAST(inv.Dated_On AS DATE) IS NOT NULL
         GROUP BY fii.[Treatment_Plan_Item_ID], fii.[Tenant_ID];
 
         -- ── A0: open_courses_value — pipeline snapshot ───────────────────────
@@ -275,20 +276,11 @@ BEGIN
                 fi.[bk_Invoice_ID]                            AS Invoice_ID,
                 fi.[Tenant_ID],
                 ISNULL(fi.[fk_Practice_Site], -1)             AS fk_Practice_Site,
-                COALESCE(
-                    MAX(CASE WHEN dp.[Role] IN ('dentist','orthodontist','specialist')
-                             THEN fii.[fk_Practitioner] END),
-                    MAX(fii.[fk_Practitioner])
-                )                                              AS fk_Practitioner,
+                MAX(fi.[fk_Practitioner])                                              AS fk_Practitioner,
                 MAX(fi.[Invoice_Amount_Outstanding])           AS Invoice_Outstanding,
                 MIN(dd_i.[Full_Date])                          AS Invoice_Date,
                 MAX(dd_p.[Full_Date])                          AS Paid_Date
             FROM [Gold].[Fact_Invoices] fi
-            LEFT JOIN [Gold].[Fact_Invoice_Items] fii
-                ON fii.[Invoice_ID] = fi.[bk_Invoice_ID] AND fii.[Tenant_ID] = fi.[Tenant_ID]
-            LEFT JOIN [Gold].[Dim_Practitioners] dp
-                ON dp.[pk_Practitioner] = fii.[fk_Practitioner]
-               AND dp.[Tenant_ID]       = fii.[Tenant_ID]
             INNER JOIN [Gold].[Dim_Date] dd_i ON dd_i.pk_Date = fi.[fk_Date_Invoice]
             LEFT  JOIN [Gold].[Dim_Date] dd_p ON dd_p.pk_Date = fi.[fk_Date_Paid]
             WHERE fi.[Invoice_Amount] > 0
