@@ -39,14 +39,14 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Invoice Items"
+                      "Entity": "_Revenue"
                     }
                   },
                   "Property": "Revenue"
                 }
               },
-              "queryRef": "_Invoice Items.Revenue",
-              "nativeQueryRef": "Revenue"
+              "queryRef": "_Revenue.Revenue",
+              "nativeQueryRef": "Revenue1"
             }
           ]
         }
@@ -58,7 +58,7 @@
               "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Invoice Items"
+                    "Entity": "_Revenue"
                   }
                 },
                 "Property": "Revenue"
@@ -210,12 +210,12 @@
         "type": "Categorical"
       },
       {
-        "name": "6f46f84257d77057d8b0",
+        "name": "c29a78b9b35be8402073",
         "field": {
           "Measure": {
             "Expression": {
               "SourceRef": {
-                "Entity": "_Invoice Items"
+                "Entity": "_Revenue"
               }
             },
             "Property": "Revenue"

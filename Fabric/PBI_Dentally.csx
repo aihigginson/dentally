@@ -2556,13 +2556,17 @@ RETURN
 
 
 // ============ Diagnostics ============
-// Row-count checks. Delete-by-name (any folder) first so this cleanly replaces older copies that
-// still referenced the retired invoice-items table (cutover -> unified _Revenue).
+// Row-count checks. Delete-by-name across EVERY table first so this cleanly replaces older copies
+// wherever they were homed -- an earlier hand-made "Diag Invoice Rows" lived on a different table
+// (not _Measures) and still referenced the retired invoice-items table, so a _Measures-only sweep
+// missed it and the broken '_Invoice Items' definition survived (cutover -> unified _Revenue).
 {
     var t = Model.Tables["_Measures"];
     string g = "Diagnostics";
-    foreach (var m in t.Measures.Where(m => m.Name == "Diag Invoice Rows" || m.Name == "Diag Capitation Rows" || m.Name == "Diag Revenue Rows").ToList())
-        m.Delete();
+    var diagNames = new[] { "Diag Invoice Rows", "Diag Capitation Rows", "Diag Revenue Rows" };
+    foreach (var tbl in Model.Tables)
+        foreach (var m in tbl.Measures.Where(m => diagNames.Contains(m.Name)).ToList())
+            m.Delete();
     var d0 = t.AddMeasure("Diag Revenue Rows",    @"COUNTROWS ( '_Revenue' )");
     d0.DisplayFolder = g; d0.FormatString = "#,##0";
     var d1 = t.AddMeasure("Diag Invoice Rows",    @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Invoice"" )");

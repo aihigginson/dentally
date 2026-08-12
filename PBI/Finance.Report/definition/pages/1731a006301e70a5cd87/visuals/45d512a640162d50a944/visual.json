@@ -75,14 +75,14 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Invoice Items"
+                      "Entity": "_Revenue"
                     }
                   },
                   "Property": "Revenue"
                 }
               },
-              "queryRef": "_Invoice Items.Revenue",
-              "nativeQueryRef": "Revenue"
+              "queryRef": "_Revenue.Revenue",
+              "nativeQueryRef": "Revenue1"
             }
           ]
         }
@@ -223,6 +223,13 @@
                   "Value": "false"
                 }
               }
+            },
+            "secShow": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
             }
           }
         }
@@ -304,5 +311,65 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "a8a302ca12885d99bcb6",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Month Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "04c01fb0c80000633de8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List GL Account"
+              }
+            },
+            "Property": "Account Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "97ad2c1bd5ba35bae0cd",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Total Costs"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "079964635d00ebb30570",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Revenue"
+              }
+            },
+            "Property": "Revenue"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }
