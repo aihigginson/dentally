@@ -796,7 +796,7 @@ ONBOARDING_NOTIFY  = os.environ.get('ONBOARDING_NOTIFY', os.environ.get('ONBOARD
 # signup. Keep this in step with the ENDPOINTS list in Fabric/Notebooks/Ingest_Dentally.ipynb.
 DENTALLY_REQUIRED = [
     ('user:read',        ['users']),
-    ('practice:read',    ['practices', 'sites', 'practitioners', 'acquisition_sources',
+    ('practice:read',    ['practice', 'sites', 'practitioners', 'acquisition_sources',
                           'appointment_cancellation_reasons', 'sundries', 'contracts', 'waiting_lists']),
     ('appointment:read', ['appointments', 'treatment_appointments', 'rota_practitioner_diaries']),
     ('patient:read',     ['patients', 'patient_referrals', 'recalls']),
@@ -846,9 +846,12 @@ def _dentally_preflight(token):
     groups = []
     for scope, ps in DENTALLY_REQUIRED:
         tables = [{'name': p, 'state': _state(status.get(p))} for p in ps]
-        groups.append({'scope': scope,
-                       'ok': all(t['state'] == 'ok' for t in tables),
-                       'tables': tables})
+        # A permission is confirmed granted once ANY of its endpoints reads and NONE is explicitly
+        # blocked -- one 2xx proves the scope. Endpoints that need params (e.g. the diary returns 400
+        # bare) or are slow (recalls can time out) stay 'unconfirmed' without dragging the group down.
+        blocked = any(t['state'] == 'blocked' for t in tables)
+        readable = any(t['state'] == 'ok' for t in tables)
+        groups.append({'scope': scope, 'ok': readable and not blocked, 'tables': tables})
     return token_valid, groups
 
 
@@ -1053,7 +1056,7 @@ def onboarding_callback():
 
         practice_id, practice_name = None, state.get('practice')
         try:
-            pr = requests.get(DENTALLY_API_BASE + '/practices', headers={
+            pr = requests.get(DENTALLY_API_BASE + '/practice', headers={
                 'Authorization': 'Bearer ' + tokens['access_token'],
                 'User-Agent':    DENTALLY_UA,
             }, timeout=30)
@@ -1131,7 +1134,7 @@ def onboarding_token():
         # ── All readable: capture the practice name, store the pending trial, notify the operator. ──
         practice_id, practice_name = None, payload.get('practice')
         try:
-            pr = requests.get(DENTALLY_API_BASE + '/practices', headers={
+            pr = requests.get(DENTALLY_API_BASE + '/practice', headers={
                 'Authorization': 'Bearer ' + token, 'User-Agent': DENTALLY_UA}, timeout=15)
             if pr.ok:
                 body = pr.json()
