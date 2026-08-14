@@ -22,6 +22,7 @@ CREATE TABLE [Gold].[Dim_NHS_Contracts](
 	[UDA_Value] [decimal](18, 4) NULL,
 	[UOA_Target] [decimal](18, 4) NULL,
 	[UOA_Value] [decimal](18, 4) NULL,
+	[Is_Rolled_Forward] [bit] NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL
 )

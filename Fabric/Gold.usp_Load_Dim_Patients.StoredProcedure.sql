@@ -123,7 +123,18 @@ BEGIN
                  WHEN TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date),'') AS DATE) <= DATEADD(DAY,-730,@Today)
                       AND next_apt.Next_Appointment_Date IS NULL THEN 'Calculated as inactive'
                  ELSE NULL END                                                                      AS Lapsed_Type,
-            dd_lap.pk_Date                                                                          AS fk_Date_Lapsed
+            dd_lap.pk_Date                                                                          AS fk_Date_Lapsed,
+            -- Lapsed_Date = the actual lapse date behind fk_Date_Lapsed; Lapsed_Reason derived from
+            -- the lapse type (archived_reason NOT ingested: data-minimised + empty on real data).
+            CAST(CASE WHEN CAST(ISNULL(p.Active,0) AS BIT) = 0 THEN TRY_CAST(p.Updated_At AS DATE)
+                 WHEN TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date),'') AS DATE) <= DATEADD(DAY,-730,@Today)
+                      AND next_apt.Next_Appointment_Date IS NULL
+                      THEN DATEADD(DAY,730,TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date),'') AS DATE))
+                 ELSE NULL END AS DATE)                                                              AS Lapsed_Date,
+            CASE WHEN CAST(ISNULL(p.Active,0) AS BIT) = 0 THEN 'Set inactive in Dentally'
+                 WHEN TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date),'') AS DATE) <= DATEADD(DAY,-730,@Today)
+                      AND next_apt.Next_Appointment_Date IS NULL THEN 'No visit in 24+ months'
+                 ELSE NULL END                                                                      AS Lapsed_Reason
         INTO #src
         FROM Silver.Patients p
         LEFT JOIN Silver.Patient_Stats ps ON ps.Patient_ID = p.Patient_ID AND ps.Tenant_ID = p.Tenant_ID
@@ -209,6 +220,8 @@ BEGIN
             Patient_Updated_Date                = src.Patient_Updated_Date,
             Lapsed_Type                         = src.Lapsed_Type,
             fk_Date_Lapsed                      = src.fk_Date_Lapsed,
+            Lapsed_Date                         = src.Lapsed_Date,
+            Lapsed_Reason                       = src.Lapsed_Reason,
             DW_Updated_At                       = SYSUTCDATETIME()
         FROM Gold.Dim_Patients tgt
         INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -251,7 +264,9 @@ BEGIN
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Lapsed_Type] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[fk_Date_Lapsed] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[fk_Date_Lapsed] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Lapsed_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Lapsed_Reason] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Account_ID] AS VARCHAR(500)), ''),
@@ -292,7 +307,9 @@ BEGIN
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Lapsed_Type] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[fk_Date_Lapsed] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[fk_Date_Lapsed] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Lapsed_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Lapsed_Reason] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -312,7 +329,7 @@ BEGIN
             Last_Scale_Polish_Date, Next_Scale_Polish_Date,
             Last_FTA_Date, Last_Cancelled_Appointment_Date,
             Total_Paid, Total_Invoiced,
-            Patient_Created_Date, Patient_Updated_Date, Lapsed_Type, fk_Date_Lapsed, Patient_Count, DW_Created_At, DW_Updated_At
+            Patient_Created_Date, Patient_Updated_Date, Lapsed_Type, fk_Date_Lapsed, Lapsed_Date, Lapsed_Reason, Patient_Count, DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
@@ -329,7 +346,7 @@ BEGIN
             src.Last_Scale_Polish_Date, src.Next_Scale_Polish_Date,
             src.Last_FTA_Date, src.Last_Cancelled_Appointment_Date,
             src.Total_Paid, src.Total_Invoiced,
-            src.Patient_Created_Date, src.Patient_Updated_Date, src.Lapsed_Type, src.fk_Date_Lapsed, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Patient_Created_Date, src.Patient_Updated_Date, src.Lapsed_Type, src.fk_Date_Lapsed, src.Lapsed_Date, src.Lapsed_Reason, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;

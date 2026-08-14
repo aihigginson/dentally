@@ -3,10 +3,10 @@
   "name": "ecd102b2cc2d7f949ada",
   "position": {
     "x": 0,
-    "y": 80.375,
+    "y": 80.375426621160415,
     "z": 0,
     "height": 423.89078498293514,
-    "width": 611.77474402730377,
+    "width": 639.93174061433444,
     "tabOrder": 0
   },
   "visual": {
@@ -332,5 +332,65 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "525172a258e94ee0c02e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Ending Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "3a5262bd96031e8aac59",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Acquisition Sources"
+              }
+            },
+            "Property": "Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "dae3d81d390967e117c5",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Lifetime Value"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "c9856a35b9801ec38a55",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "New Patients"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

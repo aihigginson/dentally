@@ -10,7 +10,7 @@
     "tabOrder": 0
   },
   "visual": {
-    "visualType": "columnChart",
+    "visualType": "lineStackedColumnComboChart",
     "query": {
       "queryState": {
         "Category": {
@@ -67,25 +67,25 @@
               "nativeQueryRef": "Revenue (Top N)"
             }
           ]
+        },
+        "Y2": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Total Revenue Rolling 12M"
+                }
+              },
+              "queryRef": "_Measures.Total Revenue Rolling 12M",
+              "nativeQueryRef": "Total Revenue Rolling 12M"
+            }
+          ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Column": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "List Date"
-                  }
-                },
-                "Property": "Week Commencing Date"
-              }
-            },
-            "direction": "Ascending"
-          }
-        ],
-        "isDefaultSort": true
       }
     },
     "objects": {
@@ -115,6 +115,13 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            },
+            "position": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
                 }
               }
             }
@@ -165,6 +172,20 @@
               }
             },
             "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "alignZeros": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "secShow": {
               "expr": {
                 "Literal": {
                   "Value": "false"
@@ -255,7 +276,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "a5dcecfa08a82806e903",
+        "name": "b7e8c5102ed0105ae1b2",
         "field": {
           "Column": {
             "Expression": {
@@ -269,7 +290,7 @@
         "type": "Categorical"
       },
       {
-        "name": "0f19ab1f905e8050ecd5",
+        "name": "3eb030bc067a61116e22",
         "field": {
           "Column": {
             "Expression": {
@@ -283,7 +304,7 @@
         "type": "Categorical"
       },
       {
-        "name": "e4a8316c69e467eed3ce",
+        "name": "853a8dbb4b92149162e3",
         "field": {
           "Measure": {
             "Expression": {
@@ -292,6 +313,20 @@
               }
             },
             "Property": "Revenue (Top N)"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "cb603e5d9635d9d00835",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Total Revenue Rolling 12M"
           }
         },
         "type": "Advanced"

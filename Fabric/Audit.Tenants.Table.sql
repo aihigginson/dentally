@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS [Audit].[Tenants]
+﻿DROP TABLE IF EXISTS [Audit].[Tenants]
 GO
 CREATE TABLE [Audit].[Tenants](
 	[Tenant_ID]           [int]           NOT NULL,
@@ -10,6 +10,7 @@ CREATE TABLE [Audit].[Tenants](
 	[Dentally_Secret]     [varchar](500)  NULL,
 	[Is_Active]           [int]           NULL,
 	[Last_Loaded_At]      [varchar](255)  NULL,
-	[Notes]               [varchar](1000) NULL
+	[Notes]               [varchar](1000) NULL,
+	[Cutover_Date]        [date]          NULL          -- Dentally go-live = MIN(updated_at) of Treatment Plans; set by Audit.usp_Set_Tenant_Cutover
 )
 GO

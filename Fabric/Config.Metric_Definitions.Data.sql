@@ -24,6 +24,8 @@ USING (VALUES
         'Revenue earned for each hour of scheduled clinical chair time, counting all clinical roles (dentists, hygienists, therapists, orthodontists and specialists). Measures how productively clinical time is used. Revenue per Dentist Hour is the dentist-only equivalent.'),
     ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist time only (Dentally role Dentist)',  0, 1, 1, 15, 'above', 'rate',
         'Revenue earned for each hour of scheduled dentist chair time only (practitioners whose Dentally role is Dentist), excluding hygiene and therapy time and revenue. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
+    ('revenue_per_diary_hour',     'Revenue Per Diary Hour',             'revenue',    'currency', 'Total revenue per hour of completed appointment (diary) time', 1, 1, 1, 15, 'above', 'rate',
+        'Total revenue divided by the hours of completed (delivered) appointment time — revenue earned per hour of chair time actually used. Denominator counts Completed appointments only. Drillable by patient, practitioner and day. Display-only (no target).'),
     ('deposit_ratio',              'Deposit Ratio',                      'revenue',    'percent',  'Deposits collected as a percentage of revenue',                           1, 1, 1, 16, 'above', 'point_in_time',
         'The value of deposits taken on treatment plans as a percentage of revenue in the period — money collected up front (e.g. for lab or private work) relative to total income. A higher ratio means more treatment is secured with a deposit before work begins.'),
     ('discounts',                  'Discounts',                          'revenue',    'percent', 'Total discounts applied to invoices (invoice header minus items sum)',    1, 1, 1, 17, 'below', 'rate',
@@ -74,6 +76,10 @@ USING (VALUES
         'The percentage of appointments that are examinations (check-ups) rather than treatment. Judged against a healthy band rather than simply higher or lower — too low may mean under-recall, too high may mean too little treatment delivered.'),
     ('avg_plan_value',             'Average Plan Value',                 'treatment',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
         'The average value of the treatment plans presented to patients in the period — total presented plan value divided by the number of plans. A measure of case size and treatment ambition. Higher generally means larger cases proposed.'),
+    ('avg_first_plan_value',       'Avg First Plan Value',               'treatment',  'currency', 'Average value of the plan created at a new patient''s first appointment', 0, 1, 1, 36, 'above', 'rate',
+        'The average value of the treatment plan created at a new patient''s first appointment — total first-appointment plan value divided by the number of new patients who received a plan there. A measure of how well first visits convert into planned treatment. Higher generally means larger first-visit cases.'),
+    ('new_patient_retention',      'New Patient Retention',              'treatment',  'percent',  'Percentage of new patients who return for a second examination', 0, 1, 1, 37, 'above', 'rate',
+        'Of new patients registered in the period, the percentage who have since returned for a second examination (any time after their first). A measure of how well the practice retains newly acquired patients. Higher is better.'),
 -- Scheduling
     ('diary_fill',                 'Diary Fill',                         'scheduling', 'percent',  'Percentage of worked time booked with appointments', 0, 1, 1, 39, 'above', 'rate',
         'The percentage of available worked time booked with patient appointments (scheduled appointment hours / worked hours). Measures how full the diary is -- the forward-plannable capacity metric, and the only chair metric computable ahead of time. Higher is better, up to practical limits; can exceed 100% when over-booked.'),
@@ -149,6 +155,12 @@ UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
 -- manually-entered targets spreadsheet.
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] = 'nhs_revenue';
+-- New-patient Clinical metrics are display-only (no target entry / no Daily_Targets rows).
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] IN ('avg_first_plan_value', 'new_patient_retention');
+-- Revenue Per Diary Hour is an actual-only metric (drillable ratio, no target).
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] = 'revenue_per_diary_hour';
 -- Exam Ratio target is only meaningful for Dentists -> only generate Dentist practitioner rows.
 UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
     WHERE [Metric_Key] = 'exam_ratio';
@@ -217,6 +229,9 @@ UPDATE Config.Metric_Definitions SET Card_Label = CASE Metric_Key
     WHEN 'open_courses_without_appt'       THEN 'Open (No Appt)'
     WHEN 'open_courses_without_appt_value' THEN 'Open £ (No Appt)'
     WHEN 'avg_plan_value'                  THEN 'Avg Plan £'
+    WHEN 'avg_first_plan_value'            THEN 'Avg 1st Plan £'
+    WHEN 'new_patient_retention'           THEN 'New Pt Retention'
+    WHEN 'revenue_per_diary_hour'          THEN 'Rev/Diary Hr'
     WHEN 'chair_utilisation'               THEN 'Chair Util'
     WHEN 'days_until_30min_free'           THEN 'Days to 30min Free'
     WHEN 'cancellation_frequency'          THEN 'Cancel %'

@@ -787,7 +787,72 @@ DENTALLY_SCOPES    = os.environ.get('DENTALLY_SCOPES',
     'user:read patient:read appointment:read practitioner:read site:read '
     'treatment:read payment_plan:read contract:read invoice:read')  # confirm the exact set with Dentally
 TRIAL_DAYS         = int(os.environ.get('ONBOARDING_TRIAL_DAYS', '30'))
+# Where to send the "an onboarding is waiting to be provisioned" alert. Onboarding is throttled/run
+# by hand, so the operator needs a nudge per new signup. Defaults to the app's reply-to address.
+ONBOARDING_NOTIFY  = os.environ.get('ONBOARDING_NOTIFY', os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info'))
+# Every Dentally endpoint the ingest reads, grouped by the read-permission a practice ticks when
+# creating the personal access token. The onboarding preflight probes each with the pasted token so
+# we confirm -- in real time -- that all the tables we need are actually readable BEFORE accepting the
+# signup. Keep this in step with the ENDPOINTS list in Fabric/Notebooks/Ingest_Dentally.ipynb.
+DENTALLY_REQUIRED = [
+    ('user:read',        ['users']),
+    ('practice:read',    ['practice', 'sites', 'practitioners', 'acquisition_sources',
+                          'appointment_cancellation_reasons', 'sundries', 'contracts', 'waiting_lists']),
+    ('appointment:read', ['appointments', 'treatment_appointments', 'rota_practitioner_diaries']),
+    ('patient:read',     ['patients', 'patient_referrals', 'recalls']),
+    ('financials:read',  ['invoices', 'invoice_items', 'payments', 'nhs_claims']),
+    ('treatments',       ['treatments', 'treatment_categories', 'treatment_plans',
+                          'treatment_plan_items', 'payment_plans']),
+]
 _dentally_app_creds = {}
+
+
+def _dentally_preflight(token):
+    """Probe every Dentally endpoint the ingest reads, with the pasted token, in parallel. Deliberately
+    agnostic to Dentally's exact status codes (a missing scope may surface as 401 or 403): a table is
+    readable ONLY on a 2xx. Returns (token_valid, groups):
+      * token_valid is False only when NOTHING was readable AND at least one probe was explicitly
+        rejected (401/403) -- i.e. the token itself is wrong, not just a per-scope gap.
+      * per table -- 'ok' (2xx), 'blocked' (401/403: readable-permission not granted / token rejected),
+        'unconfirmed' (404/5xx/network: couldn't check -- non-blocking so a path quirk or transient
+        error never blocks a real signup; the operator re-checks on the manual run)."""
+    import concurrent.futures
+    headers = {'Authorization': 'Bearer ' + token, 'User-Agent': DENTALLY_UA}
+    paths = [p for _, ps in DENTALLY_REQUIRED for p in ps]
+
+    def _probe(path):
+        try:
+            r = requests.get(f'{DENTALLY_API_BASE}/{path}', headers=headers,
+                             params={'per_page': 1}, timeout=8)
+            return path, r.status_code
+        except requests.RequestException:
+            return path, None
+
+    status = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+        for path, code in ex.map(_probe, paths):
+            status[path] = code
+
+    codes        = list(status.values())
+    any_ok       = any(c and 200 <= c < 300 for c in codes)
+    any_rejected = any(c in (401, 403) for c in codes)
+    token_valid  = any_ok or not any_rejected   # nothing readable + an explicit rejection = bad token
+
+    def _state(c):
+        if c and 200 <= c < 300: return 'ok'
+        if c in (401, 403):      return 'blocked'
+        return 'unconfirmed'
+
+    groups = []
+    for scope, ps in DENTALLY_REQUIRED:
+        tables = [{'name': p, 'state': _state(status.get(p))} for p in ps]
+        # A permission is confirmed granted once ANY of its endpoints reads and NONE is explicitly
+        # blocked -- one 2xx proves the scope. Endpoints that need params (e.g. the diary returns 400
+        # bare) or are slow (recalls can time out) stay 'unconfirmed' without dragging the group down.
+        blocked = any(t['state'] == 'blocked' for t in tables)
+        readable = any(t['state'] == 'ok' for t in tables)
+        groups.append({'scope': scope, 'ok': readable and not blocked, 'tables': tables})
+    return token_valid, groups
 
 
 def _dentally_client():
@@ -847,6 +912,27 @@ def _send_email(to, subject, body):
         return True
     app.logger.warning("onboarding email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
     return False
+
+
+def _notify_owner_pending(key, entry):
+    """Tell the operator a new onboarding is waiting so the (manual, throttled) provisioning run can be
+    scheduled. Best-effort -- a notify failure must never fail the capture (the token is already stored)."""
+    try:
+        body = (
+            "A new practice has completed onboarding and is waiting to be provisioned.\n\n"
+            f"Practice:        {entry.get('practice_name') or '(unknown)'}\n"
+            f"Principal email: {entry.get('principal_email')}\n"
+            f"Dentally id:     {entry.get('dentally_practice_id') or '(not captured)'}\n"
+            f"Auth method:     {entry.get('auth_method', 'oauth')}\n"
+            f"Trial paid-from: {entry.get('paid_from')}\n"
+            f"Captured at:     {entry.get('created_at')}\n"
+            f"Store key:       {key}   (Key Vault secret onboarding-pending-{DENTALLY_ENV})\n\n"
+            "Throttle and run the onboarding when ready."
+        )
+        subj = f"Onboarding pending: {entry.get('practice_name') or entry.get('principal_email')}"
+        _send_email(ONBOARDING_NOTIFY, subj, body)
+    except Exception as e:
+        app.logger.warning("owner notify failed (non-fatal): %s", e)
 
 
 @app.route('/onboarding')
@@ -970,7 +1056,7 @@ def onboarding_callback():
 
         practice_id, practice_name = None, state.get('practice')
         try:
-            pr = requests.get(DENTALLY_API_BASE + '/practices', headers={
+            pr = requests.get(DENTALLY_API_BASE + '/practice', headers={
                 'Authorization': 'Bearer ' + tokens['access_token'],
                 'User-Agent':    DENTALLY_UA,
             }, timeout=30)
@@ -996,15 +1082,92 @@ def onboarding_callback():
             'paid_from':            paid_from,
             'created_at':           datetime.utcnow().isoformat() + 'Z',
             'status':               'pending_provision',
+            'auth_method':          'oauth',
             'oauth':                tokens,
         }
         _kv_set(pending_secret, json.dumps(store))
+        _notify_owner_pending(key, store[key])
         app.logger.info("onboarding captured: practice=%s id=%s principal=%s paid_from=%s",
                         practice_name, practice_id, state['email'], paid_from)
         return redirect('/onboarding?status=connected')
     except Exception as e:
         app.logger.exception("onboarding callback failed: %s", e)
         return redirect('/onboarding?status=error')
+
+
+@app.route('/api/onboarding/dentally/token', methods=['POST'])
+def onboarding_token():
+    """Manual-token onboarding (no Dentally partner OAuth): the principal creates a Dentally Personal
+    Access Token with all read scopes and pastes it here. We run a live PREFLIGHT -- probing every
+    endpoint the ingest reads -- so the practice gets real-time confirmation that all the tables we need
+    are readable, with a clear message distinguishing an incorrect/expired key from a missing read
+    permission. Only once everything is readable do we record a PENDING TRIAL in Key Vault (same
+    store/shape as the OAuth path) and email the operator so the throttled onboarding run can be
+    scheduled. Public + stateless: gated by the verified-email token + the authority attestation."""
+    data    = request.get_json(silent=True) or {}
+    payload = _verify_state(data.get('verified', ''), max_age=1800)
+    token   = (data.get('token') or '').strip()
+    if not payload or payload.get('t') != 'verified':
+        return jsonify({'error': 'Please verify your email first.'}), 400
+    if not data.get('attested'):
+        return jsonify({'error': 'You must confirm you are authorised to share the data.'}), 400
+    if len(token) < 20:
+        return jsonify({'error': 'Paste the personal access token you created in Dentally.'}), 400
+    try:
+        # ── Real-time preflight: can this token actually read every table we ingest? ──────────────
+        token_valid, checks = _dentally_preflight(token)
+        if not token_valid:
+            # Incorrect / expired / revoked key -- the token itself was rejected.
+            return jsonify({'reason': 'invalid_token',
+                            'error': "The access token wasn't accepted. Check you pasted the whole token "
+                                     "and that it's still active in Dentally (Settings → Personal "
+                                     "Access Tokens)."}), 400
+        missing = [g['scope'] for g in checks if any(t['state'] == 'blocked' for t in g['tables'])]
+        if missing:
+            # Valid key, but a read permission is missing. Don't accept a token that can't read what we
+            # need -- return the per-permission checklist so the practice can see exactly what to tick.
+            return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
+                            'error': "Your token can't read some of your Dentally data. Open the token in "
+                                     "Dentally, tick every read permission marked below, save, then check "
+                                     "again."}), 200
+
+        # ── All readable: capture the practice name, store the pending trial, notify the operator. ──
+        practice_id, practice_name = None, payload.get('practice')
+        try:
+            pr = requests.get(DENTALLY_API_BASE + '/practice', headers={
+                'Authorization': 'Bearer ' + token, 'User-Agent': DENTALLY_UA}, timeout=15)
+            if pr.ok:
+                body = pr.json()
+                practices = body.get('practices') or ([body['practice']] if body.get('practice') else [])
+                if practices:
+                    practice_id   = practices[0].get('id')
+                    practice_name = practices[0].get('name') or practice_name
+        except requests.RequestException:
+            pass  # name is nice-to-have; the preflight already confirmed readability
+
+        # Idempotent per Dentally practice (fall back to the verified email if practice id unknown).
+        key = f'dentally:{practice_id}' if practice_id else f'email:{payload["email"]}'
+        paid_from = (datetime.utcnow().date() + timedelta(days=TRIAL_DAYS)).isoformat()
+        pending_secret = f'onboarding-pending-{DENTALLY_ENV}'
+        store = _kv_json(pending_secret)
+        store[key] = {
+            'principal_email':       payload['email'],
+            'practice_name':         practice_name,
+            'dentally_practice_id':  practice_id,
+            'attested':              True,
+            'paid_from':             paid_from,
+            'created_at':            datetime.utcnow().isoformat() + 'Z',
+            'status':                'pending_provision',
+            'auth_method':           'personal_access_token',
+            'personal_access_token': token,
+        }
+        _kv_set(pending_secret, json.dumps(store))
+        _notify_owner_pending(key, store[key])
+        app.logger.info("onboarding token captured: practice=%s id=%s principal=%s paid_from=%s",
+                        practice_name, practice_id, payload['email'], paid_from)
+        return jsonify({'ok': True, 'checks': checks})
+    except Exception as e:
+        return _server_error(e, 'onboarding-token')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
     "y": 0,
     "z": 3000,
     "height": 42,
-    "width": 1279.863481228669,
+    "width": 1279.8634812286689,
     "tabOrder": 8000
   },
   "visual": {
@@ -55,7 +55,8 @@
                 }
               },
               "queryRef": "_Measures.Plan Capitation Revenue",
-              "nativeQueryRef": "Plan Capitation Revenue"
+              "nativeQueryRef": "Plan Revenue",
+              "displayName": "Plan Revenue"
             },
             {
               "field": {
@@ -70,6 +71,21 @@
               },
               "queryRef": "_Measures.NHS Revenue",
               "nativeQueryRef": "NHS Revenue"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Revenue Per Dentist Hour"
+                }
+              },
+              "queryRef": "_Measures.Revenue Per Dentist Hour",
+              "nativeQueryRef": "Revenue Per Dentist Hour",
+              "displayName": "Rev/Dentist Hr"
             },
             {
               "field": {
@@ -113,21 +129,6 @@
               },
               "queryRef": "_Measures.Deposit Value",
               "nativeQueryRef": "Deposit Value"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Revenue Per Dentist Hour"
-                }
-              },
-              "queryRef": "_Measures.Revenue Per Dentist Hour",
-              "nativeQueryRef": "Revenue Per Dentist Hour",
-              "displayName": "Rev/Dentist Hr"
             }
           ]
         }
@@ -1860,5 +1861,121 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "02819cb9c993d4b35000",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Total Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "55289c72236ee470e9be",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Private Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "0d2aac31b0ce2bc64420",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Plan Capitation Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "ba5314b2d0bb7d2e457d",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "NHS Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "d16475197d02c3e08391",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Outstanding Invoices"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "15caedadb6e9480cb9c9",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Discounts"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "d989248719cd40706588",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Deposit Value"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "9b5dce30e1de314a9511",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Revenue Per Dentist Hour"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

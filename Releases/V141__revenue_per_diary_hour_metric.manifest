@@ -1,0 +1,13 @@
+# =====================================================================
+# Release V141 -- Revenue Per Diary Hour (actual-only Clinical/Revenue metric)
+# =====================================================================
+# Registers revenue_per_diary_hour (display-only, Has_Target = 0): Total Revenue / hours of COMPLETED
+# appointment time. Pure DAX in the model (add '_Appointments'-based [Diary Hours] + [Revenue Per Diary
+# Hour] via the csx) -- no new warehouse fact/view, so this manifest only lands the metric metadata.
+# Drillable by Patient / Practitioner / Day.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V141__revenue_per_diary_hour_metric.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+TEST

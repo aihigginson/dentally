@@ -21,7 +21,9 @@
       "22b7df504885d30a2e7a",
       "67cccb5341cab2987d15",
       "88374ab7cda2665cc00d",
-      "8d4c05675301407396e7"
+      "8d4c05675301407396e7",
+      "a5a3cf76bf6b2f401960",
+      "94294a5d04392a4daf69"
     ],
     "suppressData": true
   },
@@ -34,7 +36,10 @@
           "06737ef0e34891dddb0b": {
             "singleVisual": {
               "visualType": "clusteredBarChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "83f92fe5b9c7d8893816": {
@@ -169,6 +174,21 @@
           "8d4c05675301407396e7": {
             "singleVisual": {
               "visualType": "columnChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "a5a3cf76bf6b2f401960": {
+            "singleVisual": {
+              "visualType": "columnChart",
+              "objects": {}
+            }
+          },
+          "94294a5d04392a4daf69": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
               "objects": {},
               "display": {
                 "mode": "hidden"

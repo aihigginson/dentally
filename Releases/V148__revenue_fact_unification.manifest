@@ -1,0 +1,35 @@
+# =====================================================================
+# Release V148 -- Revenue Fact Unification + tenant Cutover_Date
+# =====================================================================
+# One line-grain Gold.Fact_Revenue subsumes Fact_Invoice_Items (invoice lines) AND Fact_Plan_Capitation
+# (capitation member-days), sourced entirely from Silver (GOLD_FACT). Revenue is now defined ONCE, so
+# header/line/category views can't diverge, and capitation flows into category breakdowns / per-hour /
+# profitability automatically. Reconciles BYTE-IDENTICAL to the two old facts on dev (Invoice d0.00 /
+# 91,311 rows; Capitation d0.00). Capitation is now limited to working days and only from the tenant's
+# go-live (Cutover_Date), cutting ~29% of capitation rows.
+#
+# Cutover_Date (new Audit.Tenants column, data-preserving MIGRATE) = MIN(Updated_At) of Treatment Plans,
+# set by Audit.usp_Set_Tenant_Cutover -- the single source of truth that drives capitation's from-go-live
+# window (and the Ingest cold-start floor, deployed via the notebook path).
+#
+# Old facts (Fact_Invoice_Items / Fact_Plan_Capitation) are KEPT building during the transition (identical
+# numbers, nothing double-counts) until the model cuts over to _Revenue; they get retired in a later release.
+# Aggregate_Practitioner_Contribution is repointed to Fact_Revenue now (production incl capitation).
+#
+# MODEL STEP (after this + view regen): run PBI_Dentally.csx (all revenue measures -> _Revenue) and add
+# the _Revenue table + relationships in Desktop, then refresh.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V148__revenue_fact_unification.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V148__tenant_cutover_date.sql
+DEPLOY   Fabric\Audit.usp_Set_Tenant_Cutover.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Revenue.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practitioner_Contribution.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+EXEC     EXEC Audit.usp_Set_Tenant_Cutover @Tenant_ID = NULL;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Practitioner_Contribution @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

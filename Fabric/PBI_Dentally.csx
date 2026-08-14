@@ -290,6 +290,19 @@ add("Average Plan Value",
 )",
     "£#,##0");
 
+// Avg First Plan Value + New Patient Retention -- display-only Clinical metrics off Gold.Fact_New_Patients
+// ('_New Patients'). Flags are INT (0/1) so both are a plain SUM. No target/BG (Has_Target = 0).
+//   First Plan Value = plan(s) created at the patient's FIRST appointment (via Treatment_Appointments);
+//   Has First Plan   = 1 when a plan existed there  -> average is over new patients who GOT a plan.
+//   Retained         = 1 when the patient returned for a second exam ever (Last Exam > First Exam).
+add("Avg First Plan Value",
+    @"DIVIDE(SUM('_New Patients'[First Plan Value]), SUM('_New Patients'[Has First Plan]))",
+    "£#,##0");
+
+add("New Patient Retention",
+    @"DIVIDE(SUM('_New Patients'[Retained]), SUM('_New Patients'[New Patient Count]))",
+    "0.0%");
+
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
 // acceptance_rate           → above + percent  → absolute pp
 // open_courses              → below + count    → relative %  (lower is better)
@@ -1024,7 +1037,7 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // -- Financial cohorts: distinct patients tied to an invoice/payment condition --
 
 add("Patients With Discount",
-    @"CALCULATE(DISTINCTCOUNT('_Invoice Items'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
+    @"CALCULATE(DISTINCTCOUNT('_Revenue'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
     "#,##0");
 
 add("Patients With Outstanding Invoice",
@@ -1333,21 +1346,12 @@ RETURN CALCULATE(
 )",
     "#,##0");
 
+// Net Patient Growth = New - Lapsed, using the SAME measures the cards show so the three reconcile.
+// (Previously recomputed lapsed inline with a 24-month-exam-clock rule that pre-dated the V050
+// migration of Lapsed Patients to _Metric Actuals -- that gave 517 vs the card's 1,470 and broke the
+// New - Lapsed identity. Lapsed Patients = deactivated + 730-day-silent is the canonical definition.)
 add("Net Patient Growth",
-    @"VAR period_start = MIN('List Date'[Full Date])
-VAR period_end   = MAX('List Date'[Full Date])
-VAR lapsed_flow  =
-    COUNTROWS(
-        FILTER(
-            ALL('List Patients'),
-            NOT ISBLANK('List Patients'[Last Exam Date])
-            && EDATE('List Patients'[Last Exam Date], 24) >= period_start
-            && EDATE('List Patients'[Last Exam Date], 24) <= period_end
-            && NOT ISBLANK('List Patients'[First Appointment Date])
-            && 'List Patients'[First Appointment Date] < period_start
-        )
-    )
-RETURN [New Patients] - lapsed_flow",
+    @"[New Patients] - [Lapsed Patients]",
     "#,##0");
 
 // Recall model (two sources): Dentist/Hygiene Retention Outlook (FORWARD, patient recall dates) and
@@ -1681,11 +1685,37 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 // clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
 // month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
 add("Plan Capitation Revenue",
-    @"SUM('_Plan Capitation'[Monthly Value])",
+    @"CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Capitation"")",
     "£#,##0");
 
 add("Total Revenue",
-    @"SUM('_Invoice Items'[Total Price]) + [Plan Capitation Revenue]",
+    @"SUM('_Revenue'[Amount])",
+    "£#,##0");
+
+// Rolling 12-MONTH (TTM) Total Revenue to smooth the spiky by-week charts. Deliberately 12-month
+// ONLY, NOT 3-month: a quarter is shorter than a seasonal cycle, so a 3-month rolling number wavers
+// as it slides seasonal months in/out (Christmas in, Christmas out) -- it smears seasonality rather
+// than removing it, and its day count varies (90-92) which biases the level. A trailing 12 calendar
+// months contains every month exactly once, so seasonality is fully averaged out (classic TTM).
+// Residual noise is tiny: leap years add one Feb-29 of invoices (~+0.3%; capitation unaffected);
+// Easter drifts date so a year-window near April can catch 0/1/2 Easters (a fraction of a week's
+// revenue) -- both an order of magnitude below the weekly spikes being removed.
+//   Window is EXACTLY 12 calendar months via EDATE (not 364 days), so the STRICTLY-monthly Plan
+//   Capitation component (one lump/member on the 1st) lands exactly 12 times regardless of anchor day.
+//   Divisor is a FIXED 52 weeks (not actual days) -> no day-count wobble; result = average weekly
+//   revenue over the trailing year, SAME £ scale as the weekly bars (drop-in overlay). Swap 52 -> 12
+//   for an average-MONTHLY (TTM/12) figure instead.
+//   REMOVEFILTERS('List Date')+('List Date Grouping') lets the window reach BEYOND a page date/period
+//   filter (e.g. "Last 3 Months") so the year isn't truncated + ramped at the left edge -- the model's
+//   date-window idiom (matches the current-state date-leak fix). Anchor (_hi) captured in current
+//   context first; site/practitioner/role slicers still apply, so it reaches back in TIME but stays in
+//   the selected practice/practitioner.
+add("Total Revenue Rolling 12M",
+    @"VAR _hi = MAX('List Date'[Full Date])
+VAR _lo = EDATE(_hi, -12)
+VAR _win = FILTER(ALL('List Date'), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi)
+VAR _rev = CALCULATE([Total Revenue], REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'), _win)
+RETURN DIVIDE(_rev, 52)",
     "£#,##0");
 
 // Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
@@ -1698,14 +1728,14 @@ add("Earnings",
 
 add("NHS Revenue",
     @"CALCULATE(
-    SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] > 0)",
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[NHS Charge] > 0)",
     "£#,##0");
 
 add("Private Revenue",
     @"CALCULATE(
-    SUM('_Invoice Items'[Total Price]),
-    '_Invoice Items'[NHS Charge] = 0)",
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[Revenue Type] = ""Invoice"", '_Revenue'[NHS Charge] = 0)",
     "£#,##0");
 
 add("Outstanding Invoices",
@@ -1757,6 +1787,22 @@ SUMMARIZE(
 VAR total_worked = SUMX(by_prac_day, [WH])
 VAR dentist_rev  = CALCULATE([Total Revenue], KEEPFILTERS('List Practitioners'[Role] = ""dentist""))
 RETURN DIVIDE(dentist_rev, total_worked)",
+    "£#,##0");
+
+// Revenue Per Diary Hour -- actual-only, drillable by Patient / Practitioner / Day. Diary Hours =
+// COMPLETED appointment duration only (future Confirmed/Pending excluded: their block durations are
+// anomalous and generated no revenue). [Total Revenue] already slices by practitioner/patient/date,
+// and '_Appointments' relates to List Patients / List Practitioners / List Date -- so the ratio drills
+// on all three. No target (Has_Target = 0). NOTE: hours are dated by appointment day, revenue by
+// invoice day -- they align at the practice/period level; a single-Day drill assumes same-day billing.
+add("Diary Hours",
+    @"DIVIDE(
+    CALCULATE(SUM('_Appointments'[Duration Mins]), '_Appointments'[Is Completed] = TRUE()),
+    60)",
+    "#,##0.0");
+
+add("Revenue Per Diary Hour",
+    @"DIVIDE([Total Revenue], [Diary Hours])",
     "£#,##0");
 
 add("DNA Revenue Lost",
@@ -2223,10 +2269,10 @@ RETURN IF(selected <> """", selected, cur_fy)",
 //   *03  21/05/2026  AIH  Ratio architecture: all individual = ratio vs per-prac target
 //   *04  08/06/2026  AIH  Real DAX for Discounts and Deposit Value (was hardcoded 1)
 //   *05  09/06/2026  AIH  Fix: compute actual via TREATAS so Deneb row context correctly
-//                         isolates per-practitioner figures from _Invoice Items / _Payments
+//                         isolates per-practitioner figures from _Revenue / _Payments
 //   *06  09/06/2026  AIH  Fix: Plan Value denominator → practice average (not target) for
 //                         meaningful per-practitioner variance; Outstanding Invoices axis
-//                         replaced with per-practitioner _Invoice Items[Invoice Amount
+//                         replaced with per-practitioner _Revenue[Amount]
 //                         Outstanding] as snapshot-based measure cannot split by practitioner
 //   *07  09/06/2026  AIH  Fix: tenant scope was using VALUES('List Practice Sites'[Tenant ID])
 //                         which has no RLS filter; changed to VALUES('List Practitioners'[Tenant ID])
@@ -2250,7 +2296,7 @@ foreach (var existing in Model.Tables[table].Measures
 
 add("Spider Rev Total Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [Total Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2260,7 +2306,7 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
 
 add("Spider Rev Private Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] = 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Invoice"", '_Revenue'[NHS Charge] = 0, TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [Private Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2270,7 +2316,7 @@ RETURN IFERROR(DIVIDE(actual, IF(share > 0, share, fallback)), 0)",
 
 add("Spider Rev NHS Revenue",
     @"VAR prac_pks    = VALUES('List Practitioners'[pk Practitioner])
-VAR actual      = CALCULATE(SUM('_Invoice Items'[Total Price]), '_Invoice Items'[NHS Charge] > 0, TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR actual      = CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[NHS Charge] > 0, TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR practice_tgt = [NHS Revenue Target]
 VAR n           = CALCULATE(COUNTROWS('List Practitioners'), FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])))
 VAR share       = DIVIDE(practice_tgt, n)
@@ -2317,7 +2363,7 @@ RETURN IFERROR(DIVIDE(actual, IF(practice_avg > 0, practice_avg, 1)), 0)",
 // actual = 0 → no discounts at all → perfect score (2); BLANK → no invoice data → neutral (1)
 add("Spider Rev Discounts",
     @"VAR prac_pks  = VALUES('List Practitioners'[pk Practitioner])
-VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_rev  = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR prac_disc = CALCULATE(SUM('_Invoices'[Discount Amount]), TREATAS(prac_pks, '_Invoices'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_disc, prac_rev)
 VAR tgt       = [Discounts Target]
@@ -2334,7 +2380,7 @@ RETURN IF(
 add("Spider Rev Deposit Value",
     @"VAR prac_pks = VALUES('List Practitioners'[pk Practitioner])
 VAR prac_dep  = CALCULATE(SUM('_Payments'[Deposit Amount]), TREATAS(prac_pks, '_Payments'[fk Practitioner]))
-VAR prac_rev  = CALCULATE(SUM('_Invoice Items'[Total Price]), TREATAS(prac_pks, '_Invoice Items'[fk Practitioner]))
+VAR prac_rev  = CALCULATE(SUM('_Revenue'[Amount]), TREATAS(prac_pks, '_Revenue'[fk Practitioner]))
 VAR actual    = DIVIDE(prac_dep, prac_rev)
 VAR tgt       = [Deposit Value Target]
 VAR fallback  = AVERAGEX(FILTER(ALL('List Practitioners'), 'List Practitioners'[Tenant ID] IN VALUES('List Practitioners'[Tenant ID])), [Deposit Value])
@@ -2392,7 +2438,7 @@ add("Spider Rev Avg Deposit Value",
     // collides with the synthetic "Other" (two identical "Other" series, same value). The real
     // "Other"'s revenue is folded into the synthetic bucket by the measure (OtherNames) below.
     var bucketDax = @"UNION (
-    SELECTCOLUMNS ( FILTER ( DISTINCT ( 'List Treatments'[Standard Treatment Category] ), NOT ISBLANK ( 'List Treatments'[Standard Treatment Category] ) && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Category"", 'List Treatments'[Standard Treatment Category], ""Sort Order"", 0 ),
+    SELECTCOLUMNS ( FILTER ( DISTINCT ( '_Revenue'[Revenue Category] ), NOT ISBLANK ( '_Revenue'[Revenue Category] ) && '_Revenue'[Revenue Category] <> ""Other"" ), ""Category"", '_Revenue'[Revenue Category], ""Sort Order"", 0 ),
     ROW ( ""Category"", ""Other"", ""Sort Order"", 1 )
 )";
     var bucketTbl = Model.Tables.FirstOrDefault(x => x.Name == "Category Bucket");
@@ -2412,15 +2458,15 @@ add("Spider Rev Avg Deposit Value",
     var mt = Model.Tables["_Measures"];
     var topDax = @"VAR N = 8
 VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
-VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( 'List Treatments'[Standard Treatment Category] ), ""@Total"", CALCULATE ( [Revenue], REMOVEFILTERS ( 'List Date' ) ) )
+VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( '_Revenue'[Revenue Category] ), ""@Total"", CALCULATE ( SUM ( '_Revenue'[Amount] ), REMOVEFILTERS ( 'List Date' ) ) )
 VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
-VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && 'List Treatments'[Standard Treatment Category] <> ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
-VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || 'List Treatments'[Standard Treatment Category] = ""Other"" ), ""Cat"", 'List Treatments'[Standard Treatment Category] )
+VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && '_Revenue'[Revenue Category] <> ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
+VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || '_Revenue'[Revenue Category] = ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
 RETURN
 SWITCH ( TRUE (),
-    NOT ISINSCOPE ( 'Category Bucket'[Category] ), [Revenue],
-    SelBucket = ""Other"", CALCULATE ( [Revenue], TREATAS ( OtherNames, 'List Treatments'[Standard Treatment Category] ) ),
-    CALCULATE ( [Revenue], TREATAS ( { SelBucket }, 'List Treatments'[Standard Treatment Category] ), KEEPFILTERS ( TREATAS ( TopNames, 'List Treatments'[Standard Treatment Category] ) ) )
+    NOT ISINSCOPE ( 'Category Bucket'[Category] ), SUM ( '_Revenue'[Amount] ),
+    SelBucket = ""Other"", CALCULATE ( SUM ( '_Revenue'[Amount] ), TREATAS ( OtherNames, '_Revenue'[Revenue Category] ) ),
+    CALCULATE ( SUM ( '_Revenue'[Amount] ), TREATAS ( { SelBucket }, '_Revenue'[Revenue Category] ), KEEPFILTERS ( TREATAS ( TopNames, '_Revenue'[Revenue Category] ) ) )
 )";
     var rm = mt.Measures.FirstOrDefault(x => x.Name == "Revenue (Top N)");
     if (rm == null) rm = mt.AddMeasure("Revenue (Top N)", topDax); else rm.Expression = topDax;
@@ -2449,4 +2495,82 @@ RETURN
         )
     )");
     col.DisplayFolder = "Aged Plans";
+}
+
+
+// ============ 12-Month Rolling smoothers (trailing-year, period-filter-proof) ============
+// Same pattern as Total Revenue Rolling 12M: an EXACT 12-calendar-month window (EDATE) ending at the
+// visible point, with REMOVEFILTERS('List Date')+('List Date Grouping') so a page/embed Period filter
+// can't truncate the trailing year. ADDITIVE metrics -> trailing sum / 52 (avg weekly, overlay scale);
+// RATIO metrics -> evaluate the whole measure over the window, which yields the pooled
+// SUM(numerator)/SUM(denominator) for the year (correct -- NOT an average of weekly ratios).
+// (Recalls + Cancellations deliberately omitted -- need the exact base measure chosen first.)
+{
+    var t = Model.Tables["_Measures"];
+    string g = "Rolling 12M";
+    foreach (var existing in t.Measures.Where(m => m.DisplayFolder == g).ToList()) existing.Delete();
+
+    Func<string,bool,string> body = (baseM, isRatio) => {
+        string w = "VAR _hi = MAX ( 'List Date'[Full Date] )\n"
+                 + "VAR _lo = EDATE ( _hi, -12 )\n"
+                 + "VAR _win = FILTER ( ALL ( 'List Date' ), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi )\n"
+                 + "VAR _v = CALCULATE ( [" + baseM + "], REMOVEFILTERS ( 'List Date' ), REMOVEFILTERS ( 'List Date Grouping' ), _win )\n"
+                 + "RETURN ";
+        return w + (isRatio ? "_v" : "DIVIDE ( _v, 52 )");
+    };
+    Action<string,string,bool,string> roll12 = (name, baseM, isRatio, fmt) => {
+        var m = t.AddMeasure(name + " Rolling 12M", body(baseM, isRatio));
+        m.DisplayFolder = g;
+        if (fmt != "") m.FormatString = fmt;
+    };
+
+    // Additive -> avg weekly (trailing sum / 52)
+    roll12("Xero Revenue",             "Total Revenue (PL)", false, "£#,##0");
+    roll12("Xero Costs",               "Total Costs",        false, "£#,##0");
+    roll12("New Patients",             "New Patients",       false, "#,##0.0");
+    roll12("Lapsed Patients",          "Lapsed Patients",    false, "#,##0.0");
+    roll12("Net Patient Growth",       "Net Patient Growth", false, "#,##0.0");
+    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+
+    // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
+    roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
+    roll12("Diary Fill",               "Diary Fill",               true, "#,##0.0%");
+    roll12("Avg First Plan Value",     "Avg First Plan Value",     true, "£#,##0");
+    roll12("Revenue Per Diary Hour",   "Revenue Per Diary Hour",   true, "£#,##0");
+    roll12("Revenue Per Clinical Hour","Revenue Per Clinical Hour",true, "£#,##0");
+    roll12("Revenue Per Dentist Hour", "Revenue Per Dentist Hour", true, "£#,##0");
+
+    // Cancellations (total count, avg weekly). No standalone base measure exists -- inline the
+    // Aggregate's Cancelled Appointments column (the same total the 'Cancellations Rebooked' rate uses).
+    {
+        var cm = t.AddMeasure("Cancellations Rolling 12M",
+              "VAR _hi = MAX ( 'List Date'[Full Date] )\n"
+            + "VAR _lo = EDATE ( _hi, -12 )\n"
+            + "VAR _win = FILTER ( ALL ( 'List Date' ), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi )\n"
+            + "VAR _v = CALCULATE ( SUM ( 'Aggregate Site Patient Practitioner Daily'[Cancelled Appointments] ), REMOVEFILTERS ( 'List Date' ), REMOVEFILTERS ( 'List Date Grouping' ), _win )\n"
+            + "RETURN DIVIDE ( _v, 52 )");
+        cm.DisplayFolder = g;
+        cm.FormatString = "#,##0.0";
+    }
+}
+
+
+// ============ Diagnostics ============
+// Row-count checks. Delete-by-name across EVERY table first so this cleanly replaces older copies
+// wherever they were homed -- an earlier hand-made "Diag Invoice Rows" lived on a different table
+// (not _Measures) and still referenced the retired invoice-items table, so a _Measures-only sweep
+// missed it and the broken '_Invoice Items' definition survived (cutover -> unified _Revenue).
+{
+    var t = Model.Tables["_Measures"];
+    string g = "Diagnostics";
+    var diagNames = new[] { "Diag Invoice Rows", "Diag Capitation Rows", "Diag Revenue Rows" };
+    foreach (var tbl in Model.Tables)
+        foreach (var m in tbl.Measures.Where(m => diagNames.Contains(m.Name)).ToList())
+            m.Delete();
+    var d0 = t.AddMeasure("Diag Revenue Rows",    @"COUNTROWS ( '_Revenue' )");
+    d0.DisplayFolder = g; d0.FormatString = "#,##0";
+    var d1 = t.AddMeasure("Diag Invoice Rows",    @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Invoice"" )");
+    d1.DisplayFolder = g; d1.FormatString = "#,##0";
+    var d2 = t.AddMeasure("Diag Capitation Rows", @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Capitation"" )");
+    d2.DisplayFolder = g; d2.FormatString = "#,##0";
 }

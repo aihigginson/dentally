@@ -330,6 +330,69 @@
           "selector": {
             "id": "default"
           }
+        },
+        {
+          "properties": {
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.New Patients"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            },
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Lapsed Patients"
+          }
+        },
+        {
+          "properties": {
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
+          }
         }
       ],
       "label": [
@@ -1531,5 +1594,107 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "f3114864be4b85ee705c",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Active Patients"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "bdb3dc0ac6ddc2a4b942",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Net Patient Growth"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "553368e0b8680a027bc5",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "New Patients"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "1647d60350830570b24c",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Lapsed Patients"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "e2dfd24c1470770d0660",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Overdue Recalls"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "1d1d0f887cb97c08b714",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Email Details Rate"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a3c8123294b65db70618",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Phone Details Rate"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

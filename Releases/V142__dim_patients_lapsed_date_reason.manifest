@@ -1,0 +1,18 @@
+# =====================================================================
+# Release V142 -- Dim_Patients.Lapsed_Date + Lapsed_Reason (derived)
+# =====================================================================
+# Persist the actual lapse date (deactivated -> updated_at; calculated -> last appt + 730) as a real
+# Lapsed_Date column, and a plain-English Lapsed_Reason derived from the lapse type
+# ("Set inactive in Dentally" / "No visit in 24+ months"). Dentally's archived_reason is NOT ingested
+# (data-minimised + 100% empty on real data), so no Bronze/Silver/PII change.
+# MIGRATE adds the columns via ALTER (no DROP -> pk_Patient + fact fk_Patient survive); the load SP is
+# then recreated (Fabric validates its body against the now-present columns) and backfills them.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V142__dim_patients_lapsed_date_reason.manifest -SkipTests
+# =====================================================================
+
+MIGRATE  Migrations\V142__dim_patients_lapsed_date_reason.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

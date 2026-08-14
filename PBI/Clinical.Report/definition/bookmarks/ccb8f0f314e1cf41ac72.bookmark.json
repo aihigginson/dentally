@@ -17,7 +17,10 @@
       "6abb0b843af7003c3ff9",
       "35cc7bbf3ee1a9a11d8b",
       "f5531afe5d96eb287460",
-      "487ee07330dfcf70def5"
+      "487ee07330dfcf70def5",
+      "21442f768b77f9380245",
+      "96f10e50a87f38b8d196",
+      "778515253097092d7201"
     ],
     "suppressData": true
   },
@@ -98,7 +101,7 @@
           },
           "e057c7a4f63b6a5aeddc": {
             "singleVisual": {
-              "visualType": "columnChart",
+              "visualType": "lineChart",
               "objects": {},
               "display": {
                 "mode": "hidden"
@@ -107,7 +110,7 @@
           },
           "6abb0b843af7003c3ff9": {
             "singleVisual": {
-              "visualType": "columnChart",
+              "visualType": "lineChart",
               "objects": {},
               "display": {
                 "mode": "hidden"
@@ -130,6 +133,33 @@
             "singleVisual": {
               "visualType": "actionButton",
               "objects": {}
+            }
+          },
+          "21442f768b77f9380245": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "96f10e50a87f38b8d196": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "778515253097092d7201": {
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           }
         }

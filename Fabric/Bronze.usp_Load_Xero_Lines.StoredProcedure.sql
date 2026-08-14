@@ -27,7 +27,16 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        DELETE FROM Bronze.Xero_Lines WHERE Tenant_ID = @Tenant_ID;
+        -- Incremental doc-level merge: replace only the documents present in this run's Stage
+        -- delta. On a COLD run Stage holds the full set (this replaces everything = full refresh);
+        -- on an INCREMENTAL run (Ingest_Xero fetched with If-Modified-Since) Stage holds only the
+        -- CHANGED documents, so unchanged docs are preserved. (Xero voids rather than hard-deletes,
+        -- so a doc never silently vanishes.)
+        DELETE b FROM Bronze.Xero_Lines b
+        WHERE b.Tenant_ID = @Tenant_ID
+          AND EXISTS (SELECT 1 FROM Stage.Xero_Lines s
+                      WHERE TRY_CAST(s.Tenant_ID AS INT) = @Tenant_ID
+                        AND s.Source = b.Source AND s.Doc_ID = b.Doc_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO Bronze.Xero_Lines (Tenant_ID, Xero_Tenant_ID, Source, Doc_ID, Doc_Number, Doc_Type, Doc_Status, Doc_Date, Contact_Name, Line_Amount_Types, Line_Item_ID, Account_Code, Account_ID, Description, Line_Amount, Tax_Amount, Tracking, Tracking_Cat_1, Tracking_Opt_1, Tracking_Cat_2, Tracking_Opt_2, DW_Loaded_At)

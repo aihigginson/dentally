@@ -1,0 +1,19 @@
+# =====================================================================
+# Release V146 -- NHS roll-forward reads Silver.NHS_Claims (dependency-order fix)
+# =====================================================================
+# V145's roll-forward CTE read Gold.Fact_NHS_Claims, but Dim_NHS_Contracts is a GOLD_DIM that runs
+# BEFORE facts. On a fresh full build the fact is empty when the Dim runs, so the roll-forward
+# silently misses years; and the static process-dependency guard (Check_Process_Dependencies.ps1)
+# fails because a GOLD_DIM must not read a Gold FACT. Repoint the CTE to Silver.NHS_Claims (loaded
+# before ALL Gold; carries the same Submitted_Date + Site_ID). Pure SP-body change, no schema
+# migration. Rebuild Dim_NHS_Contracts + Fact_NHS_Contract_Week so the weekly UDA targets reflect
+# the corrected roll-forward.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V146__nhs_rollforward_read_silver.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_NHS_Contracts.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_NHS_Contracts @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_NHS_Contract_Week @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

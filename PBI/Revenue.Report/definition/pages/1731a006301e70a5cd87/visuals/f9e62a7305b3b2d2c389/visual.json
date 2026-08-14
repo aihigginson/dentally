@@ -57,13 +57,13 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Invoice Items"
+                      "Entity": "_Revenue"
                     }
                   },
                   "Property": "Revenue"
                 }
               },
-              "queryRef": "_Invoice Items.Revenue",
+              "queryRef": "_Revenue.Revenue",
               "nativeQueryRef": "Revenue"
             }
           ]
@@ -220,6 +220,52 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "5928ef42990ea4aa86e0",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "54029a7776940a98d71b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "cae730b85c3e8b2113dd",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Revenue"
+              }
+            },
+            "Property": "Revenue"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   },
   "isHidden": true
 }

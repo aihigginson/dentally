@@ -1,0 +1,14 @@
+# =====================================================================
+# Release V144 -- fk_Practice_Site on Fact_New_Patients
+# =====================================================================
+# Add the patient's practice site to Fact_New_Patients (from Dim_Patients.Site_ID) so the app's Site
+# filter can scope the 1st Appointments charts. Full-rebuild DROP/CREATE fact.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V144__new_patients_fk_practice_site.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_New_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_New_Patients.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_New_Patients @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

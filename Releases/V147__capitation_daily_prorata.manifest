@@ -1,0 +1,28 @@
+# =====================================================================
+# Release V147 -- Plan capitation: daily pro-rata grain (was monthly blob)
+# =====================================================================
+# Fact_Plan_Capitation held one row per member x MONTH on the 1st, at the full monthly fee. On weekly
+# charts that spikes on the first-of-month weeks and shows nothing otherwise, and any sub-month date
+# filter grabs the whole month or none of it (can't pro-rate). Explode to one row per member x DAY,
+# value = monthly fee / days-in-month, so it's daily-continuous like invoices: weekly bars smooth out
+# and every date filter behaves. Column Monthly_Value -> Daily_Value (DECIMAL(18,6) so 28/31=0.9032..
+# sums back to 28.00). Capped at today (dday.Full_Date <= today) so the current month accrues to date
+# (no future-dated revenue; consistent with invoices). Monthly+ totals unchanged (daily sums back to
+# the monthly blob for complete months). Fact_Metric_Actuals reads SUM(Daily_Value). Verified prod:
+# grand delta = the un-elapsed current-month portion, to the pound; a GBP35 plan shows GBP11.29 for
+# Aug-to-date (35 x 10/31), not GBP35.
+#
+# MODEL STEP (after this deploys + regens views): the '_Plan Capitation' view column is now
+# [Daily Value]. Run PBI_Dentally.csx (updates [Plan Capitation Revenue] -> SUM('_Plan Capitation'
+# [Daily Value])) AND refresh the model so the table picks up [Daily Value] + the daily data.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V147__capitation_daily_prorata.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Plan_Capitation.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Plan_Capitation.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Plan_Capitation @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
