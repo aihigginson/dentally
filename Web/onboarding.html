@@ -38,6 +38,16 @@
         .how-title { font-weight:700; margin-bottom:6px; }
         .how ol { margin:0; padding-left:18px; line-height:1.6; }
         code.em { background:var(--bg); padding:1px 6px; border-radius:4px; font-weight:600; }
+        #checks { margin-top:14px; display:none; }
+        .checks-title { font-size:13px; font-weight:700; margin:4px 0 2px; }
+        .chk { display:flex; align-items:baseline; gap:8px; padding:7px 0; font-size:13px; border-top:1px solid var(--line); flex-wrap:wrap; }
+        .chk-icon { font-weight:700; width:14px; text-align:center; }
+        .chk.ok   .chk-icon { color:#1a7f4b; }
+        .chk.bad  .chk-icon { color:#b3261e; }
+        .chk.warn .chk-icon { color:#b58105; }
+        .chk-label { font-weight:600; }
+        .chk-scope { color:var(--muted); font-weight:400; }
+        .chk-detail { flex-basis:100%; margin-left:22px; color:var(--muted); }
     </style>
 </head>
 <body>
@@ -51,7 +61,7 @@
                 <div class="how">
                     <div class="how-title">How it works</div>
                     <ol>
-                        <li>Verify your email, then authorise your Dentally connection.</li>
+                        <li>Verify your email, then paste a read-only Dentally access token.</li>
                         <li>We build your practice's analytics &mdash; this takes <strong>up to 48 hours</strong>.</li>
                         <li>After that it refreshes every night, so your data is <strong>always within ~24 hours</strong>.</li>
                     </ol>
@@ -79,21 +89,31 @@
                 <div class="msg" id="msg-code"></div>
             </div>
 
-            <!-- Step 3: attestation + connect -->
+            <!-- Step 3: create + paste a Dentally personal access token -->
             <div class="step" id="step-connect">
                 <h1>Connect Dentally</h1>
-                <p class="sub">You'll be taken to Dentally to authorise the connection, then brought back here.</p>
+                <p class="sub">Create a read-only access token in Dentally and paste it below &mdash; that's how we securely read your data to build your analytics.</p>
+                <div class="how">
+                    <div class="how-title">Create your access token in Dentally</div>
+                    <ol>
+                        <li>In Dentally, open <code class="em">Settings &rarr; Personal Access Tokens</code> and choose <strong>New personal access token</strong>.</li>
+                        <li>Tick <strong>every &ldquo;read&rdquo; permission</strong>: <code class="em">user:read</code>, <code class="em">appointment:read</code>, <code class="em">financials:read</code>, <code class="em">correspondence:read</code>, <code class="em">patient:read</code>, <code class="em">practice:read</code> and <code class="em">treatments</code>.</li>
+                        <li>Click <strong>Save</strong>, copy the token it shows you, and paste it below.</li>
+                    </ol>
+                </div>
+                <label for="token">Dentally personal access token</label>
+                <input type="text" id="token" placeholder="Paste your token here" autocomplete="off" spellcheck="false">
                 <div class="warn">
-                    <strong>Before you connect</strong>
-                    The email you verified (<code class="em" id="email-echo2"></code>) will be the principal account for this practice.
-                    You must have <strong>appropriate access within Dentally</strong> to authorise this connection.
+                    <strong>The email you verified (<code class="em" id="email-echo2"></code>) becomes your principal account.</strong>
+                    You must have appropriate access within Dentally to create this token.
                 </div>
                 <label class="attest">
                     <input type="checkbox" id="attest">
                     <span>I confirm I have appropriate Dentally access and that I am <strong>authorised to share this practice's data</strong> with Analytically for the purpose of providing the service.</span>
                 </label>
-                <button class="btn dentally" id="btn-connect" disabled>Connect Dentally</button>
+                <button class="btn dentally" id="btn-connect" disabled>Check access &amp; start my trial</button>
                 <div class="msg" id="msg-connect"></div>
+                <div id="checks"></div>
             </div>
 
             <!-- Done -->
@@ -101,7 +121,7 @@
                 <div class="done">
                     <div class="tick">&#10003;</div>
                     <h1>You're all set</h1>
-                    <p class="sub">Your Dentally is connected and your 30-day trial has started. We're preparing your data now — it can take a few hours on the first run, and we'll email you the moment it's ready to explore.</p>
+                    <p class="sub">We've received your Dentally access token and your 30-day trial has started. We're preparing your data now — it can take a few hours on the first run, and we'll email you the moment it's ready to explore.</p>
                 </div>
             </div>
         </div>
@@ -154,17 +174,44 @@
             finally { this.disabled = false; }
         });
 
-        $('attest').addEventListener('change', function () { $('btn-connect').disabled = !this.checked; });
+        function refreshConnect(){ $('btn-connect').disabled = !($('attest').checked && $('token').value.trim().length > 10); }
+        $('attest').addEventListener('change', refreshConnect);
+        $('token').addEventListener('input', refreshConnect);
+
+        // Friendly names for the live access checklist.
+        var CAT = { 'user:read':'User', 'practice:read':'Practice', 'appointment:read':'Appointment',
+                    'patient:read':'Patient', 'financials:read':'Financial', 'treatments':'Treatments' };
+        function pretty(name){ return name.split('_').map(function(w){ return w === 'nhs' ? 'NHS' : (w.charAt(0).toUpperCase() + w.slice(1)); }).join(' '); }
+        function renderChecks(checks){
+            var el = $('checks'); el.innerHTML = '<div class="checks-title">Dentally access check</div>';
+            checks.forEach(function(g){
+                var bad = g.tables.filter(function(t){ return t.state === 'blocked'; });
+                var cls = g.ok ? 'ok' : (bad.length ? 'bad' : 'warn');
+                var icon = g.ok ? '✓' : (bad.length ? '✗' : '!');
+                var row = document.createElement('div'); row.className = 'chk ' + cls;
+                var detail = bad.length ? '<div class="chk-detail">Couldn’t read: ' + bad.map(function(t){ return pretty(t.name); }).join(', ') + '</div>'
+                           : (!g.ok ? '<div class="chk-detail">Couldn’t confirm right now — we’ll re-check when we build your data.</div>' : '');
+                row.innerHTML = '<span class="chk-icon">' + icon + '</span>' +
+                                '<span class="chk-label">' + (CAT[g.scope] || g.scope) + '</span>' +
+                                '<span class="chk-scope">(' + g.scope + ')</span>' + detail;
+                el.appendChild(row);
+            });
+            el.style.display = 'block';
+        }
 
         $('btn-connect').addEventListener('click', async function () {
-            if (!$('attest').checked || !verifiedTok) return;
-            this.disabled = true; msg('msg-connect', 'Redirecting to Dentally…', true);
+            var token = $('token').value.trim();
+            if (!$('attest').checked || !verifiedTok || token.length < 10) return;
+            this.disabled = true; msg('msg-connect', 'Checking your Dentally access…', true); $('checks').style.display = 'none';
             try {
-                var url = '/api/onboarding/dentally/connect?attested=1&verified=' + encodeURIComponent(verifiedTok);
-                var r = await fetch(url);
+                var r = await fetch('/api/onboarding/dentally/token', { method:'POST', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({ verified: verifiedTok, attested: true, token: token }) });
                 var j = await r.json();
-                if (!r.ok || !j.authorize_url) throw new Error(j.error || 'Could not start the connection.');
-                location.href = j.authorize_url;   // top-level navigation to Dentally consent
+                if (r.ok && j.ok) { msg('msg-connect', ''); show('step-done'); return; }
+                // Missing permissions -> show the per-permission checklist. Incorrect key -> just the message.
+                if (j.checks) renderChecks(j.checks);
+                msg('msg-connect', j.error || 'Could not verify your token.', false);
+                this.disabled = false;
             } catch (e) { this.disabled = false; msg('msg-connect', e.message, false); }
         });
     </script>
