@@ -8,7 +8,7 @@ name: Monitor Warehouse Health
 
 on:
   schedule:
-    - cron: '0 16 * * *'   # 16:00 UTC daily (after the nightly build)
+    - cron: '0 5 * * *'    # 05:00 UTC daily -- the overnight build finishes before this, so a morning run surfaces its failures
   workflow_dispatch:
 
 jobs:
