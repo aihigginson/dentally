@@ -1,0 +1,22 @@
+# =====================================================================
+# Release V152 -- Patient Data Quality view (Day Book DQ report #1)
+# =====================================================================
+# Gold.Patient_Data_Quality: ACTIVE patients whose assigned dentist and/or hygienist is INACTIVE --
+# they need reassigning in Dentally. A VIEW (not columns on Dim_Patients) so it's composed AFTER the
+# facts are built and read at model-refresh -- no dimension-load ordering. Grain = one row per
+# (patient x inactive assigned practitioner), so a single "Inactive Practitioner" slicer shows a
+# departed practitioner's orphaned patients. Surfaces most fields straight off Dim_Patients (name,
+# phone, email, Last_Scale_Polish=last hygiene, Last_Exam, Hygienist/Dentist recall dates) + two
+# fact-derived flags: Has_Outstanding_Appointment (future booked, not cancelled/completed/DNA) and
+# Has_Open_Course (treatment plan not complete with open items).
+#
+# Meta.usp_Create_Gold_Views surfaces the Gold view as PBI.[List Patient Data Quality].
+# MODEL STEP (after this + view regen): add the table + its Tenant_ID RLS filter in Desktop, refresh,
+# then build the Day Book "Data Quality" tab.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V152__patient_data_quality_view.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Patient_Data_Quality.View.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
