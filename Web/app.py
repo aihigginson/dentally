@@ -1274,9 +1274,10 @@ def dentally_update_token():
 MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
 MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
 MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
-# Sender for the customer-facing token-refresh nudge. Must be a verified sender on a domain connected
-# to the ACS resource. NOTE: today the ACS sender is the managed *.azurecomm.net domain -- for this to
-# actually deliver, analytically.info must be connected to ACS with Support@ allowed as a MailFrom.
+# Support address for the customer-facing token-refresh nudge. analytically.info is NOT connected to
+# ACS yet, so we can't SEND from it -- the nudge sends from the working managed domain and sets this as
+# Reply-To (option B; Reply-To needs no domain verification). Flip the monitor to sender=SUPPORT_FROM
+# once analytically.info is verified on ACS.
 SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
 
 
@@ -1382,8 +1383,10 @@ def monitor_health():
             for tid in bad_token_tenants:
                 em = primary.get(tid)
                 if em:
+                    # Send from the working ACS managed domain (analytically.info isn't on ACS yet) with
+                    # Reply-To = Support. Flip to sender=SUPPORT_FROM once the custom domain is verified.
                     _send_email(em, "Action needed: your Analytically data has stopped updating",
-                                _principal_token_email_body(), sender=SUPPORT_FROM, reply_to=SUPPORT_FROM)
+                                _principal_token_email_body(), reply_to=SUPPORT_FROM)
                     notified.append(em)
                 else:
                     app.logger.warning("monitor: tenant %s has a bad token but no Billing_Contact main email", tid)

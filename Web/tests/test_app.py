@@ -420,7 +420,8 @@ def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, mo
     assert appmod.MONITOR_NOTIFY in tos                       # operator summary
     assert tos.count('craig@mapledental.co.uk') == 1          # exactly ONE nudge to the main account
     nudge = next(s for s in sent if s[0] == 'craig@mapledental.co.uk')
-    assert nudge[3].get('sender') == appmod.SUPPORT_FROM      # sent FROM Support@
+    assert nudge[3].get('reply_to') == appmod.SUPPORT_FROM    # Reply-To = Support@ (interim option B)
+    assert nudge[3].get('sender') is None                    # sent from the deliverable managed domain
     assert 'settings=dentally' in nudge[2] and 'Personal Access Token' in nudge[2]
 
 
