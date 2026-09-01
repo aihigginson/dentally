@@ -1585,6 +1585,7 @@
         });
         el.style.display = 'block';
     }
+    function _dqBadge(badge, text, color){ badge.textContent = text; badge.style.display = ''; badge.style.background = color; badge.style.color = '#fff'; }
     async function loadDentallyStatus(){
         const badge = document.getElementById('dentally-status-badge');
         const desc  = document.getElementById('dentally-status-desc');
@@ -1592,9 +1593,18 @@
         desc.textContent = 'Checking…'; badge.style.display = 'none'; up.style.display = 'none';
         try {
             const s = await (await authFetch('/api/dentally/status')).json();
-            if (s.configured) { badge.textContent = 'Connected'; badge.style.display = '';
-                desc.textContent = 'Your Dentally is connected — your data refreshes each night.'; }
-            else { desc.textContent = 'No Dentally access token is set for your practice.'; }
+            if (s.status === 'ok') {
+                _dqBadge(badge, 'Connected', '#1a7f4b');
+                desc.textContent = 'Your Dentally connection is healthy — your data refreshes each night.';
+            } else if (s.status === 'invalid') {
+                _dqBadge(badge, 'Action needed', '#b3261e');
+                desc.innerHTML = 'Your Dentally access token is <strong>no longer valid</strong> — Dentally is rejecting it, so your nightly data has <strong>stopped updating</strong>. This usually means the token was regenerated in Dentally. Create a new Personal Access Token and paste it below to fix it.';
+            } else if (s.status === 'missing') {
+                _dqBadge(badge, 'Not connected', '#b3261e');
+                desc.textContent = 'No Dentally access token is set for your practice, so no data is being imported. Paste one below to start.';
+            } else {
+                desc.textContent = 'We couldn’t reach Dentally to check your connection just now. You can still paste a new token below.';
+            }
             if (s.can_update) up.style.display = '';
             else desc.textContent += ' Only a practice admin can update it.';
         } catch (e) { desc.textContent = 'Could not check the Dentally connection.'; }

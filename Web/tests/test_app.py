@@ -326,6 +326,84 @@ def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
     assert saved['name'] == f'dentally-tokens-{appmod.DENTALLY_ENV}'
 
 
+def _stub_status(appmod, monkeypatch, kv):
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Admin', 100, [100], True))
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: kv)
+
+
+def test_dentally_status_ok(client, appmod, monkeypatch):
+    _stub_status(appmod, monkeypatch, {'100': {'token': 'tok', 'base_url': 'https://api.dentally.co/v1'}})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'ok'
+
+
+def test_dentally_status_invalid(client, appmod, monkeypatch):
+    # token present but Dentally rejects it -> 'invalid' (the bug the user hit: it must NOT say connected)
+    _stub_status(appmod, monkeypatch, {'100': {'token': 'tok'}})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(401))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'invalid'
+
+
+def test_dentally_status_missing(client, appmod, monkeypatch):
+    _stub_status(appmod, monkeypatch, {})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'missing'
+
+
+# ── Warehouse health monitor: /api/monitor/health ────────────────────────────
+
+class _MonCursor:
+    def __init__(self, proc, ing):
+        self._proc, self._ing, self._which = proc, ing, None
+    def execute(self, sql, *a):
+        self._which = 'proc' if 'Process_Execution_Log' in sql else 'ing'
+        return self
+    def fetchall(self):
+        return self._proc if self._which == 'proc' else self._ing
+
+
+class _MonConn:
+    def __init__(self, cur):
+        self._cur = cur
+    def cursor(self):
+        return self._cur
+    def close(self):
+        pass
+
+
+def test_monitor_requires_key(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    assert client.post('/api/monitor/health').status_code == 401
+    assert client.post('/api/monitor/health', headers={'X-Monitor-Key': 'wrong'}).status_code == 401
+
+
+def test_monitor_no_failures_no_email(client, appmod, monkeypatch):
+    sent = {}
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], [])))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.update(x=1))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['failures'] == 0 and j['emailed'] is False and not sent
+
+
+def test_monitor_alerts_on_failures(client, appmod, monkeypatch):
+    sent = {}
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    proc = [('2026-09-01 06:00', 'Audit.Orchestrate_Build', 'boom')]
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
+           ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body: sent.update(to=to, subj=subj, body=body))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['process_failures'] == 1 and j['ingest_failures'] == 2 and j['failures'] == 3 and j['emailed'] is True
+    assert sent['to'] == appmod.MONITOR_NOTIFY
+    assert 'Orchestrate_Build' in sent['body'] and '401' in sent['body']
+    # the two identical 401 ingest rows collapse to one grouped line
+    assert 'tenant 100: 2 entities' in sent['body']
+
+
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
     # A transient error validating the token must NOT lose a verified signup -- record under the email key.
     def _boom(*a, **k):

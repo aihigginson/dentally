@@ -1179,7 +1179,9 @@ def onboarding_token():
 
 @app.route('/api/dentally/status')
 def dentally_status():
-    """Is this tenant's Dentally token configured, and may this user update it?"""
+    """Report the LIVE health of this tenant's Dentally token, not just whether one exists -- a stored
+    token can be silently revoked in Dentally. Probes the token: 'ok' (authenticates), 'invalid' (present
+    but rejected -- data has stopped refreshing), 'missing' (none set), 'unknown' (couldn't reach Dentally)."""
     upn, err = _auth()
     if err:
         return err
@@ -1190,9 +1192,19 @@ def dentally_status():
         conn.close()
         if client_id is None or not tids:
             return jsonify({'error': 'Forbidden'}), 403
-        toks = _kv_json(f'dentally-tokens-{DENTALLY_ENV}')
-        configured = bool(toks.get(str(tids[0]), {}).get('token'))
-        return jsonify({'configured': configured, 'can_update': bool(maintain)})
+        entry = _kv_json(f'dentally-tokens-{DENTALLY_ENV}').get(str(tids[0]), {})
+        token = entry.get('token')
+        if not token:
+            return jsonify({'status': 'missing', 'can_update': bool(maintain)})
+        base = (entry.get('base_url') or DENTALLY_API_BASE).rstrip('/')
+        status = 'unknown'
+        try:
+            r = requests.get(base + '/practice', params={'per_page': 1},
+                             headers={'Authorization': 'Bearer ' + token, 'User-Agent': DENTALLY_UA}, timeout=15)
+            status = 'invalid' if r.status_code in (401, 403) else ('ok' if r.ok else 'unknown')
+        except requests.RequestException:
+            status = 'unknown'
+        return jsonify({'status': status, 'can_update': bool(maintain)})
     except Exception as e:
         return _server_error(e, 'dentally-status')
 
@@ -1248,6 +1260,80 @@ def dentally_update_token():
         return jsonify({'ok': True, 'checks': checks})
     except Exception as e:
         return _server_error(e, 'dentally-token')
+
+
+# ── Warehouse health monitor (generic build/ingest failure alerting) ──────────
+# A small machine endpoint (shared-secret, no user login) that scans the two operational logs for
+# failures in a rolling window and emails a summary. Driven by a daily GitHub Actions cron that hits
+# dev + prod, so each app checks its OWN warehouse and it runs independently of the nightly build
+# (catching build crashes too). Failure signals learned from the logs:
+#   * Audit.Process_Execution_Log : Status = 'FAILED'
+#   * Audit.Ingest_Log            : Phase LIKE '%FAIL%' OR an HTTP error in Detail (Client/Server Error,
+#                                   Unauthorized) -- distinguishes real failures from deliberate throttle-skips.
+MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
+MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
+MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
+
+
+def _monitor_email_body(proc, ing, hours):
+    lines = [f"Warehouse health check ({APP_ENV}) — failures in the last {hours}h.\n"]
+    if proc:
+        lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
+        for r in proc[:20]:
+            lines.append(f"  {r['when']}  {r['name'] or '(unnamed)'}  {r['error'][:160]}")
+        if len(proc) > 20:
+            lines.append(f"  … +{len(proc) - 20} more")
+        lines.append("")
+    if ing:
+        # Group the (often many, near-identical) ingest rows by tenant + error signature.
+        groups = {}
+        for r in ing:
+            sig = (r['detail'].split(' for url')[0] or r['phase'])[:70]
+            g = groups.setdefault((r['tenant'], sig), [])
+            g.append(r['entity'])
+        lines.append(f"Ingest_Log — {len(ing)} failure row(s), {len(groups)} distinct:")
+        for (tenant, sig), entities in list(groups.items())[:20]:
+            lines.append(f"  tenant {tenant}: {len(entities)} entit{'y' if len(entities)==1 else 'ies'} — {sig}")
+            lines.append(f"      ({', '.join(entities[:8])}{' …' if len(entities) > 8 else ''})")
+        lines.append("")
+    lines.append("Investigate in Audit.Unified_Log. (Dentally 401s: a practice admin can refresh the token in the app under Settings → Dentally.)")
+    return "\n".join(lines)
+
+
+@app.route('/api/monitor/health', methods=['POST'])
+def monitor_health():
+    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log for failures in the last MONITOR_WINDOW_HOURS
+    and email a summary if any. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
+    if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        since = (datetime.utcnow() - timedelta(hours=MONITOR_WINDOW_HOURS)).strftime('%Y-%m-%dT%H:%M:%S')
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT Start_Time, Process_Name, LEFT(ISNULL(Error_Message,''),200) "
+            "FROM Audit.Process_Execution_Log WHERE Status = 'FAILED' AND Start_Time >= ? "
+            "ORDER BY Start_Time DESC", since)
+        proc = [{'when': str(r[0]), 'name': r[1], 'error': r[2] or ''} for r in cur.fetchall()]
+        cur.execute(
+            "SELECT Logged_At, Tenant_ID, Entity, Phase, LEFT(ISNULL(Detail,''),200) "
+            "FROM Audit.Ingest_Log WHERE Logged_At >= ? AND ("
+            "Phase LIKE '%FAIL%' OR Detail LIKE '%Client Error%' OR Detail LIKE '%Server Error%' "
+            "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", since)
+        ing = [{'when': str(r[0]), 'tenant': r[1], 'entity': r[2], 'phase': r[3] or '', 'detail': r[4] or ''}
+               for r in cur.fetchall()]
+        conn.close()
+        total = len(proc) + len(ing)
+        if total:
+            _send_email(MONITOR_NOTIFY,
+                        f"[{APP_ENV}] Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
+                        _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
+            app.logger.warning("monitor: %d process + %d ingest failure(s) in %dh -> alerted %s",
+                               len(proc), len(ing), MONITOR_WINDOW_HOURS, MONITOR_NOTIFY)
+        return jsonify({'window_hours': MONITOR_WINDOW_HOURS, 'process_failures': len(proc),
+                        'ingest_failures': len(ing), 'failures': total, 'emailed': bool(total)})
+    except Exception as e:
+        return _server_error(e, 'monitor-health')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
