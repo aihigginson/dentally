@@ -1300,6 +1300,32 @@ def _monitor_email_body(proc, ing, hours):
     return "\n".join(lines)
 
 
+def _tenant_admin_emails(cur, tenant_id):
+    """Practice admins (can update the connection) for a tenant -- who to nudge to refresh the token."""
+    cur.execute(
+        "SELECT DISTINCT a.User_UPN FROM Security.Application_Users a "
+        "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
+        "WHERE t.Tenant_ID = ? AND ISNULL(a.Maintain_Targets,0) = 1 AND a.User_UPN LIKE '%@%'", tenant_id)
+    return [r[0] for r in cur.fetchall()]
+
+
+def _principal_token_email_body():
+    """Customer-facing nudge: their Dentally token was rejected, here's how to fix it (deep link to the
+    Settings → Dentally screen). Sent PROD-only from the monitor."""
+    link = os.environ.get('APP_URL', 'https://app.analytically.info').rstrip('/') + '/?settings=dentally'
+    return (
+        "Your Analytically data has stopped updating.\n\n"
+        "Dentally is no longer accepting the access token for your practice, so your overnight data "
+        "refresh has stopped. This almost always means the token was regenerated in Dentally.\n\n"
+        "It takes about a minute to fix:\n"
+        "  1. In Dentally: Settings -> Personal Access Tokens -> New personal access token. Tick EVERY "
+        "read permission, Save, and copy the token.\n"
+        f"  2. In Analytically: open Settings -> Dentally and paste it in --\n     {link}\n\n"
+        "We'll check the token can read your data before saving, and your reports will catch up on the "
+        "next overnight refresh.\n"
+    )
+
+
 @app.route('/api/monitor/health', methods=['POST'])
 def monitor_health():
     """Scan Audit.Process_Execution_Log + Audit.Ingest_Log for failures in the last MONITOR_WINDOW_HOURS
@@ -1322,16 +1348,34 @@ def monitor_health():
             "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", since)
         ing = [{'when': str(r[0]), 'tenant': r[1], 'entity': r[2], 'phase': r[3] or '', 'detail': r[4] or ''}
                for r in cur.fetchall()]
+        # Tenants whose token looks revoked (401 / Unauthorized in the ingest detail) -> their practice
+        # admins should refresh it. Look up their emails while the connection is open.
+        bad_token_tenants = sorted({r['tenant'] for r in ing if r['tenant'] is not None
+                                    and ('401' in r['detail'] or 'Unauthorized' in r['detail'])})
+        principal_emails = {tid: _tenant_admin_emails(cur, tid) for tid in bad_token_tenants}
         conn.close()
+
         total = len(proc) + len(ing)
-        if total:
-            _send_email(MONITOR_NOTIFY,
-                        f"[{APP_ENV}] Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
-                        _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
-            app.logger.warning("monitor: %d process + %d ingest failure(s) in %dh -> alerted %s",
-                               len(proc), len(ing), MONITOR_WINDOW_HOURS, MONITOR_NOTIFY)
+        # PROD ONLY: never email real customers (or the operator) from a non-prod app.
+        emails_on = (APP_ENV == 'prod')
+        notified = []
+        if emails_on:
+            if total:
+                _send_email(MONITOR_NOTIFY,
+                            f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
+                            _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
+            for tid in bad_token_tenants:
+                for em in principal_emails.get(tid, []):
+                    _send_email(em, "Action needed: your Analytically data has stopped updating",
+                                _principal_token_email_body())
+                    notified.append(em)
+        app.logger.warning("monitor(%s): %d process + %d ingest failure(s); bad-token tenants=%s; principal emails=%s",
+                           APP_ENV, len(proc), len(ing), bad_token_tenants,
+                           len(notified) if emails_on else 'suppressed(non-prod)')
         return jsonify({'window_hours': MONITOR_WINDOW_HOURS, 'process_failures': len(proc),
-                        'ingest_failures': len(ing), 'failures': total, 'emailed': bool(total)})
+                        'ingest_failures': len(ing), 'failures': total,
+                        'bad_token_tenants': bad_token_tenants,
+                        'principals_notified': len(notified), 'emails_enabled': emails_on})
     except Exception as e:
         return _server_error(e, 'monitor-health')
 

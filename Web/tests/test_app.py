@@ -355,13 +355,14 @@ def test_dentally_status_missing(client, appmod, monkeypatch):
 # ── Warehouse health monitor: /api/monitor/health ────────────────────────────
 
 class _MonCursor:
-    def __init__(self, proc, ing):
-        self._proc, self._ing, self._which = proc, ing, None
+    def __init__(self, proc, ing, admins=None):
+        self._proc, self._ing, self._admins, self._which = proc, ing, admins or [], None
     def execute(self, sql, *a):
-        self._which = 'proc' if 'Process_Execution_Log' in sql else 'ing'
+        self._which = ('adm' if 'Application_Users' in sql
+                       else 'proc' if 'Process_Execution_Log' in sql else 'ing')
         return self
     def fetchall(self):
-        return self._proc if self._which == 'proc' else self._ing
+        return {'proc': self._proc, 'ing': self._ing, 'adm': self._admins}[self._which]
 
 
 class _MonConn:
@@ -385,23 +386,38 @@ def test_monitor_no_failures_no_email(client, appmod, monkeypatch):
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], [])))
     monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.update(x=1))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
-    assert j['failures'] == 0 and j['emailed'] is False and not sent
+    assert j['failures'] == 0 and not sent
 
 
-def test_monitor_alerts_on_failures(client, appmod, monkeypatch):
-    sent = {}
+def test_monitor_dev_detects_but_suppresses_emails(client, appmod, monkeypatch):
+    # APP_ENV is 'test' (conftest) -> detection happens but NO emails are sent from a non-prod app.
+    sent = []
     monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
     proc = [('2026-09-01 06:00', 'Audit.Orchestrate_Build', 'boom')]
     ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
            ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
-    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing)))
-    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body: sent.update(to=to, subj=subj, body=body))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing, [('admin@x.com',)])))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.append(a))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
-    assert j['process_failures'] == 1 and j['ingest_failures'] == 2 and j['failures'] == 3 and j['emailed'] is True
-    assert sent['to'] == appmod.MONITOR_NOTIFY
-    assert 'Orchestrate_Build' in sent['body'] and '401' in sent['body']
-    # the two identical 401 ingest rows collapse to one grouped line
-    assert 'tenant 100: 2 entities' in sent['body']
+    assert j['process_failures'] == 1 and j['ingest_failures'] == 2
+    assert j['bad_token_tenants'] == [100] and j['emails_enabled'] is False
+    assert not sent   # non-prod NEVER emails
+
+
+def test_monitor_prod_emails_operator_and_principal(client, appmod, monkeypatch):
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, [('principal@x.com',)])))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body: sent.append((to, subj, body)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['emails_enabled'] is True and j['principals_notified'] == 1 and j['bad_token_tenants'] == [100]
+    tos = [s[0] for s in sent]
+    assert appmod.MONITOR_NOTIFY in tos            # operator summary
+    assert 'principal@x.com' in tos                # the practice admin nudged directly
+    body = next(s[2] for s in sent if s[0] == 'principal@x.com')
+    assert 'settings=dentally' in body and 'Personal Access Token' in body   # deep link + fix steps
 
 
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):

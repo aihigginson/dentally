@@ -1187,6 +1187,9 @@
         if (data.maintain_targets) {
             const st = document.getElementById('settings-toggle');
             if (st) st.style.display = '';
+            // Deep link from an alert email, e.g. /?settings=dentally -> open Settings on that tab.
+            const _stab = new URLSearchParams(location.search).get('settings');
+            if (_stab) { openSettings(_stab); history.replaceState(null, '', location.pathname); }
         }
         renderTrialStrip(data.trial);
 
@@ -1719,14 +1722,14 @@
         }
     }
 
-    function openSettings() { clearDirty(); settingsOverlay.classList.add('open'); showSettingsTab('finance'); }
+    function openSettings(tab) { clearDirty(); settingsOverlay.classList.add('open'); showSettingsTab(typeof tab === 'string' ? tab : 'finance'); }
     function closeSettings() {
         if (_dirty && !confirm('You have unsaved changes. Close without saving?')) return;
         clearDirty();
         settingsOverlay.classList.remove('open');
     }
 
-    document.getElementById('settings-toggle').addEventListener('click', openSettings);
+    document.getElementById('settings-toggle').addEventListener('click', () => openSettings());
     document.getElementById('settings-close').addEventListener('click', closeSettings);
     settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
     document.getElementById('xero-connect-btn').addEventListener('click', connectXero);
