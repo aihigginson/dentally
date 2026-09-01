@@ -271,6 +271,61 @@ def test_onboarding_token_stores_and_notifies(client, appmod, monkeypatch):
     assert 'Acme Dental' in notified['body']
 
 
+def _stub_admin(appmod, monkeypatch, maintain=True):
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn(FakeCursor(one_row=('Maple Dental',))))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Admin', 100, [100], maintain))
+
+
+def test_dentally_update_requires_auth(client):
+    assert client.post('/api/dentally/token', json={'token': 'x' * 40}).status_code == 401
+
+
+def test_dentally_update_requires_admin(client, appmod, monkeypatch):
+    _stub_admin(appmod, monkeypatch, maintain=False)
+    assert client.post('/api/dentally/token', json={'token': 'x' * 40}).status_code == 403
+
+
+def test_dentally_update_rejects_bad_token(client, appmod, monkeypatch):
+    _stub_admin(appmod, monkeypatch)
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(401))
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: None)
+    r = client.post('/api/dentally/token', json={'token': 'x' * 40})
+    assert r.status_code == 400 and r.get_json()['reason'] == 'invalid_token'
+
+
+def test_dentally_update_missing_permission_not_saved(client, appmod, monkeypatch):
+    saved = {}
+    _stub_admin(appmod, monkeypatch)
+    def _get(url, *a, **k):
+        fin = ('/invoices', '/invoice_items', '/payments', '/nhs_claims')
+        return _Resp(403) if any(url.endswith(p) for p in fin) else _Resp(200)
+    monkeypatch.setattr(appmod.requests, 'get', _get)
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: saved.update(v=v))
+    r = client.post('/api/dentally/token', json={'token': 'x' * 40})
+    j = r.get_json()
+    assert r.status_code == 200 and j['ok'] is False and j['reason'] == 'missing_permissions'
+    assert not saved   # a token that can't read everything is never written to the vault
+
+
+def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
+    import json as _json
+    saved = {}
+    _stub_admin(appmod, monkeypatch)
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    monkeypatch.setattr(appmod, '_kv_json',
+                        lambda n: {'100': {'base_url': 'https://api.dentally.co/v1', 'name': 'Maple Dental', 'token': 'OLD'}})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: saved.update(name=n, val=v))
+    r = client.post('/api/dentally/token', json={'token': 'newtoken' * 6})
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    toks = _json.loads(saved['val'])
+    assert toks['100']['token'] == 'newtoken' * 6         # updated in place
+    assert toks['100']['base_url'] == 'https://api.dentally.co/v1'  # base_url preserved
+    assert saved['name'] == f'dentally-tokens-{appmod.DENTALLY_ENV}'
+
+
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
     # A transient error validating the token must NOT lose a verified signup -- record under the email key.
     def _boom(*a, **k):

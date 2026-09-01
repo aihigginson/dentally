@@ -1170,6 +1170,86 @@ def onboarding_token():
         return _server_error(e, 'onboarding-token')
 
 
+# ── Update Dentally token (existing customer, self-serve) ─────────────────────
+# A live practice's Dentally Personal Access Token can be regenerated/revoked inside Dentally at any
+# time, which silently breaks the nightly ingest (401). Rather than have them email a new token, an
+# authenticated practice admin pastes a fresh one here; we run the SAME preflight as onboarding and, only
+# if it can read everything, write it straight into KV dentally-tokens-<env>[Tenant_ID] (the exact secret
+# the ingest reads). Admin-only, tenant taken from the signed-in user; the token never leaves the vault.
+
+@app.route('/api/dentally/status')
+def dentally_status():
+    """Is this tenant's Dentally token configured, and may this user update it?"""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None or not tids:
+            return jsonify({'error': 'Forbidden'}), 403
+        toks = _kv_json(f'dentally-tokens-{DENTALLY_ENV}')
+        configured = bool(toks.get(str(tids[0]), {}).get('token'))
+        return jsonify({'configured': configured, 'can_update': bool(maintain)})
+    except Exception as e:
+        return _server_error(e, 'dentally-status')
+
+
+@app.route('/api/dentally/token', methods=['POST'])
+def dentally_update_token():
+    """Admin pastes a fresh Dentally PAT; preflight it and (only if fully readable) update the tenant's
+    token in KV. Same clear messages as onboarding: incorrect/expired key vs missing read permission."""
+    upn, err = _auth()
+    if err:
+        return err
+    token = ((request.get_json(silent=True) or {}).get('token') or '').strip()
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        practice_name = None
+        if tids:
+            cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tids[0])
+            row = cur.fetchone()
+            practice_name = row[0] if row else None
+        conn.close()
+    except Exception as e:
+        return _server_error(e, 'dentally-token')
+    if client_id is None or not tids:
+        return jsonify({'error': 'Forbidden'}), 403
+    if not maintain:
+        return jsonify({'error': 'Only a practice admin can update the Dentally connection.'}), 403
+    if len(token) < 20:
+        return jsonify({'error': 'Paste the personal access token you created in Dentally.'}), 400
+    tenant_id = tids[0]
+    try:
+        token_valid, checks = _dentally_preflight(token)
+        if not token_valid:
+            return jsonify({'reason': 'invalid_token',
+                            'error': "That token wasn't accepted by Dentally. Check you pasted the whole "
+                                     "token and that it's still active (Settings → Personal Access Tokens)."}), 400
+        missing = [g['scope'] for g in checks if any(t['state'] == 'blocked' for t in g['tables'])]
+        if missing:
+            return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
+                            'error': "That token can't read some of your Dentally data. Tick every read "
+                                     "permission marked below in Dentally, save, then check again."}), 200
+        # Fully readable -> update the token in place, preserving base_url/name.
+        secret = f'dentally-tokens-{DENTALLY_ENV}'
+        toks = _kv_json(secret)
+        entry = toks.get(str(tenant_id), {})
+        entry['base_url'] = entry.get('base_url') or 'https://api.dentally.co/v1'
+        entry['name']     = practice_name or entry.get('name')
+        entry['token']    = token
+        toks[str(tenant_id)] = entry
+        _kv_set(secret, json.dumps(toks))
+        app.logger.info("dentally token updated by %r for tenant %s", upn, tenant_id)
+        return jsonify({'ok': True, 'checks': checks})
+    except Exception as e:
+        return _server_error(e, 'dentally-token')
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_info(cur, upn):
