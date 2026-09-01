@@ -33,3 +33,11 @@ Website/docs/
 # cache/localSettings (machine-specific, not shareable).
 PBI/*.pbix
 PBI/**/.pbi/
+
+# Local scratch helpers + one-off scripts (kept on disk, never committed).
+# The _ prefix is the convention for personal tooling: _q.py/_qp.py (warehouse query
+# helpers), _edit_engine.py (encoding-preserving SQL editor), plus throwaway one-offs.
+Scripts/_*
+
+# Runtime lock for the scheduler (machine-local state, not shareable)
+.claude/scheduled_tasks.lock
