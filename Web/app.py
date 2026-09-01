@@ -872,13 +872,56 @@ def _code_hmac(code, email):
     return hmac.new(_state_key(), f'{email}:{code}'.encode(), hashlib.sha256).hexdigest()
 
 
-def _send_email(to, subject, body):
-    """Send a transactional email. Prefers Azure Communication Services -- keyless via ACS_ENDPOINT +
-    managed identity, else a connection string in Key Vault ('acs-connection-string'). Falls back to
-    SMTP (ONBOARDING_SMTP_*); otherwise (dev) logs the body so the flow is testable. Returns True if sent.
-    Sender must be an address on the domain connected to the ACS resource (set ONBOARDING_FROM)."""
-    sender   = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
-    reply_to = os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+# ── Outgoing mail: Microsoft 365 (Graph) primary, ACS fallback ────────────────
+# analytically.info runs on Microsoft 365 (MX -> outlook; SPF -> "include:spf.protection.outlook.com
+# -all"), so the aligned + branded way to send is via Graph AS a real mailbox (e.g. support@) rather
+# than ACS from the *.azurecomm.net domain. Opt-in with GRAPH_SEND once the app registration has the
+# Mail.Send APPLICATION permission (admin-consented) + an Exchange Application Access Policy scopes it
+# to GRAPH_FROM. Reuses the app's confidential-client creds. Falls back to ACS on any Graph error.
+GRAPH_SEND = os.environ.get('GRAPH_SEND', '').strip().lower() in ('1', 'true', 'yes', 'on')
+GRAPH_FROM = os.environ.get('GRAPH_FROM', 'support@analytically.info')
+_graph_msal = None
+
+
+def _graph_token():
+    global _graph_msal
+    if _graph_msal is None:
+        _graph_msal = msal.ConfidentialClientApplication(
+            CLIENT_ID, authority=f'https://login.microsoftonline.com/{TENANT_ID}', client_credential=CLIENT_SECRET)
+    result = _graph_msal.acquire_token_for_client(scopes=['https://graph.microsoft.com/.default'])
+    if 'access_token' not in result:
+        raise RuntimeError(result.get('error_description', 'Graph token acquisition failed'))
+    return result['access_token']
+
+
+def _send_email(to, subject, body, sender=None, reply_to=None):
+    """Send a transactional email. Prefers Microsoft 365 via Graph (GRAPH_SEND) -- branded + SPF/DKIM/
+    DMARC-aligned, sending AS a real analytically.info mailbox (default GRAPH_FROM). Else Azure
+    Communication Services (managed *.azurecomm.net sender), else SMTP; otherwise (dev) logs the body.
+    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain)."""
+    reply_to = reply_to or os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+
+    # 1) Microsoft 365 via Graph -- the aligned/branded path when enabled.
+    if GRAPH_SEND:
+        graph_from = sender or GRAPH_FROM
+        try:
+            r = requests.post(
+                f'https://graph.microsoft.com/v1.0/users/{graph_from}/sendMail',
+                headers={'Authorization': 'Bearer ' + _graph_token(), 'Content-Type': 'application/json'},
+                json={'message': {'subject': subject,
+                                  'body': {'contentType': 'Text', 'content': body},
+                                  'toRecipients': [{'emailAddress': {'address': to}}],
+                                  'replyTo':      [{'emailAddress': {'address': reply_to}}]},
+                      'saveToSentItems': True},
+                timeout=30)
+            r.raise_for_status()
+            return True
+        except Exception as e:
+            app.logger.warning("graph sendMail (%s) failed, falling back to ACS: %s", graph_from, e)
+
+    # 2) Azure Communication Services -- sender must be on a domain connected to the ACS resource, so
+    #    ignore any requested sender and use the managed-domain address.
+    acs_sender = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
     endpoint = os.environ.get('ACS_ENDPOINT')
     acs_conn = _kv_get('acs-connection-string') or os.environ.get('ACS_CONNECTION_STRING')
     if endpoint or acs_conn:
@@ -889,19 +932,21 @@ def _send_email(to, subject, body):
         else:
             client = EmailClient.from_connection_string(acs_conn)
         client.begin_send({
-            'senderAddress': sender,
+            'senderAddress': acs_sender,
             'recipients': {'to': [{'address': to}]},
             'replyTo':     [{'address': reply_to}],
             'content':     {'subject': subject, 'plainText': body},
         }).result()
         return True
+
+    # 3) SMTP fallback
     host = os.environ.get('ONBOARDING_SMTP_HOST')
     if host:
         import smtplib
         from email.mime.text import MIMEText
         msg = MIMEText(body)
         msg['Subject'] = subject
-        msg['From'] = os.environ.get('ONBOARDING_FROM', 'noreply@analytically.info')
+        msg['From'] = acs_sender
         msg['To'] = to
         with smtplib.SMTP(host, int(os.environ.get('ONBOARDING_SMTP_PORT', '587'))) as s:
             s.starttls()
@@ -910,7 +955,8 @@ def _send_email(to, subject, body):
                 s.login(user, os.environ.get('ONBOARDING_SMTP_PASS', ''))
             s.sendmail(msg['From'], [to], msg.as_string())
         return True
-    app.logger.warning("onboarding email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
+
+    app.logger.warning("email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
     return False
 
 
@@ -1168,6 +1214,236 @@ def onboarding_token():
         return jsonify({'ok': True, 'checks': checks})
     except Exception as e:
         return _server_error(e, 'onboarding-token')
+
+
+# ── Update Dentally token (existing customer, self-serve) ─────────────────────
+# A live practice's Dentally Personal Access Token can be regenerated/revoked inside Dentally at any
+# time, which silently breaks the nightly ingest (401). Rather than have them email a new token, an
+# authenticated practice admin pastes a fresh one here; we run the SAME preflight as onboarding and, only
+# if it can read everything, write it straight into KV dentally-tokens-<env>[Tenant_ID] (the exact secret
+# the ingest reads). Admin-only, tenant taken from the signed-in user; the token never leaves the vault.
+
+@app.route('/api/dentally/status')
+def dentally_status():
+    """Report the LIVE health of this tenant's Dentally token, not just whether one exists -- a stored
+    token can be silently revoked in Dentally. Probes the token: 'ok' (authenticates), 'invalid' (present
+    but rejected -- data has stopped refreshing), 'missing' (none set), 'unknown' (couldn't reach Dentally)."""
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        conn.close()
+        if client_id is None or not tids:
+            return jsonify({'error': 'Forbidden'}), 403
+        entry = _kv_json(f'dentally-tokens-{DENTALLY_ENV}').get(str(tids[0]), {})
+        token = entry.get('token')
+        if not token:
+            return jsonify({'status': 'missing', 'can_update': bool(maintain)})
+        base = (entry.get('base_url') or DENTALLY_API_BASE).rstrip('/')
+        status = 'unknown'
+        try:
+            r = requests.get(base + '/practice', params={'per_page': 1},
+                             headers={'Authorization': 'Bearer ' + token, 'User-Agent': DENTALLY_UA}, timeout=15)
+            status = 'invalid' if r.status_code in (401, 403) else ('ok' if r.ok else 'unknown')
+        except requests.RequestException:
+            status = 'unknown'
+        return jsonify({'status': status, 'can_update': bool(maintain)})
+    except Exception as e:
+        return _server_error(e, 'dentally-status')
+
+
+@app.route('/api/dentally/token', methods=['POST'])
+def dentally_update_token():
+    """Admin pastes a fresh Dentally PAT; preflight it and (only if fully readable) update the tenant's
+    token in KV. Same clear messages as onboarding: incorrect/expired key vs missing read permission."""
+    upn, err = _auth()
+    if err:
+        return err
+    token = ((request.get_json(silent=True) or {}).get('token') or '').strip()
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, maintain = _get_user_info(cur, upn)
+        practice_name = None
+        if tids:
+            cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tids[0])
+            row = cur.fetchone()
+            practice_name = row[0] if row else None
+        conn.close()
+    except Exception as e:
+        return _server_error(e, 'dentally-token')
+    if client_id is None or not tids:
+        return jsonify({'error': 'Forbidden'}), 403
+    if not maintain:
+        return jsonify({'error': 'Only a practice admin can update the Dentally connection.'}), 403
+    if len(token) < 20:
+        return jsonify({'error': 'Paste the personal access token you created in Dentally.'}), 400
+    tenant_id = tids[0]
+    try:
+        token_valid, checks = _dentally_preflight(token)
+        if not token_valid:
+            return jsonify({'reason': 'invalid_token',
+                            'error': "That token wasn't accepted by Dentally. Check you pasted the whole "
+                                     "token and that it's still active (Settings → Personal Access Tokens)."}), 400
+        missing = [g['scope'] for g in checks if any(t['state'] == 'blocked' for t in g['tables'])]
+        if missing:
+            return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
+                            'error': "That token can't read some of your Dentally data. Tick every read "
+                                     "permission marked below in Dentally, save, then check again."}), 200
+        # Fully readable -> update the token in place, preserving base_url/name.
+        secret = f'dentally-tokens-{DENTALLY_ENV}'
+        toks = _kv_json(secret)
+        entry = toks.get(str(tenant_id), {})
+        entry['base_url'] = entry.get('base_url') or 'https://api.dentally.co/v1'
+        entry['name']     = practice_name or entry.get('name')
+        entry['token']    = token
+        toks[str(tenant_id)] = entry
+        _kv_set(secret, json.dumps(toks))
+        app.logger.info("dentally token updated by %r for tenant %s", upn, tenant_id)
+        return jsonify({'ok': True, 'checks': checks})
+    except Exception as e:
+        return _server_error(e, 'dentally-token')
+
+
+# ── Warehouse health monitor (generic build/ingest failure alerting) ──────────
+# A small machine endpoint (shared-secret, no user login) that scans the two operational logs for
+# failures in a rolling window and emails a summary. Driven by a daily GitHub Actions cron that hits
+# dev + prod, so each app checks its OWN warehouse and it runs independently of the nightly build
+# (catching build crashes too). Failure signals learned from the logs:
+#   * Audit.Process_Execution_Log : Status = 'FAILED'
+#   * Audit.Ingest_Log            : Phase LIKE '%FAIL%' OR an HTTP error in Detail (Client/Server Error,
+#                                   Unauthorized) -- distinguishes real failures from deliberate throttle-skips.
+MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
+MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
+MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
+# Support address for the customer-facing token-refresh nudge. analytically.info is NOT connected to
+# ACS yet, so we can't SEND from it -- the nudge sends from the working managed domain and sets this as
+# Reply-To (option B; Reply-To needs no domain verification). Flip the monitor to sender=SUPPORT_FROM
+# once analytically.info is verified on ACS.
+SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
+
+
+def _monitor_email_body(proc, ing, hours):
+    lines = [f"Warehouse health check ({APP_ENV}) — failures in the last {hours}h.\n"]
+    if proc:
+        lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
+        for r in proc[:20]:
+            lines.append(f"  {r['when']}  {r['name'] or '(unnamed)'}  {r['error'][:160]}")
+        if len(proc) > 20:
+            lines.append(f"  … +{len(proc) - 20} more")
+        lines.append("")
+    if ing:
+        # Group the (often many, near-identical) ingest rows by tenant + error signature.
+        groups = {}
+        for r in ing:
+            sig = (r['detail'].split(' for url')[0] or r['phase'])[:70]
+            g = groups.setdefault((r['tenant'], sig), [])
+            g.append(r['entity'])
+        lines.append(f"Ingest_Log — {len(ing)} failure row(s), {len(groups)} distinct:")
+        for (tenant, sig), entities in list(groups.items())[:20]:
+            lines.append(f"  tenant {tenant}: {len(entities)} entit{'y' if len(entities)==1 else 'ies'} — {sig}")
+            lines.append(f"      ({', '.join(entities[:8])}{' …' if len(entities) > 8 else ''})")
+        lines.append("")
+    lines.append("Investigate in Audit.Unified_Log. (Dentally 401s: a practice admin can refresh the token in the app under Settings → Dentally.)")
+    return "\n".join(lines)
+
+
+def _tenant_primary_email(tenant_id):
+    """The practice's SINGLE main account (Input.Billing_Contact.Primary_Email, else Invoice_Email) from
+    the AppDB -- the same contact that receives invoices. Returns one address or None (don't guess/blast)."""
+    try:
+        conn = _appdb_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT TOP 1 Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID = ?",
+                    tenant_id)
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return ((row[0] or row[1] or '').strip() or None)
+    except Exception as e:
+        app.logger.warning("primary-email lookup failed for tenant %s: %s", tenant_id, e)
+        return None
+
+
+def _principal_token_email_body():
+    """Customer-facing nudge: their Dentally token was rejected, here's how to fix it (deep link to the
+    Settings → Dentally screen). Sent PROD-only from the monitor."""
+    link = os.environ.get('APP_URL', 'https://app.analytically.info').rstrip('/') + '/?settings=dentally'
+    return (
+        "Your Analytically data has stopped updating.\n\n"
+        "Dentally is no longer accepting the access token for your practice, so your overnight data "
+        "refresh has stopped. This almost always means the token was regenerated in Dentally.\n\n"
+        "It takes about a minute to fix:\n"
+        "  1. In Dentally: Settings -> Personal Access Tokens -> New personal access token. Tick EVERY "
+        "read permission, Save, and copy the token.\n"
+        f"  2. In Analytically: open Settings -> Dentally and paste it in --\n     {link}\n\n"
+        "We'll check the token can read your data before saving, and your reports will catch up on the "
+        "next overnight refresh.\n"
+    )
+
+
+@app.route('/api/monitor/health', methods=['POST'])
+def monitor_health():
+    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log for failures in the last MONITOR_WINDOW_HOURS
+    and email a summary if any. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
+    if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        since = (datetime.utcnow() - timedelta(hours=MONITOR_WINDOW_HOURS)).strftime('%Y-%m-%dT%H:%M:%S')
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT Start_Time, Process_Name, LEFT(ISNULL(Error_Message,''),200) "
+            "FROM Audit.Process_Execution_Log WHERE Status = 'FAILED' AND Start_Time >= ? "
+            "ORDER BY Start_Time DESC", since)
+        proc = [{'when': str(r[0]), 'name': r[1], 'error': r[2] or ''} for r in cur.fetchall()]
+        cur.execute(
+            "SELECT Logged_At, Tenant_ID, Entity, Phase, LEFT(ISNULL(Detail,''),200) "
+            "FROM Audit.Ingest_Log WHERE Logged_At >= ? AND ("
+            "Phase LIKE '%FAIL%' OR Detail LIKE '%Client Error%' OR Detail LIKE '%Server Error%' "
+            "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", since)
+        ing = [{'when': str(r[0]), 'tenant': r[1], 'entity': r[2], 'phase': r[3] or '', 'detail': r[4] or ''}
+               for r in cur.fetchall()]
+        # Tenants whose token looks revoked (401 / Unauthorized in the ingest detail) -> their practice
+        # admins should refresh it. Look up their emails while the connection is open.
+        bad_token_tenants = sorted({r['tenant'] for r in ing if r['tenant'] is not None
+                                    and ('401' in r['detail'] or 'Unauthorized' in r['detail'])})
+        conn.close()
+        # One recipient per bad-token tenant: the practice's MAIN account (Input.Billing_Contact, AppDB).
+        primary = {tid: _tenant_primary_email(tid) for tid in bad_token_tenants}
+
+        total = len(proc) + len(ing)
+        # PROD ONLY: never email real customers (or the operator) from a non-prod app.
+        emails_on = (APP_ENV == 'prod')
+        notified = []
+        if emails_on:
+            if total:
+                _send_email(MONITOR_NOTIFY,
+                            f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
+                            _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
+            for tid in bad_token_tenants:
+                em = primary.get(tid)
+                if em:
+                    # Send from the working ACS managed domain (analytically.info isn't on ACS yet) with
+                    # Reply-To = Support. Flip to sender=SUPPORT_FROM once the custom domain is verified.
+                    _send_email(em, "Action needed: your Analytically data has stopped updating",
+                                _principal_token_email_body(), reply_to=SUPPORT_FROM)
+                    notified.append(em)
+                else:
+                    app.logger.warning("monitor: tenant %s has a bad token but no Billing_Contact main email", tid)
+        app.logger.warning("monitor(%s): %d process + %d ingest failure(s); bad-token tenants=%s; principal emails=%s",
+                           APP_ENV, len(proc), len(ing), bad_token_tenants,
+                           len(notified) if emails_on else 'suppressed(non-prod)')
+        return jsonify({'window_hours': MONITOR_WINDOW_HOURS, 'process_failures': len(proc),
+                        'ingest_failures': len(ing), 'failures': total,
+                        'bad_token_tenants': bad_token_tenants,
+                        'principals_notified': len(notified), 'emails_enabled': emails_on})
+    except Exception as e:
+        return _server_error(e, 'monitor-health')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

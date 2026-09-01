@@ -300,6 +300,17 @@
         .settings-btn { margin-top: 0; padding: 6px 12px; font-size: 12px; }
         .settings-save:disabled, .settings-btn:disabled { opacity: .6; cursor: default; }
         .settings-msg { margin-left: 10px; font-size: 12px; }
+        /* Dentally access-check checklist (shared shape with the onboarding preflight) */
+        #dentally-checks { margin-top: 14px; display: none; max-width: 520px; }
+        .checks-title { font-size: 12px; font-weight: 700; margin: 4px 0 2px; }
+        .chk { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; font-size: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+        .chk-icon { font-weight: 700; width: 14px; text-align: center; }
+        .chk.ok   .chk-icon { color: #1a7f4b; }
+        .chk.bad  .chk-icon { color: #b3261e; }
+        .chk.warn .chk-icon { color: #b58105; }
+        .chk-label { font-weight: 600; }
+        .chk-scope { color: var(--text-2); font-weight: 400; }
+        .chk-detail { flex-basis: 100%; margin-left: 22px; color: var(--text-2); }
         /* Settings uses a full-screen panel (admin area with a wide target grid) */
         #settings-overlay .defs-panel { width: 100vw; max-width: 100vw; }
         #settings-overlay .defs-body { padding-bottom: 40px; }
@@ -633,6 +644,7 @@
         <div class="defs-body">
             <div class="settings-tabs">
                 <button class="settings-tab active" data-stab="finance">Finance</button>
+                <button class="settings-tab" data-stab="dentally">Dentally</button>
                 <button class="settings-tab" data-stab="roles">Roles</button>
                 <button class="settings-tab" data-stab="targets">Targets</button>
                 <button class="settings-tab" data-stab="variances">Variances</button>
@@ -671,6 +683,27 @@
                 </div>
             </div>
 
+            <div class="settings-pane" id="stab-dentally">
+                <div class="defs-group">Dentally &mdash; practice data connection</div>
+                <div class="defs-item">
+                    <div class="defs-item-name">Access token <span class="defs-badge" id="dentally-status-badge" style="display:none"></span></div>
+                    <div class="defs-item-desc" id="dentally-status-desc">Checking&hellip;</div>
+                    <div id="dentally-updater" style="display:none;margin-top:12px">
+                        <div class="defs-item-desc" style="margin-bottom:10px;max-width:560px">
+                            If your data stops refreshing, it's almost always because your Dentally access token was regenerated in Dentally.
+                            Create a new <strong>Personal Access Token</strong> in Dentally (Settings &rarr; Personal Access Tokens) with
+                            <strong>every read permission</strong> ticked, paste it below, and we'll check it can read your data before saving.
+                        </div>
+                        <input type="text" id="dentally-token-input" placeholder="Paste your Dentally personal access token" autocomplete="off" spellcheck="false"
+                               style="width:100%;max-width:520px;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px">
+                        <div class="settings-save-bar">
+                            <button id="dentally-save-btn" class="settings-save" style="margin-top:0">Check &amp; save token</button>
+                            <span class="settings-msg" id="dentally-msg"></span>
+                        </div>
+                        <div id="dentally-checks"></div>
+                    </div>
+                </div>
+            </div>
             <div class="settings-pane" id="stab-roles">
                 <div class="defs-item">
                     <div class="settings-save-bar"><button id="roles-save-top" class="settings-save" style="margin-top:0">Save</button></div>
@@ -1154,6 +1187,9 @@
         if (data.maintain_targets) {
             const st = document.getElementById('settings-toggle');
             if (st) st.style.display = '';
+            // Deep link from an alert email, e.g. /?settings=dentally -> open Settings on that tab.
+            const _stab = new URLSearchParams(location.search).get('settings');
+            if (_stab) { openSettings(_stab); history.replaceState(null, '', location.pathname); }
         }
         renderTrialStrip(data.trial);
 
@@ -1535,6 +1571,70 @@
         }
     }
 
+    // Dentally access token (self-serve refresh) -----------------------------
+    const _DQ_CAT = { 'user:read':'User','practice:read':'Practice','appointment:read':'Appointment','patient:read':'Patient','financials:read':'Financial','treatments':'Treatments' };
+    function _dqPretty(n){ return n.split('_').map(w => w === 'nhs' ? 'NHS' : (w.charAt(0).toUpperCase()+w.slice(1))).join(' '); }
+    function renderDentallyChecks(checks){
+        const el = document.getElementById('dentally-checks');
+        el.innerHTML = '<div class="checks-title">Dentally access check</div>';
+        checks.forEach(g => {
+            const bad = g.tables.filter(t => t.state === 'blocked');
+            const cls = g.ok ? 'ok' : (bad.length ? 'bad' : 'warn');
+            const icon = g.ok ? '✓' : (bad.length ? '✗' : '!');
+            const detail = bad.length ? '<div class="chk-detail">Couldn’t read: ' + bad.map(t => _dqPretty(t.name)).join(', ') + '</div>' : '';
+            const row = document.createElement('div'); row.className = 'chk ' + cls;
+            row.innerHTML = '<span class="chk-icon">'+icon+'</span><span class="chk-label">'+(_DQ_CAT[g.scope]||g.scope)+'</span><span class="chk-scope">('+g.scope+')</span>'+detail;
+            el.appendChild(row);
+        });
+        el.style.display = 'block';
+    }
+    function _dqBadge(badge, text, color){ badge.textContent = text; badge.style.display = ''; badge.style.background = color; badge.style.color = '#fff'; }
+    async function loadDentallyStatus(){
+        const badge = document.getElementById('dentally-status-badge');
+        const desc  = document.getElementById('dentally-status-desc');
+        const up    = document.getElementById('dentally-updater');
+        desc.textContent = 'Checking…'; badge.style.display = 'none'; up.style.display = 'none';
+        try {
+            const s = await (await authFetch('/api/dentally/status')).json();
+            if (s.status === 'ok') {
+                _dqBadge(badge, 'Connected', '#1a7f4b');
+                desc.textContent = 'Your Dentally connection is healthy — your data refreshes each night.';
+            } else if (s.status === 'invalid') {
+                _dqBadge(badge, 'Action needed', '#b3261e');
+                desc.innerHTML = 'Your Dentally access token is <strong>no longer valid</strong> — Dentally is rejecting it, so your nightly data has <strong>stopped updating</strong>. This usually means the token was regenerated in Dentally. Create a new Personal Access Token and paste it below to fix it.';
+            } else if (s.status === 'missing') {
+                _dqBadge(badge, 'Not connected', '#b3261e');
+                desc.textContent = 'No Dentally access token is set for your practice, so no data is being imported. Paste one below to start.';
+            } else {
+                desc.textContent = 'We couldn’t reach Dentally to check your connection just now. You can still paste a new token below.';
+            }
+            if (s.can_update) up.style.display = '';
+            else desc.textContent += ' Only a practice admin can update it.';
+        } catch (e) { desc.textContent = 'Could not check the Dentally connection.'; }
+    }
+    async function saveDentallyToken(){
+        const btn = document.getElementById('dentally-save-btn');
+        const input = document.getElementById('dentally-token-input');
+        const msg = document.getElementById('dentally-msg');
+        const token = (input.value || '').trim();
+        if (token.length < 10) { msg.style.color = '#b3261e'; msg.textContent = 'Paste your token first.'; return; }
+        btn.disabled = true; msg.style.color = ''; msg.textContent = 'Checking your Dentally access…';
+        document.getElementById('dentally-checks').style.display = 'none';
+        try {
+            const res = await authFetch('/api/dentally/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+            const j = await res.json();
+            if (res.ok && j.ok) {
+                if (j.checks) renderDentallyChecks(j.checks);
+                msg.style.color = '#1a7f4b'; msg.textContent = 'Saved — your new token is live for tonight’s refresh.';
+                input.value = ''; loadDentallyStatus();
+            } else {
+                if (j.checks) renderDentallyChecks(j.checks);
+                msg.style.color = '#b3261e'; msg.textContent = j.error || 'Could not save the token.';
+            }
+        } catch (e) { msg.style.color = '#b3261e'; msg.textContent = e.message || 'Could not save the token.'; }
+        finally { btn.disabled = false; }
+    }
+
     // Financial year (practice FY start month) -------------------------------
     const _FY_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     function _fyPopulate() {
@@ -1622,17 +1722,18 @@
         }
     }
 
-    function openSettings() { clearDirty(); settingsOverlay.classList.add('open'); showSettingsTab('finance'); }
+    function openSettings(tab) { clearDirty(); settingsOverlay.classList.add('open'); showSettingsTab(typeof tab === 'string' ? tab : 'finance'); }
     function closeSettings() {
         if (_dirty && !confirm('You have unsaved changes. Close without saving?')) return;
         clearDirty();
         settingsOverlay.classList.remove('open');
     }
 
-    document.getElementById('settings-toggle').addEventListener('click', openSettings);
+    document.getElementById('settings-toggle').addEventListener('click', () => openSettings());
     document.getElementById('settings-close').addEventListener('click', closeSettings);
     settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
     document.getElementById('xero-connect-btn').addEventListener('click', connectXero);
+    document.getElementById('dentally-save-btn').addEventListener('click', saveDentallyToken);
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
     { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
@@ -1646,6 +1747,7 @@
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.stab === name));
         document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
         if (name === 'finance')   { loadXeroStatus(); loadFYConfig(); loadPractitionerPay(); }
+        else if (name === 'dentally')  loadDentallyStatus();
         else if (name === 'roles')     loadRoles();
         else if (name === 'variances') loadVariances();
         else if (name === 'plans')     loadPlanRates();

@@ -1,0 +1,30 @@
+name: Monitor Warehouse Health
+
+# Daily poke of each app's /api/monitor/health. Each app scans ITS OWN warehouse
+# (Audit.Process_Execution_Log + Audit.Ingest_Log) for failures in a rolling window and emails a
+# summary if any -- independent of the nightly build, so it also catches a build that crashed.
+# The 25h default window is the safety net: exact timing vs the build doesn't matter.
+# Requires: repo secret MONITOR_KEY, matching the MONITOR_KEY env on both Container Apps.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'    # 05:00 UTC daily -- the overnight build finishes before this, so a morning run surfaces its failures
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Poke dev + prod health monitor
+        env:
+          MONITOR_KEY: ${{ secrets.MONITOR_KEY }}
+        run: |
+          if [ -z "$MONITOR_KEY" ]; then echo "::error::MONITOR_KEY secret not set"; exit 1; fi
+          for host in dev.analytically.info app.analytically.info; do
+            echo "== $host =="
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST "https://$host/api/monitor/health" \
+                     -H "X-Monitor-Key: $MONITOR_KEY" || echo 000)
+            cat /tmp/out.json 2>/dev/null; echo
+            echo "  http=$code"
+            if [ "$code" != "200" ]; then echo "::warning::$host monitor returned $code (health check itself failed)"; fi
+          done

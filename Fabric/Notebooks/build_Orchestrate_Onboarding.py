@@ -27,7 +27,9 @@ import os
 CELLS = [
     # 0 -- parameters ----------------------------------------------------------
     (r'''# Parameters -- Fabric overrides at runtime.
-tenant_id      = 100          # the ONE practice to onboard/rebuild (forced single-tenant)
+tenant_id      = 100          # the ONE practice to onboard/rebuild (single-tenant; set by STEP 0 when onboard_from_pending)
+onboard_from_pending = False  # True: STEP 0 provisions the next self-serve signup (KV onboarding-pending-<env>) + moves its token
+pending_key          = ""     # which pending entry to provision (the store key from the owner-notify email); "" = the single one waiting
 source         = "api"        # "api" = full Dentally pull ; "frozen" = restore from init_stage_*
 history_floor  = "2021-01-01T00:00:00Z"   # updated_after floor for the huge historical tables
 window_days    = 30           # date-window size for the tpi/treatment_plans deep-offset 413
@@ -77,6 +79,102 @@ cur = conn.cursor()
 print("ONBOARDING tenant " + str(tenant_id) + " | source=" + source + " | env=" + dentally_env
       + " | run_start=" + run_start)
 print("Connected to " + warehouse_name + " @ " + endpoint)
+''', False),
+
+    # 1b -- STEP 0: provision the pending signup + MOVE its token into KV ------
+    (r'''print("\nSTEP 0  PROVISION next self-serve signup" if onboard_from_pending
+      else "\nSTEP 0  rebuild existing tenant " + str(tenant_id) + " (no pending provision)")
+if onboard_from_pending:
+    import json, requests
+    keyvault_url   = "https://kv-analytically.vault.azure.net/"
+    pending_secret = "onboarding-pending-" + dentally_env
+    tokens_secret  = "dentally-tokens-" + dentally_env
+
+    def kv_get(name):
+        return mssparkutils.credentials.getSecret(keyvault_url, name)
+
+    def kv_json(name):
+        raw = (kv_get(name) or "").lstrip("﻿").strip()
+        return json.loads(raw) if raw else {}
+
+    def _vault_token():
+        # cell 1 proves getToken accepts a resource URL; try the KV resource forms so a naming
+        # difference in the runtime doesn't sink the write.
+        for aud in ("https://vault.azure.net", "https://vault.azure.net/", "keyvault"):
+            try:
+                t = mssparkutils.credentials.getToken(aud)
+                if t:
+                    return t
+            except Exception:
+                pass
+        raise RuntimeError("could not acquire a Key Vault token (getToken); grant the run identity KV access")
+
+    def kv_set(name, value):
+        # notebookutils/mssparkutils can READ a secret but not write one, so PUT via the Key Vault
+        # REST API with a vault-scoped token. The running identity (workspace / pipeline) must have
+        # secrets 'set' on kv-analytically (it already needs 'get' for the ingest).
+        r = requests.put(keyvault_url.rstrip("/") + "/secrets/" + name + "?api-version=7.4",
+                         headers={"Authorization": "Bearer " + _vault_token(), "Content-Type": "application/json"},
+                         json={"value": value}, timeout=30)
+        r.raise_for_status()
+
+    pend = kv_json(pending_secret)
+    # Pick the signup to provision: an explicit key (from the owner-notify email), else the single
+    # entry still awaiting provisioning. Refuse to guess when several are waiting.
+    if pending_key:
+        if pending_key not in pend:
+            raise RuntimeError("pending_key '" + pending_key + "' not found in " + pending_secret
+                               + " (keys: " + str(list(pend.keys())) + ")")
+        key = pending_key
+    else:
+        waiting = sorted((v.get("created_at", ""), k) for k, v in pend.items()
+                         if v.get("status") == "pending_provision")
+        if not waiting:
+            raise RuntimeError("No entries with status 'pending_provision' in " + pending_secret)
+        if len(waiting) > 1:
+            raise RuntimeError("Several signups are waiting -- pass pending_key. Waiting: "
+                               + str([k for _, k in waiting]))
+        key = waiting[0][1]
+
+    e   = pend[key]
+    pat = e.get("personal_access_token") or (e.get("oauth") or {}).get("access_token")
+    if not pat:
+        raise RuntimeError("Pending entry '" + key + "' carries no token (auth_method="
+                           + str(e.get("auth_method")) + ")")
+    print("  signup: practice=" + str(e.get("practice_name"))
+          + " principal=" + str(e.get("principal_email")) + " key=" + key)
+
+    # 1) Provision the tenant config (allocates Tenant_ID/Client_ID + access chain + trial billing;
+    #    idempotent on the principal email -- a re-run returns the existing tenant, no duplicates).
+    _sql = ("DECLARE @t INT; "
+            "EXEC Audit.usp_Provision_Tenant @Practice_Name=?, @Principal_Email=?, @Paid_From=?, "
+            "@Dentally_Practice_ID=?, @Tenant_ID=@t OUTPUT; SELECT @t;")
+    row = cur.execute(_sql, e.get("practice_name"), e.get("principal_email"),
+                      e.get("paid_from"), str(e.get("dentally_practice_id") or "")).fetchone()
+    tenant_id = int(row[0])
+    while cur.nextset():
+        pass
+    print("  provisioned Tenant_ID=" + str(tenant_id))
+
+    # 2) MOVE the token into dentally-tokens-<env>, keyed by the new Tenant_ID -- the exact shape
+    #    Ingest_Dentally reads ({"<tid>": {"token","base_url","name"}}). The hand-off from the web
+    #    capture to the ingest. (The token value is never printed.)
+    toks = kv_json(tokens_secret)
+    toks[str(tenant_id)] = {
+        "base_url": e.get("base_url") or "https://api.dentally.co/v1",
+        "name":     e.get("practice_name"),
+        "token":    pat,
+    }
+    kv_set(tokens_secret, json.dumps(toks))
+    print("  token moved -> " + tokens_secret + "[" + str(tenant_id) + "]")
+
+    # 3) Mark the pending entry provisioned (kept for audit; the token now lives in dentally-tokens).
+    e["status"]         = "provisioned"
+    e["tenant_id"]      = tenant_id
+    e["provisioned_at"] = datetime.utcnow().isoformat() + "Z"
+    pend[key] = e
+    kv_set(pending_secret, json.dumps(pend))
+    print("  pending entry '" + key + "' -> provisioned.")
 ''', False),
 
     # 2 -- STEP 1: clear -------------------------------------------------------
@@ -159,6 +257,29 @@ mssparkutils.notebook.run("Orchestrate_Build", build_timeout, {
     "refresh_semantic_model": refresh_model,
 })
 print("  build complete.")
+''', False),
+
+    # 6b -- STEP 6: set Cutover_Date + refresh capitation-gated Gold -----------
+    (r'''print("\nSTEP 6  SET tenant Cutover_Date (MIN updated_at of Treatment Plans) + refresh capitation-gated Gold")
+# Cutover_Date = the tenant's Dentally go-live (updated_at is stamped by Dentally, not migrated history).
+# Single source of truth for downstream cutover logic (plan capitation, the ingest cold floor). Set it
+# here, once the build has populated Silver.Treatment_Plans.
+cur.execute("EXEC Audit.usp_Set_Tenant_Cutover @Tenant_ID = " + str(tenant_id))
+cur.execute("SELECT Cutover_Date FROM Audit.Tenants WHERE Tenant_ID = " + str(tenant_id))
+_row = cur.fetchone()
+print("  Audit.Tenants.Cutover_Date = " + str(_row[0] if _row else None))
+
+# Fact_Revenue's capitation half is gated on Cutover_Date, which was NULL during STEP 5's build (first
+# onboarding of this tenant), so its capitation came out empty. Re-run it + the aggs that read it so
+# capitation + target actuals are correct at the end of onboarding.
+for _sp in ["Gold.usp_Load_Fact_Revenue",
+            "Gold.usp_Load_Fact_Metric_Actuals",
+            "Gold.usp_Load_Aggregate_Practitioner_Contribution"]:
+    cur.execute("DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC " + _sp
+                + " @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;")
+    print("  re-ran " + _sp)
+cur.execute("EXEC Meta.usp_Create_Gold_Views")
+print("  Gold views regenerated (capitation now from go-live only).")
 ''', False),
 
     # 7 -- done ----------------------------------------------------------------

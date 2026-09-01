@@ -271,6 +271,203 @@ def test_onboarding_token_stores_and_notifies(client, appmod, monkeypatch):
     assert 'Acme Dental' in notified['body']
 
 
+def _stub_admin(appmod, monkeypatch, maintain=True):
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn(FakeCursor(one_row=('Maple Dental',))))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Admin', 100, [100], maintain))
+
+
+def test_dentally_update_requires_auth(client):
+    assert client.post('/api/dentally/token', json={'token': 'x' * 40}).status_code == 401
+
+
+def test_dentally_update_requires_admin(client, appmod, monkeypatch):
+    _stub_admin(appmod, monkeypatch, maintain=False)
+    assert client.post('/api/dentally/token', json={'token': 'x' * 40}).status_code == 403
+
+
+def test_dentally_update_rejects_bad_token(client, appmod, monkeypatch):
+    _stub_admin(appmod, monkeypatch)
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(401))
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: None)
+    r = client.post('/api/dentally/token', json={'token': 'x' * 40})
+    assert r.status_code == 400 and r.get_json()['reason'] == 'invalid_token'
+
+
+def test_dentally_update_missing_permission_not_saved(client, appmod, monkeypatch):
+    saved = {}
+    _stub_admin(appmod, monkeypatch)
+    def _get(url, *a, **k):
+        fin = ('/invoices', '/invoice_items', '/payments', '/nhs_claims')
+        return _Resp(403) if any(url.endswith(p) for p in fin) else _Resp(200)
+    monkeypatch.setattr(appmod.requests, 'get', _get)
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: saved.update(v=v))
+    r = client.post('/api/dentally/token', json={'token': 'x' * 40})
+    j = r.get_json()
+    assert r.status_code == 200 and j['ok'] is False and j['reason'] == 'missing_permissions'
+    assert not saved   # a token that can't read everything is never written to the vault
+
+
+def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
+    import json as _json
+    saved = {}
+    _stub_admin(appmod, monkeypatch)
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    monkeypatch.setattr(appmod, '_kv_json',
+                        lambda n: {'100': {'base_url': 'https://api.dentally.co/v1', 'name': 'Maple Dental', 'token': 'OLD'}})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: saved.update(name=n, val=v))
+    r = client.post('/api/dentally/token', json={'token': 'newtoken' * 6})
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    toks = _json.loads(saved['val'])
+    assert toks['100']['token'] == 'newtoken' * 6         # updated in place
+    assert toks['100']['base_url'] == 'https://api.dentally.co/v1'  # base_url preserved
+    assert saved['name'] == f'dentally-tokens-{appmod.DENTALLY_ENV}'
+
+
+def test_send_email_graph_primary(appmod, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+
+    class _R:
+        def raise_for_status(self): pass
+    def _post(url, **kw):
+        calls.update(url=url, json=kw.get('json'), auth=kw['headers']['Authorization'])
+        return _R()
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+
+    assert appmod._send_email('craig@x.com', 'Subj', 'Body', reply_to='support@analytically.info') is True
+    assert calls['url'].endswith('/users/support@analytically.info/sendMail')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == 'craig@x.com'
+    assert msg['replyTo'][0]['emailAddress']['address'] == 'support@analytically.info'
+    assert calls['auth'] == 'Bearer gtok'
+
+
+def test_send_email_graph_sender_override(appmod, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+    class _R:
+        def raise_for_status(self): pass
+    monkeypatch.setattr(appmod.requests, 'post', lambda url, **kw: calls.update(url=url) or _R())
+    appmod._send_email('x@y.com', 'S', 'B', sender='sales@analytically.info')
+    assert calls['url'].endswith('/users/sales@analytically.info/sendMail')
+
+
+def test_send_email_graph_falls_back(appmod, monkeypatch):
+    # Graph errors (e.g. Mail.Send not consented yet) -> must NOT raise; with no ACS/SMTP in test env
+    # it falls through to the log path and returns False.
+    def _boom():
+        raise RuntimeError('no consent')
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, '_graph_token', _boom)
+    monkeypatch.setattr(appmod, '_kv_get', lambda n: None)
+    assert appmod._send_email('x@y.com', 'S', 'B') is False
+
+
+def _stub_status(appmod, monkeypatch, kv):
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Admin', 100, [100], True))
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: kv)
+
+
+def test_dentally_status_ok(client, appmod, monkeypatch):
+    _stub_status(appmod, monkeypatch, {'100': {'token': 'tok', 'base_url': 'https://api.dentally.co/v1'}})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'ok'
+
+
+def test_dentally_status_invalid(client, appmod, monkeypatch):
+    # token present but Dentally rejects it -> 'invalid' (the bug the user hit: it must NOT say connected)
+    _stub_status(appmod, monkeypatch, {'100': {'token': 'tok'}})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(401))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'invalid'
+
+
+def test_dentally_status_missing(client, appmod, monkeypatch):
+    _stub_status(appmod, monkeypatch, {})
+    monkeypatch.setattr(appmod.requests, 'get', lambda *a, **k: _Resp(200))
+    assert client.get('/api/dentally/status').get_json()['status'] == 'missing'
+
+
+# ── Warehouse health monitor: /api/monitor/health ────────────────────────────
+
+class _MonCursor:
+    def __init__(self, proc, ing):
+        self._proc, self._ing, self._which = proc, ing, None
+    def execute(self, sql, *a):
+        self._which = 'proc' if 'Process_Execution_Log' in sql else 'ing'
+        return self
+    def fetchall(self):
+        return self._proc if self._which == 'proc' else self._ing
+
+
+class _MonConn:
+    def __init__(self, cur):
+        self._cur = cur
+    def cursor(self):
+        return self._cur
+    def close(self):
+        pass
+
+
+def test_monitor_requires_key(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    assert client.post('/api/monitor/health').status_code == 401
+    assert client.post('/api/monitor/health', headers={'X-Monitor-Key': 'wrong'}).status_code == 401
+
+
+def test_monitor_no_failures_no_email(client, appmod, monkeypatch):
+    sent = {}
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], [])))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.update(x=1))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['failures'] == 0 and not sent
+
+
+def test_monitor_dev_detects_but_suppresses_emails(client, appmod, monkeypatch):
+    # APP_ENV is 'test' (conftest) -> detection happens but NO emails are sent from a non-prod app.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@x.com')
+    proc = [('2026-09-01 06:00', 'Audit.Orchestrate_Build', 'boom')]
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
+           ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing)))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.append(a))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['process_failures'] == 1 and j['ingest_failures'] == 2
+    assert j['bad_token_tenants'] == [100] and j['emails_enabled'] is False
+    assert not sent   # non-prod NEVER emails
+
+
+def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, monkeypatch):
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    # two 401 rows for the same tenant -> still ONE customer email (to the main account)
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
+           ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body, kw)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['emails_enabled'] is True and j['principals_notified'] == 1 and j['bad_token_tenants'] == [100]
+    tos = [s[0] for s in sent]
+    assert appmod.MONITOR_NOTIFY in tos                       # operator summary
+    assert tos.count('craig@mapledental.co.uk') == 1          # exactly ONE nudge to the main account
+    nudge = next(s for s in sent if s[0] == 'craig@mapledental.co.uk')
+    assert nudge[3].get('reply_to') == appmod.SUPPORT_FROM    # Reply-To = Support@ (interim option B)
+    assert nudge[3].get('sender') is None                    # sent from the deliverable managed domain
+    assert 'settings=dentally' in nudge[2] and 'Personal Access Token' in nudge[2]
+
+
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
     # A transient error validating the token must NOT lose a verified signup -- record under the email key.
     def _boom(*a, **k):
