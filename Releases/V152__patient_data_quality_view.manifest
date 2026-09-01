@@ -16,7 +16,7 @@
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V152__patient_data_quality_view.manifest -SkipTests
 # =====================================================================
 
-DEPLOY   Fabric\Gold.Patient_Data_Quality.View.sql
+DEPLOY   Fabric\Gold.Dim_Patient_Data_Quality.View.sql
 EXEC     EXEC Meta.usp_Create_Gold_Views;
 
 TEST
