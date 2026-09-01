@@ -1,0 +1,16 @@
+# =====================================================================
+# Release V153 -- Patient_Data_Quality: effectively-active = appointment in last 2 years
+# =====================================================================
+# Refine Gold.Dim_Patient_Data_Quality so a patient only counts as "orphaned by an inactive
+# practitioner" if they are effectively ACTIVE -- active flag AND at least one appointment (any
+# status) within the last 2 years. Patients dormant >2yr are treated as inactive, so their
+# orphaned-practitioner rows drop out (removes the spurious long-departed dentist-orphan rows).
+# Adds an EXISTS on Gold.Fact_Appointments to the pat CTE; view + PBI view regen only, no change
+# to output columns and no data change elsewhere.
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V153__patient_data_quality_2yr_active.manifest -SkipTests
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Dim_Patient_Data_Quality.View.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
