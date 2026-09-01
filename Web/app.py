@@ -872,14 +872,56 @@ def _code_hmac(code, email):
     return hmac.new(_state_key(), f'{email}:{code}'.encode(), hashlib.sha256).hexdigest()
 
 
+# ── Outgoing mail: Microsoft 365 (Graph) primary, ACS fallback ────────────────
+# analytically.info runs on Microsoft 365 (MX -> outlook; SPF -> "include:spf.protection.outlook.com
+# -all"), so the aligned + branded way to send is via Graph AS a real mailbox (e.g. support@) rather
+# than ACS from the *.azurecomm.net domain. Opt-in with GRAPH_SEND once the app registration has the
+# Mail.Send APPLICATION permission (admin-consented) + an Exchange Application Access Policy scopes it
+# to GRAPH_FROM. Reuses the app's confidential-client creds. Falls back to ACS on any Graph error.
+GRAPH_SEND = os.environ.get('GRAPH_SEND', '').strip().lower() in ('1', 'true', 'yes', 'on')
+GRAPH_FROM = os.environ.get('GRAPH_FROM', 'support@analytically.info')
+_graph_msal = None
+
+
+def _graph_token():
+    global _graph_msal
+    if _graph_msal is None:
+        _graph_msal = msal.ConfidentialClientApplication(
+            CLIENT_ID, authority=f'https://login.microsoftonline.com/{TENANT_ID}', client_credential=CLIENT_SECRET)
+    result = _graph_msal.acquire_token_for_client(scopes=['https://graph.microsoft.com/.default'])
+    if 'access_token' not in result:
+        raise RuntimeError(result.get('error_description', 'Graph token acquisition failed'))
+    return result['access_token']
+
+
 def _send_email(to, subject, body, sender=None, reply_to=None):
-    """Send a transactional email. Prefers Azure Communication Services -- keyless via ACS_ENDPOINT +
-    managed identity, else a connection string in Key Vault ('acs-connection-string'). Falls back to
-    SMTP (ONBOARDING_SMTP_*); otherwise (dev) logs the body so the flow is testable. Returns True if sent.
-    Sender must be an address on a domain connected to the ACS resource (default ONBOARDING_FROM; callers
-    can override, e.g. Support@Analytically.info for the token-refresh nudge)."""
-    sender   = sender   or os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
+    """Send a transactional email. Prefers Microsoft 365 via Graph (GRAPH_SEND) -- branded + SPF/DKIM/
+    DMARC-aligned, sending AS a real analytically.info mailbox (default GRAPH_FROM). Else Azure
+    Communication Services (managed *.azurecomm.net sender), else SMTP; otherwise (dev) logs the body.
+    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain)."""
     reply_to = reply_to or os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+
+    # 1) Microsoft 365 via Graph -- the aligned/branded path when enabled.
+    if GRAPH_SEND:
+        graph_from = sender or GRAPH_FROM
+        try:
+            r = requests.post(
+                f'https://graph.microsoft.com/v1.0/users/{graph_from}/sendMail',
+                headers={'Authorization': 'Bearer ' + _graph_token(), 'Content-Type': 'application/json'},
+                json={'message': {'subject': subject,
+                                  'body': {'contentType': 'Text', 'content': body},
+                                  'toRecipients': [{'emailAddress': {'address': to}}],
+                                  'replyTo':      [{'emailAddress': {'address': reply_to}}]},
+                      'saveToSentItems': True},
+                timeout=30)
+            r.raise_for_status()
+            return True
+        except Exception as e:
+            app.logger.warning("graph sendMail (%s) failed, falling back to ACS: %s", graph_from, e)
+
+    # 2) Azure Communication Services -- sender must be on a domain connected to the ACS resource, so
+    #    ignore any requested sender and use the managed-domain address.
+    acs_sender = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
     endpoint = os.environ.get('ACS_ENDPOINT')
     acs_conn = _kv_get('acs-connection-string') or os.environ.get('ACS_CONNECTION_STRING')
     if endpoint or acs_conn:
@@ -890,19 +932,21 @@ def _send_email(to, subject, body, sender=None, reply_to=None):
         else:
             client = EmailClient.from_connection_string(acs_conn)
         client.begin_send({
-            'senderAddress': sender,
+            'senderAddress': acs_sender,
             'recipients': {'to': [{'address': to}]},
             'replyTo':     [{'address': reply_to}],
             'content':     {'subject': subject, 'plainText': body},
         }).result()
         return True
+
+    # 3) SMTP fallback
     host = os.environ.get('ONBOARDING_SMTP_HOST')
     if host:
         import smtplib
         from email.mime.text import MIMEText
         msg = MIMEText(body)
         msg['Subject'] = subject
-        msg['From'] = sender
+        msg['From'] = acs_sender
         msg['To'] = to
         with smtplib.SMTP(host, int(os.environ.get('ONBOARDING_SMTP_PORT', '587'))) as s:
             s.starttls()
@@ -911,7 +955,8 @@ def _send_email(to, subject, body, sender=None, reply_to=None):
                 s.login(user, os.environ.get('ONBOARDING_SMTP_PASS', ''))
             s.sendmail(msg['From'], [to], msg.as_string())
         return True
-    app.logger.warning("onboarding email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
+
+    app.logger.warning("email (NO PROVIDER configured) to=%s subject=%s :: %s", to, subject, body)
     return False
 
 

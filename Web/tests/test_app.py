@@ -326,6 +326,49 @@ def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
     assert saved['name'] == f'dentally-tokens-{appmod.DENTALLY_ENV}'
 
 
+def test_send_email_graph_primary(appmod, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+
+    class _R:
+        def raise_for_status(self): pass
+    def _post(url, **kw):
+        calls.update(url=url, json=kw.get('json'), auth=kw['headers']['Authorization'])
+        return _R()
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+
+    assert appmod._send_email('craig@x.com', 'Subj', 'Body', reply_to='support@analytically.info') is True
+    assert calls['url'].endswith('/users/support@analytically.info/sendMail')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == 'craig@x.com'
+    assert msg['replyTo'][0]['emailAddress']['address'] == 'support@analytically.info'
+    assert calls['auth'] == 'Bearer gtok'
+
+
+def test_send_email_graph_sender_override(appmod, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+    class _R:
+        def raise_for_status(self): pass
+    monkeypatch.setattr(appmod.requests, 'post', lambda url, **kw: calls.update(url=url) or _R())
+    appmod._send_email('x@y.com', 'S', 'B', sender='sales@analytically.info')
+    assert calls['url'].endswith('/users/sales@analytically.info/sendMail')
+
+
+def test_send_email_graph_falls_back(appmod, monkeypatch):
+    # Graph errors (e.g. Mail.Send not consented yet) -> must NOT raise; with no ACS/SMTP in test env
+    # it falls through to the log path and returns False.
+    def _boom():
+        raise RuntimeError('no consent')
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, '_graph_token', _boom)
+    monkeypatch.setattr(appmod, '_kv_get', lambda n: None)
+    assert appmod._send_email('x@y.com', 'S', 'B') is False
+
+
 def _stub_status(appmod, monkeypatch, kv):
     monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
