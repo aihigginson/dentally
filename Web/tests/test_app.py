@@ -355,14 +355,13 @@ def test_dentally_status_missing(client, appmod, monkeypatch):
 # ── Warehouse health monitor: /api/monitor/health ────────────────────────────
 
 class _MonCursor:
-    def __init__(self, proc, ing, admins=None):
-        self._proc, self._ing, self._admins, self._which = proc, ing, admins or [], None
+    def __init__(self, proc, ing):
+        self._proc, self._ing, self._which = proc, ing, None
     def execute(self, sql, *a):
-        self._which = ('adm' if 'Application_Users' in sql
-                       else 'proc' if 'Process_Execution_Log' in sql else 'ing')
+        self._which = 'proc' if 'Process_Execution_Log' in sql else 'ing'
         return self
     def fetchall(self):
-        return {'proc': self._proc, 'ing': self._ing, 'adm': self._admins}[self._which]
+        return self._proc if self._which == 'proc' else self._ing
 
 
 class _MonConn:
@@ -393,10 +392,11 @@ def test_monitor_dev_detects_but_suppresses_emails(client, appmod, monkeypatch):
     # APP_ENV is 'test' (conftest) -> detection happens but NO emails are sent from a non-prod app.
     sent = []
     monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@x.com')
     proc = [('2026-09-01 06:00', 'Audit.Orchestrate_Build', 'boom')]
     ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
            ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
-    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing, [('admin@x.com',)])))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing)))
     monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.append(a))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['process_failures'] == 1 and j['ingest_failures'] == 2
@@ -404,20 +404,24 @@ def test_monitor_dev_detects_but_suppresses_emails(client, appmod, monkeypatch):
     assert not sent   # non-prod NEVER emails
 
 
-def test_monitor_prod_emails_operator_and_principal(client, appmod, monkeypatch):
+def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, monkeypatch):
     sent = []
     monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
     monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
-    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x')]
-    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, [('principal@x.com',)])))
-    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body: sent.append((to, subj, body)))
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    # two 401 rows for the same tenant -> still ONE customer email (to the main account)
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
+           ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body, kw)))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['emails_enabled'] is True and j['principals_notified'] == 1 and j['bad_token_tenants'] == [100]
     tos = [s[0] for s in sent]
-    assert appmod.MONITOR_NOTIFY in tos            # operator summary
-    assert 'principal@x.com' in tos                # the practice admin nudged directly
-    body = next(s[2] for s in sent if s[0] == 'principal@x.com')
-    assert 'settings=dentally' in body and 'Personal Access Token' in body   # deep link + fix steps
+    assert appmod.MONITOR_NOTIFY in tos                       # operator summary
+    assert tos.count('craig@mapledental.co.uk') == 1          # exactly ONE nudge to the main account
+    nudge = next(s for s in sent if s[0] == 'craig@mapledental.co.uk')
+    assert nudge[3].get('sender') == appmod.SUPPORT_FROM      # sent FROM Support@
+    assert 'settings=dentally' in nudge[2] and 'Personal Access Token' in nudge[2]
 
 
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):

@@ -872,13 +872,14 @@ def _code_hmac(code, email):
     return hmac.new(_state_key(), f'{email}:{code}'.encode(), hashlib.sha256).hexdigest()
 
 
-def _send_email(to, subject, body):
+def _send_email(to, subject, body, sender=None, reply_to=None):
     """Send a transactional email. Prefers Azure Communication Services -- keyless via ACS_ENDPOINT +
     managed identity, else a connection string in Key Vault ('acs-connection-string'). Falls back to
     SMTP (ONBOARDING_SMTP_*); otherwise (dev) logs the body so the flow is testable. Returns True if sent.
-    Sender must be an address on the domain connected to the ACS resource (set ONBOARDING_FROM)."""
-    sender   = os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
-    reply_to = os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+    Sender must be an address on a domain connected to the ACS resource (default ONBOARDING_FROM; callers
+    can override, e.g. Support@Analytically.info for the token-refresh nudge)."""
+    sender   = sender   or os.environ.get('ONBOARDING_FROM', 'DoNotReply@analytically.info')
+    reply_to = reply_to or os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
     endpoint = os.environ.get('ACS_ENDPOINT')
     acs_conn = _kv_get('acs-connection-string') or os.environ.get('ACS_CONNECTION_STRING')
     if endpoint or acs_conn:
@@ -901,7 +902,7 @@ def _send_email(to, subject, body):
         from email.mime.text import MIMEText
         msg = MIMEText(body)
         msg['Subject'] = subject
-        msg['From'] = os.environ.get('ONBOARDING_FROM', 'noreply@analytically.info')
+        msg['From'] = sender
         msg['To'] = to
         with smtplib.SMTP(host, int(os.environ.get('ONBOARDING_SMTP_PORT', '587'))) as s:
             s.starttls()
@@ -1273,6 +1274,10 @@ def dentally_update_token():
 MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
 MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
 MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
+# Sender for the customer-facing token-refresh nudge. Must be a verified sender on a domain connected
+# to the ACS resource. NOTE: today the ACS sender is the managed *.azurecomm.net domain -- for this to
+# actually deliver, analytically.info must be connected to ACS with Support@ allowed as a MailFrom.
+SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
 
 
 def _monitor_email_body(proc, ing, hours):
@@ -1300,13 +1305,22 @@ def _monitor_email_body(proc, ing, hours):
     return "\n".join(lines)
 
 
-def _tenant_admin_emails(cur, tenant_id):
-    """Practice admins (can update the connection) for a tenant -- who to nudge to refresh the token."""
-    cur.execute(
-        "SELECT DISTINCT a.User_UPN FROM Security.Application_Users a "
-        "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
-        "WHERE t.Tenant_ID = ? AND ISNULL(a.Maintain_Targets,0) = 1 AND a.User_UPN LIKE '%@%'", tenant_id)
-    return [r[0] for r in cur.fetchall()]
+def _tenant_primary_email(tenant_id):
+    """The practice's SINGLE main account (Input.Billing_Contact.Primary_Email, else Invoice_Email) from
+    the AppDB -- the same contact that receives invoices. Returns one address or None (don't guess/blast)."""
+    try:
+        conn = _appdb_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT TOP 1 Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID = ?",
+                    tenant_id)
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return ((row[0] or row[1] or '').strip() or None)
+    except Exception as e:
+        app.logger.warning("primary-email lookup failed for tenant %s: %s", tenant_id, e)
+        return None
 
 
 def _principal_token_email_body():
@@ -1352,8 +1366,9 @@ def monitor_health():
         # admins should refresh it. Look up their emails while the connection is open.
         bad_token_tenants = sorted({r['tenant'] for r in ing if r['tenant'] is not None
                                     and ('401' in r['detail'] or 'Unauthorized' in r['detail'])})
-        principal_emails = {tid: _tenant_admin_emails(cur, tid) for tid in bad_token_tenants}
         conn.close()
+        # One recipient per bad-token tenant: the practice's MAIN account (Input.Billing_Contact, AppDB).
+        primary = {tid: _tenant_primary_email(tid) for tid in bad_token_tenants}
 
         total = len(proc) + len(ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.
@@ -1365,10 +1380,13 @@ def monitor_health():
                             f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
                             _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
             for tid in bad_token_tenants:
-                for em in principal_emails.get(tid, []):
+                em = primary.get(tid)
+                if em:
                     _send_email(em, "Action needed: your Analytically data has stopped updating",
-                                _principal_token_email_body())
+                                _principal_token_email_body(), sender=SUPPORT_FROM, reply_to=SUPPORT_FROM)
                     notified.append(em)
+                else:
+                    app.logger.warning("monitor: tenant %s has a bad token but no Billing_Contact main email", tid)
         app.logger.warning("monitor(%s): %d process + %d ingest failure(s); bad-token tenants=%s; principal emails=%s",
                            APP_ENV, len(proc), len(ing), bad_token_tenants,
                            len(notified) if emails_on else 'suppressed(non-prod)')
