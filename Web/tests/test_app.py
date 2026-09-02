@@ -398,13 +398,16 @@ def test_dentally_status_missing(client, appmod, monkeypatch):
 # ── Warehouse health monitor: /api/monitor/health ────────────────────────────
 
 class _MonCursor:
-    def __init__(self, proc, ing):
-        self._proc, self._ing, self._which = proc, ing, None
+    # health rows are (Tenant_ID, last_401, last_ok); last_* are comparable (ISO strings or None).
+    def __init__(self, proc, ing, health=None):
+        self._proc, self._ing, self._health, self._which = proc, ing, (health or []), None
     def execute(self, sql, *a):
-        self._which = 'proc' if 'Process_Execution_Log' in sql else 'ing'
+        if 'Process_Execution_Log' in sql:  self._which = 'proc'
+        elif 'GROUP BY Tenant_ID' in sql:   self._which = 'health'
+        else:                               self._which = 'ing'
         return self
     def fetchall(self):
-        return self._proc if self._which == 'proc' else self._ing
+        return {'proc': self._proc, 'ing': self._ing, 'health': self._health}[self._which]
 
 
 class _MonConn:
@@ -439,7 +442,8 @@ def test_monitor_dev_detects_but_suppresses_emails(client, appmod, monkeypatch):
     proc = [('2026-09-01 06:00', 'Audit.Orchestrate_Build', 'boom')]
     ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
            ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
-    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing)))
+    health = [(100, '2026-09-01 15:04', None)]   # a 401 with no later Dentally success -> unresolved
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing, health)))
     monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: sent.append(a))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['process_failures'] == 1 and j['ingest_failures'] == 2
@@ -455,7 +459,8 @@ def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, mo
     # two 401 rows for the same tenant -> still ONE customer email (to the main account)
     ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
            ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
-    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing)))
+    health = [(100, '2026-09-01 15:04', None)]   # unresolved: no Dentally success after the 401
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, health)))
     monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body, kw)))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['emails_enabled'] is True and j['principals_notified'] == 1 and j['bad_token_tenants'] == [100]
@@ -466,6 +471,22 @@ def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, mo
     assert nudge[3].get('reply_to') == appmod.SUPPORT_FROM    # Reply-To = Support@ (interim option B)
     assert nudge[3].get('sender') is None                    # sent from the deliverable managed domain
     assert 'settings=dentally' in nudge[2] and 'Personal Access Token' in nudge[2]
+
+
+def test_monitor_resolved_token_no_nudge(client, appmod, monkeypatch):
+    # 401s still sit in the window, but a later Dentally FETCH means the token was FIXED -> no nudge,
+    # and with nothing else actionable, no operator summary either. This is the "stop nagging" guarantee.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x')]
+    health = [(100, '2026-09-01 15:04', '2026-09-01 16:10')]   # success AFTER the 401 -> resolved
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, health)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body, kw)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['bad_token_tenants'] == [] and j['principals_notified'] == 0
+    assert not sent   # nothing actionable -> no nudge AND no operator summary
 
 
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):

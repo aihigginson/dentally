@@ -1408,20 +1408,39 @@ def monitor_health():
             "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", since)
         ing = [{'when': str(r[0]), 'tenant': r[1], 'entity': r[2], 'phase': r[3] or '', 'detail': r[4] or ''}
                for r in cur.fetchall()]
-        # Tenants whose token looks revoked (401 / Unauthorized in the ingest detail) -> their practice
-        # admins should refresh it. Look up their emails while the connection is open.
-        bad_token_tenants = sorted({r['tenant'] for r in ing if r['tenant'] is not None
-                                    and ('401' in r['detail'] or 'Unauthorized' in r['detail'])})
+        # A revoked Dentally token shows as 401/Unauthorized on its entities. But we must NOT keep nagging
+        # a practice whose token is already fixed: flag a tenant only if there is NO successful Dentally
+        # fetch AFTER its most recent 401 -- i.e. its current state is broken, not merely "had a failure
+        # in the window". "Success" = FETCH/WROTE/EMPTY on a Dentally entity; Xero entities (xero_*) are
+        # excluded so a working Xero feed can't mask a dead Dentally token. Once the next run succeeds the
+        # reminders stop on their own, and a stale in-window 401 never re-fires after a fix.
+        cur.execute(
+            "SELECT Tenant_ID, "
+            "  MAX(CASE WHEN (Detail LIKE '%401%' OR Detail LIKE '%Unauthorized%') "
+            "           AND Entity NOT LIKE 'xero[_]%' THEN Logged_At END) AS last_401, "
+            "  MAX(CASE WHEN Phase IN ('FETCH','WROTE','EMPTY') "
+            "           AND Entity NOT LIKE 'xero[_]%' THEN Logged_At END) AS last_ok "
+            "FROM Audit.Ingest_Log WHERE Logged_At >= ? AND Tenant_ID IS NOT NULL "
+            "GROUP BY Tenant_ID", since)
+        bad_token_tenants = sorted(r[0] for r in cur.fetchall()
+                                   if r[1] is not None and (r[2] is None or r[2] < r[1]))
         conn.close()
         # One recipient per bad-token tenant: the practice's MAIN account (Input.Billing_Contact, AppDB).
         primary = {tid: _tenant_primary_email(tid) for tid in bad_token_tenants}
+
+        # Only alert the operator on something ACTIONABLE: a process failure, an UNRESOLVED bad token, or
+        # an ingest error that isn't a (possibly already-resolved) token 401. So a practice that fixes its
+        # token stops BOTH the nudge and the operator summary once stale 401s are all that remain.
+        _is_token_401 = lambda d: ('401' in d or 'Unauthorized' in d)
+        non_token_ingest = [r for r in ing if not _is_token_401(r['detail'])]
+        actionable = bool(proc) or bool(bad_token_tenants) or bool(non_token_ingest)
 
         total = len(proc) + len(ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.
         emails_on = (APP_ENV == 'prod')
         notified = []
         if emails_on:
-            if total:
+            if actionable:
                 _send_email(MONITOR_NOTIFY,
                             f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
                             _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
