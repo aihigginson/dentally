@@ -1319,6 +1319,10 @@ def dentally_update_token():
 MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
 MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
 MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
+# A practice is nudged about a revoked token at most once per this window. Stops a manual trigger
+# colliding with the (often GitHub-delayed) daily cron -- or two cron runs -- from double-sending.
+# Daily reminders still get through: consecutive daily runs land ~20-28h apart, above the default.
+MONITOR_NUDGE_COOLDOWN_HOURS = int(os.environ.get('MONITOR_NUDGE_COOLDOWN_HOURS', '18'))
 # Support address for the customer-facing token-refresh nudge. analytically.info is NOT connected to
 # ACS yet, so we can't SEND from it -- the nudge sends from the working managed domain and sets this as
 # Reply-To (option B; Reply-To needs no domain verification). Flip the monitor to sender=SUPPORT_FROM
@@ -1444,16 +1448,34 @@ def monitor_health():
                 _send_email(MONITOR_NOTIFY,
                             f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
                             _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
-            for tid in bad_token_tenants:
-                em = primary.get(tid)
-                if em:
-                    # Send from the working ACS managed domain (analytically.info isn't on ACS yet) with
-                    # Reply-To = Support. Flip to sender=SUPPORT_FROM once the custom domain is verified.
+            if bad_token_tenants:
+                # Per-tenant cooldown: never nudge the same practice twice inside
+                # MONITOR_NUDGE_COOLDOWN_HOURS, so overlapping triggers (manual + delayed cron, a
+                # re-run, a double-fire) collapse to a single email. State persists in Key Vault.
+                now = datetime.utcnow()
+                nudge_state = _kv_json('monitor-nudge-state')
+                state_changed = False
+                for tid in bad_token_tenants:
+                    em = primary.get(tid)
+                    if not em:
+                        app.logger.warning("monitor: tenant %s has a bad token but no Billing_Contact main email", tid)
+                        continue
+                    last = nudge_state.get(str(tid))
+                    if last:
+                        try:
+                            if now - datetime.fromisoformat(last) < timedelta(hours=MONITOR_NUDGE_COOLDOWN_HOURS):
+                                app.logger.warning("monitor: tenant %s within %sh nudge cooldown -- skipping",
+                                                   tid, MONITOR_NUDGE_COOLDOWN_HOURS)
+                                continue
+                        except ValueError:
+                            pass   # unparseable stored value -> treat as no prior nudge
                     _send_email(em, "Action needed: your Analytically data has stopped updating",
                                 _principal_token_email_body(), reply_to=SUPPORT_FROM)
                     notified.append(em)
-                else:
-                    app.logger.warning("monitor: tenant %s has a bad token but no Billing_Contact main email", tid)
+                    nudge_state[str(tid)] = now.isoformat()
+                    state_changed = True
+                if state_changed:
+                    _kv_set('monitor-nudge-state', json.dumps(nudge_state))
         app.logger.warning("monitor(%s): %d process + %d ingest failure(s); bad-token tenants=%s; principal emails=%s",
                            APP_ENV, len(proc), len(ing), bad_token_tenants,
                            len(notified) if emails_on else 'suppressed(non-prod)')

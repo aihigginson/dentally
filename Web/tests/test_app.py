@@ -460,6 +460,8 @@ def test_monitor_prod_emails_operator_and_single_main_account(client, appmod, mo
     ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
            ('2026-09-01 15:04', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
     health = [(100, '2026-09-01 15:04', None)]   # unresolved: no Dentally success after the 401
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})     # no prior nudge -> cooldown clear
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: None)
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, health)))
     monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body, kw)))
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
@@ -487,6 +489,29 @@ def test_monitor_resolved_token_no_nudge(client, appmod, monkeypatch):
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['bad_token_tenants'] == [] and j['principals_notified'] == 0
     assert not sent   # nothing actionable -> no nudge AND no operator summary
+
+
+def test_monitor_nudge_cooldown_suppresses_repeat(client, appmod, monkeypatch):
+    # Token still broken, but this tenant was nudged moments ago -> the per-tenant cooldown suppresses
+    # a second customer email (the manual-trigger + delayed-cron double). Operator summary still goes.
+    from datetime import datetime
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    ing = [('2026-09-01 15:04', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x')]
+    health = [(100, '2026-09-01 15:04', None)]                      # still broken
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {'100': datetime.utcnow().isoformat()})  # nudged just now
+    saved = {}
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: saved.update(v=v))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, health)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['bad_token_tenants'] == [100] and j['principals_notified'] == 0   # cooldown held the nudge
+    tos = [s[0] for s in sent]
+    assert 'craig@mapledental.co.uk' not in tos                    # NO second customer email
+    assert appmod.MONITOR_NOTIFY in tos                            # operator still informed
+    assert not saved                                               # state not rewritten (nothing sent)
 
 
 def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
