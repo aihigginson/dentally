@@ -1415,14 +1415,16 @@ def monitor_health():
         # A revoked Dentally token shows as 401/Unauthorized on its entities. But we must NOT keep nagging
         # a practice whose token is already fixed: flag a tenant only if there is NO successful Dentally
         # fetch AFTER its most recent 401 -- i.e. its current state is broken, not merely "had a failure
-        # in the window". "Success" = FETCH/WROTE/EMPTY on a Dentally entity; Xero entities (xero_*) are
-        # excluded so a working Xero feed can't mask a dead Dentally token. Once the next run succeeds the
-        # reminders stop on their own, and a stale in-window 401 never re-fires after a fix.
+        # in the window". "Success" = a Dentally entity that got past auth and pulled data: phases
+        # DONE / PAGE / WINDOW (Ingest_Dentally). A 401 stops at SKIP, so those never appear for a dead
+        # token. Xero entities (xero_*) are excluded so a working Xero feed can't mask a dead Dentally
+        # token. Once the next run succeeds the reminders stop on their own; a stale in-window 401 never
+        # re-fires after a fix. (FETCH/WROTE/EMPTY are Xero's success phases, kept for completeness.)
         cur.execute(
             "SELECT Tenant_ID, "
             "  MAX(CASE WHEN (Detail LIKE '%401%' OR Detail LIKE '%Unauthorized%') "
             "           AND Entity NOT LIKE 'xero[_]%' THEN Logged_At END) AS last_401, "
-            "  MAX(CASE WHEN Phase IN ('FETCH','WROTE','EMPTY') "
+            "  MAX(CASE WHEN Phase IN ('DONE','PAGE','WINDOW','FETCH','WROTE','EMPTY') "
             "           AND Entity NOT LIKE 'xero[_]%' THEN Logged_At END) AS last_ok "
             "FROM Audit.Ingest_Log WHERE Logged_At >= ? AND Tenant_ID IS NOT NULL "
             "GROUP BY Tenant_ID", since)
