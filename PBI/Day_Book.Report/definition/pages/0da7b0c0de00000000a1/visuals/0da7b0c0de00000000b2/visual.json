@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "0da7b0c0de00000000b2",
   "position": {
-    "x": 16,
-    "y": 56,
+    "x": 31.945392491467576,
+    "y": 62.047781569965871,
     "z": 0,
-    "height": 648,
-    "width": 1248,
+    "height": 648.122866894198,
+    "width": 1248.3276450511946,
     "tabOrder": 0
   },
   "visual": {
@@ -198,7 +198,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Unadopted Patients \u2014 active patients whose assigned dentist or hygienist is now inactive (reassign in Dentally)'"
+                  "Value": "'Unadopted Patients — active patients whose assigned dentist or hygienist is now inactive (reassign in Dentally)'"
                 }
               }
             },
@@ -221,5 +221,177 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "27ab30ddd0c15ebd8399",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d758dc582fc7423bc791",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Inactive Practitioner Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "3aeea41db57076f8a559",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Inactive Practitioner Role"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "aee7cd9e4a76ad82e213",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "f549c5fea83c188679ab",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Home Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ee7bb03ba1241a27d67e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d2e3c8c429afdba6b2e7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Last Hygiene Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "58124ca04f8abd3255be",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Last Exam Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e5da3c638b1e3aef90a9",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Next Hygiene Recall Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d11be0159885a16dca67",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Next Dentist Recall Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "dce3a702ea1b558f8b97",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Has Outstanding Appointment"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "a73b0db3f48a47889b31",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Has Open Course"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

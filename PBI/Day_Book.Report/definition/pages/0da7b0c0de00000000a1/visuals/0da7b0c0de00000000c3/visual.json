@@ -158,5 +158,23 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "d3d64935ed0ada69300c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patient Data Quality"
+              }
+            },
+            "Property": "Inactive Practitioner Name"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }
