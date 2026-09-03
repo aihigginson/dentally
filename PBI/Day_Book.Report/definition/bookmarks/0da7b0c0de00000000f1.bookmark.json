@@ -1,0 +1,76 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Diary",
+  "name": "0da7b0c0de00000000f1",
+  "options": {
+    "applyOnlyToTargetVisuals": true,
+    "targetVisualNames": [
+      "562aac806c3470958019",
+      "5067b86607613e911275",
+      "56e58c2930642ad7d04e",
+      "a1b11d25c0ee82de129e",
+      "f1d4784d3a00b09db074",
+      "0da7b0c0de00000000b2",
+      "0da7b0c0de00000000c3"
+    ],
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "1404b201b55e6e36945b",
+    "sections": {
+      "1404b201b55e6e36945b": {
+        "visualContainers": {
+          "562aac806c3470958019": {
+            "singleVisual": {
+              "visualType": "pivotTable",
+              "objects": {}
+            }
+          },
+          "5067b86607613e911275": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "56e58c2930642ad7d04e": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "a1b11d25c0ee82de129e": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "f1d4784d3a00b09db074": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {}
+            }
+          },
+          "0da7b0c0de00000000b2": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "0da7b0c0de00000000c3": {
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
