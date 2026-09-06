@@ -168,6 +168,47 @@ Done — you're back to a full working environment.
 
 ---
 
+## 7. Personal browser logins (HMRC, Microsoft, banking, etc.)
+
+These are **website logins saved in a browser**, not project secrets. They ride
+the browser's account sync to the new PC — nothing is machine-bound *as long as
+sync is on*. The carrier depends on the browser:
+
+- **Chrome → your Google account** (where these logins are saved here)
+- **Edge → your Microsoft account** (separate sign-in from Chrome)
+
+### Chrome (the important one for these logins)
+The cloud store behind Chrome is **Google Password Manager** —
+[passwords.google.com](https://passwords.google.com) is just its web view. If a
+login shows there, it's in your Google account and syncs to any machine.
+
+1. **Old PC, today** (time-sensitive — the SSD is dying):
+   - `chrome://settings/syncSetup` → signed in to Chrome + **Sync (Passwords) On**.
+   - Confirm your logins appear at **passwords.google.com** = they're safely in the cloud.
+   - Backup anyway: `chrome://password-manager/passwords` → **Settings** → **Export
+     passwords** → CSV. **Plain-text** — store safely (encrypted USB / protected
+     file), **delete once the new PC is set up**.
+2. **New PC:** install Chrome → sign in with the **same Google account** → Sync On
+   → passwords repopulate.
+
+### Finding a login that "isn't in the list"
+Entries are filed by the site's **real login domain, not its brand name**. HMRC's
+Government Gateway saves under **gov.uk** domains (e.g. `access.service.gov.uk`,
+`tax.service.gov.uk`), so searching "HMRC" misses it — search **"gov.uk"** or
+**"service.gov.uk"** instead.
+
+### Caveats
+- **Sync OFF = local only.** Passwords saved while Chrome sync was off live only
+  in the local profile on this SSD, not the cloud. The CSV export is the **only**
+  safety net for those — so do the export.
+- **MFA (HMRC, Microsoft, banking):** expect a **one-time re-challenge** on the new
+  device. Keep your **phone / authenticator app** — that's what clears it. Normal
+  security, not a migration failure.
+- **Windows Hello PIN / fingerprint** are device-bound by design — set up fresh on
+  the new PC; the account behind them is unchanged.
+
+---
+
 ## Recommended spec (for reference)
 
 Local compute is light because heavy work runs in Fabric. Prioritise **RAM**
