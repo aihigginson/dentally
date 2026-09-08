@@ -1884,26 +1884,33 @@ def get_team():
         billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
             ph = ','.join(['?'] * len(tids))
-            # ACTIVE staff only. A user's active flag comes from their linked practitioner
-            # (Dim_Practitioners.User_ID = Dim_Users.bk_User_ID) -- exclude users whose practitioner is
-            # inactive (departed clinicians). Non-practitioners (front office) have no such flag, so are
-            # kept. That same link gives the DEDUCED My Data practitioner (no prompt needed).
-            # Active flag lives on the PRACTITIONER record (Dentally embeds the user inside it).
-            # Silver.Practitioners keeps every staff role (front office included) -- unlike
-            # Gold.Dim_Practitioners which is clinical-only -- so join it for Practitioner_Active and
-            # drop anyone whose practitioner record is inactive (departed). Users with no practitioner
-            # record (act NULL) are kept. Dim_Practitioners still gives the deduced My Data name.
+            # ACTIVE staff only, keyed on Dentally's permission_level. Dentally has no 'active' field
+            # on a user -- permission_level IS the activity signal (0 = deactivated), which is why we
+            # test it rather than anything on the practitioner record.
+            #
+            # Previously this used Silver.Practitioners.Practitioner_Active, on the assumption that
+            # front office "have no such flag, so are kept". That was wrong: front-office staff often
+            # DO have a practitioner record, and it gets deactivated when they stop being a bookable
+            # diary entry -- while their user account stays live. On tenant 100 that silently hid two
+            # active administrators (permission_level 4) from the subscriptions roster.
+            #
+            # COALESCE order matters. Gold.Dim_Users.Permission_Level is the correct source, but it is
+            # only populated from the first build after Bronze.usp_Load_Users *04 (it was never staged,
+            # so it reads NULL for every pre-existing row). Until then fall back to the same value as
+            # carried on the practitioner record, then to 1 (assume active) for the many users who have
+            # no practitioner record at all. Once the backfill lands the first term simply wins.
+            # Dim_Practitioners still supplies the deduced My Data practitioner name.
             cur.execute(
                 f"SELECT u.Tenant_ID, u.Email, u.Full_Name, u.Role, u.Site_ID, dp.practitioner "
                 f"FROM Gold.Dim_Users u "
-                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Practitioner_Active) AS act "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(User_Permission_Level) AS perm "
                 f"           FROM Silver.Practitioners GROUP BY Tenant_ID, User_ID) sp "
                 f"           ON sp.Tenant_ID = u.Tenant_ID AND sp.User_ID = u.bk_User_ID "
                 f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Full_Name) AS practitioner "
                 f"           FROM Gold.Dim_Practitioners WHERE pk_Practitioner > 0 AND User_ID IS NOT NULL "
                 f"           GROUP BY Tenant_ID, User_ID) dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID "
                 f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 AND NULLIF(LTRIM(RTRIM(u.Email)),'') IS NOT NULL "
-                f"  AND ISNULL(sp.act, 1) = 1 "
+                f"  AND COALESCE(u.Permission_Level, sp.perm, 1) > 0 "
                 f"ORDER BY CASE "
                 f"           WHEN LOWER(u.Role) LIKE '%dentist%'          THEN 1 "
                 f"           WHEN LOWER(u.Role) LIKE '%hygien%'           THEN 2 "
