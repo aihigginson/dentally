@@ -17,9 +17,14 @@ Estimated time: ~1–2 hours, mostly unattended installs + one OneDrive sync.
 | Local secret files (`*.local`, `.env`) | OneDrive (copies); real values below | OneDrive sync |
 | Warehouse data + build | Fabric (`WH_Dentally`, dev + prod workspaces) | cloud, nothing local |
 | Real secrets of record | Azure Key Vault / GitHub secrets / Container App secrets | see §5 |
+| **Claude Code state** (memories, MCP, settings) | `<repo>/.claude/` — see §8 | OneDrive + git, via a junction |
 
 **You cannot lose data by replacing the machine.** The only pre-move check is
 that OneDrive says *"Your files are up to date"* on the old PC before you wipe it.
+
+> **Except what lives outside OneDrive.** Anything in the Windows user profile — notably
+> `~/.claude` — is **not** covered by any of the above. Learned the hard way on the 2026-09
+> move, when every Claude memory was lost. See §8.
 
 ---
 
@@ -206,6 +211,57 @@ Government Gateway saves under **gov.uk** domains (e.g. `access.service.gov.uk`,
   security, not a migration failure.
 - **Windows Hello PIN / fingerprint** are device-bound by design — set up fresh on
   the new PC; the account behind them is unchanged.
+
+---
+
+## 8. Claude Code state (memories, MCP, settings)
+
+Claude Code keeps its state in `%USERPROFILE%\.claude` — **outside OneDrive**, so unlike
+everything in §0 it does *not* come back on its own.
+
+**What survives without help**
+
+- `.claude/settings.local.json` (permission rules) — lives in the repo, restored by OneDrive.
+- `CLAUDE.md` — in the repo.
+- `~/.claude.json` (MCP server definitions, project history) — machine-local and rebuilt on
+  first run, but the servers still need re-authenticating (below).
+
+**Memories — the one thing with no other copy.** They are kept in the repo at
+`.claude/memory/` and exposed to Claude through a directory junction, so anything Claude
+writes lands in a synced, version-controlled folder automatically:
+
+```powershell
+# find the slug (it is the repo's full path with ':' and '\' replaced by '-')
+Get-ChildItem "$env:USERPROFILE\.claude\projects" -Directory
+
+$slug   = 'C--users-aihig-onedrive-dentally-code'
+$link   = "$env:USERPROFILE\.claude\projects\$slug\memory"
+$target = 'C:\Users\aihig\OneDrive\Dentally\Code\.claude\memory'
+if ((Test-Path $link) -and -not (Get-ChildItem $link -File)) { Remove-Item $link -Recurse -Force }
+New-Item -ItemType Junction -Path $link -Target $target
+```
+
+No admin rights needed. **If the repo ever moves the slug changes** — recreate the junction,
+or Claude starts up silently with no memories and nothing appears to be wrong.
+
+**MCP servers** — expect `! Needs authentication` on a new machine. Run `claude`, then `/mcp`,
+and complete the browser login for each (Microsoft 365, Google Drive).
+
+**PowerShell execution policy** — set this before installing any module (Microsoft Graph etc.):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+A fresh Windows 11 profile defaults to `Restricted`, which refuses to load `.psm1` files and
+reports it as a misleading *"the module could not be loaded"* error.
+
+**Verify**
+
+```powershell
+(Get-Item "$env:USERPROFILE\.claude\projects\$slug\memory").LinkType   # -> Junction
+claude mcp list                                                        # -> no "Needs authentication"
+```
 
 ---
 
