@@ -1175,7 +1175,8 @@ def onboarding_token():
             return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
                             'error': "Your token can't read some of your Dentally data. Open the token in "
                                      "Dentally, tick every read permission marked below, save, then check "
-                                     "again."}), 200
+                                     "again. Note that Treatments sits under “Other” and is not "
+                                     "labelled “read” like the rest, so it is easily missed."}), 200
 
         # ── All readable: capture the practice name, store the pending trial, notify the operator. ──
         practice_id, practice_name = None, payload.get('practice')
@@ -1292,7 +1293,9 @@ def dentally_update_token():
         if missing:
             return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
                             'error': "That token can't read some of your Dentally data. Tick every read "
-                                     "permission marked below in Dentally, save, then check again."}), 200
+                                     "permission marked below in Dentally, save, then check again. Note "
+                                     "that Treatments sits under “Other” and is not labelled “read” "
+                                     "like the rest, so it is easily missed."}), 200
         # Fully readable -> update the token in place, preserving base_url/name.
         secret = f'dentally-tokens-{DENTALLY_ENV}'
         toks = _kv_json(secret)
@@ -1383,7 +1386,8 @@ def _principal_token_email_body():
         "refresh has stopped. This almost always means the token was regenerated in Dentally.\n\n"
         "It takes about a minute to fix:\n"
         "  1. In Dentally: Settings -> Personal Access Tokens -> New personal access token. Tick EVERY "
-        "read permission, Save, and copy the token.\n"
+        "read permission -- AND 'Other -> Treatments', which is not labelled 'read' like the rest and is "
+        "easily missed. Save, and copy the token.\n"
         f"  2. In Analytically: open Settings -> Dentally and paste it in --\n     {link}\n\n"
         "We'll check the token can read your data before saving, and your reports will catch up on the "
         "next overnight refresh.\n"

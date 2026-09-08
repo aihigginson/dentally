@@ -692,7 +692,8 @@
                         <div class="defs-item-desc" style="margin-bottom:10px;max-width:560px">
                             If your data stops refreshing, it's almost always because your Dentally access token was regenerated in Dentally.
                             Create a new <strong>Personal Access Token</strong> in Dentally (Settings &rarr; Personal Access Tokens) with
-                            <strong>every read permission</strong> ticked, paste it below, and we'll check it can read your data before saving.
+                            <strong>every read permission</strong> ticked &mdash; <strong>and <code class="em">Other &rarr; Treatments</code></strong>, which isn't
+                            labelled "read" like the rest and is easily missed. Paste it below and we'll check it can read your data before saving.
                         </div>
                         <input type="text" id="dentally-token-input" placeholder="Paste your Dentally personal access token" autocomplete="off" spellcheck="false"
                                style="width:100%;max-width:520px;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px">
@@ -1573,6 +1574,9 @@
 
     // Dentally access token (self-serve refresh) -----------------------------
     const _DQ_CAT = { 'user:read':'User','practice:read':'Practice','appointment:read':'Appointment','patient:read':'Patient','financials:read':'Financial','treatments':'Treatments' };
+    // Treatments is the odd one out on Dentally's token screen: it lives under "Other" and carries no
+    // "read" label, so a blocked row names its location instead of echoing the bare scope key.
+    const _DQ_SCOPE = { 'treatments': 'Other → Treatments' };
     function _dqPretty(n){ return n.split('_').map(w => w === 'nhs' ? 'NHS' : (w.charAt(0).toUpperCase()+w.slice(1))).join(' '); }
     function renderDentallyChecks(checks){
         const el = document.getElementById('dentally-checks');
@@ -1583,7 +1587,7 @@
             const icon = g.ok ? '✓' : (bad.length ? '✗' : '!');
             const detail = bad.length ? '<div class="chk-detail">Couldn’t read: ' + bad.map(t => _dqPretty(t.name)).join(', ') + '</div>' : '';
             const row = document.createElement('div'); row.className = 'chk ' + cls;
-            row.innerHTML = '<span class="chk-icon">'+icon+'</span><span class="chk-label">'+(_DQ_CAT[g.scope]||g.scope)+'</span><span class="chk-scope">('+g.scope+')</span>'+detail;
+            row.innerHTML = '<span class="chk-icon">'+icon+'</span><span class="chk-label">'+(_DQ_CAT[g.scope]||g.scope)+'</span><span class="chk-scope">('+(_DQ_SCOPE[g.scope]||g.scope)+')</span>'+detail;
             el.appendChild(row);
         });
         el.style.display = 'block';

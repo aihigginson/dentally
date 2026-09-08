@@ -97,7 +97,8 @@
                     <div class="how-title">Create your access token in Dentally</div>
                     <ol>
                         <li>In Dentally, open <code class="em">Settings &rarr; Personal Access Tokens</code> and choose <strong>New personal access token</strong>.</li>
-                        <li>Tick <strong>every &ldquo;read&rdquo; permission</strong>: <code class="em">user:read</code>, <code class="em">appointment:read</code>, <code class="em">financials:read</code>, <code class="em">correspondence:read</code>, <code class="em">patient:read</code>, <code class="em">practice:read</code> and <code class="em">treatments</code>.</li>
+                        <li>Tick <strong>every &ldquo;read&rdquo; permission</strong>: <code class="em">user:read</code>, <code class="em">appointment:read</code>, <code class="em">financials:read</code>, <code class="em">correspondence:read</code>, <code class="em">patient:read</code> and <code class="em">practice:read</code>.</li>
+                        <li><strong>Also tick <code class="em">Other &rarr; Treatments</code>.</strong> This one is <em>not</em> labelled &ldquo;read&rdquo; like the others, so it&rsquo;s easily missed &mdash; but without it we can&rsquo;t read your treatments or treatment plans.</li>
                         <li>Click <strong>Save</strong>, copy the token it shows you, and paste it below.</li>
                     </ol>
                 </div>
@@ -181,6 +182,10 @@
         // Friendly names for the live access checklist.
         var CAT = { 'user:read':'User', 'practice:read':'Practice', 'appointment:read':'Appointment',
                     'patient:read':'Patient', 'financials:read':'Financial', 'treatments':'Treatments' };
+        // Where the permission actually lives on Dentally's token screen. Every other scope is named
+        // literally ("patient:read"), but Treatments sits under "Other" and carries no "read" label --
+        // so when it shows as blocked, point straight at it rather than echoing the bare scope key.
+        var SCOPE_TXT = { 'treatments': 'Other → Treatments' };
         function pretty(name){ return name.split('_').map(function(w){ return w === 'nhs' ? 'NHS' : (w.charAt(0).toUpperCase() + w.slice(1)); }).join(' '); }
         function renderChecks(checks){
             var el = $('checks'); el.innerHTML = '<div class="checks-title">Dentally access check</div>';
@@ -193,7 +198,7 @@
                            : (!g.ok ? '<div class="chk-detail">Couldn’t confirm right now — we’ll re-check when we build your data.</div>' : '');
                 row.innerHTML = '<span class="chk-icon">' + icon + '</span>' +
                                 '<span class="chk-label">' + (CAT[g.scope] || g.scope) + '</span>' +
-                                '<span class="chk-scope">(' + g.scope + ')</span>' + detail;
+                                '<span class="chk-scope">(' + (SCOPE_TXT[g.scope] || g.scope) + ')</span>' + detail;
                 el.appendChild(row);
             });
             el.style.display = 'block';
