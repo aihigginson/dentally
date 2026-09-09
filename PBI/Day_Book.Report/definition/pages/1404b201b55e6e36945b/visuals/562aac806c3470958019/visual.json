@@ -3,9 +3,9 @@
   "name": "562aac806c3470958019",
   "position": {
     "x": 0,
-    "y": 74.369885433715226,
+    "y": 74.36988543371523,
     "z": 11000,
-    "height": 525.61983471074382,
+    "height": 525.6198347107438,
     "width": 1280.3305785123966,
     "tabOrder": 6000
   },
@@ -941,6 +941,60 @@
           }
         },
         "type": "Categorical"
+      },
+      {
+        "name": "c346ca9258f49c9add90",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Practitioners"
+              }
+            },
+            "Property": "Active"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "l",
+              "Entity": "List Practitioners",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "l"
+                          }
+                        },
+                        "Property": "Active"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
       }
     ],
     "filterSortOrder": "Custom"
