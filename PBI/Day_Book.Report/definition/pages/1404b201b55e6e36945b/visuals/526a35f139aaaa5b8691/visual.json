@@ -1,39 +1,19 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "562aac806c3470958019",
+  "name": "526a35f139aaaa5b8691",
   "position": {
     "x": 0,
     "y": 74.369885433715226,
-    "z": 11000,
-    "height": 525.61983471074382,
-    "width": 1280.3305785123966,
-    "tabOrder": 6000
+    "z": 10000,
+    "height": 336.23567921440264,
+    "width": 498.59247135842878,
+    "tabOrder": 11002
   },
   "visual": {
-    "visualType": "pivotTable",
+    "visualType": "tableEx",
     "query": {
       "queryState": {
-        "Columns": {
-          "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Date Unconstrained"
-                    }
-                  },
-                  "Property": "Full Date"
-                }
-              },
-              "queryRef": "List Date Unconstrained.Full Date",
-              "nativeQueryRef": "Full Date1",
-              "active": true,
-              "format": "d/M/yy"
-            }
-          ]
-        },
-        "Rows": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -47,8 +27,7 @@
                 }
               },
               "queryRef": "List Practitioners.Full Name",
-              "nativeQueryRef": "Full Name",
-              "active": true
+              "nativeQueryRef": "Full Name"
             },
             {
               "field": {
@@ -62,8 +41,7 @@
                 }
               },
               "queryRef": "List Practitioners.Cancellations To Rebook",
-              "nativeQueryRef": "Cancellations To Rebook",
-              "active": true
+              "nativeQueryRef": "Cancellations To Rebook"
             },
             {
               "field": {
@@ -77,8 +55,7 @@
                 }
               },
               "queryRef": "List Practitioners.DNAs To Rebook",
-              "nativeQueryRef": "DNAs To Rebook",
-              "active": true
+              "nativeQueryRef": "DNAs To Rebook"
             },
             {
               "field": {
@@ -92,8 +69,7 @@
                 }
               },
               "queryRef": "List Practitioners.Recalls To Action",
-              "nativeQueryRef": "Recalls To Action",
-              "active": true
+              "nativeQueryRef": "Recalls To Action"
             },
             {
               "field": {
@@ -107,8 +83,7 @@
                 }
               },
               "queryRef": "List Practitioners.Open Plans",
-              "nativeQueryRef": "Open Plans",
-              "active": true
+              "nativeQueryRef": "Open Plans"
             },
             {
               "field": {
@@ -122,159 +97,13 @@
                 }
               },
               "queryRef": "List Practitioners.Days Until Next 30 Free",
-              "nativeQueryRef": "Days Until Next 30 Free",
-              "active": true
-            }
-          ]
-        },
-        "Values": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Diary Fill (Forward)"
-                }
-              },
-              "queryRef": "_Measures.Diary Fill (Forward)",
-              "nativeQueryRef": "Diary Fill (Forward)"
+              "nativeQueryRef": "Days Until Next 30 Free"
             }
           ]
         }
       }
     },
-    "expansionStates": [
-      {
-        "roles": [
-          "Rows"
-        ],
-        "levels": [
-          {
-            "queryRefs": [
-              "List Practitioners.Full Name"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Full Name"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Cancellations To Rebook"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Cancellations To Rebook"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.DNAs To Rebook"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "DNAs To Rebook"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Recalls To Action"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Recalls To Action"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Open Plans"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Open Plans"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Days Until Next 30 Free"
-            ],
-            "isCollapsed": true,
-            "isPinned": true
-          }
-        ],
-        "root": {}
-      }
-    ],
     "objects": {
-      "subTotals": [
-        {
-          "properties": {
-            "rowSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "columnSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        }
-      ],
       "values": [
         {
           "properties": {
@@ -424,87 +253,6 @@
               }
             }
           }
-        },
-        {
-          "properties": {
-            "backColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "FillRule": {
-                      "Input": {
-                        "Measure": {
-                          "Expression": {
-                            "SourceRef": {
-                              "Entity": "_Measures"
-                            }
-                          },
-                          "Property": "Diary Fill (Forward)"
-                        }
-                      },
-                      "FillRule": {
-                        "linearGradient3": {
-                          "min": {
-                            "color": {
-                              "Literal": {
-                                "Value": "'#c0392b'"
-                              }
-                            },
-                            "value": {
-                              "Literal": {
-                                "Value": "0D"
-                              }
-                            }
-                          },
-                          "mid": {
-                            "color": {
-                              "Literal": {
-                                "Value": "'#F3D0A5'"
-                              }
-                            },
-                            "value": {
-                              "Literal": {
-                                "Value": "0.7D"
-                              }
-                            }
-                          },
-                          "max": {
-                            "color": {
-                              "Literal": {
-                                "Value": "'#3E9B5F'"
-                              }
-                            },
-                            "value": {
-                              "Literal": {
-                                "Value": "1D"
-                              }
-                            }
-                          },
-                          "nullColoringStrategy": {
-                            "strategy": {
-                              "Literal": {
-                                "Value": "'noColor'"
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "data": [
-              {
-                "dataViewWildcard": {
-                  "matchingOption": 1
-                }
-              }
-            ],
-            "metadata": "_Measures.Diary Fill (Forward)"
-          }
         }
       ],
       "columnHeaders": [
@@ -576,83 +324,9 @@
           }
         }
       ],
-      "rowHeaders": [
-        {
-          "properties": {
-            "outlineStyle": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            },
-            "outlineColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 0,
-                      "Percent": 0
-                    }
-                  }
-                }
-              }
-            },
-            "outlineWeight": {
-              "expr": {
-                "Literal": {
-                  "Value": "1D"
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            },
-            "showExpandCollapseButtons": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "blankRows": [
-        {
-          "properties": {
-            "showBlankRows": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        }
-      ],
       "general": [
         {
-          "properties": {
-            "layout": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Tabular'"
-                }
-              }
-            }
-          }
+          "properties": {}
         }
       ],
       "columnWidth": [
@@ -735,7 +409,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Diary fill'"
+                  "Value": "'Diary Totals (Mobile)'"
                 }
               }
             },
@@ -767,7 +441,8 @@
             "Property": "Diary Fill (Forward)"
           }
         },
-        "type": "Advanced"
+        "type": "Advanced",
+        "howCreated": "User"
       },
       {
         "name": "5bcdfaebb0221e56a1d8",
@@ -782,7 +457,8 @@
             "Property": "Full Date"
           }
         },
-        "type": "Advanced"
+        "type": "Advanced",
+        "howCreated": "User"
       },
       {
         "name": "e9562d078a09210b0c83",
@@ -859,7 +535,7 @@
         "howCreated": "User"
       },
       {
-        "name": "01c2f5ac0ce07a61de97",
+        "name": "795afc79089cec1cce07",
         "field": {
           "Column": {
             "Expression": {
@@ -873,7 +549,7 @@
         "type": "Categorical"
       },
       {
-        "name": "d1df3fadc3b32ce0a65e",
+        "name": "d6f3c8503c69c80b3e65",
         "field": {
           "Column": {
             "Expression": {
@@ -887,7 +563,7 @@
         "type": "Categorical"
       },
       {
-        "name": "aff3eba9169ec83a6420",
+        "name": "28595e9ca5038096c54d",
         "field": {
           "Column": {
             "Expression": {
@@ -901,7 +577,7 @@
         "type": "Categorical"
       },
       {
-        "name": "b20096f09b543acc040a",
+        "name": "d4cee80f6b479695cd50",
         "field": {
           "Column": {
             "Expression": {
@@ -915,7 +591,7 @@
         "type": "Categorical"
       },
       {
-        "name": "333a5da825e00e710db9",
+        "name": "662d70e0719916e82c40",
         "field": {
           "Column": {
             "Expression": {
@@ -929,7 +605,7 @@
         "type": "Categorical"
       },
       {
-        "name": "126a2bd6a95369786c36",
+        "name": "c42c45419c001c4b2ec6",
         "field": {
           "Column": {
             "Expression": {

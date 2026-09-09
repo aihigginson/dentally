@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "562aac806c3470958019",
+  "name": "ff4d42860e0186700781",
   "position": {
     "x": 0,
     "y": 74.369885433715226,
-    "z": 11000,
-    "height": 525.61983471074382,
-    "width": 1280.3305785123966,
-    "tabOrder": 6000
+    "z": 9000,
+    "height": 293.81342062193124,
+    "width": 898.1996726677578,
+    "tabOrder": 11001
   },
   "visual": {
     "visualType": "pivotTable",
@@ -48,81 +48,6 @@
               },
               "queryRef": "List Practitioners.Full Name",
               "nativeQueryRef": "Full Name",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Cancellations To Rebook"
-                }
-              },
-              "queryRef": "List Practitioners.Cancellations To Rebook",
-              "nativeQueryRef": "Cancellations To Rebook",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "DNAs To Rebook"
-                }
-              },
-              "queryRef": "List Practitioners.DNAs To Rebook",
-              "nativeQueryRef": "DNAs To Rebook",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Recalls To Action"
-                }
-              },
-              "queryRef": "List Practitioners.Recalls To Action",
-              "nativeQueryRef": "Recalls To Action",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Open Plans"
-                }
-              },
-              "queryRef": "List Practitioners.Open Plans",
-              "nativeQueryRef": "Open Plans",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Days Until Next 30 Free"
-                }
-              },
-              "queryRef": "List Practitioners.Days Until Next 30 Free",
-              "nativeQueryRef": "Days Until Next 30 Free",
               "active": true
             }
           ]
@@ -169,85 +94,6 @@
                 }
               }
             ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Cancellations To Rebook"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Cancellations To Rebook"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.DNAs To Rebook"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "DNAs To Rebook"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Recalls To Action"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Recalls To Action"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Open Plans"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Practitioners"
-                    }
-                  },
-                  "Property": "Open Plans"
-                }
-              }
-            ],
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "List Practitioners.Days Until Next 30 Free"
-            ],
-            "isCollapsed": true,
             "isPinned": true
           }
         ],
@@ -654,78 +500,6 @@
             }
           }
         }
-      ],
-      "columnWidth": [
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "83.05406462973228D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Practitioners.Cancellations To Rebook"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "61.918908444130686D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Practitioners.DNAs To Rebook"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "58.216224696819054D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Practitioners.Recalls To Action"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "52.1351311092878D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Practitioners.Open Plans"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "69.94596967599699D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Practitioners.Days Until Next 30 Free"
-          }
-        }
       ]
     },
     "visualContainerObjects": {
@@ -735,7 +509,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Diary fill'"
+                  "Value": "'Diary Matirx (Mobile)'"
                 }
               }
             },
@@ -859,7 +633,7 @@
         "howCreated": "User"
       },
       {
-        "name": "01c2f5ac0ce07a61de97",
+        "name": "d1396a1c7b495e894ac3",
         "field": {
           "Column": {
             "Expression": {
@@ -868,76 +642,6 @@
               }
             },
             "Property": "Full Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "d1df3fadc3b32ce0a65e",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Cancellations To Rebook"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "aff3eba9169ec83a6420",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "DNAs To Rebook"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "b20096f09b543acc040a",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Recalls To Action"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "333a5da825e00e710db9",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Open Plans"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "126a2bd6a95369786c36",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Practitioners"
-              }
-            },
-            "Property": "Days Until Next 30 Free"
           }
         },
         "type": "Categorical"
