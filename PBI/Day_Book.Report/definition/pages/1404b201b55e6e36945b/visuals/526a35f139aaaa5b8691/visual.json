@@ -3,10 +3,10 @@
   "name": "526a35f139aaaa5b8691",
   "position": {
     "x": 0,
-    "y": 74.369885433715226,
+    "y": 74.36988543371523,
     "z": 10000,
     "height": 336.23567921440264,
-    "width": 498.59247135842878,
+    "width": 498.5924713584288,
     "tabOrder": 11002
   },
   "visual": {
@@ -442,7 +442,45 @@
           }
         },
         "type": "Advanced",
-        "howCreated": "User"
+        "howCreated": "User",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "_",
+              "Entity": "_Measures",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Not": {
+                  "Expression": {
+                    "Comparison": {
+                      "ComparisonKind": 0,
+                      "Left": {
+                        "Measure": {
+                          "Expression": {
+                            "SourceRef": {
+                              "Source": "_"
+                            }
+                          },
+                          "Property": "Diary Fill (Forward)"
+                        }
+                      },
+                      "Right": {
+                        "Literal": {
+                          "Value": "null"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
       },
       {
         "name": "5bcdfaebb0221e56a1d8",
