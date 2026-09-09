@@ -5,3 +5,4 @@
 - [Dentally user activity = permission_level](dentally-user-activity-is-permission-level.md) — /users has no active field; don't use the practitioner flag as a proxy.
 - [Prod warehouse deploys need a token](prod-warehouse-deploy-needs-a-token.md) — the Test Runner SP is dev-only; RUNBOOK §2b is wrong.
 - [AppDB "Read item permission" errors](appdb-read-item-permission-is-a-capacity-symptom.md) — usually the Fabric capacity in transition, not a grant problem.
+- [Fabric Script activities do not repoint](fabric-script-activities-dont-repoint.md) — named connections survive promotion; prod pipelines silently ran against dev.
