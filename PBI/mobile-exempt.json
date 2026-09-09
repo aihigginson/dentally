@@ -19,7 +19,8 @@
     "7f9a0bc50c0e431c4280": "wide KPI ribbon on 'Acquisition' - desktop only by design; phone reaches the KPIs page via the KPI button"
   },
   "Schedule": {
-    "c07a1d0fe42b43990064": "wide KPI ribbon on 'Utilisation' - desktop only by design; phone reaches the KPIs page via the KPI button"
+    "c07a1d0fe42b43990064": "wide KPI ribbon on 'Utilisation' - desktop only by design; phone reaches the KPIs page via the KPI button",
+    "562aac806c3470958019": "wide availability matrix - DESKTOP ONLY by design. On a phone it is replaced by the pair stacked beneath it on the desktop canvas (fc1d2e5f name x date, e27fbf28 per-name totals), occluded at a higher z. Same split as Day Book: six row-header columns will not fit a 324px canvas."
   },
   "My_Data": {
     "b1b2b3b4b5b600110022": "wide KPI ribbon on 'Overview' - desktop only by design; phone reaches the KPIs page via the KPI button"
