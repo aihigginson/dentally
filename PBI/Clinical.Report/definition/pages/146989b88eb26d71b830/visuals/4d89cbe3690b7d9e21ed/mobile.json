@@ -6,5 +6,20 @@
     "z": 3001,
     "height": 220,
     "width": 324
+  },
+  "objects": {
+    "legend": [
+      {
+        "properties": {
+          "position": {
+            "expr": {
+              "Literal": {
+                "Value": "'BottomCenter'"
+              }
+            }
+          }
+        }
+      }
+    ]
   }
 }
