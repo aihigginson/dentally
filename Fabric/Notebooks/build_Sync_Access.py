@@ -1,6 +1,6 @@
 """
-build_Sync_Subscriptions.py -- generator for Sync_Subscriptions.ipynb (Fabric).
-Edit THIS, run `python build_Sync_Subscriptions.py` to regenerate the notebook.
+build_Sync_Access.py -- generator for Sync_Access.ipynb (Fabric).
+Edit THIS, run `python build_Sync_Access.py` to regenerate the notebook.
 Never hand-edit the .ipynb JSON (corrupts it); source is a list-of-lines.
 
 Purpose: run Meta.usp_Sync_Access_From_AppDB (AppDB subscriptions -> WH Security.*) on the
@@ -109,7 +109,7 @@ def build():
         },
         "nbformat": 4, "nbformat_minor": 4,
     }
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Sync_Subscriptions.ipynb")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Sync_Access.ipynb")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(nb, f, indent=1); f.write("\n")
     return out

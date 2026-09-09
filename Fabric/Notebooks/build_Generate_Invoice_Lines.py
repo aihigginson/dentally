@@ -1,6 +1,6 @@
 """
-build_Generate_Invoices.py -- generator for Generate_Invoices.ipynb (Fabric).
-Edit THIS, run `python build_Generate_Invoices.py` to regenerate the notebook.
+build_Generate_Invoice_Lines.py -- generator for Generate_Invoice_Lines.ipynb (Fabric).
+Edit THIS, run `python build_Generate_Invoice_Lines.py` to regenerate the notebook.
 Never hand-edit the .ipynb JSON (corrupts it); source is a list-of-lines.
 
 Purpose: run Billing.usp_Generate_Invoice_Lines in WHICHEVER workspace the notebook runs in.
@@ -90,7 +90,7 @@ def build():
         },
         "nbformat": 4, "nbformat_minor": 4,
     }
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Generate_Invoices.ipynb")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Generate_Invoice_Lines.ipynb")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(nb, f, indent=1); f.write("\n")
     return out
