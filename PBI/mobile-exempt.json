@@ -1,0 +1,30 @@
+{
+    "Home":  {
+                 "1d2b0fa2ddc0f57a0a00":  "Home tile - navigation is handled by the web app\u0027s own nav on mobile; renders as wanted",
+                 "691f91909678a01b23ef":  "Home tile - navigation is handled by the web app\u0027s own nav on mobile; renders as wanted",
+                 "6ed2cfc7f58eea78d1ee":  "Home tile - navigation is handled by the web app\u0027s own nav on mobile; renders as wanted",
+                 "8f39c05ffce51b28e706":  "Home tile - navigation is handled by the web app\u0027s own nav on mobile; renders as wanted",
+                 "dfc512c8462642c8f1a6":  "Home tile - navigation is handled by the web app\u0027s own nav on mobile; renders as wanted"
+             },
+    "Revenue":  {
+                    "e461511a082b14707417":  "wide KPI ribbon on \u0027By Category\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                },
+    "Clinical":  {
+                     "4c5ed0d5c92795511403":  "wide KPI ribbon on \u0027Revenue\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                 },
+    "NHS":  {
+                "e2f7fb79a20264c8ccee":  "wide KPI ribbon on \u0027Key Metrics\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+            },
+    "Patient":  {
+                    "7f9a0bc50c0e431c4280":  "wide KPI ribbon on \u0027Acquisition\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                },
+    "Schedule":  {
+                     "c07a1d0fe42b43990064":  "wide KPI ribbon on \u0027Utilisation\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                 },
+    "My_Data":  {
+                    "b1b2b3b4b5b600110022":  "wide KPI ribbon on \u0027Overview\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                },
+    "Day_Book":  {
+                     "49dcd3fe779ade836e00":  "wide KPI ribbon on \u0027Day Book\u0027 - desktop only by design; phone reaches the KPIs page via the KPI button"
+                 }
+}

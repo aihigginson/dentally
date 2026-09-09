@@ -1175,7 +1175,8 @@ def onboarding_token():
             return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
                             'error': "Your token can't read some of your Dentally data. Open the token in "
                                      "Dentally, tick every read permission marked below, save, then check "
-                                     "again."}), 200
+                                     "again. Note that Treatments sits under “Other” and is not "
+                                     "labelled “read” like the rest, so it is easily missed."}), 200
 
         # ── All readable: capture the practice name, store the pending trial, notify the operator. ──
         practice_id, practice_name = None, payload.get('practice')
@@ -1292,7 +1293,9 @@ def dentally_update_token():
         if missing:
             return jsonify({'ok': False, 'reason': 'missing_permissions', 'checks': checks,
                             'error': "That token can't read some of your Dentally data. Tick every read "
-                                     "permission marked below in Dentally, save, then check again."}), 200
+                                     "permission marked below in Dentally, save, then check again. Note "
+                                     "that Treatments sits under “Other” and is not labelled “read” "
+                                     "like the rest, so it is easily missed."}), 200
         # Fully readable -> update the token in place, preserving base_url/name.
         secret = f'dentally-tokens-{DENTALLY_ENV}'
         toks = _kv_json(secret)
@@ -1383,7 +1386,8 @@ def _principal_token_email_body():
         "refresh has stopped. This almost always means the token was regenerated in Dentally.\n\n"
         "It takes about a minute to fix:\n"
         "  1. In Dentally: Settings -> Personal Access Tokens -> New personal access token. Tick EVERY "
-        "read permission, Save, and copy the token.\n"
+        "read permission -- AND 'Other -> Treatments', which is not labelled 'read' like the rest and is "
+        "easily missed. Save, and copy the token.\n"
         f"  2. In Analytically: open Settings -> Dentally and paste it in --\n     {link}\n\n"
         "We'll check the token can read your data before saving, and your reports will catch up on the "
         "next overnight refresh.\n"
@@ -1492,9 +1496,22 @@ def monitor_health():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_info(cur, upn):
-    """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False)."""
+    """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
+
+    Fails closed THREE ways: no row at all, no ACTIVE tenant, or a row that grants nothing --
+    no module and no Maintain_Targets.
+
+    That last check is the important one. Security.Application_Users is meant to hold
+    access-holders ONLY (see Meta.usp_Sync_Access_From_AppDB *02), but an all-zero row left
+    behind by a failed sync still returned a valid client_id and tenant list. Reports were safe
+    (embed-token gates per module) and admin routes were safe (they check maintain), but the
+    /api/targets routes gate on client_id alone -- so a stale row could READ and WRITE a
+    practice's targets. Prod carried 61 such rows while its hourly sync was unknowingly running
+    against dev. Checking the flags here means a stale row is inert whatever the sync is doing.
+    """
+    cols = ", ".join(_ALL_MODULE_COLS)
     cur.execute(
-        "SELECT Display_Name, Client_ID, Maintain_Targets "
+        "SELECT Display_Name, Client_ID, Maintain_Targets, " + cols + " "
         "FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
         upn,
     )
@@ -1502,6 +1519,8 @@ def _get_user_info(cur, upn):
     if not row:
         return None, None, [], False
     display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
+    if not maintain_targets and not any(bool(v) for v in row[3:]):
+        return None, None, [], False   # row grants nothing -> treat as unprovisioned
     cur.execute(
         "SELECT t.Tenant_ID FROM Security.Application_Users a "
         "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
@@ -1880,26 +1899,33 @@ def get_team():
         billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
             ph = ','.join(['?'] * len(tids))
-            # ACTIVE staff only. A user's active flag comes from their linked practitioner
-            # (Dim_Practitioners.User_ID = Dim_Users.bk_User_ID) -- exclude users whose practitioner is
-            # inactive (departed clinicians). Non-practitioners (front office) have no such flag, so are
-            # kept. That same link gives the DEDUCED My Data practitioner (no prompt needed).
-            # Active flag lives on the PRACTITIONER record (Dentally embeds the user inside it).
-            # Silver.Practitioners keeps every staff role (front office included) -- unlike
-            # Gold.Dim_Practitioners which is clinical-only -- so join it for Practitioner_Active and
-            # drop anyone whose practitioner record is inactive (departed). Users with no practitioner
-            # record (act NULL) are kept. Dim_Practitioners still gives the deduced My Data name.
+            # ACTIVE staff only, keyed on Dentally's permission_level. Dentally has no 'active' field
+            # on a user -- permission_level IS the activity signal (0 = deactivated), which is why we
+            # test it rather than anything on the practitioner record.
+            #
+            # Previously this used Silver.Practitioners.Practitioner_Active, on the assumption that
+            # front office "have no such flag, so are kept". That was wrong: front-office staff often
+            # DO have a practitioner record, and it gets deactivated when they stop being a bookable
+            # diary entry -- while their user account stays live. On tenant 100 that silently hid two
+            # active administrators (permission_level 4) from the subscriptions roster.
+            #
+            # COALESCE order matters. Gold.Dim_Users.Permission_Level is the correct source, but it is
+            # only populated from the first build after Bronze.usp_Load_Users *04 (it was never staged,
+            # so it reads NULL for every pre-existing row). Until then fall back to the same value as
+            # carried on the practitioner record, then to 1 (assume active) for the many users who have
+            # no practitioner record at all. Once the backfill lands the first term simply wins.
+            # Dim_Practitioners still supplies the deduced My Data practitioner name.
             cur.execute(
                 f"SELECT u.Tenant_ID, u.Email, u.Full_Name, u.Role, u.Site_ID, dp.practitioner "
                 f"FROM Gold.Dim_Users u "
-                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Practitioner_Active) AS act "
+                f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(User_Permission_Level) AS perm "
                 f"           FROM Silver.Practitioners GROUP BY Tenant_ID, User_ID) sp "
                 f"           ON sp.Tenant_ID = u.Tenant_ID AND sp.User_ID = u.bk_User_ID "
                 f"LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(Full_Name) AS practitioner "
                 f"           FROM Gold.Dim_Practitioners WHERE pk_Practitioner > 0 AND User_ID IS NOT NULL "
                 f"           GROUP BY Tenant_ID, User_ID) dp ON dp.Tenant_ID = u.Tenant_ID AND dp.User_ID = u.bk_User_ID "
                 f"WHERE u.Tenant_ID IN ({ph}) AND u.Is_Current = 1 AND NULLIF(LTRIM(RTRIM(u.Email)),'') IS NOT NULL "
-                f"  AND ISNULL(sp.act, 1) = 1 "
+                f"  AND COALESCE(u.Permission_Level, sp.perm, 1) > 0 "
                 f"ORDER BY CASE "
                 f"           WHEN LOWER(u.Role) LIKE '%dentist%'          THEN 1 "
                 f"           WHEN LOWER(u.Role) LIKE '%hygien%'           THEN 2 "

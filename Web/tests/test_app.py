@@ -66,13 +66,37 @@ def test_get_user_info_unprovisioned(appmod):
     assert appmod._get_user_info(cur, 'nobody@x.com') == (None, None, [], False)
 
 
+def _user_row(appmod, name, client_id, maintain, *modules):
+    """Display_Name, Client_ID, Maintain_Targets, then one flag per _ALL_MODULE_COLS."""
+    flags = list(modules) + [0] * (len(appmod._ALL_MODULE_COLS) - len(modules))
+    return (name, client_id, maintain) + tuple(flags)
+
+
 def test_get_user_info_provisioned(appmod):
-    cur = FakeCursor(one_row=('Alice', 7, 1), all_rows=[(11,), (12,)])
+    cur = FakeCursor(one_row=_user_row(appmod, 'Alice', 7, 1, 1), all_rows=[(11,), (12,)])
     name, client_id, tids, maintain = appmod._get_user_info(cur, 'alice@x.com')
     assert name == 'Alice'
     assert client_id == 7
     assert tids == [11, 12]
     assert maintain is True
+
+
+def test_get_user_info_module_only_no_admin(appmod):
+    """A plain user (one module, not an admin) is still provisioned."""
+    cur = FakeCursor(one_row=_user_row(appmod, 'Bob', 7, 0, 1), all_rows=[(11,)])
+    name, client_id, tids, maintain = appmod._get_user_info(cur, 'bob@x.com')
+    assert (name, client_id, tids, maintain) == ('Bob', 7, [11], False)
+
+
+def test_get_user_info_access_less_row_fails_closed(appmod):
+    """A stale all-zero row (no module, no admin) must NOT confer identity.
+
+    These rows accumulate when the AppDB->warehouse sync stops running: prod held 61 of them.
+    They are harmless for reports (gated per module) but /api/targets gates on client_id only,
+    so a row like this could read and write a practice's targets.
+    """
+    cur = FakeCursor(one_row=_user_row(appmod, 'Stale', 100, 0), all_rows=[(100,)])
+    assert appmod._get_user_info(cur, 'stale@x.com') == (None, None, [], False)
 
 
 # ── /api/embed-token: fail-closed RLS ─────────────────────────────────────────

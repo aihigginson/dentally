@@ -1,0 +1,8 @@
+- [Back up Claude state on machine moves](back-up-claude-state-on-machine-moves.md) — ~/.claude is outside OneDrive; memories were lost in the Sep 2026 PC move.
+- [Who the user is](user-solo-builder-analytically.md) — solo builder + tenant admin of the Analytically product.
+- [PBIR JSON needs UTF-8 without BOM](pbir-json-must-be-utf8-no-bom.md) — a BOM stops Power BI Desktop opening the report; opposite of the SQL rule.
+- [PBIR mobile layout model](pbir-mobile-layout-model.md) — no mobile.json = invisible on phone; why bookmark navigation breaks there.
+- [Dentally user activity = permission_level](dentally-user-activity-is-permission-level.md) — /users has no active field; don't use the practitioner flag as a proxy.
+- [Prod warehouse deploys need a token](prod-warehouse-deploy-needs-a-token.md) — the Test Runner SP is dev-only; RUNBOOK §2b is wrong.
+- [AppDB "Read item permission" errors](appdb-read-item-permission-is-a-capacity-symptom.md) — usually the Fabric capacity in transition, not a grant problem.
+- [Fabric Script activities do not repoint](fabric-script-activities-dont-repoint.md) — named connections survive promotion; prod pipelines silently ran against dev.

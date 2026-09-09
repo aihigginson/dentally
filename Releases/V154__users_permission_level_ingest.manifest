@@ -1,0 +1,34 @@
+# =====================================================================
+# Release V154 -- Bronze.usp_Load_Users: map permission_level
+# =====================================================================
+# Dentally returns permission_level on /users and it is the ONLY activity signal there -- the user
+# payload has no 'active' field at all (verified against the live API 2026-09-09). Silver.usp_Load_Users
+# and Gold.usp_Load_Dim_Users already select and cast Permission_Level, and the column exists in
+# Bronze.Users / Silver.Users / Gold.Dim_Users -- but Bronze.usp_Load_Users never staged it, so it read
+# NULL end to end (94/94 rows NULL on tenant 100).
+#
+# Consequence: the subscriptions roster in the web app could not test user activity, so it inferred it
+# from Silver.Practitioners.Practitioner_Active instead. That is a different thing -- front-office staff
+# often have a practitioner record which is deactivated when they stop being a bookable diary entry,
+# while their user account stays live. On tenant 100 it hid two ACTIVE administrators
+# (Kate Gordon, Lindsey Wordley -- both permission_level 4) from the roster.
+#
+# Proc change only: adds permission_level to the SELECT from Stage.Users and to both the UPDATE and the
+# INSERT. No DDL -- every target column already exists. No change to any other column.
+#
+# BACKFILL: none needed and none possible from here. Bronze only refreshes when the ingest re-stages
+# users, so Permission_Level populates on the next nightly Orchestrate_Build (Bronze -> Silver -> Gold),
+# after which Gold.Dim_Users.Permission_Level is authoritative. The app query COALESCEs
+# (Dim_Users.Permission_Level -> the practitioner record's copy -> 1) so it is correct both before and
+# after that first build.
+#
+# Verify after the next build:
+#   SELECT COUNT(*) AS rows, COUNT(Permission_Level) AS populated FROM Gold.Dim_Users WHERE Tenant_ID = 100;
+#   -- expect populated = rows (94), and 28 rows at level 0
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V154__users_permission_level_ingest.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Users.StoredProcedure.sql
+
+TEST
