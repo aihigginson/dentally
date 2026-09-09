@@ -41,3 +41,4 @@ Scripts/_*
 
 # Runtime lock for the scheduler (machine-local state, not shareable)
 .claude/scheduled_tasks.lock
+Web/.venv/

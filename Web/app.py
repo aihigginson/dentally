@@ -1496,9 +1496,22 @@ def monitor_health():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_info(cur, upn):
-    """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False)."""
+    """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
+
+    Fails closed THREE ways: no row at all, no ACTIVE tenant, or a row that grants nothing --
+    no module and no Maintain_Targets.
+
+    That last check is the important one. Security.Application_Users is meant to hold
+    access-holders ONLY (see Meta.usp_Sync_Access_From_AppDB *02), but an all-zero row left
+    behind by a failed sync still returned a valid client_id and tenant list. Reports were safe
+    (embed-token gates per module) and admin routes were safe (they check maintain), but the
+    /api/targets routes gate on client_id alone -- so a stale row could READ and WRITE a
+    practice's targets. Prod carried 61 such rows while its hourly sync was unknowingly running
+    against dev. Checking the flags here means a stale row is inert whatever the sync is doing.
+    """
+    cols = ", ".join(_ALL_MODULE_COLS)
     cur.execute(
-        "SELECT Display_Name, Client_ID, Maintain_Targets "
+        "SELECT Display_Name, Client_ID, Maintain_Targets, " + cols + " "
         "FROM Security.Application_Users WHERE LOWER(User_UPN) = LOWER(?)",
         upn,
     )
@@ -1506,6 +1519,8 @@ def _get_user_info(cur, upn):
     if not row:
         return None, None, [], False
     display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
+    if not maintain_targets and not any(bool(v) for v in row[3:]):
+        return None, None, [], False   # row grants nothing -> treat as unprovisioned
     cur.execute(
         "SELECT t.Tenant_ID FROM Security.Application_Users a "
         "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
