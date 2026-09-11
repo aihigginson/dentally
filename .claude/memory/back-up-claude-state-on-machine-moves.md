@@ -18,5 +18,12 @@ raised this directly: the one thing that did not survive the move was Claude its
 `~/.claude/projects/<slug>/memory` as a directory junction pointing at it — so writing
 a memory commits it to a synced, versioned location automatically. The restore steps
 are `SETUP.md` §8. Note the `<slug>` is derived from the project's full path, so it
-changes if the repo moves; the junction must then be recreated. See
+changes if the repo moves; the junction must then be recreated.
+
+Session **transcripts** are the other half and cannot use a junction (Claude appends to
+the live `.jsonl`, which would make OneDrive churn). Run
+`Scripts\Backup-ClaudeTranscripts.ps1` to copy them to
+`<OneDrive>\ClaudeTranscripts\<COMPUTERNAME>\` — worth offering at the end of a long
+session. Transcripts are unredacted (connection strings, real patient names), so the
+destination stays outside the repo and they are never committed. See
 [[user-solo-builder-analytically]].
