@@ -226,7 +226,7 @@ everything in §0 it does *not* come back on its own.
 - `~/.claude.json` (MCP server definitions, project history) — machine-local and rebuilt on
   first run, but the servers still need re-authenticating (below).
 
-**Memories — the one thing with no other copy.** They are kept in the repo at
+**Memories — no other copy unless you make one.** They are kept in the repo at
 `.claude/memory/` and exposed to Claude through a directory junction, so anything Claude
 writes lands in a synced, version-controlled folder automatically:
 
@@ -243,6 +243,27 @@ New-Item -ItemType Junction -Path $link -Target $target
 
 No admin rights needed. **If the repo ever moves the slug changes** — recreate the junction,
 or Claude starts up silently with no memories and nothing appears to be wrong.
+
+**Session transcripts — the other thing with no copy.** Claude keeps every session verbatim
+at `%USERPROFILE%\.claude\projects\<slug>\<session-uuid>.jsonl`, with oversized tool output
+spilled into a sibling `<session-uuid>\tool-results\`. This is what `/resume` and
+`--continue` read, and what Claude itself reads back to recover detail lost to compaction.
+It is not synced and dies with the machine.
+
+A junction will not work here — Claude appends to the live `.jsonl` continuously and OneDrive
+would churn on every write — so copy on demand instead:
+
+```powershell
+.\Scripts\Backup-ClaudeTranscripts.ps1          # -> <OneDrive>\ClaudeTranscripts\<COMPUTERNAME>\
+```
+
+Re-run it at the end of a session to capture the tail; unchanged files are skipped. The
+destination is deliberately **outside the repo** and the script refuses to write inside a git
+working tree: a transcript is unredacted, so it holds warehouse connection strings, real
+patient and practitioner names, and anything else that was pasted in. Never commit one.
+
+Note the session UUID in the filename is *not* the `session_…` id that appears in
+`Claude-Session:` commit trailers — they are separate identifiers and neither finds the other.
 
 **MCP servers** — expect `! Needs authentication` on a new machine. Run `claude`, then `/mcp`,
 and complete the browser login for each (Microsoft 365, Google Drive).
@@ -261,6 +282,8 @@ reports it as a misleading *"the module could not be loaded"* error.
 ```powershell
 (Get-Item "$env:USERPROFILE\.claude\projects\$slug\memory").LinkType   # -> Junction
 claude mcp list                                                        # -> no "Needs authentication"
+Get-ChildItem "$env:OneDrive\ClaudeTranscripts\$env:COMPUTERNAME" -Recurse -File |
+    Measure-Object Length -Sum                                         # -> transcripts present
 ```
 
 ---
