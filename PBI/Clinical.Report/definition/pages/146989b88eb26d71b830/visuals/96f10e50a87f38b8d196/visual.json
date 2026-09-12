@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "96f10e50a87f38b8d196",
   "position": {
     "x": 645,
@@ -174,13 +174,6 @@
                       "Value": "'#1A527A'"
                     }
                   }
-                }
-              }
-            },
-            "showAllDataPoints": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
                 }
               }
             }

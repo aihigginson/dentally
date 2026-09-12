@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.7.0/schema.json",
   "position": {
     "x": 0,
     "y": 0,
@@ -7,5 +7,51 @@
     "height": 34,
     "width": 324,
     "tabOrder": 0
+  },
+  "objects": {
+    "general": [
+      {
+        "properties": {
+          "paragraphs": [
+            {
+              "textRuns": [
+                {
+                  "value": "My Data",
+                  "textStyle": {
+                    "fontWeight": "bold",
+                    "fontSize": "11pt",
+                    "color": "#ffffff"
+                  }
+                },
+                {
+                  "value": " ",
+                  "textStyle": {
+                    "fontWeight": "bold",
+                    "fontSize": "11pt"
+                  }
+                },
+                {
+                  "value": " ",
+                  "textStyle": {
+                    "fontWeight": "bold",
+                    "fontSize": "8pt",
+                    "color": "#5ec4c0"
+                  }
+                },
+                {
+                  "value": "KPIs",
+                  "textStyle": {
+                    "fontWeight": "bold",
+                    "fontFamily": "Segoe UI Semibold",
+                    "fontSize": "9pt",
+                    "color": "#5ec4c0"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   }
 }

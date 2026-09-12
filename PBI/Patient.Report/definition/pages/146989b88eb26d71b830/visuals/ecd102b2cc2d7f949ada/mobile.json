@@ -2,10 +2,25 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
   "position": {
     "x": 0,
-    "y": 102,
+    "y": 111,
     "z": 1000,
-    "height": 416,
+    "height": 280,
     "width": 324,
     "tabOrder": 0
+  },
+  "objects": {
+    "legend": [
+      {
+        "properties": {
+          "position": {
+            "expr": {
+              "Literal": {
+                "Value": "'BottomCenter'"
+              }
+            }
+          }
+        }
+      }
+    ]
   }
 }

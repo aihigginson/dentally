@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "fa2e7164452776dd8a68",
   "position": {
     "x": 0,
@@ -163,7 +163,7 @@
             "orientation": {
               "expr": {
                 "Literal": {
-                  "Value": "0D"
+                  "Value": "1D"
                 }
               }
             },
@@ -177,7 +177,7 @@
             "rowCount": {
               "expr": {
                 "Literal": {
-                  "Value": "1L"
+                  "Value": "6L"
                 }
               }
             },
@@ -1558,5 +1558,93 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "b0fef5cf9ba6dd8c009a",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Overdue Recalls"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "d48ed1ee3731520b06d9",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Open Courses Without Appointment"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "aa7bff630013ae90b3c3",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Outstanding Invoices"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "33cc85da02e8e06a0493",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Patients Email Not Captured"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a9766a3c0726234370b4",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Patients Phone Not Captured"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "aa28d1206b84bd381bb4",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Book Before You Leave"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

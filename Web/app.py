@@ -1322,6 +1322,9 @@ def dentally_update_token():
 MONITOR_KEY          = os.environ.get('MONITOR_KEY', '')
 MONITOR_NOTIFY       = os.environ.get('MONITOR_NOTIFY', ONBOARDING_NOTIFY)
 MONITOR_WINDOW_HOURS = int(os.environ.get('MONITOR_WINDOW_HOURS', '25'))
+# How far back a single summary may reach when there is no usable previous-report watermark. Only a
+# safety cap -- in steady state the watermark is last night's run, so the email covers this build.
+MONITOR_REPORT_MAX_HOURS = int(os.environ.get('MONITOR_REPORT_MAX_HOURS', '168'))
 # A practice is nudged about a revoked token at most once per this window. Stops a manual trigger
 # colliding with the (often GitHub-delayed) daily cron -- or two cron runs -- from double-sending.
 # Daily reminders still get through: consecutive daily runs land ~20-28h apart, above the default.
@@ -1333,8 +1336,10 @@ MONITOR_NUDGE_COOLDOWN_HOURS = int(os.environ.get('MONITOR_NUDGE_COOLDOWN_HOURS'
 SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
 
 
-def _monitor_email_body(proc, ing, hours):
-    lines = [f"Warehouse health check ({APP_ENV}) — failures in the last {hours}h.\n"]
+def _monitor_email_body(proc, ing, since):
+    # 'since' is the previous report's watermark, so this lists THIS build's real errors only --
+    # already-reported rows and already-fixed token 401s are filtered out by the caller.
+    lines = [f"Warehouse health check ({APP_ENV}) — new failures since {since}.\n"]
     if proc:
         lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
         for r in proc[:20]:
@@ -1396,24 +1401,47 @@ def _principal_token_email_body():
 
 @app.route('/api/monitor/health', methods=['POST'])
 def monitor_health():
-    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log for failures in the last MONITOR_WINDOW_HOURS
-    and email a summary if any. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
+    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log and email a summary of REAL, NEW failures.
+
+    Two different spans, deliberately: the summary covers only what has happened since the previous
+    MONITOR row (in practice this build), so a failure is reported once and never re-listed; the
+    revoked-token DETECTION still looks across MONITOR_WINDOW_HOURS, because deciding whether a token
+    is still broken needs the 401 history. 401s from a tenant since proven working are excluded from
+    the summary entirely. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
     if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         since = (datetime.utcnow() - timedelta(hours=MONITOR_WINDOW_HOURS)).strftime('%Y-%m-%dT%H:%M:%S')
         conn = _fabric_conn()
         cur = conn.cursor()
+        # REPORT on this build only. The monitor is the build's own last step, so the previous MONITOR
+        # row marks exactly where the last report stopped -- anything at or before it has already been
+        # emailed once. Reporting on the rolling window instead drags the PREVIOUS night's rows into
+        # tonight's summary, which is how tenant 100 was still listed as a connection failure on
+        # 2026-09-08, a day after its token was fixed. DETECTION below keeps the full window, because
+        # deciding whether a token is still broken needs the 401 history, not just this run.
+        cur.execute("SELECT MAX(Logged_At) FROM Audit.Ingest_Log "
+                    "WHERE Phase IN ('MONITOR','MONITOR_SKIP')")
+        row = cur.fetchone()
+        last_report = row[0] if row else None
+        # Never reach back further than the cap: a missing or ancient watermark (log trimmed, first
+        # ever run, monitor offline for weeks) must not dump an unbounded backlog into one email.
+        cap = datetime.utcnow() - timedelta(hours=MONITOR_REPORT_MAX_HOURS)
+        if last_report is None:
+            report_from = datetime.utcnow() - timedelta(hours=MONITOR_WINDOW_HOURS)
+        else:
+            report_from = max(last_report, cap)
+        report_since = report_from.strftime('%Y-%m-%dT%H:%M:%S')
         cur.execute(
             "SELECT Start_Time, Process_Name, LEFT(ISNULL(Error_Message,''),200) "
             "FROM Audit.Process_Execution_Log WHERE Status = 'FAILED' AND Start_Time >= ? "
-            "ORDER BY Start_Time DESC", since)
+            "ORDER BY Start_Time DESC", report_since)
         proc = [{'when': str(r[0]), 'name': r[1], 'error': r[2] or ''} for r in cur.fetchall()]
         cur.execute(
             "SELECT Logged_At, Tenant_ID, Entity, Phase, LEFT(ISNULL(Detail,''),200) "
             "FROM Audit.Ingest_Log WHERE Logged_At >= ? AND ("
             "Phase LIKE '%FAIL%' OR Detail LIKE '%Client Error%' OR Detail LIKE '%Server Error%' "
-            "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", since)
+            "OR Detail LIKE '%Unauthorized%') ORDER BY Logged_At DESC", report_since)
         ing = [{'when': str(r[0]), 'tenant': r[1], 'entity': r[2], 'phase': r[3] or '', 'detail': r[4] or ''}
                for r in cur.fetchall()]
         # A revoked Dentally token shows as 401/Unauthorized on its entities. But we must NOT keep nagging
@@ -1442,10 +1470,21 @@ def monitor_health():
         # an ingest error that isn't a (possibly already-resolved) token 401. So a practice that fixes its
         # token stops BOTH the nudge and the operator summary once stale 401s are all that remain.
         _is_token_401 = lambda d: ('401' in d or 'Unauthorized' in d)
-        non_token_ingest = [r for r in ing if not _is_token_401(r['detail'])]
-        actionable = bool(proc) or bool(bad_token_tenants) or bool(non_token_ingest)
+        # Drop 401s belonging to a tenant that is NOT in bad_token_tenants. Absence from that list
+        # means a later successful Dentally fetch proved the token now works, so those rows are a
+        # record of a fixed problem, not a real error -- they must not be counted or listed.
+        # A 401 with no Tenant_ID is NOT swept up: it cannot be attributed to a practice token, so
+        # there is nothing proving it resolved (it is more likely an infrastructure auth fault).
+        real_ing = [r for r in ing
+                    if not _is_token_401(r['detail'])
+                    or r['tenant'] is None
+                    or r['tenant'] in bad_token_tenants]
+        suppressed = len(ing) - len(real_ing)
+        # real_ing has already had the resolved 401s removed, so anything still in it is a live
+        # error and worth an email -- including a 401 that carries no tenant.
+        actionable = bool(proc) or bool(bad_token_tenants) or bool(real_ing)
 
-        total = len(proc) + len(ing)
+        total = len(proc) + len(real_ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.
         emails_on = (APP_ENV == 'prod')
         notified = []
@@ -1453,7 +1492,7 @@ def monitor_health():
             if actionable:
                 _send_email(MONITOR_NOTIFY,
                             f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
-                            _monitor_email_body(proc, ing, MONITOR_WINDOW_HOURS))
+                            _monitor_email_body(proc, real_ing, report_since))
             if bad_token_tenants:
                 # Per-tenant cooldown: never nudge the same practice twice inside
                 # MONITOR_NUDGE_COOLDOWN_HOURS, so overlapping triggers (manual + delayed cron, a
@@ -1482,11 +1521,14 @@ def monitor_health():
                     state_changed = True
                 if state_changed:
                     _kv_set('monitor-nudge-state', json.dumps(nudge_state))
-        app.logger.warning("monitor(%s): %d process + %d ingest failure(s); bad-token tenants=%s; principal emails=%s",
-                           APP_ENV, len(proc), len(ing), bad_token_tenants,
+        app.logger.warning("monitor(%s): since %s -- %d process + %d ingest failure(s) "
+                           "(%d resolved 401(s) suppressed); bad-token tenants=%s; principal emails=%s",
+                           APP_ENV, report_since, len(proc), len(real_ing), suppressed,
+                           bad_token_tenants,
                            len(notified) if emails_on else 'suppressed(non-prod)')
         return jsonify({'window_hours': MONITOR_WINDOW_HOURS, 'process_failures': len(proc),
-                        'ingest_failures': len(ing), 'failures': total,
+                        'ingest_failures': len(real_ing), 'failures': total,
+                        'report_since': report_since, 'resolved_401_suppressed': suppressed,
                         'bad_token_tenants': bad_token_tenants,
                         'principals_notified': len(notified), 'emails_enabled': emails_on})
     except Exception as e:

@@ -423,13 +423,19 @@ def test_dentally_status_missing(client, appmod, monkeypatch):
 
 class _MonCursor:
     # health rows are (Tenant_ID, last_401, last_ok); last_* are comparable (ISO strings or None).
-    def __init__(self, proc, ing, health=None):
+    # last_report is the previous MONITOR row's Logged_At (a datetime) -- None means "never reported",
+    # which makes the handler fall back to the rolling window.
+    def __init__(self, proc, ing, health=None, last_report=None):
         self._proc, self._ing, self._health, self._which = proc, ing, (health or []), None
+        self._last_report = last_report
     def execute(self, sql, *a):
-        if 'Process_Execution_Log' in sql:  self._which = 'proc'
+        if "Phase IN ('MONITOR'" in sql:    self._which = 'watermark'
+        elif 'Process_Execution_Log' in sql: self._which = 'proc'
         elif 'GROUP BY Tenant_ID' in sql:   self._which = 'health'
         else:                               self._which = 'ing'
         return self
+    def fetchone(self):
+        return (self._last_report,) if self._which == 'watermark' else None
     def fetchall(self):
         return {'proc': self._proc, 'ing': self._ing, 'health': self._health}[self._which]
 
@@ -513,6 +519,94 @@ def test_monitor_resolved_token_no_nudge(client, appmod, monkeypatch):
     j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
     assert j['bad_token_tenants'] == [] and j['principals_notified'] == 0
     assert not sent   # nothing actionable -> no nudge AND no operator summary
+
+
+def test_monitor_resolved_401_absent_from_summary(client, appmod, monkeypatch):
+    # The 2026-09-08 regression: a tenant whose token was fixed yesterday still appeared as a
+    # connection failure because the body was built from the RAW rows. Here something else IS
+    # actionable (a process failure), so the operator summary goes out -- but the resolved 401 must
+    # not be counted in it or named in it.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    proc = [('2026-09-08 21:24', 'Audit.Orchestrate_Build', 'xero step blew up')]
+    ing = [('2026-09-07 21:22', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x'),
+           ('2026-09-07 21:22', 100, 'invoices', 'SKIP', '401 Client Error: Unauthorized for url: y')]
+    health = [(100, '2026-09-07 21:22', '2026-09-08 21:30')]   # success AFTER the 401 -> resolved
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor(proc, ing, health)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['bad_token_tenants'] == [] and j['principals_notified'] == 0
+    assert j['ingest_failures'] == 0 and j['resolved_401_suppressed'] == 2
+    assert j['failures'] == 1                        # the process failure only
+    body = next(s[2] for s in sent if s[0] == appmod.MONITOR_NOTIFY)
+    assert 'tenant 100' not in body and 'Unauthorized' not in body
+    assert 'xero step blew up' in body               # the real error is still reported
+
+
+def test_monitor_unresolved_401_still_reported(client, appmod, monkeypatch):
+    # Mirror image: the token is genuinely still broken, so the 401s ARE real errors and must survive
+    # the filter -- otherwise the fix above would blind the summary to live outages.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: 'craig@mapledental.co.uk')
+    monkeypatch.setattr(appmod, '_kv_json', lambda n: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda n, v: None)
+    ing = [('2026-09-07 21:22', 100, 'patients', 'SKIP', '401 Client Error: Unauthorized for url: x')]
+    health = [(100, '2026-09-07 21:22', None)]                 # no success after the 401 -> broken
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, health)))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['bad_token_tenants'] == [100]
+    assert j['ingest_failures'] == 1 and j['resolved_401_suppressed'] == 0
+    body = next(s[2] for s in sent if s[0] == appmod.MONITOR_NOTIFY)
+    assert 'tenant 100' in body
+
+
+def test_monitor_untenanted_401_not_suppressed(client, appmod, monkeypatch):
+    # A 401 with no Tenant_ID cannot be attributed to a practice token, so nothing proves it fixed --
+    # it must survive the resolved filter rather than being silently swallowed.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    ing = [('2026-09-08 21:24', None, 'Orchestrate_Build', 'FAILED', '401 Unauthorized calling the warehouse')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, [])))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['ingest_failures'] == 1 and j['resolved_401_suppressed'] == 0
+    assert sent, 'an untenanted 401 is actionable and must be emailed'
+
+
+def test_monitor_reports_only_since_last_report(client, appmod, monkeypatch):
+    # The report window starts at the previous MONITOR row, so a run's failures are emailed once and
+    # never re-listed by the next night's run.
+    from datetime import datetime, timedelta
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    watermark = datetime.utcnow() - timedelta(hours=20)
+    monkeypatch.setattr(appmod, '_fabric_conn',
+                        lambda *a, **k: _MonConn(_MonCursor([], [], last_report=watermark)))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: None)
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['report_since'] == watermark.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def test_monitor_report_window_capped_when_watermark_ancient(client, appmod, monkeypatch):
+    # A stale watermark (monitor offline for weeks, log trimmed) must not dump a month of backlog
+    # into one email -- the reach is capped.
+    from datetime import datetime, timedelta
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'MONITOR_REPORT_MAX_HOURS', 168)
+    ancient = datetime.utcnow() - timedelta(days=40)
+    monkeypatch.setattr(appmod, '_fabric_conn',
+                        lambda *a, **k: _MonConn(_MonCursor([], [], last_report=ancient)))
+    monkeypatch.setattr(appmod, '_send_email', lambda *a, **k: None)
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    reported = datetime.strptime(j['report_since'], '%Y-%m-%dT%H:%M:%S')
+    expected = datetime.utcnow() - timedelta(hours=168)
+    assert abs((reported - expected).total_seconds()) < 120
+    assert reported > ancient
 
 
 def test_monitor_nudge_cooldown_suppresses_repeat(client, appmod, monkeypatch):

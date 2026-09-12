@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.7.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 430,
+    "z": 0,
+    "height": 335,
+    "width": 324,
+    "tabOrder": 9000
+  },
+  "objects": {
+    "subTotals": [],
+    "values": [],
+    "columnHeaders": [
+      {
+        "properties": {}
+      }
+    ],
+    "grid": [],
+    "rowHeaders": [],
+    "blankRows": [],
+    "general": [],
+    "columnWidth": [
+      {
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "88D"
+              }
+            }
+          }
+        },
+        "selector": {
+          "metadata": "List Practitioners.Full Name"
+        }
+      }
+    ]
+  }
+}

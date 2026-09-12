@@ -26,7 +26,15 @@
 #                    PowerShell 5.1's `Out-File -Encoding utf8` ALWAYS writes a
 #                    BOM; use [System.IO.File]::WriteAllText with
 #                    UTF8Encoding($false) instead.
-#   5. COVERAGE    - reported for information only, never fails the run.
+#   5. DEFAULT STATE - the visibility SAVED on the page (each visual's top-level isHidden)
+#                    must match one of that page's bookmark states. Power BI writes whatever
+#                    the canvas showed when you pressed Save, so a page can be left in a
+#                    state that belongs to no bookmark -- visuals then paint on top of each
+#                    other for the first render, until a tab is clicked. Invisible in the
+#                    files and invisible in review; only the opening frame is wrong. This is
+#                    a report-level check rather than a phone-specific one, but it lives here
+#                    because this is the guard that runs.
+#   6. COVERAGE    - reported for information only, never fails the run.
 #
 # Reports under -Reports (default: the nine embedded by the web app). The
 # Template scaffold and the Day_Book2 backup are excluded by default.
@@ -159,7 +167,58 @@ foreach ($rep in $reportDirs) {
         catch { Add-Failure 'ENCODING' $name '-' "$rel is not valid JSON: $($_.Exception.Message)" }
     }
 
-    # ---- 5: coverage, informational ---------------------------------------
+    # ---- 5: saved default visibility must match a bookmark state ----------
+    # Index the page's saved state by PAGE id, since bookmarks address pages that way.
+    $pageDefault = @{}   # pageId -> @{ visualId -> 'hidden'|'visible' }
+    $pageTitle   = @{}
+    foreach ($pageDir in Get-ChildItem $pagesRoot -Directory) {
+        $pj = Join-Path $pageDir.FullName 'page.json'
+        if (-not (Test-Path $pj)) { continue }
+        $pageTitle[$pageDir.Name] = (Get-Content $pj -Raw | ConvertFrom-Json).displayName
+        $state = @{}
+        foreach ($vd in Get-ChildItem (Join-Path $pageDir.FullName 'visuals') -Directory -ErrorAction SilentlyContinue) {
+            $vj = Join-Path $vd.FullName 'visual.json'
+            if (-not (Test-Path $vj)) { continue }
+            $v = Get-Content $vj -Raw | ConvertFrom-Json
+            $state[$vd.Name] = if ($v.isHidden) { 'hidden' } else { 'visible' }
+        }
+        if ($state.Count) { $pageDefault[$pageDir.Name] = $state }
+    }
+
+    if (Test-Path $bmDir) {
+        $matched = @{}   # pageId -> $true once any bookmark state matches
+        $nearest = @{}   # pageId -> the smallest diff seen, for the failure message
+        foreach ($bf in Get-ChildItem $bmDir -Filter '*.bookmark.json') {
+            $b = Get-Content $bf.FullName -Raw | ConvertFrom-Json
+            $targets = @($b.options.targetVisualNames)
+            foreach ($sec in $b.explorationState.sections.PSObject.Properties) {
+                $pageId = $sec.Name
+                if (-not $pageDefault.ContainsKey($pageId)) { continue }
+                $diffs = @()
+                foreach ($vc in $sec.Value.visualContainers.PSObject.Properties) {
+                    # applyOnlyToTargetVisuals: an untargeted visual is not governed by this bookmark
+                    if ($targets.Count -and $targets -notcontains $vc.Name) { continue }
+                    $mode = 'visible'
+                    try { if ($vc.Value.singleVisual.display.mode) { $mode = $vc.Value.singleVisual.display.mode } } catch {}
+                    $def = $pageDefault[$pageId][$vc.Name]
+                    if ($def -and $def -ne $mode) { $diffs += "$($vc.Name.Substring(0,8)) saved=$def but '$($b.displayName)'=$mode" }
+                }
+                if (-not $diffs) { $matched[$pageId] = $true }
+                elseif (-not $nearest.ContainsKey($pageId) -or $diffs.Count -lt $nearest[$pageId].Count) {
+                    $nearest[$pageId] = $diffs
+                }
+            }
+        }
+        foreach ($pageId in $nearest.Keys) {
+            if ($matched[$pageId]) { continue }
+            $d = $nearest[$pageId]
+            $shown = if ($d.Count -gt 3) { ($d[0..2] -join '; ') + " (+$($d.Count - 3) more)" } else { $d -join '; ' }
+            Add-Failure 'DEFAULT STATE' $name $pageTitle[$pageId] `
+                "saved page state matches no bookmark - closest differs by $($d.Count): $shown"
+        }
+    }
+
+    # ---- 6: coverage, informational ---------------------------------------
     foreach ($grp in ($visual.Values | Group-Object Page)) {
         $tot = $grp.Count
         $on  = @($grp.Group | Where-Object HasPhone).Count
@@ -185,7 +244,7 @@ if ($failures.Count -eq 0) {
 }
 
 Write-Host "=== FAILURES ($($failures.Count)) ===" -ForegroundColor Red
-foreach ($rule in @('ENCODING', 'NAVIGATOR', 'DEAD STATE', 'LOST ACTION')) {
+foreach ($rule in @('ENCODING', 'NAVIGATOR', 'DEAD STATE', 'LOST ACTION', 'DEFAULT STATE')) {
     $set = $failures | Where-Object Rule -eq $rule
     if (-not $set) { continue }
     Write-Host ""

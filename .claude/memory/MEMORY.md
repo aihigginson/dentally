@@ -1,4 +1,4 @@
-- [Back up Claude state on machine moves](back-up-claude-state-on-machine-moves.md) — ~/.claude is outside OneDrive; memories were lost in the Sep 2026 PC move.
+- [Back up Claude state on machine moves](back-up-claude-state-on-machine-moves.md) — ~/.claude is outside OneDrive; memories and transcripts need explicit backup.
 - [Who the user is](user-solo-builder-analytically.md) — solo builder + tenant admin of the Analytically product.
 - [PBIR JSON needs UTF-8 without BOM](pbir-json-must-be-utf8-no-bom.md) — a BOM stops Power BI Desktop opening the report; opposite of the SQL rule.
 - [PBIR mobile layout model](pbir-mobile-layout-model.md) — no mobile.json = invisible on phone; why bookmark navigation breaks there.

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "428e44f43a455533d4b8",
   "position": {
     "x": 0,
@@ -39,13 +39,13 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Invoice Items"
+                      "Entity": "_Revenue"
                     }
                   },
                   "Property": "Revenue"
                 }
               },
-              "queryRef": "_Invoice Items.Revenue",
+              "queryRef": "_Revenue.Revenue",
               "nativeQueryRef": "Revenue"
             }
           ]
@@ -58,7 +58,7 @@
               "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Invoice Items"
+                    "Entity": "_Revenue"
                   }
                 },
                 "Property": "Revenue"
@@ -192,6 +192,38 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "b8051901e7901835c324",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Treatments"
+              }
+            },
+            "Property": "Standard Treatment Category"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c0c17dfb45766819c200",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Revenue"
+              }
+            },
+            "Property": "Revenue"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   },
   "isHidden": true
 }

@@ -1,11 +1,47 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.5.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.7.0/schema.json",
   "position": {
     "x": 0,
     "y": 42,
     "z": 0,
     "height": 636,
     "width": 324,
-    "tabOrder": 0
+    "tabOrder": 1000
+  },
+  "objects": {
+    "layout": [
+      {
+        "properties": {
+          "columnCount": {
+            "expr": {
+              "Literal": {
+                "Value": "1L"
+              }
+            }
+          },
+          "rowCount": {
+            "expr": {
+              "Literal": {
+                "Value": "16L"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "fillCustom": [],
+    "shapeCustomRectangle": [],
+    "referenceLabelLayout": [],
+    "value": [],
+    "label": [],
+    "divider": [],
+    "padding": [],
+    "cardCalloutArea": [],
+    "outline": [],
+    "referenceLabel": [],
+    "referenceLabelTitle": [],
+    "referenceLabelValue": [],
+    "border": [],
+    "referenceLabelDetail": []
   }
 }
