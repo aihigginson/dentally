@@ -1468,11 +1468,16 @@ def monitor_health():
         # Drop 401s belonging to a tenant that is NOT in bad_token_tenants. Absence from that list
         # means a later successful Dentally fetch proved the token now works, so those rows are a
         # record of a fixed problem, not a real error -- they must not be counted or listed.
+        # A 401 with no Tenant_ID is NOT swept up: it cannot be attributed to a practice token, so
+        # there is nothing proving it resolved (it is more likely an infrastructure auth fault).
         real_ing = [r for r in ing
-                    if not _is_token_401(r['detail']) or r['tenant'] in bad_token_tenants]
+                    if not _is_token_401(r['detail'])
+                    or r['tenant'] is None
+                    or r['tenant'] in bad_token_tenants]
         suppressed = len(ing) - len(real_ing)
-        non_token_ingest = [r for r in real_ing if not _is_token_401(r['detail'])]
-        actionable = bool(proc) or bool(bad_token_tenants) or bool(non_token_ingest)
+        # real_ing has already had the resolved 401s removed, so anything still in it is a live
+        # error and worth an email -- including a 401 that carries no tenant.
+        actionable = bool(proc) or bool(bad_token_tenants) or bool(real_ing)
 
         total = len(proc) + len(real_ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.

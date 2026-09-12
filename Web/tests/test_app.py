@@ -565,6 +565,20 @@ def test_monitor_unresolved_401_still_reported(client, appmod, monkeypatch):
     assert 'tenant 100' in body
 
 
+def test_monitor_untenanted_401_not_suppressed(client, appmod, monkeypatch):
+    # A 401 with no Tenant_ID cannot be attributed to a practice token, so nothing proves it fixed --
+    # it must survive the resolved filter rather than being silently swallowed.
+    sent = []
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'secret')
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    ing = [('2026-09-08 21:24', None, 'Orchestrate_Build', 'FAILED', '401 Unauthorized calling the warehouse')]
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _MonConn(_MonCursor([], ing, [])))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    j = client.post('/api/monitor/health', headers={'X-Monitor-Key': 'secret'}).get_json()
+    assert j['ingest_failures'] == 1 and j['resolved_401_suppressed'] == 0
+    assert sent, 'an untenanted 401 is actionable and must be emailed'
+
+
 def test_monitor_reports_only_since_last_report(client, appmod, monkeypatch):
     # The report window starts at the previous MONITOR row, so a run's failures are emailed once and
     # never re-listed by the next night's run.
