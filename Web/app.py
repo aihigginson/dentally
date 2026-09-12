@@ -1401,8 +1401,13 @@ def _principal_token_email_body():
 
 @app.route('/api/monitor/health', methods=['POST'])
 def monitor_health():
-    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log for failures in the last MONITOR_WINDOW_HOURS
-    and email a summary if any. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
+    """Scan Audit.Process_Execution_Log + Audit.Ingest_Log and email a summary of REAL, NEW failures.
+
+    Two different spans, deliberately: the summary covers only what has happened since the previous
+    MONITOR row (in practice this build), so a failure is reported once and never re-listed; the
+    revoked-token DETECTION still looks across MONITOR_WINDOW_HOURS, because deciding whether a token
+    is still broken needs the 401 history. 401s from a tenant since proven working are excluded from
+    the summary entirely. Shared-secret auth (X-Monitor-Key); fails closed if MONITOR_KEY unset."""
     if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
     try:
