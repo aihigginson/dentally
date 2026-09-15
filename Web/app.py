@@ -880,6 +880,10 @@ def _code_hmac(code, email):
 # to GRAPH_FROM. Reuses the app's confidential-client creds. Falls back to ACS on any Graph error.
 GRAPH_SEND = os.environ.get('GRAPH_SEND', '').strip().lower() in ('1', 'true', 'yes', 'on')
 GRAPH_FROM = os.environ.get('GRAPH_FROM', 'support@analytically.info')
+# Every non-prod email is re-addressed here. Dev has the same GRAPH_SEND config as prod, and dev's
+# tenant 100 is a copy of a live practice, so this is the only thing standing between a test and a
+# real customer's inbox. Overridable, but it must never be blank outside prod.
+MAIL_REDIRECT = os.environ.get('MAIL_REDIRECT', 'support@analytically.info')
 _graph_msal = None
 
 
@@ -898,8 +902,22 @@ def _send_email(to, subject, body, sender=None, reply_to=None):
     """Send a transactional email. Prefers Microsoft 365 via Graph (GRAPH_SEND) -- branded + SPF/DKIM/
     DMARC-aligned, sending AS a real analytically.info mailbox (default GRAPH_FROM). Else Azure
     Communication Services (managed *.azurecomm.net sender), else SMTP; otherwise (dev) logs the body.
-    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain)."""
+    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain).
+
+    NON-PROD REDIRECT: outside prod every message is re-addressed to MAIL_REDIRECT
+    (support@analytically.info). Dev carries the same GRAPH_SEND/GRAPH_FROM config as prod, so mail
+    from dev really does leave the building -- and dev's tenant 100 is a copy of a live practice,
+    so its Application_Users and Billing_Contact hold REAL staff addresses. Without this, testing a
+    token nudge, a primary handover or a termination would email an actual dental practice. The
+    intended recipient is preserved in the subject and body so the test is still meaningful.
+    """
     reply_to = reply_to or os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+    if APP_ENV != 'prod':
+        intended = to
+        to = MAIL_REDIRECT
+        subject = f'[{APP_ENV.upper()} -> {intended}] {subject}'
+        body = (f"--- {APP_ENV} redirect: this would have been sent to {intended} ---\n\n") + body
+        app.logger.warning("mail redirected (%s): %r -> %s", APP_ENV, intended, to)
 
     # 1) Microsoft 365 via Graph -- the aligned/branded path when enabled.
     if GRAPH_SEND:
@@ -2164,10 +2182,10 @@ def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
         "If you did not expect this, reply to this email or contact sales@analytically.info "
         "straight away.\n"
     )
-    tag = '' if APP_ENV == 'prod' else f'[{APP_ENV.upper()}] '
     for to in filter(None, {previous, 'Sales@Analytically.info'}):
         try:
-            _send_email(to, f"{tag}Analytically: primary account holder changed", body)
+            # _send_email tags and redirects non-prod centrally -- nothing to do here.
+            _send_email(to, "Analytically: primary account holder changed", body)
         except Exception as e:
             app.logger.warning("primary-change notice to %s failed (tenant %s): %s", to, tenant_id, e)
 
@@ -2304,11 +2322,10 @@ def cancel_subscription():
         app.logger.warning("SUBSCRIPTION ENDED: tenant(s)=%s by=%s users_revoked=%d reason=%r",
                            tids, upn, revoked, reason)
         # Best-effort: the termination is already committed, so a mail failure must not 500 the
-        # caller into thinking it did not happen. Non-prod tags the subject so a test is obvious.
+        # caller into thinking it did not happen. (Non-prod tagging/redirect is done centrally.)
         try:
-            tag = '' if APP_ENV == 'prod' else f'[{APP_ENV.upper()}] '
             _send_email('Sales@Analytically.info',
-                        f"{tag}Subscription ended: {practice or tids[0]}",
+                        f"Subscription ended: {practice or tids[0]}",
                         _termination_email_body(practice, tids, upn, reason, revoked))
         except Exception as e:
             app.logger.warning("termination alert email failed for tenant(s)=%s: %s", tids, e)

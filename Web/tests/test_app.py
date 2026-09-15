@@ -352,6 +352,7 @@ def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
 
 def test_send_email_graph_primary(appmod, monkeypatch):
     calls = {}
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')   # transport test: not the non-prod redirect
     monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
     monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
     monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
@@ -857,3 +858,47 @@ def test_cancel_leaves_support_logins_alone(client, appmod, monkeypatch):
     # and it guards the UPDATE, not just the SELECT that counts who lost access
     upd = ap.ran('UPDATE Input.Application_Users')[0]
     assert "NOT LIKE '%@analytically.info'" in upd
+
+
+# ── Non-prod mail redirect ────────────────────────────────────────────────────
+
+def _graph_capture(appmod, monkeypatch):
+    """Intercept the Graph send and hand back the message payload it would have posted."""
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+
+    class _R:
+        def raise_for_status(self):
+            pass
+
+    def _post(url, **kw):
+        calls['json'] = kw.get('json')
+        return _R()
+
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+    return calls
+
+
+def test_non_prod_mail_is_redirected_to_support(appmod, monkeypatch):
+    """Dev carries prod's GRAPH_SEND config, and dev's tenant 100 is a copy of a live practice, so
+    its stored addresses are real. A test nudge/handover/termination must not reach the practice."""
+    monkeypatch.setattr(appmod, 'APP_ENV', 'dev')
+    calls = _graph_capture(appmod, monkeypatch)
+    appmod._send_email('craigjack@mapledental.co.uk', 'Your data has stopped updating', 'body text')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == appmod.MAIL_REDIRECT
+    # the real recipient is still legible, so the test remains meaningful
+    assert 'craigjack@mapledental.co.uk' in msg['subject']
+    assert 'craigjack@mapledental.co.uk' in msg['body']['content']
+    assert msg['subject'].startswith('[DEV -> ')
+
+
+def test_prod_mail_reaches_the_real_recipient(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    calls = _graph_capture(appmod, monkeypatch)
+    appmod._send_email('craigjack@mapledental.co.uk', 'Subject', 'body')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == 'craigjack@mapledental.co.uk'
+    assert msg['subject'] == 'Subject'
