@@ -101,7 +101,13 @@ def _security_headers(response):
     response.headers.setdefault(_csp_header, _csp)
     return response
 
-APP_ENV        = os.environ.get('APP_ENV', 'prod')
+# Defaults to 'dev' so an unconfigured environment FAILS SAFE: APP_ENV gates whether real customer
+# email is sent (monitor nudges) and whether _send_email redirects everything to MAIL_REDIRECT, so a
+# missing value must mean "not prod". It used to default to 'prod', which meant dev was safe only
+# while its APP_ENV variable survived -- drop that one variable and dev would have started emailing
+# real practices, since dev carries prod's Graph config and a copy of a live practice's addresses.
+# Prod now sets APP_ENV=prod explicitly on the container app rather than relying on the default.
+APP_ENV        = os.environ.get('APP_ENV', 'dev')
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
 CLIENT_SECRET  = os.environ['CLIENT_SECRET']

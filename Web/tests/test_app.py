@@ -926,3 +926,21 @@ def test_cancel_still_refuses_a_non_primary_practice_admin(client, appmod, monke
     r = client.post('/api/cancel', json={'reason': 'x'})
     assert r.status_code == 403
     assert not ap.ran('UPDATE Input.Application_Users') and not sent
+
+
+def test_app_env_defaults_to_non_prod(appmod, monkeypatch):
+    """An unconfigured APP_ENV must mean "not prod", so mail fails safe.
+
+    APP_ENV gates both the monitor's customer nudges and the _send_email redirect. It used to
+    default to 'prod', which made dev safe only while its APP_ENV variable survived -- and dev
+    carries prod's Graph config plus a copy of a live practice's addresses.
+    """
+    import importlib, os as _os
+    saved = _os.environ.pop('APP_ENV', None)
+    try:
+        mod = importlib.reload(appmod)
+        assert mod.APP_ENV != 'prod'
+    finally:
+        if saved is not None:
+            _os.environ['APP_ENV'] = saved
+        importlib.reload(appmod)
