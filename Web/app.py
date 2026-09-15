@@ -2267,14 +2267,22 @@ def cancel_subscription():
             cid = client_by_tenant.get(tid)
             if cid is not None:
                 # Read the roster BEFORE zeroing it, so Access_Log records who actually changed.
+                # Our own support logins are left alone. They are not the practice's users: they
+                # are added straight to Application_Users by SQL (they have no Dentally user, so
+                # they never appear on the subscriptions roster), they are already excluded from
+                # billing by usp_Generate_Invoice_Lines on the same test, and support needs to keep
+                # access to run the re-engagement and the eventual manual cleanup. Revoking them
+                # would lock the vendor out of a tenant that still has data to deal with.
+                _SUPPORT = "LOWER(User_UPN) NOT LIKE '%@analytically.info'"
                 acur.execute("SELECT User_UPN FROM Input.Application_Users "
-                             "WHERE Client_ID = ? AND ISNULL(Profile_Key, '') <> 'no_access'", cid)
+                             "WHERE Client_ID = ? AND ISNULL(Profile_Key, '') <> 'no_access' "
+                             "AND " + _SUPPORT, cid)
                 losing = [r[0] for r in acur.fetchall()]
                 acur.execute(
                     "UPDATE Input.Application_Users SET "
                     + " = 0, ".join(_ALL_MODULE_COLS) + " = 0, "
                     + "Maintain_Targets = 0, Profile_Key = 'no_access', Practitioner_Full_Name = NULL, "
-                      "Updated_By = ? WHERE Client_ID = ?", [upn, cid])
+                      "Updated_By = ? WHERE Client_ID = ? AND " + _SUPPORT, [upn, cid])
                 for who in losing:
                     acur.execute("INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) "
                                  "VALUES (?, ?, 'no_access', ?)", [tid, who, upn])

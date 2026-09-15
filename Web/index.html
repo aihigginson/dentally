@@ -1936,10 +1936,19 @@
             _teamProfiles = profiles || [];
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
             // Ending the subscription cuts off everyone, so it is the billing owner's call alone --
-            // not every practice admin. is_primary compares the row against Billing_Contact.
+            // not every practice admin.
+            //
+            // Compare the SIGNED-IN address against the billing contact directly, NOT against the
+            // roster. The roster is built FROM Gold.Dim_Users, i.e. Dentally users only, so an
+            // account added straight to Application_Users by SQL (support/admin logins) never has a
+            // row in it -- and a `people.some(p => p.is_self && ...)` test would hide the button
+            // from that person permanently, even when they ARE the recorded primary. This mirrors
+            // exactly what /api/cancel enforces server-side.
             {
                 const wrap = document.getElementById('team-cancel-wrap');
-                if (wrap) wrap.style.display = people.some(p => p.is_self && p.is_primary) ? '' : 'none';
+                const me   = ((msalAccount && msalAccount.username) || '').trim().toLowerCase();
+                const lead = (_teamBilling.primary_email || '').trim().toLowerCase();
+                if (wrap) wrap.style.display = (me && lead && me === lead) ? '' : 'none';
             }
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')

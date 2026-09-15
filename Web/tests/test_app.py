@@ -840,3 +840,20 @@ def test_primary_handover_survives_failing_notice(client, appmod, monkeypatch):
                                        'invoice_email': ''})
     assert r.status_code == 200
     assert ap.ran('INSERT INTO Input.Billing_Contact')
+
+
+def test_cancel_leaves_support_logins_alone(client, appmod, monkeypatch):
+    """Our own @analytically.info logins are not the practice's users.
+
+    They are inserted straight into Application_Users by SQL (no Dentally user, so they never show
+    on the subscriptions roster), usp_Generate_Invoice_Lines already excludes them from billing on
+    the same test, and support must keep access to run the re-engagement call and the eventual
+    manual cleanup. Revoking them would lock the vendor out of a tenant that still holds data.
+    """
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    client.post('/api/cancel', json={'reason': 'x'})
+    sql = ' '.join(ap.ran('Input.Application_Users'))
+    assert "LOWER(User_UPN) NOT LIKE '%@analytically.info'" in sql
+    # and it guards the UPDATE, not just the SELECT that counts who lost access
+    upd = ap.ran('UPDATE Input.Application_Users')[0]
+    assert "NOT LIKE '%@analytically.info'" in upd
