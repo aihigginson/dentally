@@ -10,6 +10,11 @@
     <style>
         :root {
             --navy:        #1A527A;
+            /* Chrome = the solid brand bars (app header, settings panel head, contact head) and the
+               active nav tab. Kept separate from --navy so DEV can recolour every one of them by
+               overriding this ONE variable (body.dev-mode below). Painting them individually is
+               what let the settings panel keep its prod-blue head on dev. */
+            --chrome:      var(--navy);
             --teal-bright: #5EC4C0;
             --bg-page:     #FFFFFF;
             --bg-subtle:   #F8FAFC;
@@ -58,7 +63,7 @@
             background: var(--bg-page); flex-direction: column; display: none;
         }
         .contact-header {
-            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            background: var(--chrome); color: white; padding: 0 24px; height: 52px;
             display: flex; align-items: center; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
@@ -90,14 +95,14 @@
 
         /* ── Header ── */
         .header {
-            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            background: var(--chrome); color: white; padding: 0 24px; height: 52px;
             display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
-        body.dev-mode .header { background: #6B21A8; }
-        body.dev-mode .nav-tab.active { color: #fff; background: #6B21A8; border-bottom-color: transparent; }
-        body.dev-mode .nav-tab:hover  { color: #6B21A8; background: #f1e8fb; }
-        body.dev-mode .nav-tab.active:hover { color: #fff; background: #6B21A8; }
+        /* DEV wears purple chrome so the environment is obvious at a glance. Overriding the
+           variable recolours every chrome surface at once -- add new ones with var(--chrome). */
+        body.dev-mode { --chrome: #6B21A8; }
+        body.dev-mode .nav-tab:hover { background: #f1e8fb; }   /* purple-tinted wash, not chrome */
         .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
@@ -137,9 +142,9 @@
             white-space: nowrap; user-select: none; transition: color 0.12s, background 0.12s;
             border-radius: 6px 6px 0 0;
         }
-        .nav-tab:hover  { color: var(--navy); background: var(--surface-2, #f1f5f9); }
-        .nav-tab.active { color: #fff; background: var(--navy); border-bottom-color: transparent; font-weight: 600; }
-        .nav-tab.active:hover { color: #fff; background: var(--navy); }
+        .nav-tab:hover  { color: var(--chrome); background: var(--surface-2, #f1f5f9); }
+        .nav-tab.active { color: #fff; background: var(--chrome); border-bottom-color: transparent; font-weight: 600; }
+        .nav-tab.active:hover { color: #fff; background: var(--chrome); }
 
         /* ── Filter toggle button ── */
         .filter-toggle {
@@ -275,7 +280,7 @@
         .defs-overlay.open { opacity: 1; visibility: visible; }
         .defs-panel { position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 92vw; background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.18); transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
         .defs-overlay.open .defs-panel { transform: translateX(0); }
-        .defs-head { background: var(--navy); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+        .defs-head { background: var(--chrome); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
         .defs-title { font-size: 15px; font-weight: 600; }
         .defs-sub { font-size: 12px; opacity: 0.82; margin-top: 2px; }
         .defs-close { background: none; border: none; color: white; font-size: 24px; line-height: 1; cursor: pointer; padding: 0 2px; }
@@ -2654,6 +2659,23 @@
         }, ms);
     }
 
+    // Does this failure look like an expired / rejected token? PBI reports errors in several
+    // shapes -- an Error, an event detail object, sometimes an array of them -- so flatten to text
+    // rather than reaching for a fixed field. Used by both the embed 'error' event and setFilters,
+    // so the two paths can never drift apart on what counts as an auth failure.
+    function _looksLikeTokenError(x) {
+        if (!x) return false;
+        let blob;
+        if (typeof x === 'string') blob = x;
+        else {
+            const d = x.detail || x;
+            blob = [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
+                .filter(Boolean).join(' ');
+            if (!blob) { try { blob = JSON.stringify(d); } catch (_) { blob = String(d); } }
+        }
+        return /token|expired|401|403|unauthor/i.test(blob);
+    }
+
     // Recover a report whose embed token expired: mint a fresh one, hand it to the embed via
     // setAccessToken, then refresh() so any visual that already errored ("Access token has
     // expired") re-queries and re-renders. Falls back to the friendly session-timeout overlay
@@ -2807,11 +2829,8 @@
         // still saw. Catch the error event and recover the same way, gated to token/auth errors so
         // ordinary visual errors are left alone; recoverEmbedToken's cooldown stops any loop.
         r.on('error', event => {
-            const d = event && event.detail;
-            const blob = d ? [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
-                .filter(Boolean).join(' ') : '';
-            if (/token|expired|401|403|unauthor/i.test(blob)) {
-                _devLog('[error->token recover]', sectionKey, d);
+            if (_looksLikeTokenError(event)) {
+                _devLog('[error->token recover]', sectionKey, event && event.detail);
                 recoverEmbedToken(r, sectionKey, 'error');
             }
         });
@@ -3008,8 +3027,45 @@
         targets.forEach(r => {
             const f = filters.slice();
             if (periodFilter && r._section !== 'day_book') f.push(periodFilter);
-            r.setFilters(f).catch(() => {});
+            applyFilterSet(r, f);
         });
+    }
+
+    // Apply one filter set, repairing an expired token instead of failing silently.
+    //
+    // This used to be `r.setFilters(f).catch(() => {})`. On a page left open past the token
+    // lifetime that swallowed the auth failure whole: the filter never reached the report, nothing
+    // triggered recovery, and the stale embed then rendered PBI's own error the moment it next
+    // drew -- "sit on a page for a while, change a filter, the report errors".
+    //
+    // The proactive refresh timer cannot be relied on to have closed the gap first. setTimeout is
+    // throttled in background tabs and does not run at all while the machine sleeps, so a timer
+    // scheduled for 58 minutes' time can fire long after the token died. Check the wall clock at
+    // the point of use, then still handle a rejection in case the token lapsed mid-call.
+    async function applyFilterSet(r, f) {
+        try {
+            await ensureFreshToken(r);
+            await r.setFilters(f);
+        } catch (e) {
+            if (!_looksLikeTokenError(e)) { _devLog('[filters] setFilters failed', e); return; }
+            _devLog('[filters] token error on setFilters, recovering', r._section);
+            if (await recoverEmbedToken(r, r._section, 'setFilters')) {
+                try { await r.setFilters(f); }
+                catch (e2) { _devLog('[filters] retry after recovery failed', e2); }
+            }
+        }
+    }
+
+    // Renew the token before using it if it has lapsed or is nearly there. Cheap: a no-op unless
+    // the embed is actually within the danger window.
+    async function ensureFreshToken(r) {
+        const sectionKey = r && r._section;
+        const reportName = sectionKey ? SECTION_REPORT[sectionKey] : null;
+        const entry = reportName ? tokenCache[reportName] : null;
+        if (!entry || !entry.expiry) return;
+        if (entry.expiry - Date.now() > 120000) return;
+        _devLog('[token] stale at point of use, refreshing before filter', sectionKey);
+        await recoverEmbedToken(r, sectionKey, 'pre-filter');
     }
 
     // ── Page name helper ────────────────────────────────────────────────────
