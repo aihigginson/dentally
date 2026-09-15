@@ -2188,12 +2188,16 @@ def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
         "If you did not expect this, reply to this email or contact sales@analytically.info "
         "straight away.\n"
     )
-    for to in filter(None, {previous, 'Sales@Analytically.info'}):
-        try:
-            # _send_email tags and redirects non-prod centrally -- nothing to do here.
-            _send_email(to, "Analytically: primary account holder changed", body)
-        except Exception as e:
-            app.logger.warning("primary-change notice to %s failed (tenant %s): %s", to, tenant_id, e)
+    # ONLY the outgoing primary is told. They are the person losing the role, so telling them is
+    # the whole control -- a takeover cannot be silent. Sales@ was copied here originally and it was
+    # just noise: a practice moving its own billing contact is their internal admin, and Updated_By
+    # already records who did it. Sales@ IS still alerted on an actual termination, which is the
+    # event that matters commercially.
+    try:
+        # _send_email tags and redirects non-prod centrally -- nothing to do here.
+        _send_email(previous, "Analytically: primary account holder changed", body)
+    except Exception as e:
+        app.logger.warning("primary-change notice to %s failed (tenant %s): %s", previous, tenant_id, e)
 
 
 def _termination_email_body(practice, tids, upn, reason, revoked):

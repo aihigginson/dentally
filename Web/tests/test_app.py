@@ -803,8 +803,8 @@ def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatc
     r = client.post('/api/team', json={'rows': [], 'primary_email': 'newboss@practice.co.uk',
                                        'invoice_email': ''})
     assert r.status_code == 200
-    tos = sorted(s[0] for s in sent)
-    assert tos == ['Sales@Analytically.info', 'oldboss@practice.co.uk']
+    # exactly one notice, to the person losing the role -- Sales@ is not copied on a handover
+    assert [s[0] for s in sent] == ['oldboss@practice.co.uk']
     body = sent[0][2]
     assert 'oldboss@practice.co.uk' in body and 'newboss@practice.co.uk' in body
     assert 'newboss@practice.co.uk' in body   # who did it is on the record
