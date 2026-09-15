@@ -2270,13 +2270,20 @@ def cancel_subscription():
         primaries = [(r[0] or '').strip().lower() for r in acur.fetchall() if (r[0] or '').strip()]
     except Exception as e:
         return _server_error(e, 'cancel')
-    if not primaries:
-        ac.close(); conn.close()
-        return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
-                                 'tab first — only the primary account can end the subscription.'}), 403
-    if (upn or '').lower() not in primaries:
-        ac.close(); conn.close()
-        return jsonify({'error': 'Only the primary account holder can end the subscription.'}), 403
+    # Our own support logins bypass the gate entirely. They are never the recorded primary (the
+    # primary is picked by radio from the Dentally roster, and a support account has no Dentally
+    # user), yet support has to be able to end a subscription on the practice's behalf -- over the
+    # phone, or when the primary has left and nobody can reach the mailbox. They also keep their
+    # access through termination, so they can still act afterwards.
+    is_support = (upn or '').lower().endswith('@analytically.info')
+    if not is_support:
+        if not primaries:
+            ac.close(); conn.close()
+            return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
+                                     'tab first — only the primary account can end the subscription.'}), 403
+        if (upn or '').lower() not in primaries:
+            ac.close(); conn.close()
+            return jsonify({'error': 'Only the primary account holder can end the subscription.'}), 403
 
     reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
     try:

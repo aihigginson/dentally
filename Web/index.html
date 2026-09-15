@@ -1948,7 +1948,11 @@
                 const wrap = document.getElementById('team-cancel-wrap');
                 const me   = ((msalAccount && msalAccount.username) || '').trim().toLowerCase();
                 const lead = (_teamBilling.primary_email || '').trim().toLowerCase();
-                if (wrap) wrap.style.display = (me && lead && me === lead) ? '' : 'none';
+                // Our own support logins always see it: they can never BE the primary (that is a
+                // radio over the Dentally roster, and they have no Dentally user), but they need to
+                // end a subscription on the practice's behalf. The API applies the same exemption.
+                const support = me.endsWith('@analytically.info');
+                if (wrap) wrap.style.display = (support || (me && lead && me === lead)) ? '' : 'none';
             }
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')

@@ -902,3 +902,27 @@ def test_prod_mail_reaches_the_real_recipient(appmod, monkeypatch):
     msg = calls['json']['message']
     assert msg['toRecipients'][0]['emailAddress']['address'] == 'craigjack@mapledental.co.uk'
     assert msg['subject'] == 'Subject'
+
+
+def test_cancel_allowed_for_support_account_without_a_primary(client, appmod, monkeypatch):
+    """Support can always end a subscription, including on a tenant with no primary recorded.
+
+    A support login can never be the primary — that is a radio over the Dentally roster and support
+    has no Dentally user — so gating purely on the primary would lock the vendor out of acting on
+    the practice's behalf (phone request, or the primary has left and the mailbox is unreachable).
+    """
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary=None)
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@analytically.info', None))
+    r = client.post('/api/cancel', json={'reason': 'Requested by phone'})
+    assert r.status_code == 200
+    assert ap.ran('UPDATE Input.Application_Users')
+    assert sent and sent[0][0] == 'Sales@Analytically.info'
+
+
+def test_cancel_still_refuses_a_non_primary_practice_admin(client, appmod, monkeypatch):
+    """The support exemption must not leak to practice users: only @analytically.info bypasses."""
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary='owner@practice.co.uk')
+    monkeypatch.setattr(appmod, '_auth', lambda: ('nurse@practice.co.uk', None))
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 403
+    assert not ap.ran('UPDATE Input.Application_Users') and not sent
