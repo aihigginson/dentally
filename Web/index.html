@@ -777,8 +777,11 @@
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
                     <span id="team-msg" class="settings-msg"></span>
-                    <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eee">
-                        <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Cancel subscription</button>
+                    <!-- Lead account only. Hidden by default and revealed by loadTeam() when the
+                         signed-in user is the recorded primary, so it never flashes for anyone else.
+                         The API enforces the same rule -- this is presentation, not the control. -->
+                    <div id="team-cancel-wrap" style="margin-top:22px;padding-top:14px;border-top:1px solid #eee;display:none">
+                        <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Stop using Analytically</button>
                     </div>
                 </div>
             </div>
@@ -1103,9 +1106,9 @@
             ov.id = 'cancel-modal-overlay';
             ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,40,60,.5);display:flex;align-items:center;justify-content:center;z-index:2100';
             ov.innerHTML = '<div id="cancel-modal-box" style="background:#fff;border-radius:12px;max-width:450px;width:92%;padding:24px 26px;box-shadow:0 10px 34px rgba(0,0,0,.25)">'
-                + '<div style="font-size:18px;font-weight:700;color:#8a1f1f;margin-bottom:10px">Cancel subscription</div>'
+                + '<div style="font-size:18px;font-weight:700;color:#8a1f1f;margin-bottom:10px">Stop using Analytically</div>'
                 + '<div style="background:#fbeaea;border-left:3px solid #c0392b;border-radius:6px;padding:12px;font-size:13px;line-height:1.5;color:#7a1f1f;margin-bottom:14px">'
-                + 'This can’t be undone. <strong>Access ends immediately for everyone at your practice</strong>, and <strong>your data is deleted within 28 days</strong>.</div>'
+                + 'This can’t be undone. <strong>Access ends immediately for everyone at your practice</strong>, and <strong>your data is deleted within 28 days</strong>. You will still be billed for the remainder of the current month; nothing is charged after that.</div>'
                 + '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">Reason for leaving</label>'
                 + '<select id="cancel-reason-sel" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:8px">'
                 + '<option value="">Please choose…</option><option>Too expensive</option><option>Not using it enough</option>'
@@ -1115,7 +1118,7 @@
                 + '<div id="cancel-msg" style="font-size:12px;min-height:16px;margin-top:6px"></div>'
                 + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'
                 + '<button id="cancel-keep" style="padding:9px 16px;border:1px solid #ccc;background:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Keep my subscription</button>'
-                + '<button id="cancel-confirm" style="padding:9px 16px;border:none;background:#c0392b;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Cancel subscription</button>'
+                + '<button id="cancel-confirm" style="padding:9px 16px;border:none;background:#c0392b;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Stop using Analytically</button>'
                 + '</div></div>';
             document.body.appendChild(ov);
             ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'cancel-keep') ov.style.display = 'none'; });
@@ -1134,12 +1137,19 @@
         msg.style.color = '#999'; msg.textContent = 'Cancelling…';
         try {
             const res = await authFetch('/api/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
-            if (!res.ok) throw new Error('status ' + res.status);
+            if (!res.ok) {
+                // Surface the server's own wording: the lead-account refusal and the "no primary
+                // set" case both tell the user exactly what to do, which a generic failure hides.
+                const body = await res.json().catch(() => ({}));
+                const e = new Error('status ' + res.status);
+                e.apiError = body.error;
+                throw e;
+            }
             document.getElementById('cancel-modal-box').innerHTML =
-                '<div style="text-align:center;padding:8px 0"><div style="font-size:17px;font-weight:700;color:#0b3d5c;margin-bottom:8px">Your subscription is cancelled</div>'
-                + '<div style="font-size:13px;color:#5b6b78;line-height:1.5">Access has ended and your data will be deleted within 28 days. If this was a mistake, email <a href="mailto:sales@analytically.info">sales@analytically.info</a> right away.</div></div>';
+                '<div style="text-align:center;padding:8px 0"><div style="font-size:17px;font-weight:700;color:#0b3d5c;margin-bottom:8px">Your subscription has ended</div>'
+                + '<div style="font-size:13px;color:#5b6b78;line-height:1.5">Access has ended for everyone at your practice and your data will be deleted within 28 days. If this was a mistake, email <a href="mailto:sales@analytically.info">sales@analytically.info</a> right away — we can restore it until then.</div></div>';
             setTimeout(() => location.reload(), 4500);
-        } catch (e) { btn.disabled = false; msg.style.color = '#b3261e'; msg.textContent = 'Could not cancel — please try again or contact support.'; }
+        } catch (e) { btn.disabled = false; msg.style.color = '#b3261e'; msg.textContent = (e && e.apiError) || 'Could not complete — please try again or contact support.'; }
     }
 
     // Contact modal (Sales / Support / Security), opened from the header "Contact us" link.
@@ -1925,6 +1935,12 @@
             const { people, profiles, billing } = await res.json();
             _teamProfiles = profiles || [];
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
+            // Ending the subscription cuts off everyone, so it is the billing owner's call alone --
+            // not every practice admin. is_primary compares the row against Billing_Contact.
+            {
+                const wrap = document.getElementById('team-cancel-wrap');
+                if (wrap) wrap.style.display = people.some(p => p.is_self && p.is_primary) ? '' : 'none';
+            }
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');

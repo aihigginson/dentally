@@ -643,3 +643,132 @@ def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
     r = client.post('/api/onboarding/dentally/token',
                     json={'verified': _verified_token(appmod), 'attested': True, 'token': 'x' * 40})
     assert r.status_code == 200 and r.get_json()['ok'] is True
+
+
+# ── "Stop using Analytically": /api/cancel ────────────────────────────────────
+
+class _RecCursor:
+    """Records every statement, and answers fetches by matching on the SQL text."""
+    def __init__(self, answers):
+        self.answers, self.sql, self._last = answers, [], ''
+
+    def execute(self, sql, *a):
+        self._last = sql
+        self.sql.append((sql, a[0] if a else None))
+        return self
+
+    def _answer(self):
+        for frag, val in self.answers.items():
+            if frag in self._last:
+                return val
+        return None
+
+    def fetchone(self):
+        v = self._answer()
+        return v[0] if isinstance(v, list) and v else v
+
+    def fetchall(self):
+        v = self._answer()
+        return v if isinstance(v, list) else []
+
+    def ran(self, frag):
+        return [s for s, _ in self.sql if frag in s]
+
+
+class _RecConn:
+    def __init__(self, cur):
+        self._cur = cur
+    def cursor(self):
+        return self._cur
+    def close(self):
+        pass
+
+
+def _cancel_env(appmod, monkeypatch, primary='owner@practice.co.uk', users=None, tids=(11,)):
+    """Wire both connections + auth for the cancel endpoint. Returns (wh_cursor, appdb_cursor, sent)."""
+    users = ['owner@practice.co.uk', 'nurse@practice.co.uk'] if users is None else users
+    wh = _RecCursor({
+        'Tenant_Name': [('Maple Dental',)],
+        'SELECT Tenant_ID, Client_ID': [(t, 700 + t) for t in tids],
+        'COUNT(*) FROM Billing.Account_Billing': [(1,)],
+    })
+    ap = _RecCursor({
+        'Primary_Email': [(primary,)] if primary else [],
+        'SELECT User_UPN': [(u,) for u in users],
+    })
+    sent = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('owner@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, list(tids), True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    return wh, ap, sent
+
+
+def test_cancel_refuses_non_primary(client, appmod, monkeypatch):
+    # A practice ADMIN who is not the billing owner must not be able to end the subscription:
+    # it cuts off everyone, so it is the lead account's call alone.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk')
+    r = client.post('/api/cancel', json={'reason': 'Too expensive'})
+    assert r.status_code == 403
+    assert 'primary account holder' in r.get_json()['error']
+    assert not ap.ran('UPDATE Input.Application_Users')   # nothing revoked
+    assert not wh.ran('UPDATE Audit.Tenants')             # tenant untouched
+    assert not sent
+
+
+def test_cancel_refuses_when_no_primary_recorded(client, appmod, monkeypatch):
+    # A blank billing contact must not become a loophole that lets any admin terminate.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary=None)
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 403
+    assert 'No primary account holder' in r.get_json()['error']
+    assert not ap.ran('UPDATE Input.Application_Users') and not sent
+
+
+def test_cancel_by_primary_revokes_everyone_and_alerts_sales(client, appmod, monkeypatch):
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    r = client.post('/api/cancel', json={'reason': 'Closing the practice'})
+    assert r.status_code == 200 and r.get_json()['users_revoked'] == 2
+
+    upd = ap.ran('UPDATE Input.Application_Users')
+    assert len(upd) == 1
+    # every module flag cleared, admin dropped, profile recorded -- and the ROW KEPT, because
+    # usp_Generate_Invoice_Lines draws its user list from Application_Users and a DELETE would
+    # lose the final month's invoice.
+    for col in appmod._ALL_MODULE_COLS:
+        assert f'{col} = 0' in upd[0]
+    assert "Profile_Key = 'no_access'" in upd[0] and 'Maintain_Targets = 0' in upd[0]
+    assert not ap.ran('DELETE FROM Input.Application_Users')
+    # one Access_Log row per user losing access (this is what closes the billable interval)
+    assert len(ap.ran('INSERT INTO Input.Access_Log')) == 2
+    # tenant deactivated -> ingest stops and auth fails closed before the sync catches up
+    assert wh.ran('UPDATE Audit.Tenants')
+    # nothing scheduled for deletion by machine: Delete_By is a marker for the support team
+    assert wh.ran('Delete_By')
+    to, subj, body = sent[0]
+    assert to == 'Sales@Analytically.info'
+    assert 'Maple Dental' in subj and 'Closing the practice' in body
+    assert 'no data has been deleted' in body
+
+
+def test_cancel_bills_the_current_month(client, appmod, monkeypatch):
+    # Cancelled_At must be the START OF NEXT MONTH. usp_Generate_Invoice_Lines bills a month only
+    # when `Cancelled_At > @MEnd`, so stamping it with now() would silently drop the final month.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    client.post('/api/cancel', json={'reason': 'x'})
+    billing = ' '.join(wh.ran('Billing.Account_Billing'))
+    assert 'DATEADD(month, 1, DATEFROMPARTS' in billing
+    assert 'Cancelled_At = SYSUTCDATETIME()' not in billing
+
+
+def test_cancel_survives_a_failing_alert_email(client, appmod, monkeypatch):
+    # The termination is already committed when the mail is sent; a mail failure must not 500 the
+    # caller into believing it did not happen.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    def boom(*a, **k):
+        raise RuntimeError('graph down')
+    monkeypatch.setattr(appmod, '_send_email', boom)
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    assert ap.ran('UPDATE Input.Application_Users')

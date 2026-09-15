@@ -2124,11 +2124,55 @@ def save_team():
         return _server_error(e, 'save_team')
 
 
+def _termination_email_body(practice, tids, upn, reason, revoked):
+    """Internal alert to Sales@ so a human can start the re-engagement call. Deletion is NOT
+    automatic -- support runs Audit.usp_Delete_All_Tenant by hand once the account is written off."""
+    return (
+        f"A practice has stopped using Analytically.\n\n"
+        f"  Practice   : {practice or '(unknown)'}\n"
+        f"  Tenant ID  : {', '.join(str(t) for t in tids)}\n"
+        f"  Ended by   : {upn}\n"
+        f"  When       : {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
+        f"  Reason     : {reason or '(none given)'}\n"
+        f"  Users cut  : {revoked}\n\n"
+        "Done automatically:\n"
+        "  * every user set to No Access\n"
+        "  * tenant deactivated (Audit.Tenants.Is_Active = 0) -- ingest stops\n"
+        "  * billed to the end of the current month, nothing after\n\n"
+        "NOT done -- for support to action:\n"
+        "  * no data has been deleted. Re-engage first; if the account is written off, run\n"
+        "    Audit.usp_Delete_All_Tenant by hand (Delete_By on Billing.Account_Billing is the\n"
+        "    28-day marker shown to the customer, not a scheduled job).\n"
+        "  * to reinstate: flip Is_Active back to 1 and re-grant profiles on the Subscriptions\n"
+        "    tab. The ETL resumes from where it left off with a larger delta load.\n"
+    )
+
+
 @app.route('/api/cancel', methods=['POST'])
 def cancel_subscription():
-    """Cancel the practice's subscription: IMMEDIATE revocation (Audit.Tenants.Is_Active=0 -> every user
-    on the tenant then fails closed in _get_user_info) + record the reason and Delete_By = +28 days on
-    Billing.Account_Billing. Owner-only. Data is purged by the offboarding job on/after Delete_By."""
+    """"Stop using Analytically": end the practice's subscription.
+
+    LEAD ACCOUNT ONLY -- the caller must be the recorded primary on Input.Billing_Contact. Being a
+    practice admin is not enough: this ends access for everyone, so it is the billing owner's call.
+
+    What it does, all reversible:
+      * every user on the tenant -> profile no_access (row KEPT, flags zeroed) + an Access_Log entry
+      * Audit.Tenants.Is_Active = 0, so ingest stops and every user also fails closed in
+        _get_user_info even before the AppDB->warehouse sync catches up
+      * Billing.Account_Billing gets the reason, the 28-day Delete_By marker, and Cancelled_At
+      * emails Sales@ so support can try to re-engage
+
+    NOTHING is deleted here. Delete_By is a marker for the support team, who run
+    Audit.usp_Delete_All_Tenant by hand -- no job consumes it.
+
+    Two billing subtleties, both load-bearing:
+      * the rows must SURVIVE. usp_Generate_Invoice_Lines draws its user list from
+        Security.Application_Users and the profile history from Access_Log, so deleting the rows
+        would lose the final month's invoice entirely. Hence no_access rather than DELETE.
+      * Cancelled_At is set to the START OF NEXT MONTH, not now. The sproc bills a month only when
+        `Cancelled_At IS NULL OR Cancelled_At > @MEnd`, so stamping it with now() would drop the
+        current month -- the opposite of "billing continues to the end of the month".
+    """
     upn, err = _auth()
     if err:
         return err
@@ -2136,23 +2180,83 @@ def cancel_subscription():
         conn = _fabric_conn(autocommit=True)
         cur  = conn.cursor()
         _, client_id, tids, maintain = _get_user_info(cur, upn)
-        if client_id is None:
+        if client_id is None or not tids:
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
-        if not maintain:
-            conn.close(); return jsonify({'error': 'Only a practice admin can cancel the subscription'}), 403
-        reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+        practice = None
+        cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tids[0])
+        row = cur.fetchone()
+        if row:
+            practice = row[0]
+        cur.execute(f"SELECT Tenant_ID, Client_ID FROM Audit.Tenants "
+                    f"WHERE Tenant_ID IN ({','.join(['?'] * len(tids))})", tids)
+        client_by_tenant = {r[0]: r[1] for r in cur.fetchall()}
+    except Exception as e:
+        return _server_error(e, 'cancel')
+
+    # ── lead-account gate ────────────────────────────────────────────────────
+    # Deliberately refuses when no primary has been recorded rather than falling back to "any
+    # admin": a blank billing contact must not become a loophole that lets any admin end the
+    # practice's subscription. The message says how to clear it.
+    try:
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        acur.execute(f"SELECT Primary_Email FROM Input.Billing_Contact "
+                     f"WHERE Tenant_ID IN ({','.join(['?'] * len(tids))})", tids)
+        primaries = [(r[0] or '').strip().lower() for r in acur.fetchall() if (r[0] or '').strip()]
+    except Exception as e:
+        return _server_error(e, 'cancel')
+    if not primaries:
+        ac.close(); conn.close()
+        return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
+                                 'tab first — only the primary account can end the subscription.'}), 403
+    if (upn or '').lower() not in primaries:
+        ac.close(); conn.close()
+        return jsonify({'error': 'Only the primary account holder can end the subscription.'}), 403
+
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+    try:
+        revoked = 0
         for tid in tids:
+            cid = client_by_tenant.get(tid)
+            if cid is not None:
+                # Read the roster BEFORE zeroing it, so Access_Log records who actually changed.
+                acur.execute("SELECT User_UPN FROM Input.Application_Users "
+                             "WHERE Client_ID = ? AND ISNULL(Profile_Key, '') <> 'no_access'", cid)
+                losing = [r[0] for r in acur.fetchall()]
+                acur.execute(
+                    "UPDATE Input.Application_Users SET "
+                    + " = 0, ".join(_ALL_MODULE_COLS) + " = 0, "
+                    + "Maintain_Targets = 0, Profile_Key = 'no_access', Practitioner_Full_Name = NULL, "
+                      "Updated_By = ? WHERE Client_ID = ?", [upn, cid])
+                for who in losing:
+                    acur.execute("INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) "
+                                 "VALUES (?, ?, 'no_access', ?)", [tid, who, upn])
+                revoked += len(losing)
+
             cur.execute("UPDATE Audit.Tenants SET Is_Active = 0 WHERE Tenant_ID = ?", tid)
+            # Start of next month: keeps the current month billable, stops everything after it.
+            nxt = "DATEADD(month, 1, DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1))"
             cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Tenant_ID = ?", tid)
             if cur.fetchone()[0]:
-                cur.execute("UPDATE Billing.Account_Billing SET Cancelled_At = SYSUTCDATETIME(), Cancel_Reason = ?, "
-                            "Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?", [reason, tid])
+                cur.execute(f"UPDATE Billing.Account_Billing SET Cancelled_At = {nxt}, Cancel_Reason = ?, "
+                            f"Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?",
+                            [reason, tid])
             else:
-                cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
-                            "VALUES (?, SYSUTCDATETIME(), ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+                cur.execute(f"INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
+                            f"VALUES (?, {nxt}, ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+        ac.close()
         conn.close()
-        app.logger.info("subscription cancelled: tenant(s)=%s by=%s reason=%r", tids, upn, reason)
-        return jsonify({'ok': True})
+        app.logger.warning("SUBSCRIPTION ENDED: tenant(s)=%s by=%s users_revoked=%d reason=%r",
+                           tids, upn, revoked, reason)
+        # Best-effort: the termination is already committed, so a mail failure must not 500 the
+        # caller into thinking it did not happen. Non-prod tags the subject so a test is obvious.
+        try:
+            tag = '' if APP_ENV == 'prod' else f'[{APP_ENV.upper()}] '
+            _send_email('Sales@Analytically.info',
+                        f"{tag}Subscription ended: {practice or tids[0]}",
+                        _termination_email_body(practice, tids, upn, reason, revoked))
+        except Exception as e:
+            app.logger.warning("termination alert email failed for tenant(s)=%s: %s", tids, e)
+        return jsonify({'ok': True, 'users_revoked': revoked})
     except Exception as e:
         return _server_error(e, 'cancel')
 
