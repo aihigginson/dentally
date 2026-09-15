@@ -808,6 +808,9 @@ def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatc
     body = sent[0][2]
     assert 'oldboss@practice.co.uk' in body and 'newboss@practice.co.uk' in body
     assert 'newboss@practice.co.uk' in body   # who did it is on the record
+    # a handover the recipient did not expect is a SUPPORT matter, not a sales one
+    assert appmod.SUPPORT_FROM in body
+    assert 'sales@analytically.info' not in body.lower()
 
 
 def test_primary_first_time_setup_notifies_nobody(client, appmod, monkeypatch):

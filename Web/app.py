@@ -2185,8 +2185,7 @@ def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
         f"  When            : {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n\n"
         "The primary account holder receives invoices and is the only person who can end the "
         "subscription.\n\n"
-        "If you did not expect this, reply to this email or contact sales@analytically.info "
-        "straight away.\n"
+        f"If you did not expect this, reply to this email or contact {SUPPORT_FROM} straight away.\n"
     )
     # ONLY the outgoing primary is told. They are the person losing the role, so telling them is
     # the whole control -- a takeover cannot be silent. Sales@ was copied here originally and it was
@@ -2195,7 +2194,10 @@ def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
     # event that matters commercially.
     try:
         # _send_email tags and redirects non-prod centrally -- nothing to do here.
-        _send_email(previous, "Analytically: primary account holder changed", body)
+        # Reply-To is support, not the sales default: an unexpected handover is a support matter,
+        # so "reply to this email" has to reach someone who can actually undo it.
+        _send_email(previous, "Analytically: primary account holder changed", body,
+                    reply_to=SUPPORT_FROM)
     except Exception as e:
         app.logger.warning("primary-change notice to %s failed (tenant %s): %s", previous, tenant_id, e)
 
