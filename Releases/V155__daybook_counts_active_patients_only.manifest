@@ -1,0 +1,21 @@
+# =====================================================================
+# Release V155 -- Day Book action counts: Open Plans / Recalls need an ACTIVE patient
+# =====================================================================
+# The four Day Book tiles applied three different patient rules between them:
+#   Cancellations To Rebook / DNAs To Rebook : JOIN Dim_Patients ... AND Active = 1
+#   Open Plans / Recalls To Action           : no patient filter at all
+# So plans and recalls belonging to patients the practice had already marked inactive were still
+# being counted and shown against the practitioner, which is part of why the counts read too high.
+# Both now use the same Active = 1 join. No new columns; the aggregate is a DROP/CREATE full
+# rebuild, so the corrected counts land on the next run.
+#
+# NOT addressed here (raised separately): the counts still have no recency horizon, and
+# Rebooked_Status compares BOOKING time to the cancellation, so a patient who had already booked a
+# later appointment before cancelling -- and then attended it -- stays on the list for ever.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V155__daybook_counts_active_patients_only.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+
+TEST
