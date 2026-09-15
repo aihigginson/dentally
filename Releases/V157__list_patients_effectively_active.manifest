@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V157 -- PBI.[List Patients] gains Effectively_Active
+# =====================================================================
+# The Day Book detail drill-through pages filter ONLY on the fact condition -- Is Cancelled /
+# Is DNA / Course Status / recall scope -- with no patient predicate at all. So they list far more
+# than the tile counts: on tenant 100, 2,185 cancellation rows behind a tile reading 1,157, and
+# 453 DNA rows behind 261. That mismatch pre-dates V155/V156; those releases widened it.
+#
+# Power BI cannot express "attended within two years" from the base views, so Gold.vw_Dim_Patients
+# supplies the flag. It reads Gold.vw_Effectively_Active_Patients rather than restating the rule,
+# so there is still exactly one definition.
+#
+# Meta.usp_Create_Gold_Views prefers a vw_<table> override over the table, so this becomes
+# PBI.[List Patients] automatically -- the same mechanism vw_Dim_Practitioners uses. Purely
+# ADDITIVE: all 51 existing columns pass through unchanged and in order, so no existing report
+# binding can break.
+#
+# AFTER DEPLOY, in this order:
+#   1. Refresh the shared semantic model in Power BI Desktop so [List Patients] picks up the new
+#      column. Nothing changes in any report until this is done.
+#   2. THEN open Day_Book.pbip and publish -- the four detail pages filter on the new column, and
+#      opening before step 1 will show them as referencing a missing field.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V157__list_patients_effectively_active.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.vw_Dim_Patients.View.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
