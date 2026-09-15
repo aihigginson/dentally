@@ -6,9 +6,14 @@
 --  History          :
 --    *01     07/05/2026  AIH  Initial Release
 --    *02     11/06/2026  AIH  Add Next_7_Days_Available_Mins / Next_7_Days_Booked_Mins
---    *05     15/09/2026  AIH  Open Plans and Recalls To Action now require an ACTIVE patient, as
---                             Cancellations/DNAs already did. The four Day Book tiles applied
---                             three different patient rules between them.
+--    *05     15/09/2026  AIH  All four Day Book action counts now key off ONE definition of an
+--                             effectively active patient (#act): the Active flag AND an
+--                             attended appointment within 2 years. Previously the four tiles
+--                             carried three different rules -- Cancellations/DNAs used the
+--                             Active flag, Open Plans and Recalls had no patient filter at
+--                             all -- and the flag alone let long-dormant patients pad every
+--                             list. Same shape as V153's Dim_Patient_Data_Quality rule but
+--                             keyed on ATTENDANCE, not any appointment.
 --    *04     31/07/2026  AIH  Days_Until_Next_30/60 counted in SESSION days (practitioner's own
 --                             working days) not calendar days; #free now session days only.
 --    *03     30/07/2026  AIH  Fold in Day Book action counts (Open Plans / Cancellations /
@@ -158,36 +163,57 @@ BEGIN
         -- Each matches its Day Book detail-page filter. Split by the fact's own
         -- fk_Practice_Site so a multi-site practitioner's actions land at the
         -- right site (recalls now carry fk_Practice_Site, derived from the patient).
-        -- Active patients only -- same rule as #cx / #dn below. Without it the tile counted plans
-        -- belonging to patients the practice has already marked inactive, which is a large part of
-        -- why the Day Book counts read too high.
+        -- ── Effectively active patients ────────────────────────
+        -- Dentally's Active flag alone is not evidence the patient still uses the practice: on
+        -- tenant 100, 1,019 of 7,011 "active" patients had not attended for two years and were
+        -- padding every Day Book tile. Same shape as the rule V153 gave Dim_Patient_Data_Quality,
+        -- but keyed on ATTENDANCE rather than any appointment -- someone who only ever cancels or
+        -- DNAs is not an active patient, and counting them is what put stale names on the
+        -- to-rebook lists. Defined ONCE here: the four tiles previously carried three different
+        -- patient rules between them.
+        -- The Is_Cancelled / Is_DNA guards drop the ~100 contradictory rows that carry a
+        -- Completed_At yet are also flagged cancelled or DNA.
+        DROP TABLE IF EXISTS #act;
+        SELECT dp.pk_Patient
+        INTO #act
+        FROM Gold.Dim_Patients dp
+        WHERE dp.Active = 1 AND dp.pk_Patient > 0
+          AND EXISTS (
+                SELECT 1
+                FROM Gold.Fact_Appointments a
+                WHERE a.fk_Patient   = dp.pk_Patient
+                  AND a.Tenant_ID    = dp.Tenant_ID
+                  AND a.Completed_At IS NOT NULL
+                  AND a.Is_Cancelled = 0
+                  AND a.Is_DNA       = 0
+                  AND a.Start_Time  >= DATEADD(YEAR, -2, CAST(SYSUTCDATETIME() AS DATE))
+          );
+
         SELECT tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, tp.fk_Practitioner, COUNT(1) AS cnt
         INTO #op
         FROM Gold.Fact_Treatment_Plans tp
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = tp.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = tp.fk_Patient
         WHERE tp.Course_Status IN ('In Progress', 'Open - No Appointment')
         GROUP BY tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1), tp.fk_Practitioner;
 
-        -- Active patients only (exclude inactive) -- matches the detail-page filter.
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #cx
         FROM Gold.Fact_Appointments a
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_Cancelled = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #dn
         FROM Gold.Fact_Appointments a
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_DNA = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
-        -- Active patients only -- same rule as #cx / #dn above.
         SELECT r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1) AS fk_Site, r.fk_Practitioner, COUNT(1) AS cnt
         INTO #rc
         FROM Gold.Fact_Recalls r
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = r.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = r.fk_Patient
         WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0
         GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner;
 
@@ -275,6 +301,7 @@ BEGIN
         DROP TABLE #week;
         DROP TABLE #free;
         DROP TABLE #booked;
+        DROP TABLE #act;
 
         --*********************************
         --**** Procedure logic ends    ****
