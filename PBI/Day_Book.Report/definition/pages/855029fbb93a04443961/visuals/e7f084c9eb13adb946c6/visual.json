@@ -385,6 +385,7 @@
       },
       {
         "name": "b45053c2d2474380d952",
+        "ordinal": 2,
         "field": {
           "Column": {
             "Expression": {
