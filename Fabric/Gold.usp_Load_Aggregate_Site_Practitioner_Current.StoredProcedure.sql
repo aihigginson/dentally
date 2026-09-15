@@ -163,31 +163,14 @@ BEGIN
         -- Each matches its Day Book detail-page filter. Split by the fact's own
         -- fk_Practice_Site so a multi-site practitioner's actions land at the
         -- right site (recalls now carry fk_Practice_Site, derived from the patient).
-        -- ── Effectively active patients ────────────────────────
-        -- Dentally's Active flag alone is not evidence the patient still uses the practice: on
-        -- tenant 100, 1,019 of 7,011 "active" patients had not attended for two years and were
-        -- padding every Day Book tile. Same shape as the rule V153 gave Dim_Patient_Data_Quality,
-        -- but keyed on ATTENDANCE rather than any appointment -- someone who only ever cancels or
-        -- DNAs is not an active patient, and counting them is what put stale names on the
-        -- to-rebook lists. Defined ONCE here: the four tiles previously carried three different
-        -- patient rules between them.
-        -- The Is_Cancelled / Is_DNA guards drop the ~100 contradictory rows that carry a
-        -- Completed_At yet are also flagged cancelled or DNA.
+        -- ── Effectively active patients ──────────────────
+        -- One definition, shared with Dim_Patient_Data_Quality: see
+        -- Gold.vw_Effectively_Active_Patients for why it is a view and not a stored column.
+        -- Materialised here only so the four tiles below scan it once rather than four times.
         DROP TABLE IF EXISTS #act;
-        SELECT dp.pk_Patient
+        SELECT pk_Patient
         INTO #act
-        FROM Gold.Dim_Patients dp
-        WHERE dp.Active = 1 AND dp.pk_Patient > 0
-          AND EXISTS (
-                SELECT 1
-                FROM Gold.Fact_Appointments a
-                WHERE a.fk_Patient   = dp.pk_Patient
-                  AND a.Tenant_ID    = dp.Tenant_ID
-                  AND a.Completed_At IS NOT NULL
-                  AND a.Is_Cancelled = 0
-                  AND a.Is_DNA       = 0
-                  AND a.Start_Time  >= DATEADD(YEAR, -2, CAST(SYSUTCDATETIME() AS DATE))
-          );
+        FROM Gold.vw_Effectively_Active_Patients;
 
         SELECT tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, tp.fk_Practitioner, COUNT(1) AS cnt
         INTO #op

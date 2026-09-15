@@ -1,0 +1,47 @@
+# =====================================================================
+# Release V156 -- one shared "effectively active patient" view + Rebooked_Status on attendance
+# =====================================================================
+# Two related corrections to why the Day Book counts read too high.
+#
+# 1. EFFECTIVELY ACTIVE, supplied as a VIEW.
+#    Gold.vw_Effectively_Active_Patients = Active flag AND an ATTENDED appointment within 2 years
+#    (Completed_At set, not cancelled, not a DNA). A view rather than a stored column because the
+#    answer is TIME-dependent -- a patient crosses the 2-year line with no data changing at all, so
+#    anything materialised at build time is stale by morning. Gold stays delta-loaded; this kind of
+#    derived aggregation is supplied on read.
+#    Both consumers now use it, so they cannot drift apart again:
+#      * Gold.usp_Load_Aggregate_Site_Practitioner_Current -- the four Day Book tiles (V155 had its
+#        own #act copy; now sourced from the view)
+#      * Gold.Dim_Patient_Data_Quality -- replaces V153's inline rule, which used Is_Completed = 1
+#        (that is only "Completed_At IS NOT NULL", so it still counted the ~100 appointments
+#        flagged completed AND cancelled/DNA)
+#    Meta.usp_Create_Gold_Views excludes the view by name -- every Gold view otherwise becomes a
+#    PBI view, and Power BI has no use for a list of patient keys (same treatment as vw_Dim_Date).
+#
+# 2. REBOOKED_STATUS NOW ASKS "DID THEY COME BACK".
+#    It compared #last_booked (MAX Pending_At) against the cancellation, i.e. "did they book
+#    again" -- so a patient who had ALREADY booked a later appointment before cancelling, and then
+#    attended it, had a booking timestamp that predated the cancellation and never cleared. New
+#    #last_attended (MAX Start_Time of genuinely attended appointments) is OR-ed into both the
+#    cancellation and DNA branches. Rebooked_Status is inside the HASHBYTES gate, so affected rows
+#    re-merge on the next Fact_Appointments load.
+#
+# Measured on prod tenant 100 (original -> +active rule -> +attendance):
+#   Cancellations  1407 -> 909 -> 707        DNAs  277 -> 169 -> 158
+#   Open Plans      585 -> 566               Recalls  2386 -> 2092
+#
+# ORDER MATTERS: the view must exist before its consumers compile.
+# AFTER DEPLOY the counts only move once Fact_Appointments reloads and the aggregate rebuilds --
+# run the nightly build, or EXEC Audit.usp_Run_Downstream for the affected chain.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V156__effectively_active_view_and_rebooked_attendance.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.vw_Effectively_Active_Patients.View.sql
+DEPLOY   Fabric\Meta.usp_Create_Gold_Views.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Dim_Patient_Data_Quality.View.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
