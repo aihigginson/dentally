@@ -2111,17 +2111,65 @@ def save_team():
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
                     [tid, email, profile, upn])
         # Billing contact (primary account + invoice email), per tenant -- only when the client sent it.
+        #
+        # ANY practice admin may set the primary, including to themselves. That is deliberate: the
+        # primary is the only account that can end the subscription, so if that person is off sick,
+        # leaves, or dies, another admin has to be able to take the account over without waiting on
+        # support. Restricting the change to the current primary would deadlock exactly that case
+        # (and would deadlock a tenant that has no primary recorded at all, which is dev today).
+        #
+        # The safeguard is therefore accountability, not prevention: a takeover is announced to the
+        # person losing it and to Sales@, so it can never happen quietly. Updated_By records who did
+        # it. Without this, an admin could self-appoint and immediately terminate unnoticed.
         if isinstance(payload, dict) and ('primary_email' in payload or 'invoice_email' in payload):
             primary_email = (payload.get('primary_email') or '').strip() or None
             invoice_email = (payload.get('invoice_email') or '').strip() or None
+            takeovers = []
             for tid in allowed:
+                acur.execute("SELECT Primary_Email FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
+                prev_row  = acur.fetchone()
+                prev      = ((prev_row[0] if prev_row else None) or '').strip()
                 acur.execute("DELETE FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
                 acur.execute("INSERT INTO Input.Billing_Contact (Tenant_ID, Primary_Email, Invoice_Email, Updated_By) VALUES (?, ?, ?, ?)",
                              [tid, primary_email, invoice_email, upn])
+                # Only a genuine handover of an EXISTING primary is announced. First-time setup has
+                # nobody to tell, and re-saving the same address is not a change.
+                if prev and (primary_email or '').lower() != prev.lower():
+                    takeovers.append((tid, prev, primary_email))
+            for tid, prev, now_primary in takeovers:
+                _notify_primary_change(tid, prev, now_primary, upn)
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_team')
+
+
+def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
+    """Announce a change of primary account holder to the OUTGOING primary and to Sales@.
+
+    The primary is the only account that can end the subscription, so handing that role over is a
+    privilege change, not a preference. Any admin is allowed to do it (see save_team for why), which
+    makes telling people the only thing standing between a legitimate handover and a quiet takeover.
+    Best-effort -- the change is already saved and must not be rolled back by a mail failure.
+    """
+    body = (
+        f"The primary account holder for your Analytically subscription has been changed.\n\n"
+        f"  Practice tenant : {tenant_id}\n"
+        f"  Was             : {previous}\n"
+        f"  Now             : {now_primary or '(none)'}\n"
+        f"  Changed by      : {changed_by}\n"
+        f"  When            : {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n\n"
+        "The primary account holder receives invoices and is the only person who can end the "
+        "subscription.\n\n"
+        "If you did not expect this, reply to this email or contact sales@analytically.info "
+        "straight away.\n"
+    )
+    tag = '' if APP_ENV == 'prod' else f'[{APP_ENV.upper()}] '
+    for to in filter(None, {previous, 'Sales@Analytically.info'}):
+        try:
+            _send_email(to, f"{tag}Analytically: primary account holder changed", body)
+        except Exception as e:
+            app.logger.warning("primary-change notice to %s failed (tenant %s): %s", to, tenant_id, e)
 
 
 def _termination_email_body(practice, tids, upn, reason, revoked):

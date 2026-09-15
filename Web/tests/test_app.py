@@ -772,3 +772,71 @@ def test_cancel_survives_a_failing_alert_email(client, appmod, monkeypatch):
     r = client.post('/api/cancel', json={'reason': 'x'})
     assert r.status_code == 200 and r.get_json()['ok'] is True
     assert ap.ran('UPDATE Input.Application_Users')
+
+
+# ── Primary account holder handover (save_team) ───────────────────────────────
+
+def _team_env(appmod, monkeypatch, previous_primary):
+    """Wire save_team with an existing (or absent) primary. Returns (appdb_cursor, sent)."""
+    wh = _RecCursor({
+        'SELECT Tenant_ID, Client_ID': [(11, 711)],
+        'Dim_Practitioners': [],
+    })
+    ap = _RecCursor({
+        'SELECT Primary_Email': [(previous_primary,)] if previous_primary else [],
+        'SELECT LOWER(User_UPN)': [],
+    })
+    sent = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('newboss@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('New Boss', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    return ap, sent
+
+
+def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatch):
+    # Any admin may take the primary over -- that is the continuity path when the primary is off
+    # sick or has left. It must never be SILENT: the person losing it and Sales@ are both told.
+    ap, sent = _team_env(appmod, monkeypatch, 'oldboss@practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'newboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    tos = sorted(s[0] for s in sent)
+    assert tos == ['Sales@Analytically.info', 'oldboss@practice.co.uk']
+    body = sent[0][2]
+    assert 'oldboss@practice.co.uk' in body and 'newboss@practice.co.uk' in body
+    assert 'newboss@practice.co.uk' in body   # who did it is on the record
+
+
+def test_primary_first_time_setup_notifies_nobody(client, appmod, monkeypatch):
+    # Bootstrap: a tenant with no primary recorded (dev today) must be able to get one, and there
+    # is nobody to notify about a handover that did not happen.
+    ap, sent = _team_env(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'firstboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert not sent
+    assert ap.ran('INSERT INTO Input.Billing_Contact')   # but it WAS set
+
+
+def test_primary_unchanged_is_not_a_handover(client, appmod, monkeypatch):
+    # Re-saving the subscriptions screen keeps sending primary_email; that is not a takeover and
+    # must not fire a notice every time someone edits the team.
+    ap, sent = _team_env(appmod, monkeypatch, 'Boss@Practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'boss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert not sent   # case-insensitive compare
+
+
+def test_primary_handover_survives_failing_notice(client, appmod, monkeypatch):
+    # The change is already saved; a mail failure must not roll it back or 500 the caller.
+    ap, sent = _team_env(appmod, monkeypatch, 'oldboss@practice.co.uk')
+    def boom(*a, **k):
+        raise RuntimeError('graph down')
+    monkeypatch.setattr(appmod, '_send_email', boom)
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'newboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert ap.ran('INSERT INTO Input.Billing_Contact')
