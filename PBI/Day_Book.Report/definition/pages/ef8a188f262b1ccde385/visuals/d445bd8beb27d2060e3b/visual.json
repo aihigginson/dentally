@@ -5,8 +5,8 @@
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 589.14675767918084,
-    "width": 991.53583617747438,
+    "height": 589.1467576791808,
+    "width": 991.5358361774744,
     "tabOrder": 0
   },
   "visual": {
@@ -411,6 +411,60 @@
           }
         },
         "type": "Advanced"
+      },
+      {
+        "name": "29c24c249f61be49322e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Effectively Active"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "l",
+              "Entity": "List Patients",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "l"
+                          }
+                        },
+                        "Property": "Effectively Active"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
       }
     ],
     "filterSortOrder": "Custom"
