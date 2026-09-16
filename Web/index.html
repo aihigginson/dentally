@@ -813,9 +813,10 @@
     // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
     // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
     // fixed panel at the bottom of the screen so issues can be seen on a phone.
-    // The on-screen panel is OFF by default (it crowds the page layout). Re-enable
-    // on demand with ?devlog=1 in the URL (?devlog=0 turns it off again); the panel
-    // is mainly for mobile where there's no reachable console. console.log always fires.
+    // OFF by default -- both the on-screen panel and the console output, which was
+    // otherwise a firehose. Turn on with ?devlog=1 in the URL (?devlog=0 turns it off
+    // again); the on-screen panel additionally needs .dev-mode, as mobile has no
+    // reachable console. _probeFilters() prints regardless: it only runs when asked.
     function _devLogEnabled() {
         const q = new URLSearchParams(location.search);
         if (q.get('devlog') === '1') localStorage.setItem('_anly_devlog', '1');
@@ -823,8 +824,9 @@
         return localStorage.getItem('_anly_devlog') === '1';
     }
     function _devLog(...args) {
+        if (!_devLogEnabled()) return;
         try { console.log(...args); } catch (e) {}
-        if (!document.body.classList.contains('dev-mode') || !_devLogEnabled()) return;
+        if (!document.body.classList.contains('dev-mode')) return;
         let panel = document.getElementById('dev-log');
         if (!panel) {
             panel = document.createElement('div');
@@ -2818,15 +2820,15 @@
             const rep = embeddedReports[key] || r;
             const pages = await rep.getPages();
             const act = pages.find(p => p.isActive);
-            _devLog('[filters] MANUAL probe', key, act ? act.displayName : '?');
+            console.log('[filters] MANUAL probe', key, act ? act.displayName : '?');
             const rf = await rep.getFilters();
-            _devLog('[filters] MANUAL REPORT', key, (rf && rf.length) ? rf : '(none)');
+            console.log('[filters] MANUAL REPORT', key, (rf && rf.length) ? rf : '(none)');
             if (act) {
                 const pf = await act.getFilters();
-                _devLog('[filters] MANUAL PAGE', act.displayName, (pf && pf.length) ? pf : '(none)');
+                console.log('[filters] MANUAL PAGE', act.displayName, (pf && pf.length) ? pf : '(none)');
                 for (const v of await act.getVisuals()) {
                     const vf = await v.getFilters();
-                    _devLog('[filters] MANUAL VISUAL', act.displayName, v.name, v.type, (vf && vf.length) ? vf : '(none)');
+                    console.log('[filters] MANUAL VISUAL', act.displayName, v.name, v.type, (vf && vf.length) ? vf : '(none)');
                 }
             }
         };
