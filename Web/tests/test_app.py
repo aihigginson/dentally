@@ -352,6 +352,7 @@ def test_dentally_update_writes_token_when_good(client, appmod, monkeypatch):
 
 def test_send_email_graph_primary(appmod, monkeypatch):
     calls = {}
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')   # transport test: not the non-prod redirect
     monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
     monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
     monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
@@ -643,3 +644,306 @@ def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
     r = client.post('/api/onboarding/dentally/token',
                     json={'verified': _verified_token(appmod), 'attested': True, 'token': 'x' * 40})
     assert r.status_code == 200 and r.get_json()['ok'] is True
+
+
+# ── "Stop using Analytically": /api/cancel ────────────────────────────────────
+
+class _RecCursor:
+    """Records every statement, and answers fetches by matching on the SQL text."""
+    def __init__(self, answers):
+        self.answers, self.sql, self._last = answers, [], ''
+
+    def execute(self, sql, *a):
+        self._last = sql
+        self.sql.append((sql, a[0] if a else None))
+        return self
+
+    def _answer(self):
+        for frag, val in self.answers.items():
+            if frag in self._last:
+                return val
+        return None
+
+    def fetchone(self):
+        v = self._answer()
+        return v[0] if isinstance(v, list) and v else v
+
+    def fetchall(self):
+        v = self._answer()
+        return v if isinstance(v, list) else []
+
+    def ran(self, frag):
+        return [s for s, _ in self.sql if frag in s]
+
+
+class _RecConn:
+    def __init__(self, cur):
+        self._cur = cur
+    def cursor(self):
+        return self._cur
+    def close(self):
+        pass
+
+
+def _cancel_env(appmod, monkeypatch, primary='owner@practice.co.uk', users=None, tids=(11,)):
+    """Wire both connections + auth for the cancel endpoint. Returns (wh_cursor, appdb_cursor, sent)."""
+    users = ['owner@practice.co.uk', 'nurse@practice.co.uk'] if users is None else users
+    wh = _RecCursor({
+        'Tenant_Name': [('Maple Dental',)],
+        'SELECT Tenant_ID, Client_ID': [(t, 700 + t) for t in tids],
+        'COUNT(*) FROM Billing.Account_Billing': [(1,)],
+    })
+    ap = _RecCursor({
+        'Primary_Email': [(primary,)] if primary else [],
+        'SELECT User_UPN': [(u,) for u in users],
+    })
+    sent = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('owner@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, list(tids), True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    return wh, ap, sent
+
+
+def test_cancel_refuses_non_primary(client, appmod, monkeypatch):
+    # A practice ADMIN who is not the billing owner must not be able to end the subscription:
+    # it cuts off everyone, so it is the lead account's call alone.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk')
+    r = client.post('/api/cancel', json={'reason': 'Too expensive'})
+    assert r.status_code == 403
+    assert 'primary account holder' in r.get_json()['error']
+    assert not ap.ran('UPDATE Input.Application_Users')   # nothing revoked
+    assert not wh.ran('UPDATE Audit.Tenants')             # tenant untouched
+    assert not sent
+
+
+def test_cancel_refuses_when_no_primary_recorded(client, appmod, monkeypatch):
+    # A blank billing contact must not become a loophole that lets any admin terminate.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary=None)
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 403
+    assert 'No primary account holder' in r.get_json()['error']
+    assert not ap.ran('UPDATE Input.Application_Users') and not sent
+
+
+def test_cancel_by_primary_revokes_everyone_and_alerts_sales(client, appmod, monkeypatch):
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    r = client.post('/api/cancel', json={'reason': 'Closing the practice'})
+    assert r.status_code == 200 and r.get_json()['users_revoked'] == 2
+
+    upd = ap.ran('UPDATE Input.Application_Users')
+    assert len(upd) == 1
+    # every module flag cleared, admin dropped, profile recorded -- and the ROW KEPT, because
+    # usp_Generate_Invoice_Lines draws its user list from Application_Users and a DELETE would
+    # lose the final month's invoice.
+    for col in appmod._ALL_MODULE_COLS:
+        assert f'{col} = 0' in upd[0]
+    assert "Profile_Key = 'no_access'" in upd[0] and 'Maintain_Targets = 0' in upd[0]
+    assert not ap.ran('DELETE FROM Input.Application_Users')
+    # one Access_Log row per user losing access (this is what closes the billable interval)
+    assert len(ap.ran('INSERT INTO Input.Access_Log')) == 2
+    # tenant deactivated -> ingest stops and auth fails closed before the sync catches up
+    assert wh.ran('UPDATE Audit.Tenants')
+    # nothing scheduled for deletion by machine: Delete_By is a marker for the support team
+    assert wh.ran('Delete_By')
+    to, subj, body = sent[0]
+    assert to == 'Sales@Analytically.info'
+    assert 'Maple Dental' in subj and 'Closing the practice' in body
+    assert 'no data has been deleted' in body
+
+
+def test_cancel_bills_the_current_month(client, appmod, monkeypatch):
+    # Cancelled_At must be the START OF NEXT MONTH. usp_Generate_Invoice_Lines bills a month only
+    # when `Cancelled_At > @MEnd`, so stamping it with now() would silently drop the final month.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    client.post('/api/cancel', json={'reason': 'x'})
+    billing = ' '.join(wh.ran('Billing.Account_Billing'))
+    assert 'DATEADD(month, 1, DATEFROMPARTS' in billing
+    assert 'Cancelled_At = SYSUTCDATETIME()' not in billing
+
+
+def test_cancel_survives_a_failing_alert_email(client, appmod, monkeypatch):
+    # The termination is already committed when the mail is sent; a mail failure must not 500 the
+    # caller into believing it did not happen.
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    def boom(*a, **k):
+        raise RuntimeError('graph down')
+    monkeypatch.setattr(appmod, '_send_email', boom)
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    assert ap.ran('UPDATE Input.Application_Users')
+
+
+# ── Primary account holder handover (save_team) ───────────────────────────────
+
+def _team_env(appmod, monkeypatch, previous_primary):
+    """Wire save_team with an existing (or absent) primary. Returns (appdb_cursor, sent)."""
+    wh = _RecCursor({
+        'SELECT Tenant_ID, Client_ID': [(11, 711)],
+        'Dim_Practitioners': [],
+    })
+    ap = _RecCursor({
+        'SELECT Primary_Email': [(previous_primary,)] if previous_primary else [],
+        'SELECT LOWER(User_UPN)': [],
+    })
+    sent = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('newboss@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('New Boss', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_send_email', lambda to, subj, body, **kw: sent.append((to, subj, body)))
+    return ap, sent
+
+
+def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatch):
+    # Any admin may take the primary over -- that is the continuity path when the primary is off
+    # sick or has left. It must never be SILENT: the person losing it and Sales@ are both told.
+    ap, sent = _team_env(appmod, monkeypatch, 'oldboss@practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'newboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    # exactly one notice, to the person losing the role -- Sales@ is not copied on a handover
+    assert [s[0] for s in sent] == ['oldboss@practice.co.uk']
+    body = sent[0][2]
+    assert 'oldboss@practice.co.uk' in body and 'newboss@practice.co.uk' in body
+    assert 'newboss@practice.co.uk' in body   # who did it is on the record
+    # a handover the recipient did not expect is a SUPPORT matter, not a sales one
+    assert appmod.SUPPORT_FROM in body
+    assert 'sales@analytically.info' not in body.lower()
+
+
+def test_primary_first_time_setup_notifies_nobody(client, appmod, monkeypatch):
+    # Bootstrap: a tenant with no primary recorded (dev today) must be able to get one, and there
+    # is nobody to notify about a handover that did not happen.
+    ap, sent = _team_env(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'firstboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert not sent
+    assert ap.ran('INSERT INTO Input.Billing_Contact')   # but it WAS set
+
+
+def test_primary_unchanged_is_not_a_handover(client, appmod, monkeypatch):
+    # Re-saving the subscriptions screen keeps sending primary_email; that is not a takeover and
+    # must not fire a notice every time someone edits the team.
+    ap, sent = _team_env(appmod, monkeypatch, 'Boss@Practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'boss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert not sent   # case-insensitive compare
+
+
+def test_primary_handover_survives_failing_notice(client, appmod, monkeypatch):
+    # The change is already saved; a mail failure must not roll it back or 500 the caller.
+    ap, sent = _team_env(appmod, monkeypatch, 'oldboss@practice.co.uk')
+    def boom(*a, **k):
+        raise RuntimeError('graph down')
+    monkeypatch.setattr(appmod, '_send_email', boom)
+    r = client.post('/api/team', json={'rows': [], 'primary_email': 'newboss@practice.co.uk',
+                                       'invoice_email': ''})
+    assert r.status_code == 200
+    assert ap.ran('INSERT INTO Input.Billing_Contact')
+
+
+def test_cancel_leaves_support_logins_alone(client, appmod, monkeypatch):
+    """Our own @analytically.info logins are not the practice's users.
+
+    They are inserted straight into Application_Users by SQL (no Dentally user, so they never show
+    on the subscriptions roster), usp_Generate_Invoice_Lines already excludes them from billing on
+    the same test, and support must keep access to run the re-engagement call and the eventual
+    manual cleanup. Revoking them would lock the vendor out of a tenant that still holds data.
+    """
+    wh, ap, sent = _cancel_env(appmod, monkeypatch)
+    client.post('/api/cancel', json={'reason': 'x'})
+    sql = ' '.join(ap.ran('Input.Application_Users'))
+    assert "LOWER(User_UPN) NOT LIKE '%@analytically.info'" in sql
+    # and it guards the UPDATE, not just the SELECT that counts who lost access
+    upd = ap.ran('UPDATE Input.Application_Users')[0]
+    assert "NOT LIKE '%@analytically.info'" in upd
+
+
+# ── Non-prod mail redirect ────────────────────────────────────────────────────
+
+def _graph_capture(appmod, monkeypatch):
+    """Intercept the Graph send and hand back the message payload it would have posted."""
+    calls = {}
+    monkeypatch.setattr(appmod, 'GRAPH_SEND', True)
+    monkeypatch.setattr(appmod, 'GRAPH_FROM', 'support@analytically.info')
+    monkeypatch.setattr(appmod, '_graph_token', lambda: 'gtok')
+
+    class _R:
+        def raise_for_status(self):
+            pass
+
+    def _post(url, **kw):
+        calls['json'] = kw.get('json')
+        return _R()
+
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+    return calls
+
+
+def test_non_prod_mail_is_redirected_to_support(appmod, monkeypatch):
+    """Dev carries prod's GRAPH_SEND config, and dev's tenant 100 is a copy of a live practice, so
+    its stored addresses are real. A test nudge/handover/termination must not reach the practice."""
+    monkeypatch.setattr(appmod, 'APP_ENV', 'dev')
+    calls = _graph_capture(appmod, monkeypatch)
+    appmod._send_email('craigjack@mapledental.co.uk', 'Your data has stopped updating', 'body text')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == appmod.MAIL_REDIRECT
+    # the real recipient is still legible, so the test remains meaningful
+    assert 'craigjack@mapledental.co.uk' in msg['subject']
+    assert 'craigjack@mapledental.co.uk' in msg['body']['content']
+    assert msg['subject'].startswith('[DEV -> ')
+
+
+def test_prod_mail_reaches_the_real_recipient(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'APP_ENV', 'prod')
+    calls = _graph_capture(appmod, monkeypatch)
+    appmod._send_email('craigjack@mapledental.co.uk', 'Subject', 'body')
+    msg = calls['json']['message']
+    assert msg['toRecipients'][0]['emailAddress']['address'] == 'craigjack@mapledental.co.uk'
+    assert msg['subject'] == 'Subject'
+
+
+def test_cancel_allowed_for_support_account_without_a_primary(client, appmod, monkeypatch):
+    """Support can always end a subscription, including on a tenant with no primary recorded.
+
+    A support login can never be the primary — that is a radio over the Dentally roster and support
+    has no Dentally user — so gating purely on the primary would lock the vendor out of acting on
+    the practice's behalf (phone request, or the primary has left and the mailbox is unreachable).
+    """
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary=None)
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@analytically.info', None))
+    r = client.post('/api/cancel', json={'reason': 'Requested by phone'})
+    assert r.status_code == 200
+    assert ap.ran('UPDATE Input.Application_Users')
+    assert sent and sent[0][0] == 'Sales@Analytically.info'
+
+
+def test_cancel_still_refuses_a_non_primary_practice_admin(client, appmod, monkeypatch):
+    """The support exemption must not leak to practice users: only @analytically.info bypasses."""
+    wh, ap, sent = _cancel_env(appmod, monkeypatch, primary='owner@practice.co.uk')
+    monkeypatch.setattr(appmod, '_auth', lambda: ('nurse@practice.co.uk', None))
+    r = client.post('/api/cancel', json={'reason': 'x'})
+    assert r.status_code == 403
+    assert not ap.ran('UPDATE Input.Application_Users') and not sent
+
+
+def test_app_env_defaults_to_non_prod(appmod, monkeypatch):
+    """An unconfigured APP_ENV must mean "not prod", so mail fails safe.
+
+    APP_ENV gates both the monitor's customer nudges and the _send_email redirect. It used to
+    default to 'prod', which made dev safe only while its APP_ENV variable survived -- and dev
+    carries prod's Graph config plus a copy of a live practice's addresses.
+    """
+    import importlib, os as _os
+    saved = _os.environ.pop('APP_ENV', None)
+    try:
+        mod = importlib.reload(appmod)
+        assert mod.APP_ENV != 'prod'
+    finally:
+        if saved is not None:
+            _os.environ['APP_ENV'] = saved
+        importlib.reload(appmod)

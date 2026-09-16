@@ -10,6 +10,11 @@
     <style>
         :root {
             --navy:        #1A527A;
+            /* Chrome = the solid brand bars (app header, settings panel head, contact head) and the
+               active nav tab. Kept separate from --navy so DEV can recolour every one of them by
+               overriding this ONE variable (body.dev-mode below). Painting them individually is
+               what let the settings panel keep its prod-blue head on dev. */
+            --chrome:      var(--navy);
             --teal-bright: #5EC4C0;
             --bg-page:     #FFFFFF;
             --bg-subtle:   #F8FAFC;
@@ -58,7 +63,7 @@
             background: var(--bg-page); flex-direction: column; display: none;
         }
         .contact-header {
-            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            background: var(--chrome); color: white; padding: 0 24px; height: 52px;
             display: flex; align-items: center; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
@@ -90,14 +95,14 @@
 
         /* ── Header ── */
         .header {
-            background: var(--navy); color: white; padding: 0 24px; height: 52px;
+            background: var(--chrome); color: white; padding: 0 24px; height: 52px;
             display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
-        body.dev-mode .header { background: #6B21A8; }
-        body.dev-mode .nav-tab.active { color: #fff; background: #6B21A8; border-bottom-color: transparent; }
-        body.dev-mode .nav-tab:hover  { color: #6B21A8; background: #f1e8fb; }
-        body.dev-mode .nav-tab.active:hover { color: #fff; background: #6B21A8; }
+        /* DEV wears purple chrome so the environment is obvious at a glance. Overriding the
+           variable recolours every chrome surface at once -- add new ones with var(--chrome). */
+        body.dev-mode { --chrome: #6B21A8; }
+        body.dev-mode .nav-tab:hover { background: #f1e8fb; }   /* purple-tinted wash, not chrome */
         .dev-badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
@@ -137,9 +142,9 @@
             white-space: nowrap; user-select: none; transition: color 0.12s, background 0.12s;
             border-radius: 6px 6px 0 0;
         }
-        .nav-tab:hover  { color: var(--navy); background: var(--surface-2, #f1f5f9); }
-        .nav-tab.active { color: #fff; background: var(--navy); border-bottom-color: transparent; font-weight: 600; }
-        .nav-tab.active:hover { color: #fff; background: var(--navy); }
+        .nav-tab:hover  { color: var(--chrome); background: var(--surface-2, #f1f5f9); }
+        .nav-tab.active { color: #fff; background: var(--chrome); border-bottom-color: transparent; font-weight: 600; }
+        .nav-tab.active:hover { color: #fff; background: var(--chrome); }
 
         /* ── Filter toggle button ── */
         .filter-toggle {
@@ -275,7 +280,7 @@
         .defs-overlay.open { opacity: 1; visibility: visible; }
         .defs-panel { position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 92vw; background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.18); transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
         .defs-overlay.open .defs-panel { transform: translateX(0); }
-        .defs-head { background: var(--navy); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+        .defs-head { background: var(--chrome); color: white; padding: 14px 18px; display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
         .defs-title { font-size: 15px; font-weight: 600; }
         .defs-sub { font-size: 12px; opacity: 0.82; margin-top: 2px; }
         .defs-close { background: none; border: none; color: white; font-size: 24px; line-height: 1; cursor: pointer; padding: 0 2px; }
@@ -772,8 +777,11 @@
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
                     <span id="team-msg" class="settings-msg"></span>
-                    <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eee">
-                        <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Cancel subscription</button>
+                    <!-- Lead account only. Hidden by default and revealed by loadTeam() when the
+                         signed-in user is the recorded primary, so it never flashes for anyone else.
+                         The API enforces the same rule -- this is presentation, not the control. -->
+                    <div id="team-cancel-wrap" style="margin-top:22px;padding-top:14px;border-top:1px solid #eee;display:none">
+                        <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Stop using Analytically</button>
                     </div>
                 </div>
             </div>
@@ -805,18 +813,30 @@
     // ── Dev-only on-screen log (mobile has no reachable console) ──────────────
     // Active only when body has .dev-mode. Mirrors key diagnostic messages to a
     // fixed panel at the bottom of the screen so issues can be seen on a phone.
-    // The on-screen panel is OFF by default (it crowds the page layout). Re-enable
-    // on demand with ?devlog=1 in the URL (?devlog=0 turns it off again); the panel
-    // is mainly for mobile where there's no reachable console. console.log always fires.
+    // OFF by default -- both the on-screen panel and the console output, which was
+    // otherwise a firehose. Turn on with ?devlog=1 in the URL (?devlog=0 turns it off
+    // again); the on-screen panel additionally needs .dev-mode, as mobile has no
+    // reachable console. _probeFilters() prints regardless: it only runs when asked.
     function _devLogEnabled() {
         const q = new URLSearchParams(location.search);
         if (q.get('devlog') === '1') localStorage.setItem('_anly_devlog', '1');
         if (q.get('devlog') === '0') localStorage.removeItem('_anly_devlog');
         return localStorage.getItem('_anly_devlog') === '1';
     }
+    // Same as _devLog but fires at most once per distinct key. For facts about the
+    // environment (client capabilities, feature support) that are true for the whole
+    // session: re-logging them on every report embed is pure noise.
+    const _devLogSeen = new Set();
+    function _devLogOnce(key, ...args) {
+        if (_devLogSeen.has(key)) return;
+        _devLogSeen.add(key);
+        _devLog(...args);
+    }
+
     function _devLog(...args) {
+        if (!_devLogEnabled()) return;
         try { console.log(...args); } catch (e) {}
-        if (!document.body.classList.contains('dev-mode') || !_devLogEnabled()) return;
+        if (!document.body.classList.contains('dev-mode')) return;
         let panel = document.getElementById('dev-log');
         if (!panel) {
             panel = document.createElement('div');
@@ -1098,9 +1118,9 @@
             ov.id = 'cancel-modal-overlay';
             ov.style.cssText = 'position:fixed;inset:0;background:rgba(10,40,60,.5);display:flex;align-items:center;justify-content:center;z-index:2100';
             ov.innerHTML = '<div id="cancel-modal-box" style="background:#fff;border-radius:12px;max-width:450px;width:92%;padding:24px 26px;box-shadow:0 10px 34px rgba(0,0,0,.25)">'
-                + '<div style="font-size:18px;font-weight:700;color:#8a1f1f;margin-bottom:10px">Cancel subscription</div>'
+                + '<div style="font-size:18px;font-weight:700;color:#8a1f1f;margin-bottom:10px">Stop using Analytically</div>'
                 + '<div style="background:#fbeaea;border-left:3px solid #c0392b;border-radius:6px;padding:12px;font-size:13px;line-height:1.5;color:#7a1f1f;margin-bottom:14px">'
-                + 'This can’t be undone. <strong>Access ends immediately for everyone at your practice</strong>, and <strong>your data is deleted within 28 days</strong>.</div>'
+                + 'This can’t be undone. <strong>Access ends immediately for everyone at your practice</strong>, and <strong>your data is deleted within 28 days</strong>. You will still be billed for the remainder of the current month; nothing is charged after that.</div>'
                 + '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">Reason for leaving</label>'
                 + '<select id="cancel-reason-sel" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:8px">'
                 + '<option value="">Please choose…</option><option>Too expensive</option><option>Not using it enough</option>'
@@ -1110,7 +1130,7 @@
                 + '<div id="cancel-msg" style="font-size:12px;min-height:16px;margin-top:6px"></div>'
                 + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'
                 + '<button id="cancel-keep" style="padding:9px 16px;border:1px solid #ccc;background:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Keep my subscription</button>'
-                + '<button id="cancel-confirm" style="padding:9px 16px;border:none;background:#c0392b;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Cancel subscription</button>'
+                + '<button id="cancel-confirm" style="padding:9px 16px;border:none;background:#c0392b;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Stop using Analytically</button>'
                 + '</div></div>';
             document.body.appendChild(ov);
             ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'cancel-keep') ov.style.display = 'none'; });
@@ -1129,12 +1149,19 @@
         msg.style.color = '#999'; msg.textContent = 'Cancelling…';
         try {
             const res = await authFetch('/api/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
-            if (!res.ok) throw new Error('status ' + res.status);
+            if (!res.ok) {
+                // Surface the server's own wording: the lead-account refusal and the "no primary
+                // set" case both tell the user exactly what to do, which a generic failure hides.
+                const body = await res.json().catch(() => ({}));
+                const e = new Error('status ' + res.status);
+                e.apiError = body.error;
+                throw e;
+            }
             document.getElementById('cancel-modal-box').innerHTML =
-                '<div style="text-align:center;padding:8px 0"><div style="font-size:17px;font-weight:700;color:#0b3d5c;margin-bottom:8px">Your subscription is cancelled</div>'
-                + '<div style="font-size:13px;color:#5b6b78;line-height:1.5">Access has ended and your data will be deleted within 28 days. If this was a mistake, email <a href="mailto:sales@analytically.info">sales@analytically.info</a> right away.</div></div>';
+                '<div style="text-align:center;padding:8px 0"><div style="font-size:17px;font-weight:700;color:#0b3d5c;margin-bottom:8px">Your subscription has ended</div>'
+                + '<div style="font-size:13px;color:#5b6b78;line-height:1.5">Access has ended for everyone at your practice and your data will be deleted within 28 days. If this was a mistake, email <a href="mailto:sales@analytically.info">sales@analytically.info</a> right away — we can restore it until then.</div></div>';
             setTimeout(() => location.reload(), 4500);
-        } catch (e) { btn.disabled = false; msg.style.color = '#b3261e'; msg.textContent = 'Could not cancel — please try again or contact support.'; }
+        } catch (e) { btn.disabled = false; msg.style.color = '#b3261e'; msg.textContent = (e && e.apiError) || 'Could not complete — please try again or contact support.'; }
     }
 
     // Contact modal (Sales / Support / Security), opened from the header "Contact us" link.
@@ -1920,6 +1947,25 @@
             const { people, profiles, billing } = await res.json();
             _teamProfiles = profiles || [];
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
+            // Ending the subscription cuts off everyone, so it is the billing owner's call alone --
+            // not every practice admin.
+            //
+            // Compare the SIGNED-IN address against the billing contact directly, NOT against the
+            // roster. The roster is built FROM Gold.Dim_Users, i.e. Dentally users only, so an
+            // account added straight to Application_Users by SQL (support/admin logins) never has a
+            // row in it -- and a `people.some(p => p.is_self && ...)` test would hide the button
+            // from that person permanently, even when they ARE the recorded primary. This mirrors
+            // exactly what /api/cancel enforces server-side.
+            {
+                const wrap = document.getElementById('team-cancel-wrap');
+                const me   = ((msalAccount && msalAccount.username) || '').trim().toLowerCase();
+                const lead = (_teamBilling.primary_email || '').trim().toLowerCase();
+                // Our own support logins always see it: they can never BE the primary (that is a
+                // radio over the Dentally roster, and they have no Dentally user), but they need to
+                // end a subscription on the practice's behalf. The API applies the same exemption.
+                const support = me.endsWith('@analytically.info');
+                if (wrap) wrap.style.display = (support || (me && lead && me === lead)) ? '' : 'none';
+            }
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
@@ -2654,6 +2700,23 @@
         }, ms);
     }
 
+    // Does this failure look like an expired / rejected token? PBI reports errors in several
+    // shapes -- an Error, an event detail object, sometimes an array of them -- so flatten to text
+    // rather than reaching for a fixed field. Used by both the embed 'error' event and setFilters,
+    // so the two paths can never drift apart on what counts as an auth failure.
+    function _looksLikeTokenError(x) {
+        if (!x) return false;
+        let blob;
+        if (typeof x === 'string') blob = x;
+        else {
+            const d = x.detail || x;
+            blob = [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
+                .filter(Boolean).join(' ');
+            if (!blob) { try { blob = JSON.stringify(d); } catch (_) { blob = String(d); } }
+        }
+        return /token|expired|401|403|unauthor/i.test(blob);
+    }
+
     // Recover a report whose embed token expired: mint a fresh one, hand it to the embed via
     // setAccessToken, then refresh() so any visual that already errored ("Access token has
     // expired") re-queries and re-renders. Falls back to the friendly session-timeout overlay
@@ -2748,6 +2811,37 @@
     // navigation buttons stop working.
     function attachReportHandlers(r, sectionKey) {
         let initialFiltersReasserted = false;
+        // Diagnostic: dump the filters actually applied at report, page and visual level.
+        //
+        // ON DEMAND ONLY. This used to probe automatically on load and on every render, which
+        // buried the dev log -- every visual of every report, on every page change. The findings it
+        // was built for are recorded: the Cancellation Details table carries NO date filter
+        // (Start Time is operator "All"), persistent filters are unavailable to this app because it
+        // embeds app-owns-data (resetPersistentFilters throws "supported only for AAD Token"), and
+        // pageChanged does not fire for a native Drillthrough button.
+        // pageChanged does NOT fire for a native Drillthrough button, so drive the probe off
+        // 'rendered' instead -- that does fire after the target page draws. Guarded on the active
+        // page NAME changing, so a re-render of the same page cannot spam the log.
+        // Manual escape hatch: run _probeFilters() in the console after navigating, for when the
+        // events do not cooperate. Returns nothing; everything goes to the dev log.
+        window._probeFilters = async () => {
+            const cur = document.querySelector('.nav-tab.active');
+            const key = cur ? cur.getAttribute('data-section') : sectionKey;
+            const rep = embeddedReports[key] || r;
+            const pages = await rep.getPages();
+            const act = pages.find(p => p.isActive);
+            console.log('[filters] MANUAL probe', key, act ? act.displayName : '?');
+            const rf = await rep.getFilters();
+            console.log('[filters] MANUAL REPORT', key, (rf && rf.length) ? rf : '(none)');
+            if (act) {
+                const pf = await act.getFilters();
+                console.log('[filters] MANUAL PAGE', act.displayName, (pf && pf.length) ? pf : '(none)');
+                for (const v of await act.getVisuals()) {
+                    const vf = await v.getFilters();
+                    console.log('[filters] MANUAL VISUAL', act.displayName, v.name, v.type, (vf && vf.length) ? vf : '(none)');
+                }
+            }
+        };
         r.on('loaded', () => {
             attachReportToSubnav(sectionKey, r);
             applyFilters(r);
@@ -2798,20 +2892,27 @@
         // one and hand it back so an idle/long-open report keeps working instead of every visual
         // showing "Access token has expired". If the refresh fails (app session also died), show
         // a friendly refresh prompt rather than the raw error.
-        r.on('tokenExpired', () => {
-            _devLog('[tokenExpired] for', sectionKey);
-            recoverEmbedToken(r, sectionKey, 'tokenExpired');
-        });
+        // 'tokenExpired' is NOT a valid event in powerbi-client 2.23.10 -- r.on() validates the
+        // name and THROWS. Registered bare, that threw here and aborted the rest of this function,
+        // so r.on('error') and scheduleTokenRefresh() below were never attached on any report, on
+        // any load: the whole token-recovery mechanism was dead. Wrapped so a future client that
+        // does support it still gets the handler, and a client that does not cannot break the rest.
+        try {
+            r.on('tokenExpired', () => {
+                _devLog('[tokenExpired] for', sectionKey);
+                recoverEmbedToken(r, sectionKey, 'tokenExpired');
+            });
+        } catch (e) {
+            _devLogOnce('tokenExpired-unsupported',
+                '[token] tokenExpired event unsupported by this client; relying on error + proactive refresh');
+        }
         // A visual can error with an expired token WITHOUT tokenExpired firing first (PBI fires it
         // late, or not before a query runs) -- which is the raw "Access token has expired" the user
         // still saw. Catch the error event and recover the same way, gated to token/auth errors so
         // ordinary visual errors are left alone; recoverEmbedToken's cooldown stops any loop.
         r.on('error', event => {
-            const d = event && event.detail;
-            const blob = d ? [d.message, d.detailedMessage, d.errorCode, d.technicalDetails]
-                .filter(Boolean).join(' ') : '';
-            if (/token|expired|401|403|unauthor/i.test(blob)) {
-                _devLog('[error->token recover]', sectionKey, d);
+            if (_looksLikeTokenError(event)) {
+                _devLog('[error->token recover]', sectionKey, event && event.detail);
                 recoverEmbedToken(r, sectionKey, 'error');
             }
         });
@@ -3008,8 +3109,45 @@
         targets.forEach(r => {
             const f = filters.slice();
             if (periodFilter && r._section !== 'day_book') f.push(periodFilter);
-            r.setFilters(f).catch(() => {});
+            applyFilterSet(r, f);
         });
+    }
+
+    // Apply one filter set, repairing an expired token instead of failing silently.
+    //
+    // This used to be `r.setFilters(f).catch(() => {})`. On a page left open past the token
+    // lifetime that swallowed the auth failure whole: the filter never reached the report, nothing
+    // triggered recovery, and the stale embed then rendered PBI's own error the moment it next
+    // drew -- "sit on a page for a while, change a filter, the report errors".
+    //
+    // The proactive refresh timer cannot be relied on to have closed the gap first. setTimeout is
+    // throttled in background tabs and does not run at all while the machine sleeps, so a timer
+    // scheduled for 58 minutes' time can fire long after the token died. Check the wall clock at
+    // the point of use, then still handle a rejection in case the token lapsed mid-call.
+    async function applyFilterSet(r, f) {
+        try {
+            await ensureFreshToken(r);
+            await r.setFilters(f);
+        } catch (e) {
+            if (!_looksLikeTokenError(e)) { _devLog('[filters] setFilters failed', e); return; }
+            _devLog('[filters] token error on setFilters, recovering', r._section);
+            if (await recoverEmbedToken(r, r._section, 'setFilters')) {
+                try { await r.setFilters(f); }
+                catch (e2) { _devLog('[filters] retry after recovery failed', e2); }
+            }
+        }
+    }
+
+    // Renew the token before using it if it has lapsed or is nearly there. Cheap: a no-op unless
+    // the embed is actually within the danger window.
+    async function ensureFreshToken(r) {
+        const sectionKey = r && r._section;
+        const reportName = sectionKey ? SECTION_REPORT[sectionKey] : null;
+        const entry = reportName ? tokenCache[reportName] : null;
+        if (!entry || !entry.expiry) return;
+        if (entry.expiry - Date.now() > 120000) return;
+        _devLog('[token] stale at point of use, refreshing before filter', sectionKey);
+        await recoverEmbedToken(r, sectionKey, 'pre-filter');
     }
 
     // ── Page name helper ────────────────────────────────────────────────────

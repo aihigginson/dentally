@@ -1,0 +1,35 @@
+# =====================================================================
+# Release V155 -- Day Book action counts: one definition of an active patient
+# =====================================================================
+# The four Day Book tiles applied THREE different patient rules between them:
+#   Cancellations To Rebook / DNAs To Rebook : Dim_Patients.Active = 1
+#   Open Plans / Recalls To Action           : no patient filter at all
+# And the Active flag by itself is not evidence a patient still uses the practice -- on tenant 100,
+# 1,019 of 7,011 "active" patients had not attended in two years and were padding every tile.
+#
+# All four now join one #act temp table: Active = 1 AND an ATTENDED appointment within 2 years
+# (Completed_At set, not cancelled, not a DNA). Same shape as the rule V153 gave
+# Gold.Dim_Patient_Data_Quality, but keyed on attendance rather than any appointment -- a patient
+# who only ever cancels or DNAs is not active, and counting them is what put stale names on the
+# to-rebook lists.
+#
+# Measured on prod tenant 100 (counts before -> after):
+#   Open Plans       585 -> 566     Cancellations  1407 -> 909
+#   Recalls         2386 -> 2092    DNAs            277 -> 169
+#
+# The aggregate is a DROP/CREATE full rebuild, so corrected counts land on the next run. No schema
+# change, no new columns.
+#
+# STILL OUTSTANDING (not in this release):
+#   * Rebooked_Status compares BOOKING time to the cancellation, so a patient who had already
+#     booked a later appointment before cancelling -- and then attended it -- never clears. 254 of
+#     the 1,407 cancellations are patients who demonstrably attended afterwards.
+#   * Gold.Dim_Patient_Data_Quality still uses V153's "any appointment in 2 years", so two
+#     definitions of effectively-active now exist. Worth aligning on attendance.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V155__daybook_counts_active_patients_only.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+
+TEST

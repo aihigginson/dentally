@@ -101,7 +101,13 @@ def _security_headers(response):
     response.headers.setdefault(_csp_header, _csp)
     return response
 
-APP_ENV        = os.environ.get('APP_ENV', 'prod')
+# Defaults to 'dev' so an unconfigured environment FAILS SAFE: APP_ENV gates whether real customer
+# email is sent (monitor nudges) and whether _send_email redirects everything to MAIL_REDIRECT, so a
+# missing value must mean "not prod". It used to default to 'prod', which meant dev was safe only
+# while its APP_ENV variable survived -- drop that one variable and dev would have started emailing
+# real practices, since dev carries prod's Graph config and a copy of a live practice's addresses.
+# Prod now sets APP_ENV=prod explicitly on the container app rather than relying on the default.
+APP_ENV        = os.environ.get('APP_ENV', 'dev')
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
 CLIENT_SECRET  = os.environ['CLIENT_SECRET']
@@ -880,6 +886,10 @@ def _code_hmac(code, email):
 # to GRAPH_FROM. Reuses the app's confidential-client creds. Falls back to ACS on any Graph error.
 GRAPH_SEND = os.environ.get('GRAPH_SEND', '').strip().lower() in ('1', 'true', 'yes', 'on')
 GRAPH_FROM = os.environ.get('GRAPH_FROM', 'support@analytically.info')
+# Every non-prod email is re-addressed here. Dev has the same GRAPH_SEND config as prod, and dev's
+# tenant 100 is a copy of a live practice, so this is the only thing standing between a test and a
+# real customer's inbox. Overridable, but it must never be blank outside prod.
+MAIL_REDIRECT = os.environ.get('MAIL_REDIRECT', 'support@analytically.info')
 _graph_msal = None
 
 
@@ -898,8 +908,22 @@ def _send_email(to, subject, body, sender=None, reply_to=None):
     """Send a transactional email. Prefers Microsoft 365 via Graph (GRAPH_SEND) -- branded + SPF/DKIM/
     DMARC-aligned, sending AS a real analytically.info mailbox (default GRAPH_FROM). Else Azure
     Communication Services (managed *.azurecomm.net sender), else SMTP; otherwise (dev) logs the body.
-    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain)."""
+    `sender` chooses the Graph mailbox to send as; ACS ignores it (can only send from its own domain).
+
+    NON-PROD REDIRECT: outside prod every message is re-addressed to MAIL_REDIRECT
+    (support@analytically.info). Dev carries the same GRAPH_SEND/GRAPH_FROM config as prod, so mail
+    from dev really does leave the building -- and dev's tenant 100 is a copy of a live practice,
+    so its Application_Users and Billing_Contact hold REAL staff addresses. Without this, testing a
+    token nudge, a primary handover or a termination would email an actual dental practice. The
+    intended recipient is preserved in the subject and body so the test is still meaningful.
+    """
     reply_to = reply_to or os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info')
+    if APP_ENV != 'prod':
+        intended = to
+        to = MAIL_REDIRECT
+        subject = f'[{APP_ENV.upper()} -> {intended}] {subject}'
+        body = (f"--- {APP_ENV} redirect: this would have been sent to {intended} ---\n\n") + body
+        app.logger.warning("mail redirected (%s): %r -> %s", APP_ENV, intended, to)
 
     # 1) Microsoft 365 via Graph -- the aligned/branded path when enabled.
     if GRAPH_SEND:
@@ -2111,24 +2135,122 @@ def save_team():
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
                     [tid, email, profile, upn])
         # Billing contact (primary account + invoice email), per tenant -- only when the client sent it.
+        #
+        # ANY practice admin may set the primary, including to themselves. That is deliberate: the
+        # primary is the only account that can end the subscription, so if that person is off sick,
+        # leaves, or dies, another admin has to be able to take the account over without waiting on
+        # support. Restricting the change to the current primary would deadlock exactly that case
+        # (and would deadlock a tenant that has no primary recorded at all, which is dev today).
+        #
+        # The safeguard is therefore accountability, not prevention: a takeover is announced to the
+        # person losing it and to Sales@, so it can never happen quietly. Updated_By records who did
+        # it. Without this, an admin could self-appoint and immediately terminate unnoticed.
         if isinstance(payload, dict) and ('primary_email' in payload or 'invoice_email' in payload):
             primary_email = (payload.get('primary_email') or '').strip() or None
             invoice_email = (payload.get('invoice_email') or '').strip() or None
+            takeovers = []
             for tid in allowed:
+                acur.execute("SELECT Primary_Email FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
+                prev_row  = acur.fetchone()
+                prev      = ((prev_row[0] if prev_row else None) or '').strip()
                 acur.execute("DELETE FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
                 acur.execute("INSERT INTO Input.Billing_Contact (Tenant_ID, Primary_Email, Invoice_Email, Updated_By) VALUES (?, ?, ?, ?)",
                              [tid, primary_email, invoice_email, upn])
+                # Only a genuine handover of an EXISTING primary is announced. First-time setup has
+                # nobody to tell, and re-saving the same address is not a change.
+                if prev and (primary_email or '').lower() != prev.lower():
+                    takeovers.append((tid, prev, primary_email))
+            for tid, prev, now_primary in takeovers:
+                _notify_primary_change(tid, prev, now_primary, upn)
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_team')
 
 
+def _notify_primary_change(tenant_id, previous, now_primary, changed_by):
+    """Announce a change of primary account holder to the OUTGOING primary and to Sales@.
+
+    The primary is the only account that can end the subscription, so handing that role over is a
+    privilege change, not a preference. Any admin is allowed to do it (see save_team for why), which
+    makes telling people the only thing standing between a legitimate handover and a quiet takeover.
+    Best-effort -- the change is already saved and must not be rolled back by a mail failure.
+    """
+    body = (
+        f"The primary account holder for your Analytically subscription has been changed.\n\n"
+        f"  Practice tenant : {tenant_id}\n"
+        f"  Was             : {previous}\n"
+        f"  Now             : {now_primary or '(none)'}\n"
+        f"  Changed by      : {changed_by}\n"
+        f"  When            : {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n\n"
+        "The primary account holder receives invoices and is the only person who can end the "
+        "subscription.\n\n"
+        f"If you did not expect this, reply to this email or contact {SUPPORT_FROM} straight away.\n"
+    )
+    # ONLY the outgoing primary is told. They are the person losing the role, so telling them is
+    # the whole control -- a takeover cannot be silent. Sales@ was copied here originally and it was
+    # just noise: a practice moving its own billing contact is their internal admin, and Updated_By
+    # already records who did it. Sales@ IS still alerted on an actual termination, which is the
+    # event that matters commercially.
+    try:
+        # _send_email tags and redirects non-prod centrally -- nothing to do here.
+        # Reply-To is support, not the sales default: an unexpected handover is a support matter,
+        # so "reply to this email" has to reach someone who can actually undo it.
+        _send_email(previous, "Analytically: primary account holder changed", body,
+                    reply_to=SUPPORT_FROM)
+    except Exception as e:
+        app.logger.warning("primary-change notice to %s failed (tenant %s): %s", previous, tenant_id, e)
+
+
+def _termination_email_body(practice, tids, upn, reason, revoked):
+    """Internal alert to Sales@ so a human can start the re-engagement call. Deletion is NOT
+    automatic -- support runs Audit.usp_Delete_All_Tenant by hand once the account is written off."""
+    return (
+        f"A practice has stopped using Analytically.\n\n"
+        f"  Practice   : {practice or '(unknown)'}\n"
+        f"  Tenant ID  : {', '.join(str(t) for t in tids)}\n"
+        f"  Ended by   : {upn}\n"
+        f"  When       : {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n"
+        f"  Reason     : {reason or '(none given)'}\n"
+        f"  Users cut  : {revoked}\n\n"
+        "Done automatically:\n"
+        "  * every user set to No Access\n"
+        "  * tenant deactivated (Audit.Tenants.Is_Active = 0) -- ingest stops\n"
+        "  * billed to the end of the current month, nothing after\n\n"
+        "NOT done -- for support to action:\n"
+        "  * no data has been deleted. Re-engage first; if the account is written off, run\n"
+        "    Audit.usp_Delete_All_Tenant by hand (Delete_By on Billing.Account_Billing is the\n"
+        "    28-day marker shown to the customer, not a scheduled job).\n"
+        "  * to reinstate: flip Is_Active back to 1 and re-grant profiles on the Subscriptions\n"
+        "    tab. The ETL resumes from where it left off with a larger delta load.\n"
+    )
+
+
 @app.route('/api/cancel', methods=['POST'])
 def cancel_subscription():
-    """Cancel the practice's subscription: IMMEDIATE revocation (Audit.Tenants.Is_Active=0 -> every user
-    on the tenant then fails closed in _get_user_info) + record the reason and Delete_By = +28 days on
-    Billing.Account_Billing. Owner-only. Data is purged by the offboarding job on/after Delete_By."""
+    """"Stop using Analytically": end the practice's subscription.
+
+    LEAD ACCOUNT ONLY -- the caller must be the recorded primary on Input.Billing_Contact. Being a
+    practice admin is not enough: this ends access for everyone, so it is the billing owner's call.
+
+    What it does, all reversible:
+      * every user on the tenant -> profile no_access (row KEPT, flags zeroed) + an Access_Log entry
+      * Audit.Tenants.Is_Active = 0, so ingest stops and every user also fails closed in
+        _get_user_info even before the AppDB->warehouse sync catches up
+      * Billing.Account_Billing gets the reason, the 28-day Delete_By marker, and Cancelled_At
+      * emails Sales@ so support can try to re-engage
+
+    NOTHING is deleted here. Delete_By is a marker for the support team, who run
+    Audit.usp_Delete_All_Tenant by hand -- no job consumes it.
+
+    Two billing subtleties, both load-bearing:
+      * the rows must SURVIVE. usp_Generate_Invoice_Lines draws its user list from
+        Security.Application_Users and the profile history from Access_Log, so deleting the rows
+        would lose the final month's invoice entirely. Hence no_access rather than DELETE.
+      * Cancelled_At is set to the START OF NEXT MONTH, not now. The sproc bills a month only when
+        `Cancelled_At IS NULL OR Cancelled_At > @MEnd`, so stamping it with now() would drop the
+        current month -- the opposite of "billing continues to the end of the month".
+    """
     upn, err = _auth()
     if err:
         return err
@@ -2136,23 +2258,97 @@ def cancel_subscription():
         conn = _fabric_conn(autocommit=True)
         cur  = conn.cursor()
         _, client_id, tids, maintain = _get_user_info(cur, upn)
-        if client_id is None:
+        if client_id is None or not tids:
             conn.close(); return jsonify({'error': 'Forbidden'}), 403
-        if not maintain:
-            conn.close(); return jsonify({'error': 'Only a practice admin can cancel the subscription'}), 403
-        reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+        practice = None
+        cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tids[0])
+        row = cur.fetchone()
+        if row:
+            practice = row[0]
+        cur.execute(f"SELECT Tenant_ID, Client_ID FROM Audit.Tenants "
+                    f"WHERE Tenant_ID IN ({','.join(['?'] * len(tids))})", tids)
+        client_by_tenant = {r[0]: r[1] for r in cur.fetchall()}
+    except Exception as e:
+        return _server_error(e, 'cancel')
+
+    # ── lead-account gate ────────────────────────────────────────────────────
+    # Deliberately refuses when no primary has been recorded rather than falling back to "any
+    # admin": a blank billing contact must not become a loophole that lets any admin end the
+    # practice's subscription. The message says how to clear it.
+    try:
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        acur.execute(f"SELECT Primary_Email FROM Input.Billing_Contact "
+                     f"WHERE Tenant_ID IN ({','.join(['?'] * len(tids))})", tids)
+        primaries = [(r[0] or '').strip().lower() for r in acur.fetchall() if (r[0] or '').strip()]
+    except Exception as e:
+        return _server_error(e, 'cancel')
+    # Our own support logins bypass the gate entirely. They are never the recorded primary (the
+    # primary is picked by radio from the Dentally roster, and a support account has no Dentally
+    # user), yet support has to be able to end a subscription on the practice's behalf -- over the
+    # phone, or when the primary has left and nobody can reach the mailbox. They also keep their
+    # access through termination, so they can still act afterwards.
+    is_support = (upn or '').lower().endswith('@analytically.info')
+    if not is_support:
+        if not primaries:
+            ac.close(); conn.close()
+            return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
+                                     'tab first — only the primary account can end the subscription.'}), 403
+        if (upn or '').lower() not in primaries:
+            ac.close(); conn.close()
+            return jsonify({'error': 'Only the primary account holder can end the subscription.'}), 403
+
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
+    try:
+        revoked = 0
         for tid in tids:
+            cid = client_by_tenant.get(tid)
+            if cid is not None:
+                # Read the roster BEFORE zeroing it, so Access_Log records who actually changed.
+                # Our own support logins are left alone. They are not the practice's users: they
+                # are added straight to Application_Users by SQL (they have no Dentally user, so
+                # they never appear on the subscriptions roster), they are already excluded from
+                # billing by usp_Generate_Invoice_Lines on the same test, and support needs to keep
+                # access to run the re-engagement and the eventual manual cleanup. Revoking them
+                # would lock the vendor out of a tenant that still has data to deal with.
+                _SUPPORT = "LOWER(User_UPN) NOT LIKE '%@analytically.info'"
+                acur.execute("SELECT User_UPN FROM Input.Application_Users "
+                             "WHERE Client_ID = ? AND ISNULL(Profile_Key, '') <> 'no_access' "
+                             "AND " + _SUPPORT, cid)
+                losing = [r[0] for r in acur.fetchall()]
+                acur.execute(
+                    "UPDATE Input.Application_Users SET "
+                    + " = 0, ".join(_ALL_MODULE_COLS) + " = 0, "
+                    + "Maintain_Targets = 0, Profile_Key = 'no_access', Practitioner_Full_Name = NULL, "
+                      "Updated_By = ? WHERE Client_ID = ? AND " + _SUPPORT, [upn, cid])
+                for who in losing:
+                    acur.execute("INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) "
+                                 "VALUES (?, ?, 'no_access', ?)", [tid, who, upn])
+                revoked += len(losing)
+
             cur.execute("UPDATE Audit.Tenants SET Is_Active = 0 WHERE Tenant_ID = ?", tid)
+            # Start of next month: keeps the current month billable, stops everything after it.
+            nxt = "DATEADD(month, 1, DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1))"
             cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Tenant_ID = ?", tid)
             if cur.fetchone()[0]:
-                cur.execute("UPDATE Billing.Account_Billing SET Cancelled_At = SYSUTCDATETIME(), Cancel_Reason = ?, "
-                            "Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?", [reason, tid])
+                cur.execute(f"UPDATE Billing.Account_Billing SET Cancelled_At = {nxt}, Cancel_Reason = ?, "
+                            f"Delete_By = DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)) WHERE Tenant_ID = ?",
+                            [reason, tid])
             else:
-                cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
-                            "VALUES (?, SYSUTCDATETIME(), ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+                cur.execute(f"INSERT INTO Billing.Account_Billing (Tenant_ID, Cancelled_At, Cancel_Reason, Delete_By) "
+                            f"VALUES (?, {nxt}, ?, DATEADD(day, 28, CAST(SYSUTCDATETIME() AS DATE)))", [tid, reason])
+        ac.close()
         conn.close()
-        app.logger.info("subscription cancelled: tenant(s)=%s by=%s reason=%r", tids, upn, reason)
-        return jsonify({'ok': True})
+        app.logger.warning("SUBSCRIPTION ENDED: tenant(s)=%s by=%s users_revoked=%d reason=%r",
+                           tids, upn, revoked, reason)
+        # Best-effort: the termination is already committed, so a mail failure must not 500 the
+        # caller into thinking it did not happen. (Non-prod tagging/redirect is done centrally.)
+        try:
+            _send_email('Sales@Analytically.info',
+                        f"Subscription ended: {practice or tids[0]}",
+                        _termination_email_body(practice, tids, upn, reason, revoked))
+        except Exception as e:
+            app.logger.warning("termination alert email failed for tenant(s)=%s: %s", tids, e)
+        return jsonify({'ok': True, 'users_revoked': revoked})
     except Exception as e:
         return _server_error(e, 'cancel')
 

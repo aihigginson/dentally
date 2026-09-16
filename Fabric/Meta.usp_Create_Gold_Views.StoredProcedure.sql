@@ -81,6 +81,7 @@ BEGIN
         INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
         WHERE s.name = 'Gold'
           AND v.name <> 'vw_Dim_Date'   -- back-end-only per-tenant date helper; must NOT become PBI.[List Date]
+          AND v.name <> 'vw_Effectively_Active_Patients'   -- back-end-only patient filter; PBI has no use for a list of keys
     ) src;
 
     SET @Row     = 1;

@@ -6,6 +6,14 @@
 --  History          :
 --    *01     07/05/2026  AIH  Initial Release
 --    *02     11/06/2026  AIH  Add Next_7_Days_Available_Mins / Next_7_Days_Booked_Mins
+--    *05     15/09/2026  AIH  All four Day Book action counts now key off ONE definition of an
+--                             effectively active patient (#act): the Active flag AND an
+--                             attended appointment within 2 years. Previously the four tiles
+--                             carried three different rules -- Cancellations/DNAs used the
+--                             Active flag, Open Plans and Recalls had no patient filter at
+--                             all -- and the flag alone let long-dormant patients pad every
+--                             list. Same shape as V153's Dim_Patient_Data_Quality rule but
+--                             keyed on ATTENDANCE, not any appointment.
 --    *04     31/07/2026  AIH  Days_Until_Next_30/60 counted in SESSION days (practitioner's own
 --                             working days) not calendar days; #free now session days only.
 --    *03     30/07/2026  AIH  Fold in Day Book action counts (Open Plans / Cancellations /
@@ -155,32 +163,42 @@ BEGIN
         -- Each matches its Day Book detail-page filter. Split by the fact's own
         -- fk_Practice_Site so a multi-site practitioner's actions land at the
         -- right site (recalls now carry fk_Practice_Site, derived from the patient).
-        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
-        INTO #op
-        FROM Gold.Fact_Treatment_Plans
-        WHERE Course_Status IN ('In Progress', 'Open - No Appointment')
-        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+        -- ── Effectively active patients ──────────────────
+        -- One definition, shared with Dim_Patient_Data_Quality: see
+        -- Gold.vw_Effectively_Active_Patients for why it is a view and not a stored column.
+        -- Materialised here only so the four tiles below scan it once rather than four times.
+        DROP TABLE IF EXISTS #act;
+        SELECT pk_Patient
+        INTO #act
+        FROM Gold.vw_Effectively_Active_Patients;
 
-        -- Active patients only (exclude inactive) -- matches the detail-page filter.
+        SELECT tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, tp.fk_Practitioner, COUNT(1) AS cnt
+        INTO #op
+        FROM Gold.Fact_Treatment_Plans tp
+        JOIN #act ap ON ap.pk_Patient = tp.fk_Patient
+        WHERE tp.Course_Status IN ('In Progress', 'Open - No Appointment')
+        GROUP BY tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1), tp.fk_Practitioner;
+
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #cx
         FROM Gold.Fact_Appointments a
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_Cancelled = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #dn
         FROM Gold.Fact_Appointments a
-        JOIN Gold.Dim_Patients dp ON dp.pk_Patient = a.fk_Patient AND dp.Active = 1
+        JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_DNA = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
-        SELECT Tenant_ID, ISNULL(fk_Practice_Site,-1) AS fk_Site, fk_Practitioner, COUNT(1) AS cnt
+        SELECT r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1) AS fk_Site, r.fk_Practitioner, COUNT(1) AS cnt
         INTO #rc
-        FROM Gold.Fact_Recalls
-        WHERE Retention_Outlook_In_Scope = 1 AND Is_Booked = 0
-        GROUP BY Tenant_ID, ISNULL(fk_Practice_Site,-1), fk_Practitioner;
+        FROM Gold.Fact_Recalls r
+        JOIN #act ap ON ap.pk_Patient = r.fk_Patient
+        WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0
+        GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner;
 
         -- ── Site × practitioner spine ────────────────────────────────────────
         -- Union of the home site (for availability) with any site where the
@@ -266,6 +284,7 @@ BEGIN
         DROP TABLE #week;
         DROP TABLE #free;
         DROP TABLE #booked;
+        DROP TABLE #act;
 
         --*********************************
         --**** Procedure logic ends    ****

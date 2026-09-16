@@ -147,6 +147,24 @@ BEGIN
         WHERE Appointment_ID IS NOT NULL AND Patient_ID IS NOT NULL
         GROUP BY Tenant_ID, Patient_ID;
 
+        -- Did they actually COME BACK? #last_booked answers "did they book again", which is not
+        -- the same question and is why cancellations stuck on the Day Book list for years: a
+        -- patient who had ALREADY booked a later appointment before cancelling, and then attended
+        -- it, has a Last_Booked_DT that predates the cancellation, so nothing ever cleared them.
+        -- 254 of tenant 100's 1,407 "to rebook" cancellations were people who demonstrably
+        -- attended afterwards. Keyed on the appointment DATE, since that is when they turned up.
+        DROP TABLE IF EXISTS #last_attended;
+        SELECT
+            Tenant_ID, Patient_ID,
+            MAX(TRY_CAST(NULLIF(TRIM(Start_Time),'') AS datetime2(3))) AS Last_Attended_DT
+        INTO #last_attended
+        FROM Silver.Appointments
+        WHERE Appointment_ID IS NOT NULL AND Patient_ID IS NOT NULL
+          AND NULLIF(TRIM(Completed_At),'')      IS NOT NULL
+          AND NULLIF(TRIM(Cancelled_At),'')      IS NULL
+          AND NULLIF(TRIM(Did_Not_Attend_At),'') IS NULL
+        GROUP BY Tenant_ID, Patient_ID;
+
         -- Patients who already have a FUTURE non-cancelled appointment don't need rebooking,
         -- regardless of when it was booked (matches the recall Is_Booked signal).
         DROP TABLE IF EXISTS #has_future;
@@ -227,10 +245,12 @@ BEGIN
             CASE
                 WHEN TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3)) IS NOT NULL
                     THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
+                                OR la.Last_Attended_DT > TRY_CAST(NULLIF(TRIM(a.Cancelled_At),'') AS datetime2(3))
                                 OR hf.Patient_ID IS NOT NULL
                               THEN 'Rebooked' ELSE 'Not Rebooked' END
                 WHEN TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3)) IS NOT NULL
                     THEN CASE WHEN lb.Last_Booked_DT > TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3))
+                                OR la.Last_Attended_DT > TRY_CAST(NULLIF(TRIM(a.Did_Not_Attend_At),'') AS datetime2(3))
                                 OR hf.Patient_ID IS NOT NULL
                               THEN 'Rebooked' ELSE 'Not Rebooked' END
                 ELSE NULL
@@ -248,6 +268,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Cancellation_Reasons dcr ON dcr.bk_Cancellation_Reason_ID = NULLIF(TRIM(a.Appointment_Cancellation_Reason_ID),'') AND dcr.Tenant_ID = a.Tenant_ID
         LEFT JOIN #journey ja                   ON ja.Appointment_ID   = a.Appointment_ID AND ja.Tenant_ID = a.Tenant_ID
         LEFT JOIN #last_booked lb               ON lb.Patient_ID       = a.Patient_ID     AND lb.Tenant_ID = a.Tenant_ID
+        LEFT JOIN #last_attended la             ON la.Patient_ID       = a.Patient_ID     AND la.Tenant_ID = a.Tenant_ID
         LEFT JOIN #has_future hf                ON hf.Patient_ID       = a.Patient_ID     AND hf.Tenant_ID = a.Tenant_ID
         WHERE a.Appointment_ID IS NOT NULL;
 

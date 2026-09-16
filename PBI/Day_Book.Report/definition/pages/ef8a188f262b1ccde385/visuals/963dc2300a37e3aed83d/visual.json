@@ -1,177 +1,252 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "30c6f2d7c7a7b9199e9f",
+  "name": "963dc2300a37e3aed83d",
   "position": {
-    "x": 0,
+    "x": 1000,
     "y": 0,
-    "z": 0,
-    "height": 588.73720136518773,
-    "width": 1009.5563139931741,
-    "tabOrder": 0
+    "z": 4000,
+    "height": 44,
+    "width": 272,
+    "tabOrder": 4000
   },
   "visual": {
-    "visualType": "tableEx",
+    "visualType": "cardVisual",
     "query": {
       "queryState": {
-        "Values": {
+        "Data": {
           "projections": [
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Recalls"
                     }
                   },
-                  "Property": "Full Name"
+                  "Property": "Recall Count"
                 }
               },
-              "queryRef": "List Patients.Full Name",
-              "nativeQueryRef": "Full Name"
+              "queryRef": "_Recalls.Recall Count",
+              "nativeQueryRef": "Recalls",
+              "displayName": "Recalls"
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Appointments"
+                      "Entity": "_Recalls"
                     }
                   },
-                  "Property": "Start Time"
+                  "Property": "Recall Patients"
                 }
               },
-              "queryRef": "_Appointments.Start Time",
-              "nativeQueryRef": "Start Time",
-              "format": "dd/MM/yyyy"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
-                  "Property": "Email Address"
-                }
-              },
-              "queryRef": "List Patients.Email Address",
-              "nativeQueryRef": "Email Address"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
-                  "Property": "Mobile Phone"
-                }
-              },
-              "queryRef": "List Patients.Mobile Phone",
-              "nativeQueryRef": "Mobile Phone"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Patients"
-                    }
-                  },
-                  "Property": "Total Paid"
-                }
-              },
-              "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Lifetime Value",
-              "displayName": "Lifetime Value"
+              "queryRef": "_Recalls.Recall Patients",
+              "nativeQueryRef": "Patients",
+              "displayName": "Patients"
             }
           ]
         }
       }
     },
+    "drillFilterOtherVisuals": true,
     "objects": {
-      "columnHeaders": [
-        {
-          "properties": {}
-        }
-      ],
-      "columnWidth": [
+      "value": [
         {
           "properties": {
-            "value": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "141.9078447932745D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Patients.Full Name"
-          }
-        },
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "125.65290456808282D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Patients.Mobile Phone"
-          }
-        }
-      ]
-    },
-    "visualContainerObjects": {
-      "title": [
-        {
-          "properties": {
-            "text": {
-              "expr": {
-                "Literal": {
-                  "Value": "'DNAs -- Not Rebooked'"
+                  "Value": "11D"
                 }
               }
             },
             "fontFamily": {
               "expr": {
                 "Literal": {
-                  "Value": "'Arial'"
+                  "Value": "'''Segoe UI Semibold'', wf_segoe-ui_semibold, helvetica, arial, sans-serif'"
                 }
               }
             },
-            "bold": {
+            "horizontalAlignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'center'"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "label": [
+        {
+          "properties": {
+            "show": {
               "expr": {
                 "Literal": {
                   "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "position": {
+              "expr": {
+                "Literal": {
+                  "Value": "'aboveValue'"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'''Segoe UI'', wf_segoe-ui_normal, helvetica, arial, sans-serif'"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "cardCalloutArea": [
+        {
+          "properties": {
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "divider": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "outline": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "layout": [
+        {
+          "properties": {
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        },
+        {
+          "properties": {
+            "orientation": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "rowCount": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
                 }
               }
             }
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   },
   "filterConfig": {
     "filters": [
       {
-        "name": "4732482dfda6787ce41d",
+        "name": "638c4235d607b1e9cd22",
         "ordinal": 0,
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "_Appointments"
+                "Entity": "_Recalls"
               }
             },
-            "Property": "Is DNA"
+            "Property": "Retention Outlook In Scope"
           }
         },
         "type": "Categorical",
@@ -179,8 +254,8 @@
           "Version": 2,
           "From": [
             {
-              "Name": "a",
-              "Entity": "_Appointments",
+              "Name": "_",
+              "Entity": "_Recalls",
               "Type": 0
             }
           ],
@@ -193,10 +268,10 @@
                       "Column": {
                         "Expression": {
                           "SourceRef": {
-                            "Source": "a"
+                            "Source": "_"
                           }
                         },
-                        "Property": "Is DNA"
+                        "Property": "Retention Outlook In Scope"
                       }
                     }
                   ],
@@ -204,7 +279,7 @@
                     [
                       {
                         "Literal": {
-                          "Value": "true"
+                          "Value": "1L"
                         }
                       }
                     ]
@@ -217,16 +292,16 @@
         "howCreated": "User"
       },
       {
-        "name": "27da79f752d056f61d81",
+        "name": "1e3a5e60ab5fd57dff38",
         "ordinal": 1,
         "field": {
           "Column": {
             "Expression": {
               "SourceRef": {
-                "Entity": "_Appointments"
+                "Entity": "_Recalls"
               }
             },
-            "Property": "Rebooked Status"
+            "Property": "Is Booked"
           }
         },
         "type": "Categorical",
@@ -234,8 +309,8 @@
           "Version": 2,
           "From": [
             {
-              "Name": "a",
-              "Entity": "_Appointments",
+              "Name": "r",
+              "Entity": "_Recalls",
               "Type": 0
             }
           ],
@@ -248,10 +323,10 @@
                       "Column": {
                         "Expression": {
                           "SourceRef": {
-                            "Source": "a"
+                            "Source": "r"
                           }
                         },
-                        "Property": "Rebooked Status"
+                        "Property": "Is Booked"
                       }
                     }
                   ],
@@ -259,7 +334,7 @@
                     [
                       {
                         "Literal": {
-                          "Value": "'Not Rebooked'"
+                          "Value": "false"
                         }
                       }
                     ]
@@ -272,77 +347,7 @@
         "howCreated": "User"
       },
       {
-        "name": "a97154e55aac0a497dec",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Full Name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "08e3df554626a6c0e011",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Email Address"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "c509d04690d70c6700db",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Mobile Phone"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "9ffb44a1a033032345c0",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Appointments"
-              }
-            },
-            "Property": "Start Time"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "154c3af1282825390b52",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "List Patients"
-              }
-            },
-            "Property": "Total Paid"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "57cf4ef369b37bbc7663",
+        "name": "0f0f5f5f97f0e90fd0bd",
         "ordinal": 2,
         "field": {
           "Column": {

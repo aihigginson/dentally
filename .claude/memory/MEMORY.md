@@ -6,3 +6,6 @@
 - [Prod warehouse deploys need a token](prod-warehouse-deploy-needs-a-token.md) — the Test Runner SP is dev-only; RUNBOOK §2b is wrong.
 - [AppDB "Read item permission" errors](appdb-read-item-permission-is-a-capacity-symptom.md) — usually the Fabric capacity in transition, not a grant problem.
 - [Fabric Script activities do not repoint](fabric-script-activities-dont-repoint.md) — named connections survive promotion; prod pipelines silently ran against dev.
+- [Support logins are not Dentally users](support-logins-are-not-dentally-users.md) — added by SQL, so they never appear in any Gold.Dim_Users roster.
+- [RLS + many-to-many truncates List Date](rls-m2m-truncates-list-date.md) — rows present in Desktop but missing in the app; the rule text is a red herring.
+- [List Date Unconstrained is deliberate](list-date-unconstrained-is-deliberate.md) — Day Book is the one report the period filter is not forced on; do not merge the date tables.

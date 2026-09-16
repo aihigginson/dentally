@@ -1,0 +1,28 @@
+# =====================================================================
+# Release V158 -- Unadopted Patients: surface patients with NO dentist assigned
+# =====================================================================
+# Gold.Dim_Patient_Data_Quality used an INNER join to Dim_Practitioners, so it only ever caught a
+# patient whose practitioner EXISTS but is inactive. A patient with a NULL practitioner id matched
+# nothing and was invisible -- while their dentist recall carries fk_Practitioner = -1, which the
+# Day Book spine drops (it keeps > 0 only), so nobody is asked to action it.
+#
+# On tenant 100 that is 936 unattributed recalls, 28 of them over a year overdue, behind an
+# Unadopted Patients tab showing 20 rows. The new branch adds 149 patients (133 of whom already
+# have a dentist recall date, 121 have had an exam).
+#
+# DENTIST ONLY, deliberately. A hygienist is optional: where assigned the recalls are tracked,
+# where not the practice treats the patient as no longer subject to hygiene recalls, and assigning
+# one later picks the overdue recall back up. A dentist is not optional. Including the hygienist
+# equivalent would bury the list under ~900 rows of normal business.
+#
+# NO MODEL REFRESH OR REPORT CHANGE NEEDED: the branch reuses the existing columns
+# (Inactive_Practitioner_Role = 'Dentist', Name = 'None assigned', ID = NULL), so the PBI view
+# shape is unchanged and the rows simply appear on the existing tab and in its slicer.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V158__unadopted_patients_missing_dentist.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Dim_Patient_Data_Quality.View.sql
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
