@@ -103,8 +103,15 @@ To apply the measures: open `PBI/PBI Dentally.pbix` in Power BI Desktop, launch 
 **External Tools** (or File → Open → From DB… and pick the local Analysis Services instance Desktop
 is hosting). Paste `Fabric/PBI_Dentally.csx` into the **C# Script** tab, Run, then Save. The script
 is amalgamated and idempotent — one run rebuilds every measure folder, and each section deletes its
-own measures by name first, so re-running replaces rather than duplicates. Publish the model
-afterwards or the reports will not see the changes.
+own measures by name first, so re-running replaces rather than duplicates.
+
+> **Publish the model, then REFRESH it in the service — in that order, every time.**
+> Publishing from Desktop replaces the dataset's *imported data* with whatever snapshot your local
+> `.pbix` happens to hold, and that is **not** recorded as a refresh, so nothing in the refresh
+> history hints at it. Publishing to ship a measure change will therefore quietly roll the numbers
+> back to whenever you last refreshed locally. Seen on 2026-09-16: the Day Book to-rebook count
+> read 910 against a warehouse holding 710, which is the figure from before a fix that had already
+> been deployed and built. A refresh in the service corrects it.
 
 Claude Code (native, no Node needed):
 
