@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "name": "adec1a94696b5e70a2b5",
+  "position": {
+    "x": 15,
+    "y": 613,
+    "z": 4000,
+    "height": 70,
+    "width": 901,
+    "tabOrder": 4000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Treatment Plans"
+                    }
+                  },
+                  "Property": "Plan Count"
+                }
+              },
+              "queryRef": "_Treatment Plans.Plan Count",
+              "nativeQueryRef": "Open Plans",
+              "displayName": "Open Plans"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Treatment Plans"
+                    }
+                  },
+                  "Property": "Plan Patients"
+                }
+              },
+              "queryRef": "_Treatment Plans.Plan Patients",
+              "nativeQueryRef": "Patients",
+              "displayName": "Patients"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

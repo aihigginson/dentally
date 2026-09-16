@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "name": "07a393698272330370be",
+  "position": {
+    "x": 0,
+    "y": 598,
+    "z": 4000,
+    "height": 70,
+    "width": 1010,
+    "tabOrder": 4000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Appointments"
+                    }
+                  },
+                  "Property": "Appointment Count"
+                }
+              },
+              "queryRef": "_Appointments.Appointment Count",
+              "nativeQueryRef": "DNAs",
+              "displayName": "DNAs"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Appointments"
+                    }
+                  },
+                  "Property": "Patient Count"
+                }
+              },
+              "queryRef": "_Appointments.Patient Count",
+              "nativeQueryRef": "Patients",
+              "displayName": "Patients"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

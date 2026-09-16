@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "name": "963dc2300a37e3aed83d",
+  "position": {
+    "x": 0,
+    "y": 598,
+    "z": 4000,
+    "height": 70,
+    "width": 992,
+    "tabOrder": 4000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Recall Count"
+                }
+              },
+              "queryRef": "_Recalls.Recall Count",
+              "nativeQueryRef": "Recalls",
+              "displayName": "Recalls"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Recall Patients"
+                }
+              },
+              "queryRef": "_Recalls.Recall Patients",
+              "nativeQueryRef": "Patients",
+              "displayName": "Patients"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}
