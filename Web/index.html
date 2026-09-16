@@ -823,6 +823,16 @@
         if (q.get('devlog') === '0') localStorage.removeItem('_anly_devlog');
         return localStorage.getItem('_anly_devlog') === '1';
     }
+    // Same as _devLog but fires at most once per distinct key. For facts about the
+    // environment (client capabilities, feature support) that are true for the whole
+    // session: re-logging them on every report embed is pure noise.
+    const _devLogSeen = new Set();
+    function _devLogOnce(key, ...args) {
+        if (_devLogSeen.has(key)) return;
+        _devLogSeen.add(key);
+        _devLog(...args);
+    }
+
     function _devLog(...args) {
         if (!_devLogEnabled()) return;
         try { console.log(...args); } catch (e) {}
@@ -2893,7 +2903,8 @@
                 recoverEmbedToken(r, sectionKey, 'tokenExpired');
             });
         } catch (e) {
-            _devLog('[token] tokenExpired event unsupported by this client; relying on error + proactive refresh');
+            _devLogOnce('tokenExpired-unsupported',
+                '[token] tokenExpired event unsupported by this client; relying on error + proactive refresh');
         }
         // A visual can error with an expired token WITHOUT tokenExpired firing first (PBI fires it
         // late, or not before a query runs) -- which is the raw "Access token has expired" the user
