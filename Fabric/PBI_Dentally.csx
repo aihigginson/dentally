@@ -2574,3 +2574,43 @@ RETURN
     var d2 = t.AddMeasure("Diag Capitation Rows", @"CALCULATE ( COUNTROWS ( '_Revenue' ), '_Revenue'[Revenue Type] = ""Capitation"" )");
     d2.DisplayFolder = g; d2.FormatString = "#,##0";
 }
+
+// ===================== Day Book detail counts =====================
+// Row counts for the four Day Book drill-through Details pages. Each page lists rows, not
+// patients, and several patients hold more than one outstanding item -- so the two numbers differ
+// and both are worth showing. The Day Book TILE counts ROWS: the aggregate uses COUNT(1) over the
+// fact, so "Cancellations To Rebook" is cancellations, not patients.
+//
+// They also make the page auditable against the tile. A detail page reading 80 beside a tile
+// reading 83 is the open Alexandra Higginson bug made visible in-product -- her cancellation is in
+// the model and passes every filter, yet the embedded table omits it, while Desktop renders it.
+//
+// The patient side already exists for two of the three facts (_Appointments[Patient Count],
+// _Recalls[Recall Patients]), so only Treatment Plans needs its own. Homed on the fact tables to
+// sit beside those, not in _Measures.
+//
+// discourageImplicitMeasures is set on the model, so the visuals cannot Count a column -- these
+// explicit measures are the only way to put a count on those pages.
+{
+    string g = "Day Book";
+    var names = new[] { "Appointment Count", "Plan Count", "Plan Patients", "Recall Count" };
+    foreach (var tbl in Model.Tables)
+        foreach (var m in tbl.Measures.Where(m => names.Contains(m.Name)).ToList())
+            m.Delete();
+
+    var ac = Model.Tables["_Appointments"].AddMeasure("Appointment Count", @"COUNTROWS ( '_Appointments' )");
+    ac.DisplayFolder = g; ac.FormatString = "#,##0";
+    ac.Description = "Rows on the Cancellations / DNA Details pages. In each page's filter context this is cancellations or DNAs -- the same basis as the Day Book tile.";
+
+    var pc = Model.Tables["_Treatment Plans"].AddMeasure("Plan Count", @"COUNTROWS ( '_Treatment Plans' )");
+    pc.DisplayFolder = g; pc.FormatString = "#,##0";
+    pc.Description = "Rows on the Open Plan Details page -- open courses, not patients.";
+
+    var pp = Model.Tables["_Treatment Plans"].AddMeasure("Plan Patients", @"DISTINCTCOUNTNOBLANK ( '_Treatment Plans'[fk Patient] )");
+    pp.DisplayFolder = g; pp.FormatString = "#,##0";
+    pp.Description = "Distinct patients behind the open courses. Lower than Plan Count where a patient has several.";
+
+    var rc = Model.Tables["_Recalls"].AddMeasure("Recall Count", @"COUNTROWS ( '_Recalls' )");
+    rc.DisplayFolder = g; rc.FormatString = "#,##0";
+    rc.Description = "Rows on the Recall Details page -- recalls, not patients.";
+}
