@@ -2880,10 +2880,19 @@
         // one and hand it back so an idle/long-open report keeps working instead of every visual
         // showing "Access token has expired". If the refresh fails (app session also died), show
         // a friendly refresh prompt rather than the raw error.
-        r.on('tokenExpired', () => {
-            _devLog('[tokenExpired] for', sectionKey);
-            recoverEmbedToken(r, sectionKey, 'tokenExpired');
-        });
+        // 'tokenExpired' is NOT a valid event in powerbi-client 2.23.10 -- r.on() validates the
+        // name and THROWS. Registered bare, that threw here and aborted the rest of this function,
+        // so r.on('error') and scheduleTokenRefresh() below were never attached on any report, on
+        // any load: the whole token-recovery mechanism was dead. Wrapped so a future client that
+        // does support it still gets the handler, and a client that does not cannot break the rest.
+        try {
+            r.on('tokenExpired', () => {
+                _devLog('[tokenExpired] for', sectionKey);
+                recoverEmbedToken(r, sectionKey, 'tokenExpired');
+            });
+        } catch (e) {
+            _devLog('[token] tokenExpired event unsupported by this client; relying on error + proactive refresh');
+        }
         // A visual can error with an expired token WITHOUT tokenExpired firing first (PBI fires it
         // late, or not before a query runs) -- which is the raw "Access token has expired" the user
         // still saw. Catch the error event and recover the same way, gated to token/auth errors so
