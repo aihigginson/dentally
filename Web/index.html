@@ -2801,17 +2801,13 @@
         let initialFiltersReasserted = false;
         r.on('loaded', async () => {
             attachReportToSubnav(sectionKey, r);
-            // Clear Power BI's PERSISTENT FILTERS before applying our own.
+            // Dump the filters actually applied at every level, as a diagnostic.
             //
-            // The service saves each user's filter changes per report and silently reapplies them
-            // on every load. That state is invisible here (filterPaneEnabled: false) and survives
-            // code changes, so it fights the slicer bar: Day Book kept applying a Date Grouping
-            // filter that this app has explicitly NOT sent since f344dd5 (2026-07-30), hiding every
-            // future-dated cancellation from the detail pages. Craig's list read 18 rows instead of
-            // 83 -- a cancelled appointment dated next week simply never appeared.
-            //
-            // The app owns filter state via its own slicers and re-asserts it on every change, so
-            // persisted service state is never wanted for any report, not just Day Book.
+            // NOT resetPersistentFilters(): that throws "This feature is supported only for AAD
+            // Token" here. This app embeds with an EMBED token (tokenType: 1, app-owns-data), and
+            // persistent filters are a user-owns-data feature -- so per-user persisted filter state
+            // cannot be the cause of anything in this app, and the call was dead code that logged an
+            // error once per report.
             try {
                 // Report level is not enough: a persisted filter can sit on the PAGE or the VISUAL,
                 // and only those would explain a list that keeps every historic row but drops the
@@ -2830,8 +2826,7 @@
                         }
                     } catch (e) { _devLog('[filters] page/visual probe failed', pg.displayName, e); }
                 }
-                await r.resetPersistentFilters();
-            } catch (e) { _devLog('[filters] resetPersistentFilters failed', sectionKey, e); }
+            } catch (e) { _devLog('[filters] probe failed', sectionKey, e); }
             applyFilters(r);
         });
         r.on('rendered', () => {
