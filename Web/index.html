@@ -2799,34 +2799,38 @@
     // navigation buttons stop working.
     function attachReportHandlers(r, sectionKey) {
         let initialFiltersReasserted = false;
-        r.on('loaded', async () => {
-            attachReportToSubnav(sectionKey, r);
-            // Dump the filters actually applied at every level, as a diagnostic.
-            //
-            // NOT resetPersistentFilters(): that throws "This feature is supported only for AAD
-            // Token" here. This app embeds with an EMBED token (tokenType: 1, app-owns-data), and
-            // persistent filters are a user-owns-data feature -- so per-user persisted filter state
-            // cannot be the cause of anything in this app, and the call was dead code that logged an
-            // error once per report.
+        // Diagnostic: dump the filters actually applied at report, page and visual level.
+        //
+        // Must run on pageChanged as well as loaded. 'loaded' fires once, while the active page is
+        // still the report's DEFAULT page -- a drill-through navigates without re-firing it, so
+        // probing only on load captured every page except the one being investigated.
+        //
+        // Not resetPersistentFilters(): that throws "supported only for AAD Token". This app embeds
+        // app-owns-data (tokenType: 1) and persistent filters are a user-owns-data feature, so
+        // per-user persisted state cannot affect this app at all.
+        async function probeFilters(when) {
             try {
-                // Report level is not enough: a persisted filter can sit on the PAGE or the VISUAL,
-                // and only those would explain a list that keeps every historic row but drops the
-                // future-dated ones. Dump all three levels before resetting, so whatever is actually
-                // applied is named in the log instead of being guessed at from the rendered output.
-                const before = await r.getFilters();
-                if (before && before.length) _devLog('[filters] REPORT-level on load', sectionKey, before);
+                const rf = await r.getFilters();
+                if (rf && rf.length) _devLog('[filters]', when, 'REPORT-level', sectionKey, rf);
                 for (const pg of await r.getPages()) {
                     if (!pg.isActive) continue;
-                    try {
-                        const pf = await pg.getFilters();
-                        if (pf && pf.length) _devLog('[filters] PAGE-level', sectionKey, pg.displayName, pf);
-                        for (const v of await pg.getVisuals()) {
-                            const vf = await v.getFilters();
-                            if (vf && vf.length) _devLog('[filters] VISUAL-level', pg.displayName, v.name, v.type, vf);
-                        }
-                    } catch (e) { _devLog('[filters] page/visual probe failed', pg.displayName, e); }
+                    const pf = await pg.getFilters();
+                    _devLog('[filters]', when, 'PAGE', sectionKey, pg.displayName, (pf && pf.length) ? pf : '(none)');
+                    for (const v of await pg.getVisuals()) {
+                        const vf = await v.getFilters();
+                        if (vf && vf.length) _devLog('[filters]', when, 'VISUAL', pg.displayName, v.name, v.type, vf);
+                    }
                 }
-            } catch (e) { _devLog('[filters] probe failed', sectionKey, e); }
+            } catch (e) { _devLog('[filters] probe failed', when, sectionKey, e); }
+        }
+        r.on('pageChanged', async event => {
+            const nm = event && event.detail && event.detail.newPage ? event.detail.newPage.displayName : '?';
+            _devLog('[pageChanged]', sectionKey, '->', nm);
+            await probeFilters('AFTER pageChanged to ' + nm);
+        });
+        r.on('loaded', async () => {
+            attachReportToSubnav(sectionKey, r);
+            await probeFilters('on load');
             applyFilters(r);
         });
         r.on('rendered', () => {
