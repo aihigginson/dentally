@@ -2801,44 +2801,15 @@
         let initialFiltersReasserted = false;
         // Diagnostic: dump the filters actually applied at report, page and visual level.
         //
-        // Must run on pageChanged as well as loaded. 'loaded' fires once, while the active page is
-        // still the report's DEFAULT page -- a drill-through navigates without re-firing it, so
-        // probing only on load captured every page except the one being investigated.
-        //
-        // Not resetPersistentFilters(): that throws "supported only for AAD Token". This app embeds
-        // app-owns-data (tokenType: 1) and persistent filters are a user-owns-data feature, so
-        // per-user persisted state cannot affect this app at all.
-        async function probeFilters(when) {
-            try {
-                const rf = await r.getFilters();
-                if (rf && rf.length) _devLog('[filters]', when, 'REPORT-level', sectionKey, rf);
-                for (const pg of await r.getPages()) {
-                    if (!pg.isActive) continue;
-                    const pf = await pg.getFilters();
-                    _devLog('[filters]', when, 'PAGE', sectionKey, pg.displayName, (pf && pf.length) ? pf : '(none)');
-                    for (const v of await pg.getVisuals()) {
-                        const vf = await v.getFilters();
-                        if (vf && vf.length) _devLog('[filters]', when, 'VISUAL', pg.displayName, v.name, v.type, vf);
-                    }
-                }
-            } catch (e) { _devLog('[filters] probe failed', when, sectionKey, e); }
-        }
+        // ON DEMAND ONLY. This used to probe automatically on load and on every render, which
+        // buried the dev log -- every visual of every report, on every page change. The findings it
+        // was built for are recorded: the Cancellation Details table carries NO date filter
+        // (Start Time is operator "All"), persistent filters are unavailable to this app because it
+        // embeds app-owns-data (resetPersistentFilters throws "supported only for AAD Token"), and
+        // pageChanged does not fire for a native Drillthrough button.
         // pageChanged does NOT fire for a native Drillthrough button, so drive the probe off
         // 'rendered' instead -- that does fire after the target page draws. Guarded on the active
         // page NAME changing, so a re-render of the same page cannot spam the log.
-        let lastProbedPage = null;
-        r.on('pageChanged', async event => {
-            const nm = event && event.detail && event.detail.newPage ? event.detail.newPage.displayName : '?';
-            _devLog('[pageChanged]', sectionKey, '->', nm);
-        });
-        async function probeIfPageChanged() {
-            try {
-                const active = (await r.getPages()).find(p => p.isActive);
-                if (!active || active.displayName === lastProbedPage) return;
-                lastProbedPage = active.displayName;
-                await probeFilters('page now ' + active.displayName);
-            } catch (e) { _devLog('[filters] page-change detect failed', sectionKey, e); }
-        }
         // Manual escape hatch: run _probeFilters() in the console after navigating, for when the
         // events do not cooperate. Returns nothing; everything goes to the dev log.
         window._probeFilters = async () => {
@@ -2859,13 +2830,11 @@
                 }
             }
         };
-        r.on('loaded', async () => {
+        r.on('loaded', () => {
             attachReportToSubnav(sectionKey, r);
-            await probeFilters('on load');
             applyFilters(r);
         });
         r.on('rendered', () => {
-            probeIfPageChanged();
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
             // Re-assert filters once the report has actually rendered. The setFilters
