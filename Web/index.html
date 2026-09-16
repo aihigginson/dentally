@@ -2823,17 +2823,49 @@
                 }
             } catch (e) { _devLog('[filters] probe failed', when, sectionKey, e); }
         }
+        // pageChanged does NOT fire for a native Drillthrough button, so drive the probe off
+        // 'rendered' instead -- that does fire after the target page draws. Guarded on the active
+        // page NAME changing, so a re-render of the same page cannot spam the log.
+        let lastProbedPage = null;
         r.on('pageChanged', async event => {
             const nm = event && event.detail && event.detail.newPage ? event.detail.newPage.displayName : '?';
             _devLog('[pageChanged]', sectionKey, '->', nm);
-            await probeFilters('AFTER pageChanged to ' + nm);
         });
+        async function probeIfPageChanged() {
+            try {
+                const active = (await r.getPages()).find(p => p.isActive);
+                if (!active || active.displayName === lastProbedPage) return;
+                lastProbedPage = active.displayName;
+                await probeFilters('page now ' + active.displayName);
+            } catch (e) { _devLog('[filters] page-change detect failed', sectionKey, e); }
+        }
+        // Manual escape hatch: run _probeFilters() in the console after navigating, for when the
+        // events do not cooperate. Returns nothing; everything goes to the dev log.
+        window._probeFilters = async () => {
+            const cur = document.querySelector('.nav-tab.active');
+            const key = cur ? cur.getAttribute('data-section') : sectionKey;
+            const rep = embeddedReports[key] || r;
+            const pages = await rep.getPages();
+            const act = pages.find(p => p.isActive);
+            _devLog('[filters] MANUAL probe', key, act ? act.displayName : '?');
+            const rf = await rep.getFilters();
+            _devLog('[filters] MANUAL REPORT', key, (rf && rf.length) ? rf : '(none)');
+            if (act) {
+                const pf = await act.getFilters();
+                _devLog('[filters] MANUAL PAGE', act.displayName, (pf && pf.length) ? pf : '(none)');
+                for (const v of await act.getVisuals()) {
+                    const vf = await v.getFilters();
+                    _devLog('[filters] MANUAL VISUAL', act.displayName, v.name, v.type, (vf && vf.length) ? vf : '(none)');
+                }
+            }
+        };
         r.on('loaded', async () => {
             attachReportToSubnav(sectionKey, r);
             await probeFilters('on load');
             applyFilters(r);
         });
         r.on('rendered', () => {
+            probeIfPageChanged();
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
             // Re-assert filters once the report has actually rendered. The setFilters
