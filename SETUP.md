@@ -18,6 +18,7 @@ Estimated time: ~1–2 hours, mostly unattended installs + one OneDrive sync.
 | Warehouse data + build | Fabric (`WH_Dentally`, dev + prod workspaces) | cloud, nothing local |
 | Real secrets of record | Azure Key Vault / GitHub secrets / Container App secrets | see §5 |
 | **Claude Code state** (memories, MCP, settings) | `<repo>/.claude/` — see §8 | OneDrive + git, via a junction |
+| **Semantic model measures** | `Fabric/PBI_Dentally.csx` — applied with Tabular Editor, see §2 | git; needs a manual run |
 
 **You cannot lose data by replacing the machine.** The only pre-move check is
 that OneDrive says *"Your files are up to date"* on the old PC before you wipe it.
@@ -54,7 +55,56 @@ winget install --id Microsoft.AzureCLI -e
 winget install --id GitHub.cli -e
 winget install --id Microsoft.PowerBI -e            # Power BI Desktop
 winget install --id Microsoft.VisualStudioCode -e   # or SSMS if you prefer
+winget install --id TabularEditor.TabularEditor.2 -e   # model measures (see below)
 ```
+
+**Tabular Editor 2** is not optional — every measure in the semantic model is defined in
+`Fabric/PBI_Dentally.csx` and applied by running that script, so without it the model cannot be
+rebuilt or extended. Take the **.2** package: it is the free one and runs `.csx` scripts.
+`TabularEditor.TabularEditor.3` also exists in winget but is licensed.
+
+It installs as a **portable** build, so there is no Start Menu entry:
+
+```
+%LOCALAPPDATA%\Microsoft\WinGet\Packages\TabularEditor.TabularEditor.2_*\TabularEditor.exe
+```
+
+winget adds a `TabularEditor` command alias and edits PATH, so in a **new** shell you can just type
+`TabularEditor`.
+
+**Get it into Power BI's External Tools ribbon.** That is how it is normally launched — one click,
+with the open model's server/database already wired up. The winget package ships only the
+**portable** zip, which does NOT register itself, so the ribbon entry will be missing. Either:
+
+- run the **MSI** from <https://github.com/TabularEditor/TabularEditor/releases>
+  (`TabularEditor.Installer.msi`), which registers the tool for you — simplest; or
+- keep the winget build and register it by hand, which needs an **elevated** shell because the
+  folder lives under Program Files:
+
+```powershell
+$dir = "C:\Program Files (x86)\Common Files\Microsoft Shared\Power BI Desktop\External Tools"
+New-Item -ItemType Directory -Force $dir | Out-Null
+$exe = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse `
+          -Filter TabularEditor.exe | Select-Object -First 1).FullName
+@"
+{
+  "version": "2.29",
+  "name": "Tabular Editor",
+  "description": "Applies Fabric/PBI_Dentally.csx to the semantic model",
+  "path": "$($exe -replace '\','\\')",
+  "arguments": "\"%server%\" \"%database%\""
+}
+"@ | Set-Content (Join-Path $dir 'tabulareditor.pbitool.json') -Encoding utf8
+```
+
+Restart Power BI Desktop and it appears under **External Tools**.
+
+To apply the measures: open `PBI/PBI Dentally.pbix` in Power BI Desktop, launch Tabular Editor from
+**External Tools** (or File → Open → From DB… and pick the local Analysis Services instance Desktop
+is hosting). Paste `Fabric/PBI_Dentally.csx` into the **C# Script** tab, Run, then Save. The script
+is amalgamated and idempotent — one run rebuilds every measure folder, and each section deletes its
+own measures by name first, so re-running replaces rather than duplicates. Publish the model
+afterwards or the reports will not see the changes.
 
 Claude Code (native, no Node needed):
 
@@ -101,7 +151,7 @@ cd $HOME\OneDrive\dentally\code\Web
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest        # sanity: 44 tests should pass
+python -m pytest        # sanity: the suite should pass clean (65 tests at time of writing)
 deactivate
 
 # API (mock/ingest helpers)
@@ -167,7 +217,8 @@ az account show
 ```
 
 - Open a `.pbix` in Power BI Desktop → it renders (report + model intact).
-- `cd Web; .\.venv\Scripts\Activate.ps1; python -m pytest` → 44 pass.
+- `TabularEditor` launches in a new shell (needed to apply `Fabric/PBI_Dentally.csx`).
+- `cd Web; .\.venv\Scripts\Activate.ps1; python -m pytest` → all pass (65 at time of writing).
 
 Done — you're back to a full working environment.
 
