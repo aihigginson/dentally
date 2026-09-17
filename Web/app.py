@@ -2133,6 +2133,24 @@ def _stripe():
     return _stripe_singleton
 
 
+def _stripe_configured():
+    """Is Stripe usable in this environment? True only if a correctly-prefixed key is present.
+
+    Lets an environment run with Stripe simply absent rather than broken. Without this, prod
+    shows an "Add a card" button that 500s the moment the billing owner presses it, because
+    _stripe() raises on the missing secret -- a control that exists but cannot work is worse than
+    one that is not offered yet.
+
+    Never raises, and cheap after the first call: _kv_get swallows its own failures and the
+    client is cached once built.
+    """
+    try:
+        key = (_kv_get('stripe-secret-key-' + STRIPE_ENV) or '').strip()
+        return key.startswith('sk_live_' if STRIPE_ENV == 'prod' else 'sk_test_')
+    except Exception:
+        return False
+
+
 def _lead_account_error(upn, tids, acur, action='manage billing'):
     """None if this caller may act as the practice's billing owner, else an error response.
 
@@ -2349,6 +2367,11 @@ def stripe_payment_method():
         row = cur.fetchone()
         conn.close()
 
+        # With no Stripe key in this environment there is nothing to show and nothing to do, so
+        # report it plainly instead of offering a control that cannot work.
+        if not _stripe_configured():
+            return jsonify({'has_card': False, 'can_manage': False, 'configured': False})
+
         # Whether the caller may ADD or CHANGE the card is decided here, not in the browser. The
         # UI must never re-derive it from a roster: an account added straight to Application_Users
         # by SQL has no Dentally user, so a client-side test hides the control from precisely the
@@ -2388,6 +2411,9 @@ def stripe_setup_session():
     upn, err = _auth()
     if err:
         return err
+    if not _stripe_configured():
+        return jsonify({'error': 'Card payments are not configured in this environment '
+                                 'yet.'}), 503
     try:
         conn = _fabric_conn(autocommit=True)
         cur  = conn.cursor()
@@ -2445,6 +2471,9 @@ def stripe_remove_card():
     upn, err = _auth()
     if err:
         return err
+    if not _stripe_configured():
+        return jsonify({'error': 'Card payments are not configured in this environment '
+                                 'yet.'}), 503
     try:
         conn = _fabric_conn(autocommit=True)
         cur  = conn.cursor()

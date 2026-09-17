@@ -1036,6 +1036,9 @@ def _stripe_env(appmod, monkeypatch, primary='owner@practice.co.uk', customer_id
     monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
     monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: primary)
     monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, default_pm, cards))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
     return wh, ap, calls
 
 
@@ -1258,6 +1261,9 @@ def test_contact_sync_pushes_the_new_address_to_stripe(appmod, monkeypatch):
                      'Tenant_Name': [('Maple Dental',)]})
     calls = []
     monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
     monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
     assert appmod._stripe_sync_customer_contact(wh, 11) is True
     mod = [kw for name, kw in calls if name == 'customer.modify']
@@ -1305,6 +1311,9 @@ def _remove_env(appmod, monkeypatch, paid_from, cancelled_at, cards=None,
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
     monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
     monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, 'pm_ONE', cards))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
     return wh, ap, calls
 
 
@@ -1364,4 +1373,24 @@ def test_remove_card_refuses_non_primary(client, appmod, monkeypatch):
     wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None,
                                 primary='someoneelse@practice.co.uk')
     assert client.post('/api/stripe/remove-card', json={}).status_code == 403
+    assert not calls
+
+def test_payment_method_reports_not_configured_without_a_key(client, appmod, monkeypatch):
+    # An environment with no Stripe key must say so, not offer a control that 500s the moment the
+    # billing owner presses it. This is what prod looked like before the live key existed.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: False)
+    body = client.get('/api/stripe/payment-method').get_json()
+    assert body == {'has_card': False, 'can_manage': False, 'configured': False}
+    assert not calls
+
+
+def test_write_endpoints_refuse_when_stripe_is_not_configured(client, appmod, monkeypatch):
+    # 503, not a generic 500 from a raised RuntimeError deep in _stripe().
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: False)
+    for path in ('/api/stripe/setup-session', '/api/stripe/remove-card'):
+        r = client.post(path, json={})
+        assert r.status_code == 503, path
+        assert 'not configured' in r.get_json()['error']
     assert not calls

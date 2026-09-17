@@ -2110,6 +2110,11 @@
                         + 'padding:0;margin-left:10px">Remove card</button>'
                       : '')
                 : '';
+            if (pm.configured === false) {
+                el.innerHTML = '<div style="font-size:13px;color:#666">Card payments are not set up '
+                             + 'for this environment yet.</div>';
+                return;
+            }
             const state = pm.has_card
                 ? '<div style="font-size:13px">' + escHtml((pm.brand || 'Card').toUpperCase())
                   + ' ending ' + escHtml(pm.last4 || '****')
