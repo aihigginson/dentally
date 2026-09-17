@@ -1,0 +1,38 @@
+# =====================================================================
+# Release V161 -- sync procs read Input_Stage instead of [AppDB] cross-database
+# =====================================================================
+# Repoints Meta.usp_Sync_Access_From_AppDB and Meta.usp_Sync_Input_From_AppDB from
+# [AppDB].[Input].[X] to [Input_Stage].[X]. 13 references; MERGE/copy logic untouched.
+#
+# WHY: AppDB has moved off the Fabric capacity to Azure SQL (AppDB/MIGRATION.md) after both the
+# dev and prod Fabric SQL Database endpoints refused connections for ~25 minutes on 2026-09-17.
+# A three-part name only resolves for a Fabric item in the same workspace, so the cross-database
+# read cannot reach an Azure SQL database. Web/appdb_sync.py (a Container Apps Job) lands the rows
+# in Input_Stage first, and these procs read that.
+#
+# SAFE BECAUSE IT WAS PROVEN, NOT ASSUMED: before this repoint, Input_Stage was compared against
+# [AppDB].[Input].[X] for all eight tables with EXCEPT in BOTH directions -- zero rows either way,
+# identical counts. The procs therefore see exactly what they saw before.
+#
+# ==> ORDERING -- THIS IS THE DANGEROUS PART <==
+# After this deploys, the procs are fed by Input_Stage, which the JOB fills from AZURE SQL. The
+# app is still writing to the OLD Fabric AppDB until its APPDB_SERVER/APPDB_DB are repointed. In
+# that window, a subscription change made in the app does NOT reach Security.*: a newly subscribed
+# user never gains access and a revoked one keeps it, with nothing visible on the screen that made
+# the change (auth reads the warehouse, not AppDB).
+#
+# So deploy this, create/schedule the job, and cut the app over in ONE sitting -- and run
+# Copy_AppDB.py --copy immediately before the app cutover so Azure SQL is current. Per-environment
+# checklist in AppDB/MIGRATION.md.
+#
+# ROLLBACK: redeploy the previous revision of both proc files. They are DROP/CREATE, so reverting
+# is a straight redeploy -- and while the app still points at the Fabric AppDB, the old cross-DB
+# read works again immediately.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V161__sync_procs_read_input_stage.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Sync_Access_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+TEST

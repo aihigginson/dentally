@@ -11,10 +11,12 @@ Replaces the three-part cross-database read the procs used to do:
     [AppDB].[Input].[Application_Users]   ->   Input_Stage.Application_Users
 
 Modes:
-    python appdb_sync.py access   # Application_Users + Access_Log, then usp_Sync_Access_From_AppDB
-    python appdb_sync.py full     # all eight tables, then usp_Sync_Input_From_AppDB
-    python appdb_sync.py copy     # all eight tables, run NO proc -- for validating a cutover
+    python appdb_sync.py access   # stage all, then usp_Sync_Access_From_AppDB   (10-minute job)
+    python appdb_sync.py full     # stage all, then usp_Sync_Input_From_AppDB    (nightly build)
+    python appdb_sync.py copy     # stage all, run NO proc -- for validating a cutover
     python appdb_sync.py check    # copy nothing, just report both sides
+
+Every mode stages all eight tables; the mode only chooses which proc runs afterwards.
 
 Connection settings come from the same env vars the app uses, so the job inherits the container's
 configuration and cannot drift from it.
@@ -36,9 +38,8 @@ APPDB_DB      = os.environ['APPDB_DB']
 FABRIC_SERVER = os.environ['FABRIC_SERVER']
 FABRIC_DB     = os.environ['FABRIC_DB']
 
-ACCESS_TABLES = ['Application_Users', 'Access_Log']
-FULL_TABLES   = ACCESS_TABLES + ['Metric_Variance', 'Plan_Capitation_Rate', 'Practice_Config',
-                                 'Practitioner_Pay', 'Practitioner_Role', 'Targets']
+FULL_TABLES = ['Application_Users', 'Access_Log', 'Metric_Variance', 'Plan_Capitation_Rate',
+               'Practice_Config', 'Practitioner_Pay', 'Practitioner_Role', 'Targets']
 
 # A source table that has gone unexpectedly empty is the one input that could do real harm, so
 # refuse to proceed below these floors rather than sync an empty roster. Application_Users empty
@@ -126,7 +127,10 @@ def main():
         print(__doc__)
         return 2
 
-    tables = ACCESS_TABLES if mode == 'access' else FULL_TABLES
+    # ALWAYS stage all eight, whichever proc is being run. Staging only two would leave the
+    # nightly META_SYNC_INPUT reading a stale copy of the other six, and make correctness depend
+    # on job ordering. The whole dataset is ~750 rows, so there is nothing to save by being clever.
+    tables = FULL_TABLES
     tok = _token_struct()
     src_cn = _connect(APPDB_SERVER, APPDB_DB, tok)
     tgt_cn = _connect(FABRIC_SERVER, FABRIC_DB, tok)
