@@ -2109,6 +2109,15 @@ STRIPE_ENV = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
 _stripe_singleton = None
 
 
+def _stripe_key_prefixes():
+    """Acceptable key prefixes for this environment: secret OR restricted, live XOR test.
+
+    Restricted keys (rk_) are preferred in prod -- scoped to the handful of resources the app
+    touches, so a leak cannot refund or drain the account. What must never cross is live/test.
+    """
+    return ('sk_live_', 'rk_live_') if STRIPE_ENV == 'prod' else ('sk_test_', 'rk_test_')
+
+
 def _stripe():
     """Configured Stripe client, or raise.
 
@@ -2124,9 +2133,12 @@ def _stripe():
         key  = (_kv_get(name) or '').strip()
         if not key:
             raise RuntimeError(name + ' is not set in Key Vault')
-        expected = 'sk_live_' if STRIPE_ENV == 'prod' else 'sk_test_'
+        # The live/test half is what must match the environment; sk_ vs rk_ is not our business.
+        # A RESTRICTED key (rk_) is the right thing in prod -- it cannot issue refunds or read the
+        # whole account -- and an earlier version of this check rejected exactly that.
+        expected = _stripe_key_prefixes()
         if not key.startswith(expected):
-            raise RuntimeError(name + ' does not start with ' + expected +
+            raise RuntimeError(name + ' does not start with one of ' + str(expected) +
                                ' -- refusing to use it in ' + STRIPE_ENV)
         _s.api_key = key
         _stripe_singleton = _s
@@ -2146,7 +2158,7 @@ def _stripe_configured():
     """
     try:
         key = (_kv_get('stripe-secret-key-' + STRIPE_ENV) or '').strip()
-        return key.startswith('sk_live_' if STRIPE_ENV == 'prod' else 'sk_test_')
+        return key.startswith(_stripe_key_prefixes())
     except Exception:
         return False
 

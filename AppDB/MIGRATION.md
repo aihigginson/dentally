@@ -90,21 +90,21 @@ checked *in prod, after promotion*, not assumed.
 reading `Input_Stage`, `Security.Application_Users` steady at 7. Staging verified row-for-row
 against the old Fabric source before V161 (all eight tables, `EXCEPT` zero both ways).
 
-### OUTSTANDING: the prod job runs a dev-built image
+### RESOLVED: the prod job's temporary image pin
 
-`caj-appdb-sync-prod` is pinned to `analytically:11fb4716...`, a digest-tagged image built from
-the `dev` branch. `analytically:latest` (built from `main`) does not contain `appdb_sync.py` at
-all, because the script has never been merged, so the job failed with
-`can't open file '/app/appdb_sync.py'` until it was repointed.
+`caj-appdb-sync-prod` briefly ran `analytically:11fb4716...`, a digest-tagged image built from
+`dev`, because `analytically:latest` (built from `main`) did not contain `appdb_sync.py` — the
+script had never been merged, so the job failed with `can't open file '/app/appdb_sync.py'`.
+Once `dev` was merged to `main` and prod rebuilt (revision r48), the job was repointed to
+`analytically:latest` and re-verified. No pin remains.
 
-This is safe -- the script's target is decided entirely by env vars, and the prod job carries prod
-env vars -- but it is exactly the kind of temporary pin that gets forgotten. **Repoint it to
-`analytically:latest` once `dev` is merged to `main`.**
+### Confirmed working with live data
 
-Merging is itself blocked on prod warehouse releases: **V159** (`Stripe_Customer_ID`) must land
-first, or `/api/stripe/payment-method` queries a column that does not exist and 500s the Invoices
-tab. **V162** (VAT-inclusive prices) should land in the same batch, or prod will label net prices
-"inc. VAT" on a public endpoint.
+A real prod write reached the warehouse through the new path during smoke testing:
+`Input.Practitioner_Pay` went 9 -> 10 rows between the cutover copy and the next job run, so a
+save on the Finance screen landed in Azure SQL and synced through `Input_Stage` on its own. That
+is the whole chain — app -> Azure SQL -> job -> Input_Stage -> proc -> warehouse — proven end to
+end without intervention.
 
 ## Cutover checklist (per environment)
 
