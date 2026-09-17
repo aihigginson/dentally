@@ -650,8 +650,11 @@ def test_onboarding_token_records_on_network_blip(client, appmod, monkeypatch):
 
 class _RecCursor:
     """Records every statement, and answers fetches by matching on the SQL text."""
-    def __init__(self, answers):
+    def __init__(self, answers, rowcount=1):
         self.answers, self.sql, self._last = answers, [], ''
+        # Code that branches on whether an UPDATE hit anything (UPDATE-then-INSERT upserts)
+        # needs this; default 1 = the row was already there.
+        self.rowcount = rowcount
 
     def execute(self, sql, *a):
         self._last = sql
@@ -947,3 +950,447 @@ def test_app_env_defaults_to_non_prod(appmod, monkeypatch):
         if saved is not None:
             _os.environ['APP_ENV'] = saved
         importlib.reload(appmod)
+
+
+# ── Stripe: the payment rail ──────────────────────────────────────────────────
+# The key-prefix guard is the one that matters most here. Everything else in this file
+# fails visibly; a dev deployment holding a live key fails by charging a real dentist.
+
+
+class _FakeObj:
+    """Stand-in for a Stripe resource.
+
+    Deliberately NOT a dict subclass. Real stripe>=15 resources are not dicts and have no
+    .get() -- calling it raises AttributeError. A dict-based double made `cust.get(...)` look
+    fine in tests while the endpoint would have thrown on the first real call, so this double
+    exposes attributes only.
+    """
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _card(pm_id, last4='4242', brand='visa'):
+    return _FakeObj(id=pm_id, card=_FakeObj(brand=brand, last4=last4, exp_month=4, exp_year=2030))
+
+
+def _fake_stripe(calls, default_pm='pm_DEFAULT', cards=None):
+    """Minimal stand-in for the stripe module: records what would have been sent.
+
+    `default_pm=None` with `cards` non-empty models the state Checkout actually leaves behind --
+    the card is ATTACHED to the customer but is not the default payment method. That is the exact
+    condition that put "Card saved." and "No card on file." on screen together, so the double has
+    to be able to reproduce it.
+    """
+    cards = [_card('pm_DEFAULT')] if cards is None else cards
+
+    class _Customer:
+        @staticmethod
+        def create(**kw):
+            calls.append(('customer.create', kw))
+            return _FakeObj(id='cus_TEST123')
+
+        @staticmethod
+        def retrieve(cid, **kw):
+            calls.append(('customer.retrieve', cid))
+            pm = next((c for c in cards if c.id == default_pm), None)
+            return _FakeObj(invoice_settings=_FakeObj(default_payment_method=pm))
+
+        @staticmethod
+        def modify(cid, **kw):
+            calls.append(('customer.modify', (cid, kw)))
+            return _FakeObj(id=cid)
+
+    class _PaymentMethod:
+        @staticmethod
+        def list(**kw):
+            calls.append(('pm.list', kw))
+            return _FakeObj(data=list(cards))          # Stripe returns newest first
+
+        @staticmethod
+        def detach(pm_id, **kw):
+            calls.append(('pm.detach', pm_id))
+            return _FakeObj(id=pm_id)
+
+    class _Session:
+        @staticmethod
+        def create(**kw):
+            calls.append(('session.create', kw))
+            return _FakeObj(id='cs_TEST', url='https://checkout.stripe.com/c/pay/cs_TEST')
+
+    return _FakeObj(Customer=_Customer, PaymentMethod=_PaymentMethod,
+                    checkout=_FakeObj(Session=_Session))
+
+
+def _stripe_env(appmod, monkeypatch, primary='owner@practice.co.uk', customer_id=None,
+                caller='owner@practice.co.uk', tids=(11,), default_pm='pm_DEFAULT', cards=None):
+    """Wire both connections, auth and a fake Stripe. Returns (wh_cursor, appdb_cursor, calls)."""
+    wh = _RecCursor({
+        'Stripe_Customer_ID FROM Billing.Account_Billing': [(customer_id,)] if customer_id else [(None,)],
+        'Tenant_Name': [('Maple Dental',)],
+    })
+    ap = _RecCursor({'Primary_Email': [(primary,)] if primary else []})
+    calls = []
+    monkeypatch.setattr(appmod, '_auth', lambda: (caller, None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, list(tids), True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: primary)
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, default_pm, cards))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
+    return wh, ap, calls
+
+
+def test_stripe_refuses_a_live_key_outside_prod(appmod, monkeypatch):
+    # The guard that stops a dev deployment charging real cards. A live key reaching dev is a
+    # paste error, and the only safe response is to refuse loudly rather than transact.
+    appmod._stripe_singleton = None
+    monkeypatch.setattr(appmod, 'STRIPE_ENV', 'dev')
+    monkeypatch.setattr(appmod, '_kv_get', lambda n, d=None: 'sk_live_realmoney')
+    try:
+        appmod._stripe()
+        assert False, 'a live key must not be accepted in dev'
+    except RuntimeError as e:
+        assert 'sk_test_' in str(e) and 'dev' in str(e)
+    finally:
+        appmod._stripe_singleton = None
+
+
+def test_stripe_refuses_a_test_key_in_prod(appmod, monkeypatch):
+    # The mirror image, and just as bad: prod holding a test key takes no money at all while
+    # every invoice appears to succeed.
+    appmod._stripe_singleton = None
+    monkeypatch.setattr(appmod, 'STRIPE_ENV', 'prod')
+    monkeypatch.setattr(appmod, '_kv_get', lambda n, d=None: 'sk_test_pretend')
+    try:
+        appmod._stripe()
+        assert False, 'a test key must not be accepted in prod'
+    except RuntimeError as e:
+        assert 'sk_live_' in str(e)
+    finally:
+        appmod._stripe_singleton = None
+
+
+def test_stripe_refuses_when_no_key_is_set(appmod, monkeypatch):
+    # An unset secret must not fall through to an unauthenticated client.
+    appmod._stripe_singleton = None
+    monkeypatch.setattr(appmod, 'STRIPE_ENV', 'dev')
+    monkeypatch.setattr(appmod, '_kv_get', lambda n, d=None: None)
+    try:
+        appmod._stripe()
+        assert False, 'a missing key must raise'
+    except RuntimeError as e:
+        assert 'stripe-secret-key-dev' in str(e)
+    finally:
+        appmod._stripe_singleton = None
+
+
+def test_setup_session_refuses_non_primary(client, appmod, monkeypatch):
+    # Saving a card commits the practice to being charged, so it is the billing owner's call --
+    # the same gate as ending the subscription, and now literally the same function.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk')
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 403
+    assert 'primary account holder' in r.get_json()['error']
+    assert not calls                                   # nothing reached Stripe
+    assert not wh.ran('UPDATE Billing.Account_Billing')  # no customer created
+
+
+def test_setup_session_refuses_when_no_primary_recorded(client, appmod, monkeypatch):
+    # A blank billing contact must not become a loophole here either.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary=None)
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 403
+    assert 'No primary account holder' in r.get_json()['error']
+    assert not calls
+
+
+def test_setup_session_allowed_for_support_account(client, appmod, monkeypatch):
+    # Support has to be able to set a card up over the phone, and is never the recorded primary.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary=None, caller='admin@analytically.info')
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 200
+    assert r.get_json()['url'].startswith('https://checkout.stripe.com/')
+
+
+def test_setup_session_is_setup_mode_not_a_subscription(client, appmod, monkeypatch):
+    # SQL stays the system of record for what is owed. If this ever became mode='subscription'
+    # Stripe would start computing amounts too, and the two engines would drift.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch)
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 200
+    mode = [kw for name, kw in calls if name == 'session.create'][0]
+    assert mode['mode'] == 'setup'
+    assert mode['currency'] == 'gbp'
+    assert mode['metadata']['tenant_id'] == '11'
+
+
+def test_stripe_customer_is_created_once_and_reused(client, appmod, monkeypatch):
+    # A second Customer for the same practice would split its payment history and could leave a
+    # card saved against the one we no longer read.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 200
+    assert not [c for c in calls if c[0] == 'customer.create']
+    assert [kw for name, kw in calls if name == 'session.create'][0]['customer'] == 'cus_EXISTING'
+
+
+def test_payment_method_reports_no_card_before_setup(client, appmod, monkeypatch):
+    # Drives the subscribe page: no Stripe customer yet means no card, without calling Stripe.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id=None)
+    r = client.get('/api/stripe/payment-method')
+    assert r.status_code == 200
+    assert r.get_json() == {'has_card': False, 'can_manage': True}
+    assert not calls
+
+
+def test_payment_method_returns_brand_and_last4_only(client, appmod, monkeypatch):
+    # Never a full card number -- only what the UI needs to say "Visa ending 4242".
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    r = client.get('/api/stripe/payment-method')
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['has_card'] is True and body['brand'] == 'visa' and body['last4'] == '4242'
+    assert set(body) == {'has_card', 'can_manage', 'brand', 'last4', 'exp_month', 'exp_year'}
+
+def test_payment_method_tells_the_ui_who_may_change_the_card(client, appmod, monkeypatch):
+    # can_manage is decided server-side. A non-primary admin can SEE that billing is set up but
+    # must not be offered the control -- and, critically, the UI never works this out from a
+    # roster, because support logins have no Dentally user and would be wrongly excluded.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk',
+                                customer_id='cus_EXISTING')
+    assert client.get('/api/stripe/payment-method').get_json()['can_manage'] is False
+
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary=None,
+                                caller='admin@analytically.info', customer_id='cus_EXISTING')
+    assert client.get('/api/stripe/payment-method').get_json()['can_manage'] is True
+
+
+def test_attached_but_undefaulted_card_is_adopted(client, appmod, monkeypatch):
+    # The real bug. Setup-mode Checkout ATTACHES the card but does not make it the default, so
+    # the customer had a perfectly good visa 4242 while the app reported "No card on file" --
+    # and the monthly invoice would have found nothing to charge. Reading must self-heal, because
+    # the browser may never have made it back from Checkout to say so.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm=None, cards=[_card('pm_NEW', last4='4242')])
+    r = client.get('/api/stripe/payment-method')
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['has_card'] is True and body['last4'] == '4242'
+    # and it must PERSIST the choice, not just render it -- otherwise billing still can't charge
+    modified = [kw for name, kw in calls if name == 'customer.modify']
+    assert modified and modified[0][1]['invoice_settings']['default_payment_method'] == 'pm_NEW'
+
+
+def test_no_cards_at_all_still_reports_no_card(client, appmod, monkeypatch):
+    # Self-healing must not invent a card when none is attached.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm=None, cards=[])
+    assert client.get('/api/stripe/payment-method').get_json()['has_card'] is False
+    assert not [c for c in calls if c[0] == 'customer.modify']
+
+
+def test_setup_complete_makes_the_newest_card_the_one_we_bill(client, appmod, monkeypatch):
+    # "Change card" must actually change it. Checkout attaches the new card alongside the old one
+    # and leaves the default pointing at the old -- so without this the practice changes their
+    # card, sees the new one, and we keep charging the cancelled one until it declines.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm='pm_OLD',
+                                cards=[_card('pm_NEW', last4='1111'), _card('pm_OLD', last4='4242')])
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 200
+    assert r.get_json()['last4'] == '1111'
+    modified = [kw for name, kw in calls if name == 'customer.modify']
+    assert modified[0][1]['invoice_settings']['default_payment_method'] == 'pm_NEW'
+    # one card on file: the superseded one is detached, so there is no ambiguity about what pays
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_OLD']
+
+
+def test_setup_complete_is_idempotent(client, appmod, monkeypatch):
+    # The browser can return twice (refresh, back button). Doing it again must not detach the
+    # only card on file.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm='pm_ONLY', cards=[_card('pm_ONLY')])
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 200
+    assert not [c for c in calls if c[0] == 'pm.detach']
+
+
+def test_setup_complete_refuses_non_primary(client, appmod, monkeypatch):
+    # Same gate as the rest of billing -- it decides what card the practice gets charged on.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk',
+                                customer_id='cus_EXISTING')
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 403
+    assert not [c for c in calls if c[0] in ('customer.modify', 'pm.detach')]
+
+
+def test_setup_session_returns_to_the_invoices_tab(client, appmod, monkeypatch):
+    # Returning to the app home page leaves the user to find their own way back to see whether it
+    # worked -- and they cannot tell a saved card from a silent failure.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch)
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 200
+    kw = [k for name, k in calls if name == 'session.create'][0]
+    assert 'settings=invoices' in kw['success_url'] and 'billing=saved' in kw['success_url']
+    assert 'settings=invoices' in kw['cancel_url'] and 'billing=cancelled' in kw['cancel_url']
+
+
+def test_invoice_email_prefers_invoice_over_primary(appmod, monkeypatch):
+    # The whole point of a separate lookup. _tenant_primary_email uses the OPPOSITE precedence
+    # because it answers "who is the main account holder" for monitor and token alerts. Reusing it
+    # for billing sends invoices to the primary even when an accounts mailbox was entered.
+    ap = _RecCursor({'Invoice_Email, Primary_Email': [('accounts@practice.co.uk', 'owner@practice.co.uk')]})
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    assert appmod._tenant_invoice_email(11) == 'accounts@practice.co.uk'
+
+
+def test_invoice_email_falls_back_to_primary(appmod, monkeypatch):
+    # No accounts mailbox entered -- the primary is the right destination.
+    ap = _RecCursor({'Invoice_Email, Primary_Email': [(None, 'owner@practice.co.uk')]})
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    assert appmod._tenant_invoice_email(11) == 'owner@practice.co.uk'
+
+
+def test_contact_sync_pushes_the_new_address_to_stripe(appmod, monkeypatch):
+    # Stripe emails receipts and hosted invoices to the Customer's own email, set once at
+    # creation. Without this the app's records change and Stripe keeps billing the old address --
+    # silent until someone says they never got an invoice.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [('cus_EXISTING',)],
+                     'Tenant_Name': [('Maple Dental',)]})
+    calls = []
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
+    monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
+    assert appmod._stripe_sync_customer_contact(wh, 11) is True
+    mod = [kw for name, kw in calls if name == 'customer.modify']
+    assert mod and mod[0][0] == 'cus_EXISTING'
+    assert mod[0][1]['email'] == 'accounts@practice.co.uk'
+    assert mod[0][1]['name'] == 'Maple Dental'
+
+
+def test_contact_sync_is_a_noop_without_a_stripe_customer(appmod, monkeypatch):
+    # A practice that has never saved a card has no Customer to update.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [(None,)]})
+    calls = []
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    assert appmod._stripe_sync_customer_contact(wh, 11) is False
+    assert not calls
+
+
+def test_contact_sync_failure_never_loses_the_save(appmod, monkeypatch):
+    # This runs inside save_team, after the billing contact has been written. If Stripe is down,
+    # the user's save must still stand -- so it returns False rather than raising.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [('cus_EXISTING',)],
+                     'Tenant_Name': [('Maple Dental',)]})
+
+    def _boom():
+        raise RuntimeError('stripe unreachable')
+    monkeypatch.setattr(appmod, '_stripe', _boom)
+    monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
+    assert appmod._stripe_sync_customer_contact(wh, 11) is False
+
+
+# ── Removing the card on file ─────────────────────────────────────────────────
+# Policy: replace-only while being billed. The refusal is the feature -- a practice that
+# deleted its last card mid-subscription would look fine and silently stop paying.
+
+def _remove_env(appmod, monkeypatch, paid_from, cancelled_at, cards=None,
+                customer_id='cus_EXISTING', primary='owner@practice.co.uk',
+                caller='owner@practice.co.uk'):
+    cards = [_card('pm_ONE')] if cards is None else cards
+    wh = _RecCursor({'Stripe_Customer_ID, Paid_From, Cancelled_At':
+                         [(customer_id, paid_from, cancelled_at)]})
+    ap = _RecCursor({'Primary_Email': [(primary,)] if primary else []})
+    calls = []
+    monkeypatch.setattr(appmod, '_auth', lambda: (caller, None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, 'pm_ONE', cards))
+    # Both helpers stand for a CONFIGURED environment; the not-configured case is patched
+    # back to False by the two tests that cover it.
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: True)
+    return wh, ap, calls
+
+
+def test_remove_card_refused_while_being_billed(client, appmod, monkeypatch):
+    # The core guard. Paid_From in the past and no cancellation = actively charged.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2026, 1, 1), cancelled_at=None)
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 409
+    assert 'subscription is active' in r.get_json()['error']
+    assert not [c for c in calls if c[0] == 'pm.detach']      # card untouched
+
+
+def test_remove_card_refused_when_paid_from_is_null(client, appmod, monkeypatch):
+    # NULL Paid_From means "bill from first access" (no trial) -- i.e. billing. Treating NULL as
+    # "not charging" would let a paying practice delete its only card.
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=None, cancelled_at=None)
+    assert client.post('/api/stripe/remove-card', json={}).status_code == 409
+    assert not [c for c in calls if c[0] == 'pm.detach']
+
+
+def test_remove_card_allowed_during_a_trial(client, appmod, monkeypatch):
+    # Paid_From in the future = trial or free-forever. Nothing to bill, so nothing to protect.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None)
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200 and r.get_json()['has_card'] is False
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_ONE']
+
+
+def test_remove_card_allowed_once_cancellation_has_taken_effect(client, appmod, monkeypatch):
+    # Cancelled_At is the START OF NEXT MONTH, so a cancellation dated in the past means the
+    # subscription has actually ended and the final invoice is behind us.
+    from datetime import date, datetime as dt
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2026, 1, 1),
+                                cancelled_at=dt(2026, 2, 1))
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_ONE']
+    # and the default must be cleared, not left pointing at a detached card
+    mod = [kw for name, kw in calls if name == 'customer.modify']
+    assert mod and mod[0][1]['invoice_settings']['default_payment_method'] == ''
+
+
+def test_remove_card_detaches_every_card_not_just_the_default(client, appmod, monkeypatch):
+    # Belt and braces: if a stray second card ever got attached, "remove" must mean remove.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None,
+                                cards=[_card('pm_ONE'), _card('pm_TWO')])
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200 and r.get_json()['removed'] == 2
+    assert sorted(pm for name, pm in calls if name == 'pm.detach') == ['pm_ONE', 'pm_TWO']
+
+
+def test_remove_card_refuses_non_primary(client, appmod, monkeypatch):
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None,
+                                primary='someoneelse@practice.co.uk')
+    assert client.post('/api/stripe/remove-card', json={}).status_code == 403
+    assert not calls
+
+def test_payment_method_reports_not_configured_without_a_key(client, appmod, monkeypatch):
+    # An environment with no Stripe key must say so, not offer a control that 500s the moment the
+    # billing owner presses it. This is what prod looked like before the live key existed.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: False)
+    body = client.get('/api/stripe/payment-method').get_json()
+    assert body == {'has_card': False, 'can_manage': False, 'configured': False}
+    assert not calls
+
+
+def test_write_endpoints_refuse_when_stripe_is_not_configured(client, appmod, monkeypatch):
+    # 503, not a generic 500 from a raised RuntimeError deep in _stripe().
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING')
+    monkeypatch.setattr(appmod, '_stripe_configured', lambda: False)
+    for path in ('/api/stripe/setup-session', '/api/stripe/remove-card'):
+        r = client.post(path, json={})
+        assert r.status_code == 503, path
+        assert 'not configured' in r.get_json()['error']
+    assert not calls

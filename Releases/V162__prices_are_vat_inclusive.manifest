@@ -1,0 +1,37 @@
+# =====================================================================
+# Release V162 -- Profile_Pricing holds VAT-INCLUSIVE prices
+# =====================================================================
+# Reprices to what the practice PAYS rather than what we keep:
+#
+#   full          50.00 net  ->  60.00 inclusive  (50.00 net + 10.00 VAT)
+#   clinician     20.00 net  ->  24.00 inclusive  (20.00 net +  4.00 VAT)
+#   front_office   5.00 net  ->   6.00 inclusive  ( 5.00 net +  1.00 VAT)
+#
+# REVENUE IS UNCHANGED. The net take is identical; only how the price is expressed changes.
+#
+# WHY: dental treatment is a VAT-exempt supply, so most practices are wholly or partly exempt and
+# cannot reclaim the VAT we charge. Unlike a normal VAT-registered customer, for whom the VAT
+# washes out, the gross figure is a real cost to a practice -- so the all-in number is both the
+# honest price and the one they will compare against a competitor quoting "all in".
+#
+# NO MIGRATION COST: nothing has ever been invoiced. Billing.Invoice_Line is empty in every month
+# and the only account has Paid_From = 2100-01-01. The seed is therefore REPLACED rather than
+# layered with a new Valid_From, which would imply a price change that never happened.
+#
+# ==> KNOCK-ON: THE STRIPE TAX RATE MUST BE INCLUSIVE <==
+# Billing.Invoice_Line.Value now holds GROSS, so Stripe must DERIVE the VAT from it rather than
+# add 20% on top. An EXCLUSIVE rate against these figures would bill 72.00 for a full seat.
+# A tax rate's `inclusive` flag CANNOT be edited after creation -- a wrong one has to be archived,
+# replaced, and any invoice already issued against it credited and reissued.
+# The dev sandbox rate has been replaced accordingly (exclusive archived, inclusive created).
+# The LIVE rate must be confirmed inclusive before the first real charge.
+#
+# App wording updated in the same change: the Invoices screen now reads "Amounts shown include VAT
+# at 20%", and the Subscriptions price list is labelled "inc. VAT".
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V162__prices_are_vat_inclusive.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Profile_Pricing.Data.sql
+
+TEST

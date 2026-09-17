@@ -1,0 +1,30 @@
+# =====================================================================
+# Release V159 -- Stripe: link a practice to its Stripe Customer
+# =====================================================================
+# Adds Billing.Account_Billing.Stripe_Customer_ID (varchar(64) NULL), the only schema change the
+# payment rail needs. The Customer is created lazily the first time a practice saves a card.
+#
+# DELIBERATELY NOT A STRIPE SUBSCRIPTION. Billing.usp_Generate_Invoice_Lines stays the sole system
+# of record for what is owed -- date-ranged per-seat prices, pro-rated first month, the trial as
+# the Access_From -> Paid_From gap, affiliate commission. Stripe only collects. Modelling the
+# seats as a Stripe Subscription would put a second engine on the same number, and the two would
+# drift the first time a price changed mid-month.
+#
+# VAT: prices in Billing.Profile_Pricing are NET (full 50.00, clinician 20.00, front_office 5.00
+# -> 60 / 24 / 6 gross at 20%). VAT is applied as a Stripe tax rate when the invoice is issued and
+# is never stored in SQL, so the tax treatment can change without touching the billing engine.
+# Nothing has ever been invoiced (zero rows in Billing.Invoice_Line, and the only account has
+# Paid_From = 2100-01-01), so this costs no migration.
+#
+# SAFE TO DEPLOY AHEAD OF THE KEYS. The column is nullable and unused until a card is saved; the
+# app fails closed without stripe-secret-key-<env> in Key Vault, and refuses outright if the key
+# does not match the environment (dev must hold sk_test_, prod sk_live_).
+#
+# Guarded ALTER, so it is idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V159__stripe_customer_on_account_billing.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Account_Billing.Table.sql
+
+TEST
