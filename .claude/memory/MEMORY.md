@@ -9,3 +9,5 @@
 - [Support logins are not Dentally users](support-logins-are-not-dentally-users.md) — added by SQL, so they never appear in any Gold.Dim_Users roster.
 - [RLS + many-to-many truncates List Date](rls-m2m-truncates-list-date.md) — rows present in Desktop but missing in the app; the rule text is a red herring.
 - [List Date Unconstrained is deliberate](list-date-unconstrained-is-deliberate.md) — Day Book is the one report the period filter is not forced on; do not merge the date tables.
+- [Container Apps staticIp is ingress, not egress](container-apps-staticip-is-ingress.md) — no stable outbound IP; an IP firewall cannot allow it.
+- [Prod warehouse deploys can run from the laptop](prod-warehouse-deploy-from-the-laptop.md) — delegated token, not a bypass; do not hand them back.

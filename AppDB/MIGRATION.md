@@ -106,6 +106,31 @@ save on the Finance screen landed in Azure SQL and synced through `Input_Stage` 
 is the whole chain — app -> Azure SQL -> job -> Input_Stage -> proc -> warehouse — proven end to
 end without intervention.
 
+### Monitoring the job — and the hole that remains
+
+`appdb_sync.py` writes an `Audit.Process_Execution_Log` row (`appdb_sync.<mode>`, `Process_Type`
+`JOB`) on both outcomes, so the job appears where every other process does and the existing
+monitor emails its `FAILED` rows. No new alerting was built.
+
+**That log is in the warehouse, on the Fabric capacity — so it cannot report the capacity being
+down, which is the very thing AppDB moved away from.** Coverage is therefore:
+
+| Failure | Logged? | Signal |
+|---|---|---|
+| AppDB unreachable, capacity up | **yes** | monitor email (the common case) |
+| Proc error / row-count mismatch | **yes** | monitor email |
+| Capacity or warehouse down | **no** | job exits non-zero, and nothing watches that yet |
+
+The logging is best-effort and swallows its own errors by design: a logging failure must never
+replace the real error in the traceback, or we would chase the wrong fault. `_log_run` opens its
+own warehouse connection when needed, because the commonest failure happens before any connection
+exists.
+
+**Still to do:** an Azure Monitor alert rule on Container Apps Job execution failure -> email. That
+is the only signal here that does not touch Fabric, and until it exists a capacity outage silences
+the access sync without telling anyone. Do NOT disable the `Sync_Subscriptions` pipeline before
+that is in place: while both run, a failing job is at least partially covered.
+
 ## Cutover checklist (per environment)
 
 - [ ] Pipeline copy built and running into `Input_Stage.*`

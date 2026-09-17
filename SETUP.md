@@ -158,7 +158,7 @@ cd $HOME\OneDrive\dentally\code\Web
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest        # sanity: the suite should pass clean (65 tests at time of writing)
+python -m pytest        # sanity: the suite should pass clean (97 tests at time of writing)
 deactivate
 
 # API (mock/ingest helpers)
@@ -179,6 +179,62 @@ pip install pyodbc azure-identity      # into whichever venv you run them from
 
 > Reminder: `_q.py`/`_qp.py` have **no autocommit** — DML rolls back. For
 > `EXEC`/DML use a `pyodbc.connect(..., autocommit=True)` one-liner instead.
+
+### AppDB is no longer in Fabric
+
+Since 2026-09-17 the owner-curated `Input.*` tables live in **Azure SQL**, not the Fabric SQL
+Database — see `AppDB/MIGRATION.md` for why (both Fabric endpoints hung for ~25 minutes while the
+warehouse beside them was fine, for the second time).
+
+| | |
+|---|---|
+| Server | `sql-analytically.database.windows.net` — **Entra-only auth**, no SQL login exists |
+| Databases | `AppDB-dev`, `AppDB-prod` |
+| Connect | SSMS → Authentication **Microsoft Entra MFA**, user `admin@analytically.info` |
+
+**In SSMS you must set the database explicitly** (Options → Connection Properties → Connect to
+database). Left at `<default>` you land on `master`, see no tables, and conclude something is
+broken.
+
+Your workstation IP is allowed by a named firewall rule, so a **changed public IP means a connect
+failure** — add a rule rather than assuming the server is down:
+
+```powershell
+az sql server firewall-rule create -g rg-analytically -s sql-analytically `
+    -n admin-workstation-2 --start-ip-address <new ip> --end-ip-address <new ip>
+```
+
+`AppDB/Copy_AppDB.py --env dev|prod --check` reports both sides' row counts and is the quickest
+way to prove connectivity end to end.
+
+### The sync jobs
+
+`caj-appdb-sync-dev` / `caj-appdb-sync-prod` are Container Apps **Jobs** on `*/10 * * * *`. They
+copy Azure SQL `Input.*` into `WH_Dentally.Input_Stage.*` and then run the sync proc, because a
+three-part `[AppDB].[Input].[X]` name only resolves for a Fabric item. They run the same image as
+the web app with `python appdb_sync.py access`.
+
+```powershell
+az containerapp job start -n caj-appdb-sync-prod -g rg-analytically
+az containerapp job execution list -n caj-appdb-sync-prod -g rg-analytically -o table
+az containerapp job logs show -n caj-appdb-sync-prod -g rg-analytically --execution <name> --container caj-appdb-sync-prod
+```
+
+Reading job logs needs the preview CLI extension: `az extension add --name containerapp`.
+
+### Stripe
+
+Keys live in Key Vault, never in env vars, so they cannot leak via a container spec or a workflow
+log: `stripe-secret-key-dev` (sandbox, `sk_test_`/`rk_test_`) and `stripe-secret-key-prod` (live,
+`rk_live_` — a **restricted** key scoped to Customers, Checkout Sessions, Payment methods, Tax
+rates, Invoices, Invoice Items).
+
+`_stripe()` refuses a key whose live/test half does not match `APP_ENV`, so **dev physically
+cannot charge a real card** and prod cannot silently take no money. A sandbox is a separate Stripe
+account, so account-level things — branding, the VAT rate — exist twice and must be set in each.
+
+Prices in `Billing.Profile_Pricing` are **VAT-inclusive**, so the Stripe tax rate must be
+**inclusive** too; its `inclusive` flag cannot be edited after creation.
 
 ---
 
