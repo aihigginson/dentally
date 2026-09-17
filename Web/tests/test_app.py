@@ -1394,3 +1394,28 @@ def test_write_endpoints_refuse_when_stripe_is_not_configured(client, appmod, mo
         assert r.status_code == 503, path
         assert 'not configured' in r.get_json()['error']
     assert not calls
+
+def test_stripe_accepts_a_restricted_key_for_the_right_environment(appmod, monkeypatch):
+    # A RESTRICTED key (rk_) is what should be in prod -- scoped so a leak cannot refund or drain
+    # the account. An earlier version of the guard demanded sk_ and would have rejected exactly
+    # the key we recommend, at the first real call.
+    for env, key in (('prod', 'rk_live_scoped'), ('dev', 'rk_test_scoped')):
+        appmod._stripe_singleton = None
+        monkeypatch.setattr(appmod, 'STRIPE_ENV', env)
+        monkeypatch.setattr(appmod, '_kv_get', lambda n, d=None, k=key: k)
+        appmod._stripe()          # must not raise
+        appmod._stripe_singleton = None
+
+
+def test_stripe_still_refuses_a_restricted_key_from_the_wrong_environment(appmod, monkeypatch):
+    # Relaxing sk_/rk_ must not relax live/test, which is the half that moves real money.
+    appmod._stripe_singleton = None
+    monkeypatch.setattr(appmod, 'STRIPE_ENV', 'dev')
+    monkeypatch.setattr(appmod, '_kv_get', lambda n, d=None: 'rk_live_realmoney')
+    try:
+        appmod._stripe()
+        assert False, 'a live restricted key must not be accepted in dev'
+    except RuntimeError as e:
+        assert 'rk_test_' in str(e)
+    finally:
+        appmod._stripe_singleton = None
