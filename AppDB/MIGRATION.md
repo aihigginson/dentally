@@ -52,6 +52,14 @@ fewer Fabric-side moving parts, and the copy is explicit and under our control.
 
 ### Order of operations — do not invert these
 
+0. **Populate and VERIFY staging before the procs are repointed.** `usp_Sync_Input_From_AppDB`
+   DELETEs-then-INSERTs six `Input.*` tables, so running it against an empty `Input_Stage` wipes
+   the tenant's targets, practitioner roles, pay, plan rates and practice config. On dev this was
+   survived by luck -- staging happened to be full already. On prod it was done deliberately:
+   copy -> populate -> `EXCEPT` both directions against `[AppDB].[Input].[X]` -> only then V161.
+   The job's own NONEMPTY floor protects the JOB from an empty source; it does not protect the
+   PROC from empty staging when something else runs it, such as the nightly pipeline.
+
 1. **Pipeline copy first.** A Fabric Data pipeline Copy activity: Azure SQL `Input.*` ->
    `WH_Dentally.Input_Stage.*`. Then repoint the two sync procs from `[AppDB].[Input].[X]` to
    `Input_Stage.[X]`. Their MERGE logic is unchanged — only the source name moves.
@@ -72,6 +80,31 @@ Fabric **Script/Copy activities do not repoint on promotion** — a named connec
 dev -> prod deployment, and prod pipelines have silently run against dev before (see project
 memory `fabric-script-activities-dont-repoint`). The new Copy activity must have its connection
 checked *in prod, after promotion*, not assumed.
+
+## Status
+
+**dev: cut over** (2026-09-17). App -> `AppDB-dev`, `caj-appdb-sync-dev` on `*/10`, procs reading
+`Input_Stage`, `Security.Application_Users` steady at 19.
+
+**prod: cut over** (2026-09-17). App -> `AppDB-prod`, `caj-appdb-sync-prod` on `*/10`, procs
+reading `Input_Stage`, `Security.Application_Users` steady at 7. Staging verified row-for-row
+against the old Fabric source before V161 (all eight tables, `EXCEPT` zero both ways).
+
+### OUTSTANDING: the prod job runs a dev-built image
+
+`caj-appdb-sync-prod` is pinned to `analytically:11fb4716...`, a digest-tagged image built from
+the `dev` branch. `analytically:latest` (built from `main`) does not contain `appdb_sync.py` at
+all, because the script has never been merged, so the job failed with
+`can't open file '/app/appdb_sync.py'` until it was repointed.
+
+This is safe -- the script's target is decided entirely by env vars, and the prod job carries prod
+env vars -- but it is exactly the kind of temporary pin that gets forgotten. **Repoint it to
+`analytically:latest` once `dev` is merged to `main`.**
+
+Merging is itself blocked on prod warehouse releases: **V159** (`Stripe_Customer_ID`) must land
+first, or `/api/stripe/payment-method` queries a column that does not exist and 500s the Invoices
+tab. **V162** (VAT-inclusive prices) should land in the same batch, or prod will label net prices
+"inc. VAT" on a public endpoint.
 
 ## Cutover checklist (per environment)
 
