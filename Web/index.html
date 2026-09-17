@@ -788,7 +788,15 @@
 
             <div class="settings-pane" id="stab-invoices">
                 <div class="defs-item">
-                    <div class="defs-item-desc">Your monthly bill for Analytically. Each line is a subscribed user for that month; the first part-month at sign-up is pro-rated, and free / trial months show nothing to pay.</div>
+                    <div class="defs-item-desc">Payment method. Analytically is billed monthly in arrears to the card on file.</div>
+                    <!-- Whether the "Add a card" control appears is decided by the API (can_manage),
+                         never worked out in the browser: an account added straight to
+                         Application_Users by SQL has no Dentally user, so a client-side roster test
+                         would hide it from exactly the person who needs it. -->
+                    <div id="billing-card" style="margin-top:10px">Loading&hellip;</div>
+                </div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">Your monthly bill for Analytically. Each line is a subscribed user for that month; the first part-month at sign-up is pro-rated, and free / trial months show nothing to pay. Amounts shown exclude VAT, which is added at 20% when the invoice is issued.</div>
                     <div id="invoices-list" style="margin-top:10px">Loading&hellip;</div>
                 </div>
             </div>
@@ -2049,7 +2057,79 @@
         const y = Math.floor(ym / 100), mo = ym % 100;
         return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1] + ' ' + y;
     }
+    // ── Payment method (Stripe) ───────────────────────────────────────────────
+    // Checkout in SETUP mode: the practice saves a card, nothing is charged here. The monthly
+    // job then charges the invoice the SQL engine produced, so the amount owed has exactly one
+    // source of truth and changing a card never disturbs billing.
+    //
+    // Returning from Checkout lands on /?billing=saved (or =cancelled). Read it once, then strip
+    // it from the URL so a refresh or a shared link doesn't keep re-announcing it.
+    let _billingReturn = '';
+    try {
+        const q = new URLSearchParams(location.search);
+        _billingReturn = q.get('billing') || '';
+        if (_billingReturn) {
+            q.delete('billing');
+            const rest = q.toString();
+            history.replaceState({}, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+        }
+    } catch (e) {}
+
+    async function loadPaymentMethod() {
+        const el = document.getElementById('billing-card');
+        if (!el) return;
+        el.textContent = 'Loading…';
+        try {
+            const res = await authFetch('/api/stripe/payment-method');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const pm = await res.json();
+            const note = _billingReturn === 'saved'
+                ? '<div style="color:#0b6b3a;font-size:12px;margin-bottom:8px">Card saved.</div>'
+                : (_billingReturn === 'cancelled'
+                    ? '<div style="color:#8a6d3b;font-size:12px;margin-bottom:8px">No card was saved.</div>'
+                    : '');
+            _billingReturn = '';
+            const btn = pm.can_manage
+                ? '<button id="billing-card-btn" class="settings-save" style="margin-top:0">'
+                  + (pm.has_card ? 'Change card' : 'Add a card') + '</button>'
+                : '';
+            const state = pm.has_card
+                ? '<div style="font-size:13px">' + escHtml((pm.brand || 'Card').toUpperCase())
+                  + ' ending ' + escHtml(pm.last4 || '****')
+                  + ' <span style="color:#aaa;font-size:11px">expires '
+                  + String(pm.exp_month).padStart(2, '0') + '/' + String(pm.exp_year).slice(-2)
+                  + '</span></div>'
+                : '<div style="font-size:13px;color:#666">No card on file'
+                  + (pm.can_manage ? '.' : ' — the primary account holder can add one.') + '</div>';
+            el.innerHTML = note + state
+                + (btn ? '<div style="margin-top:10px">' + btn + '</div>' : '')
+                + '<div id="billing-card-msg" class="settings-msg"></div>';
+            const b = document.getElementById('billing-card-btn');
+            if (b) b.addEventListener('click', startCardSetup);
+        } catch (e) {
+            el.textContent = 'Could not load the payment method.';
+        }
+    }
+
+    async function startCardSetup() {
+        const b   = document.getElementById('billing-card-btn');
+        const msg = document.getElementById('billing-card-msg');
+        if (b) { b.disabled = true; b.textContent = 'Opening…'; }
+        try {
+            const res  = await authFetch('/api/stripe/setup-session', { method: 'POST' });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.error || ('status ' + res.status));
+            // Full redirect rather than a popup: Checkout must own the page for 3-D Secure, and a
+            // blocked popup would look like a silent failure.
+            location.assign(body.url);
+        } catch (e) {
+            if (msg) msg.textContent = e.message || 'Could not start card setup.';
+            if (b) { b.disabled = false; b.textContent = 'Add a card'; }
+        }
+    }
+
     async function loadInvoices() {
+        loadPaymentMethod();
         const list = document.getElementById('invoices-list');
         list.textContent = 'Loading…';
         try {

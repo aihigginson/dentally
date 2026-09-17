@@ -2069,6 +2069,201 @@ def get_invoices():
         return _server_error(e, 'get_invoices')
 
 
+# ── Stripe: the payment rail ─────────────────────────────────────────────────
+# SQL is the system of record for what is owed. Billing.usp_Generate_Invoice_Lines computes the
+# per-seat lines (date-ranged prices, pro-rated first month, trial as the Access_From->Paid_From
+# gap, affiliate commission); Stripe only collects them. So there is deliberately NO Stripe
+# Subscription or Price object here -- a Customer holds the practice's card and each month's
+# lines are pushed as invoice items. Two engines computing the same number is how billing
+# systems silently diverge.
+#
+# Prices in Billing.Profile_Pricing are NET of VAT (full 50.00, clinician 20.00, front_office
+# 5.00 -> 60/24/6 gross). VAT is applied as a Stripe tax rate at invoice time and never stored
+# in SQL, so the tax treatment can change without touching the billing engine.
+#
+# Keys live in Key Vault as stripe-secret-key-<env> -- never an env var, so a key cannot leak
+# through a container spec or a workflow log. Same isolation as Xero.
+
+STRIPE_ENV = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
+_stripe_singleton = None
+
+
+def _stripe():
+    """Configured Stripe client, or raise.
+
+    The key-prefix check is the guard that stops a non-prod deployment ever touching real
+    money. dev must hold sk_test_, prod must hold sk_live_, and a mismatch fails closed --
+    loudly -- rather than quietly charging real cards from dev, or quietly failing to charge
+    anyone in prod because a test key was pasted into the wrong secret.
+    """
+    global _stripe_singleton
+    if _stripe_singleton is None:
+        import stripe as _s
+        name = 'stripe-secret-key-' + STRIPE_ENV
+        key  = (_kv_get(name) or '').strip()
+        if not key:
+            raise RuntimeError(name + ' is not set in Key Vault')
+        expected = 'sk_live_' if STRIPE_ENV == 'prod' else 'sk_test_'
+        if not key.startswith(expected):
+            raise RuntimeError(name + ' does not start with ' + expected +
+                               ' -- refusing to use it in ' + STRIPE_ENV)
+        _s.api_key = key
+        _stripe_singleton = _s
+    return _stripe_singleton
+
+
+def _lead_account_error(upn, tids, acur, action='manage billing'):
+    """None if this caller may act as the practice's billing owner, else an error response.
+
+    One definition, used by both /api/cancel and the Stripe endpoints, so the two can never
+    drift on who is allowed to commit or end the practice's money.
+
+    Deliberately refuses when no primary has been recorded rather than falling back to "any
+    admin": a blank billing contact must not become a loophole. Our own support logins bypass
+    it entirely -- they are never the recorded primary (the primary is picked by radio from the
+    Dentally roster and a support account has no Dentally user), yet support has to be able to
+    act on the practice's behalf over the phone.
+    """
+    if (upn or '').lower().endswith('@analytically.info'):
+        return None
+    acur.execute("SELECT Primary_Email FROM Input.Billing_Contact "
+                 "WHERE Tenant_ID IN (" + ','.join(['?'] * len(tids)) + ")", tids)
+    primaries = [(r[0] or '').strip().lower() for r in acur.fetchall() if (r[0] or '').strip()]
+    if not primaries:
+        return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
+                                 'tab first — only the primary account can ' + action + '.'}), 403
+    if (upn or '').lower() not in primaries:
+        return jsonify({'error': 'Only the primary account holder can ' + action + '.'}), 403
+    return None
+
+
+def _stripe_customer(cur, tenant_id):
+    """This tenant's Stripe Customer id, created on first use and stored on Account_Billing.
+
+    Carries metadata.tenant_id so anyone looking at a payment in the Stripe dashboard can get
+    back to the practice without a lookup table -- which matters during a billing query.
+    """
+    cur.execute("SELECT Stripe_Customer_ID FROM Billing.Account_Billing WHERE Tenant_ID = ?", tenant_id)
+    row = cur.fetchone()
+    if row and (row[0] or '').strip():
+        return (row[0] or '').strip()
+
+    cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tenant_id)
+    r = cur.fetchone()
+    name = (r[0] if r else None) or ('Tenant ' + str(tenant_id))
+
+    cust = _stripe().Customer.create(
+        name=name,
+        email=_tenant_primary_email(tenant_id) or None,
+        metadata={'tenant_id': str(tenant_id), 'app_env': APP_ENV},
+        idempotency_key='customer-' + STRIPE_ENV + '-' + str(tenant_id),
+    )
+    # The row normally exists already (provisioning writes it); UPDATE-then-INSERT keeps this
+    # correct if billing is ever set up before Account_Billing is seeded.
+    cur.execute("UPDATE Billing.Account_Billing SET Stripe_Customer_ID = ?, Updated_At = SYSUTCDATETIME() "
+                "WHERE Tenant_ID = ?", cust.id, tenant_id)
+    if cur.rowcount == 0:
+        cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Stripe_Customer_ID, Updated_At) "
+                    "VALUES (?, ?, SYSUTCDATETIME())", tenant_id, cust.id)
+    app.logger.info("stripe: created customer %s for tenant %s", cust.id, tenant_id)
+    return cust.id
+
+
+@app.route('/api/stripe/payment-method', methods=['GET'])
+def stripe_payment_method():
+    """What card, if any, is on file for this practice. Drives the subscribe page's billing panel.
+
+    Read-only, so any practice admin may see it -- knowing whether billing is set up is not the
+    same as being able to change it. Never returns a card number: Stripe only ever hands back
+    brand/last4/expiry, which is all the UI needs.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None or not tids:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+        cur.execute("SELECT Stripe_Customer_ID FROM Billing.Account_Billing WHERE Tenant_ID = ?", tids[0])
+        row = cur.fetchone()
+        conn.close()
+
+        # Whether the caller may ADD or CHANGE the card is decided here, not in the browser. The
+        # UI must never re-derive it from a roster: an account added straight to Application_Users
+        # by SQL has no Dentally user, so a client-side test hides the control from precisely the
+        # person who needs it. Same helper as the gate on the write endpoint.
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        try:
+            can_manage = _lead_account_error(upn, tids, acur) is None
+        finally:
+            ac.close()
+
+        cust_id = (row[0] or '').strip() if row else ''
+        if not cust_id:
+            return jsonify({'has_card': False, 'can_manage': can_manage})
+
+        cust = _stripe().Customer.retrieve(cust_id, expand=['invoice_settings.default_payment_method'])
+        pm   = (cust.get('invoice_settings') or {}).get('default_payment_method')
+        if not pm:
+            return jsonify({'has_card': False, 'can_manage': can_manage})
+        card = pm.get('card') or {}
+        return jsonify({'has_card': True, 'can_manage': can_manage,
+                        'brand': card.get('brand'), 'last4': card.get('last4'),
+                        'exp_month': card.get('exp_month'), 'exp_year': card.get('exp_year')})
+    except Exception as e:
+        return _server_error(e, 'stripe_payment_method')
+
+
+@app.route('/api/stripe/setup-session', methods=['POST'])
+def stripe_setup_session():
+    """Start Stripe Checkout so the billing owner can save a card. Returns a URL to redirect to.
+
+    SETUP mode, not payment or subscription mode: nothing is charged here and no subscription is
+    created. The card is stored against the Customer, and the monthly job then charges the
+    invoice the SQL engine produced. This keeps the amount owed in one place, and means changing
+    a card never disturbs billing.
+
+    Lead-account gated: saving a card commits the practice to being charged, so it is the
+    billing owner's call rather than any admin's -- the same gate as ending the subscription.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None or not tids:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        try:
+            gate = _lead_account_error(upn, tids, acur)
+        finally:
+            ac.close()
+        if gate:
+            conn.close(); return gate
+
+        cust_id = _stripe_customer(cur, tids[0])
+        conn.close()
+
+        base = os.environ.get('APP_URL', 'https://app.analytically.info').rstrip('/')
+        sess = _stripe().checkout.Session.create(
+            mode='setup',
+            customer=cust_id,
+            currency='gbp',
+            success_url=base + '/?billing=saved',
+            cancel_url=base + '/?billing=cancelled',
+            metadata={'tenant_id': str(tids[0]), 'upn': upn},
+        )
+        app.logger.info("stripe: setup session %s for tenant %s by %r", sess.id, tids[0], upn)
+        return jsonify({'url': sess.url})
+    except Exception as e:
+        return _server_error(e, 'stripe_setup_session')
+
+
 @app.route('/api/team', methods=['POST'])
 def save_team():
     """Assign a subscription profile (+ My Data practitioner) per user. Writes Security.Application_Users
@@ -2275,27 +2470,19 @@ def cancel_subscription():
     # Deliberately refuses when no primary has been recorded rather than falling back to "any
     # admin": a blank billing contact must not become a loophole that lets any admin end the
     # practice's subscription. The message says how to clear it.
+    # _lead_account_error holds the only copy of this rule -- shared with the Stripe endpoints so
+    # the two can never drift on who may commit or end the practice's money. is_support is still
+    # needed below: support keeps its access through termination, so it is excluded from the
+    # revocation sweep as well as from this gate.
     try:
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
-        acur.execute(f"SELECT Primary_Email FROM Input.Billing_Contact "
-                     f"WHERE Tenant_ID IN ({','.join(['?'] * len(tids))})", tids)
-        primaries = [(r[0] or '').strip().lower() for r in acur.fetchall() if (r[0] or '').strip()]
+        gate = _lead_account_error(upn, tids, acur, action='end the subscription')
     except Exception as e:
         return _server_error(e, 'cancel')
-    # Our own support logins bypass the gate entirely. They are never the recorded primary (the
-    # primary is picked by radio from the Dentally roster, and a support account has no Dentally
-    # user), yet support has to be able to end a subscription on the practice's behalf -- over the
-    # phone, or when the primary has left and nobody can reach the mailbox. They also keep their
-    # access through termination, so they can still act afterwards.
     is_support = (upn or '').lower().endswith('@analytically.info')
-    if not is_support:
-        if not primaries:
-            ac.close(); conn.close()
-            return jsonify({'error': 'No primary account holder is set. Set one on the Subscriptions '
-                                     'tab first — only the primary account can end the subscription.'}), 403
-        if (upn or '').lower() not in primaries:
-            ac.close(); conn.close()
-            return jsonify({'error': 'Only the primary account holder can end the subscription.'}), 403
+    if gate:
+        ac.close(); conn.close()
+        return gate
 
     reason = ((request.get_json(silent=True) or {}).get('reason') or '')[:1000]
     try:
