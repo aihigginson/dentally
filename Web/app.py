@@ -2137,6 +2137,58 @@ def _lead_account_error(upn, tids, acur, action='manage billing'):
     return None
 
 
+def _tenant_invoice_email(tenant_id):
+    """Where this practice's INVOICES should go: Invoice_Email if set, else Primary_Email.
+
+    Deliberately NOT _tenant_primary_email, which uses the opposite precedence. That one answers
+    "who is the main account holder" and feeds the monitor and token alerts, where the primary is
+    the right person. For billing, an explicitly-entered Invoice_Email is a request to send
+    invoices somewhere else -- usually a practice's accounts mailbox -- and must win.
+    """
+    try:
+        conn = _appdb_conn()
+        cur  = conn.cursor()
+        cur.execute("SELECT TOP 1 Invoice_Email, Primary_Email FROM Input.Billing_Contact "
+                    "WHERE Tenant_ID = ?", tenant_id)
+        row = cur.fetchone()
+        conn.close()
+        return ((row[0] or row[1] or '').strip() or None) if row else None
+    except Exception as e:
+        app.logger.warning("invoice-email lookup failed for tenant %s: %s", tenant_id, e)
+        return None
+
+
+def _stripe_sync_customer_contact(cur, tenant_id):
+    """Push the practice's current name + invoice address onto its Stripe Customer.
+
+    Stripe emails receipts and hosted invoices to the Customer's own email, which is set once at
+    creation -- so without this, changing the invoice contact in Settings updates our records and
+    leaves Stripe billing the old address. Silent, and only discovered when someone says they
+    never got an invoice.
+
+    No-op when the tenant has no Stripe Customer yet. Never raises: a failure here must not lose
+    the billing-contact save the user actually asked for.
+    """
+    try:
+        cur.execute("SELECT Stripe_Customer_ID FROM Billing.Account_Billing WHERE Tenant_ID = ?", tenant_id)
+        row = cur.fetchone()
+        cust_id = (row[0] or '').strip() if row else ''
+        if not cust_id:
+            return False
+        email = _tenant_invoice_email(tenant_id)
+        cur.execute("SELECT TOP 1 Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tenant_id)
+        r = cur.fetchone()
+        fields = {'name': (r[0] if r else None) or ('Tenant ' + str(tenant_id))}
+        if email:
+            fields['email'] = email
+        _stripe().Customer.modify(cust_id, **fields)
+        app.logger.info("stripe: synced contact for tenant %s -> %s", tenant_id, email)
+        return True
+    except Exception as e:
+        app.logger.warning("stripe: could not sync contact for tenant %s: %s", tenant_id, e)
+        return False
+
+
 def _stripe_customer(cur, tenant_id):
     """This tenant's Stripe Customer id, created on first use and stored on Account_Billing.
 
@@ -2154,7 +2206,7 @@ def _stripe_customer(cur, tenant_id):
 
     cust = _stripe().Customer.create(
         name=name,
-        email=_tenant_primary_email(tenant_id) or None,
+        email=_tenant_invoice_email(tenant_id) or None,
         metadata={'tenant_id': str(tenant_id), 'app_env': APP_ENV},
         idempotency_key='customer-' + STRIPE_ENV + '-' + str(tenant_id),
     )
@@ -2442,6 +2494,8 @@ def save_team():
                 # nobody to tell, and re-saving the same address is not a change.
                 if prev and (primary_email or '').lower() != prev.lower():
                     takeovers.append((tid, prev, primary_email))
+                # Keep Stripe's copy in step, or invoices keep going to the old address.
+                _stripe_sync_customer_contact(cur, tid)
             for tid, prev, now_primary in takeovers:
                 _notify_primary_change(tid, prev, now_primary, upn)
         ac.close()

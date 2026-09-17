@@ -1232,3 +1232,57 @@ def test_setup_session_returns_to_the_invoices_tab(client, appmod, monkeypatch):
     kw = [k for name, k in calls if name == 'session.create'][0]
     assert 'settings=invoices' in kw['success_url'] and 'billing=saved' in kw['success_url']
     assert 'settings=invoices' in kw['cancel_url'] and 'billing=cancelled' in kw['cancel_url']
+
+
+def test_invoice_email_prefers_invoice_over_primary(appmod, monkeypatch):
+    # The whole point of a separate lookup. _tenant_primary_email uses the OPPOSITE precedence
+    # because it answers "who is the main account holder" for monitor and token alerts. Reusing it
+    # for billing sends invoices to the primary even when an accounts mailbox was entered.
+    ap = _RecCursor({'Invoice_Email, Primary_Email': [('accounts@practice.co.uk', 'owner@practice.co.uk')]})
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    assert appmod._tenant_invoice_email(11) == 'accounts@practice.co.uk'
+
+
+def test_invoice_email_falls_back_to_primary(appmod, monkeypatch):
+    # No accounts mailbox entered -- the primary is the right destination.
+    ap = _RecCursor({'Invoice_Email, Primary_Email': [(None, 'owner@practice.co.uk')]})
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    assert appmod._tenant_invoice_email(11) == 'owner@practice.co.uk'
+
+
+def test_contact_sync_pushes_the_new_address_to_stripe(appmod, monkeypatch):
+    # Stripe emails receipts and hosted invoices to the Customer's own email, set once at
+    # creation. Without this the app's records change and Stripe keeps billing the old address --
+    # silent until someone says they never got an invoice.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [('cus_EXISTING',)],
+                     'Tenant_Name': [('Maple Dental',)]})
+    calls = []
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
+    assert appmod._stripe_sync_customer_contact(wh, 11) is True
+    mod = [kw for name, kw in calls if name == 'customer.modify']
+    assert mod and mod[0][0] == 'cus_EXISTING'
+    assert mod[0][1]['email'] == 'accounts@practice.co.uk'
+    assert mod[0][1]['name'] == 'Maple Dental'
+
+
+def test_contact_sync_is_a_noop_without_a_stripe_customer(appmod, monkeypatch):
+    # A practice that has never saved a card has no Customer to update.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [(None,)]})
+    calls = []
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    assert appmod._stripe_sync_customer_contact(wh, 11) is False
+    assert not calls
+
+
+def test_contact_sync_failure_never_loses_the_save(appmod, monkeypatch):
+    # This runs inside save_team, after the billing contact has been written. If Stripe is down,
+    # the user's save must still stand -- so it returns False rather than raising.
+    wh = _RecCursor({'Stripe_Customer_ID FROM Billing.Account_Billing': [('cus_EXISTING',)],
+                     'Tenant_Name': [('Maple Dental',)]})
+
+    def _boom():
+        raise RuntimeError('stripe unreachable')
+    monkeypatch.setattr(appmod, '_stripe', _boom)
+    monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
+    assert appmod._stripe_sync_customer_contact(wh, 11) is False
