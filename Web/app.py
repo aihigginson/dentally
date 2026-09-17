@@ -2169,6 +2169,92 @@ def _stripe_customer(cur, tenant_id):
     return cust.id
 
 
+def _stripe_card(cust_id):
+    """The card we would charge, as a dict for the UI, or None.
+
+    Checkout in setup mode ATTACHES the PaymentMethod to the Customer but does NOT set
+    invoice_settings.default_payment_method -- so a customer can have a perfectly good card and
+    still be unchargeable. Reading only the default is how "Card saved." and "No card on file."
+    end up on screen together, and how a monthly invoice would later find nothing to bill.
+
+    So: prefer the default, and if there is none but a card is attached, adopt the newest as the
+    default. That self-heals the case where the browser never made it back from Checkout.
+    """
+    st   = _stripe()
+    cust = st.Customer.retrieve(cust_id, expand=['invoice_settings.default_payment_method'])
+    inv  = getattr(cust, 'invoice_settings', None)
+    pm   = getattr(inv, 'default_payment_method', None)
+    if pm is None:
+        cards = st.PaymentMethod.list(customer=cust_id, type='card').data   # newest first
+        if not cards:
+            return None
+        pm = cards[0]
+        st.Customer.modify(cust_id, invoice_settings={'default_payment_method': pm.id})
+        app.logger.info("stripe: adopted %s as default card for %s", pm.id, cust_id)
+    card = getattr(pm, 'card', None)
+    return {'brand': getattr(card, 'brand', None), 'last4': getattr(card, 'last4', None),
+            'exp_month': getattr(card, 'exp_month', None), 'exp_year': getattr(card, 'exp_year', None)}
+
+
+@app.route('/api/stripe/setup-complete', methods=['POST'])
+def stripe_setup_complete():
+    """Called when the browser returns from Checkout. Makes the card just entered the one we bill.
+
+    Needed because setup-mode Checkout only attaches the card. Without this, "Change card" would
+    attach a second card and keep charging the old one -- the failure nobody notices until a
+    cancelled card declines.
+
+    ONE CARD ON FILE is the rule: the newest becomes the default and any others are detached, so
+    "Change card" means what it says and there is no ambiguity about what gets charged.
+    Idempotent -- running it again with nothing new attached changes nothing.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None or not tids:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        try:
+            gate = _lead_account_error(upn, tids, acur)
+        finally:
+            ac.close()
+        if gate:
+            conn.close(); return gate
+
+        cur.execute("SELECT Stripe_Customer_ID FROM Billing.Account_Billing WHERE Tenant_ID = ?", tids[0])
+        row = cur.fetchone()
+        conn.close()
+        cust_id = (row[0] or '').strip() if row else ''
+        if not cust_id:
+            return jsonify({'has_card': False})
+
+        st    = _stripe()
+        cards = st.PaymentMethod.list(customer=cust_id, type='card').data   # newest first
+        if not cards:
+            return jsonify({'has_card': False})
+        keep = cards[0]
+        st.Customer.modify(cust_id, invoice_settings={'default_payment_method': keep.id})
+        for old_pm in cards[1:]:
+            try:
+                st.PaymentMethod.detach(old_pm.id)
+            except Exception:
+                app.logger.warning("stripe: could not detach superseded card %s", old_pm.id)
+        app.logger.info("stripe: default card %s for tenant %s (%d superseded)",
+                        keep.id, tids[0], len(cards) - 1)
+        c = getattr(keep, 'card', None)
+        return jsonify({'has_card': True, 'brand': getattr(c, 'brand', None),
+                        'last4': getattr(c, 'last4', None),
+                        'exp_month': getattr(c, 'exp_month', None),
+                        'exp_year': getattr(c, 'exp_year', None)})
+    except Exception as e:
+        return _server_error(e, 'stripe_setup_complete')
+
+
 @app.route('/api/stripe/payment-method', methods=['GET'])
 def stripe_payment_method():
     """What card, if any, is on file for this practice. Drives the subscribe page's billing panel.
@@ -2204,19 +2290,12 @@ def stripe_payment_method():
         if not cust_id:
             return jsonify({'has_card': False, 'can_manage': can_manage})
 
-        cust = _stripe().Customer.retrieve(cust_id, expand=['invoice_settings.default_payment_method'])
         # Stripe resources are NOT dicts in stripe>=15: .get() raises AttributeError rather than
-        # returning None, so walk them with getattr. The test double must behave the same way --
-        # a dict-based fake hid exactly this and let the endpoint ship broken.
-        inv  = getattr(cust, 'invoice_settings', None)
-        pm   = getattr(inv, 'default_payment_method', None)
-        if not pm:
+        # returning None, so _stripe_card walks them with getattr.
+        card = _stripe_card(cust_id)
+        if not card:
             return jsonify({'has_card': False, 'can_manage': can_manage})
-        card = getattr(pm, 'card', None)
-        return jsonify({'has_card': True, 'can_manage': can_manage,
-                        'brand': getattr(card, 'brand', None), 'last4': getattr(card, 'last4', None),
-                        'exp_month': getattr(card, 'exp_month', None),
-                        'exp_year': getattr(card, 'exp_year', None)})
+        return jsonify(dict(card, has_card=True, can_manage=can_manage))
     except Exception as e:
         return _server_error(e, 'stripe_payment_method')
 
@@ -2259,8 +2338,11 @@ def stripe_setup_session():
             mode='setup',
             customer=cust_id,
             currency='gbp',
-            success_url=base + '/?billing=saved',
-            cancel_url=base + '/?billing=cancelled',
+            # Deep-link back to the tab they started from. Landing on the app home page leaves
+            # them to find their own way back to see whether it worked. ?settings= is the
+            # existing deep-link the alert emails use; the page strips ?billing= after reading it.
+            success_url=base + '/?settings=invoices&billing=saved',
+            cancel_url=base + '/?settings=invoices&billing=cancelled',
             metadata={'tenant_id': str(tids[0]), 'upn': upn},
         )
         app.logger.info("stripe: setup session %s for tenant %s by %r", sess.id, tids[0], upn)

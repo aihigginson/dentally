@@ -2070,6 +2070,7 @@
         _billingReturn = q.get('billing') || '';
         if (_billingReturn) {
             q.delete('billing');
+            q.delete('session_id');   // leave ?settings= for the deep-link handler below
             const rest = q.toString();
             history.replaceState({}, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
         }
@@ -2080,6 +2081,13 @@
         if (!el) return;
         el.textContent = 'Loading…';
         try {
+            // Just back from Checkout: make the card they entered the one we bill. Setup-mode
+            // Checkout only ATTACHES it -- without this step the practice has a card Stripe can
+            // see and the invoice cannot charge, and "Change card" would quietly keep the old one.
+            if (_billingReturn === 'saved') {
+                try { await authFetch('/api/stripe/setup-complete', { method: 'POST' }); }
+                catch (e) {}
+            }
             const res = await authFetch('/api/stripe/payment-method');
             if (!res.ok) throw new Error('status ' + res.status);
             const pm = await res.json();

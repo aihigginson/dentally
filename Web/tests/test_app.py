@@ -969,8 +969,20 @@ class _FakeObj:
         self.__dict__.update(kw)
 
 
-def _fake_stripe(calls):
-    """Minimal stand-in for the stripe module: records what would have been sent."""
+def _card(pm_id, last4='4242', brand='visa'):
+    return _FakeObj(id=pm_id, card=_FakeObj(brand=brand, last4=last4, exp_month=4, exp_year=2030))
+
+
+def _fake_stripe(calls, default_pm='pm_DEFAULT', cards=None):
+    """Minimal stand-in for the stripe module: records what would have been sent.
+
+    `default_pm=None` with `cards` non-empty models the state Checkout actually leaves behind --
+    the card is ATTACHED to the customer but is not the default payment method. That is the exact
+    condition that put "Card saved." and "No card on file." on screen together, so the double has
+    to be able to reproduce it.
+    """
+    cards = [_card('pm_DEFAULT')] if cards is None else cards
+
     class _Customer:
         @staticmethod
         def create(**kw):
@@ -980,9 +992,24 @@ def _fake_stripe(calls):
         @staticmethod
         def retrieve(cid, **kw):
             calls.append(('customer.retrieve', cid))
-            return _FakeObj(invoice_settings=_FakeObj(
-                default_payment_method=_FakeObj(card=_FakeObj(
-                    brand='visa', last4='4242', exp_month=4, exp_year=2030))))
+            pm = next((c for c in cards if c.id == default_pm), None)
+            return _FakeObj(invoice_settings=_FakeObj(default_payment_method=pm))
+
+        @staticmethod
+        def modify(cid, **kw):
+            calls.append(('customer.modify', (cid, kw)))
+            return _FakeObj(id=cid)
+
+    class _PaymentMethod:
+        @staticmethod
+        def list(**kw):
+            calls.append(('pm.list', kw))
+            return _FakeObj(data=list(cards))          # Stripe returns newest first
+
+        @staticmethod
+        def detach(pm_id, **kw):
+            calls.append(('pm.detach', pm_id))
+            return _FakeObj(id=pm_id)
 
     class _Session:
         @staticmethod
@@ -990,11 +1017,12 @@ def _fake_stripe(calls):
             calls.append(('session.create', kw))
             return _FakeObj(id='cs_TEST', url='https://checkout.stripe.com/c/pay/cs_TEST')
 
-    return _FakeObj(Customer=_Customer, checkout=_FakeObj(Session=_Session))
+    return _FakeObj(Customer=_Customer, PaymentMethod=_PaymentMethod,
+                    checkout=_FakeObj(Session=_Session))
 
 
 def _stripe_env(appmod, monkeypatch, primary='owner@practice.co.uk', customer_id=None,
-                caller='owner@practice.co.uk', tids=(11,)):
+                caller='owner@practice.co.uk', tids=(11,), default_pm='pm_DEFAULT', cards=None):
     """Wire both connections, auth and a fake Stripe. Returns (wh_cursor, appdb_cursor, calls)."""
     wh = _RecCursor({
         'Stripe_Customer_ID FROM Billing.Account_Billing': [(customer_id,)] if customer_id else [(None,)],
@@ -1007,7 +1035,7 @@ def _stripe_env(appmod, monkeypatch, primary='owner@practice.co.uk', customer_id
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
     monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
     monkeypatch.setattr(appmod, '_tenant_primary_email', lambda tid: primary)
-    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls))
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, default_pm, cards))
     return wh, ap, calls
 
 
@@ -1134,3 +1162,73 @@ def test_payment_method_tells_the_ui_who_may_change_the_card(client, appmod, mon
     wh, ap, calls = _stripe_env(appmod, monkeypatch, primary=None,
                                 caller='admin@analytically.info', customer_id='cus_EXISTING')
     assert client.get('/api/stripe/payment-method').get_json()['can_manage'] is True
+
+
+def test_attached_but_undefaulted_card_is_adopted(client, appmod, monkeypatch):
+    # The real bug. Setup-mode Checkout ATTACHES the card but does not make it the default, so
+    # the customer had a perfectly good visa 4242 while the app reported "No card on file" --
+    # and the monthly invoice would have found nothing to charge. Reading must self-heal, because
+    # the browser may never have made it back from Checkout to say so.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm=None, cards=[_card('pm_NEW', last4='4242')])
+    r = client.get('/api/stripe/payment-method')
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['has_card'] is True and body['last4'] == '4242'
+    # and it must PERSIST the choice, not just render it -- otherwise billing still can't charge
+    modified = [kw for name, kw in calls if name == 'customer.modify']
+    assert modified and modified[0][1]['invoice_settings']['default_payment_method'] == 'pm_NEW'
+
+
+def test_no_cards_at_all_still_reports_no_card(client, appmod, monkeypatch):
+    # Self-healing must not invent a card when none is attached.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm=None, cards=[])
+    assert client.get('/api/stripe/payment-method').get_json()['has_card'] is False
+    assert not [c for c in calls if c[0] == 'customer.modify']
+
+
+def test_setup_complete_makes_the_newest_card_the_one_we_bill(client, appmod, monkeypatch):
+    # "Change card" must actually change it. Checkout attaches the new card alongside the old one
+    # and leaves the default pointing at the old -- so without this the practice changes their
+    # card, sees the new one, and we keep charging the cancelled one until it declines.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm='pm_OLD',
+                                cards=[_card('pm_NEW', last4='1111'), _card('pm_OLD', last4='4242')])
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 200
+    assert r.get_json()['last4'] == '1111'
+    modified = [kw for name, kw in calls if name == 'customer.modify']
+    assert modified[0][1]['invoice_settings']['default_payment_method'] == 'pm_NEW'
+    # one card on file: the superseded one is detached, so there is no ambiguity about what pays
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_OLD']
+
+
+def test_setup_complete_is_idempotent(client, appmod, monkeypatch):
+    # The browser can return twice (refresh, back button). Doing it again must not detach the
+    # only card on file.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, customer_id='cus_EXISTING',
+                                default_pm='pm_ONLY', cards=[_card('pm_ONLY')])
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 200
+    assert not [c for c in calls if c[0] == 'pm.detach']
+
+
+def test_setup_complete_refuses_non_primary(client, appmod, monkeypatch):
+    # Same gate as the rest of billing -- it decides what card the practice gets charged on.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch, primary='someoneelse@practice.co.uk',
+                                customer_id='cus_EXISTING')
+    r = client.post('/api/stripe/setup-complete', json={})
+    assert r.status_code == 403
+    assert not [c for c in calls if c[0] in ('customer.modify', 'pm.detach')]
+
+
+def test_setup_session_returns_to_the_invoices_tab(client, appmod, monkeypatch):
+    # Returning to the app home page leaves the user to find their own way back to see whether it
+    # worked -- and they cannot tell a saved card from a silent failure.
+    wh, ap, calls = _stripe_env(appmod, monkeypatch)
+    r = client.post('/api/stripe/setup-session', json={})
+    assert r.status_code == 200
+    kw = [k for name, k in calls if name == 'session.create'][0]
+    assert 'settings=invoices' in kw['success_url'] and 'billing=saved' in kw['success_url']
+    assert 'settings=invoices' in kw['cancel_url'] and 'billing=cancelled' in kw['cancel_url']
