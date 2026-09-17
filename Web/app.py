@@ -2095,6 +2095,10 @@ def get_invoices():
 #     access -- at this scale a human makes the call, because cutting off a practice over a failed
 #     card is not a decision to automate while there are few enough customers to phone. Revisit
 #     when the volume makes that impractical.
+#   * STRIPE emails the practice about a failed payment (its own dunning emails are enabled in the
+#     dashboard). So the charge job must NOT email the customer as well -- it alerts Sales@ ONLY.
+#     Two "your payment failed" emails in different voices, one of them ours and one Stripe's,
+#     reads as a system in disarray to the person least able to tell them apart.
 
 STRIPE_ENV = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
 _stripe_singleton = None
