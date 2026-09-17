@@ -2205,13 +2205,18 @@ def stripe_payment_method():
             return jsonify({'has_card': False, 'can_manage': can_manage})
 
         cust = _stripe().Customer.retrieve(cust_id, expand=['invoice_settings.default_payment_method'])
-        pm   = (cust.get('invoice_settings') or {}).get('default_payment_method')
+        # Stripe resources are NOT dicts in stripe>=15: .get() raises AttributeError rather than
+        # returning None, so walk them with getattr. The test double must behave the same way --
+        # a dict-based fake hid exactly this and let the endpoint ship broken.
+        inv  = getattr(cust, 'invoice_settings', None)
+        pm   = getattr(inv, 'default_payment_method', None)
         if not pm:
             return jsonify({'has_card': False, 'can_manage': can_manage})
-        card = pm.get('card') or {}
+        card = getattr(pm, 'card', None)
         return jsonify({'has_card': True, 'can_manage': can_manage,
-                        'brand': card.get('brand'), 'last4': card.get('last4'),
-                        'exp_month': card.get('exp_month'), 'exp_year': card.get('exp_year')})
+                        'brand': getattr(card, 'brand', None), 'last4': getattr(card, 'last4', None),
+                        'exp_month': getattr(card, 'exp_month', None),
+                        'exp_year': getattr(card, 'exp_year', None)})
     except Exception as e:
         return _server_error(e, 'stripe_payment_method')
 

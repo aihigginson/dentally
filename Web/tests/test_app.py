@@ -957,13 +957,16 @@ def test_app_env_defaults_to_non_prod(appmod, monkeypatch):
 # fails visibly; a dev deployment holding a live key fails by charging a real dentist.
 
 
-class _FakeObj(dict):
-    """Stripe returns objects that are both attribute- and dict-accessible."""
-    def __getattr__(self, k):
-        try:
-            return self[k]
-        except KeyError:
-            raise AttributeError(k)
+class _FakeObj:
+    """Stand-in for a Stripe resource.
+
+    Deliberately NOT a dict subclass. Real stripe>=15 resources are not dicts and have no
+    .get() -- calling it raises AttributeError. A dict-based double made `cust.get(...)` look
+    fine in tests while the endpoint would have thrown on the first real call, so this double
+    exposes attributes only.
+    """
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
 
 
 def _fake_stripe(calls):
