@@ -2077,9 +2077,14 @@ def get_invoices():
 # lines are pushed as invoice items. Two engines computing the same number is how billing
 # systems silently diverge.
 #
-# Prices in Billing.Profile_Pricing are NET of VAT (full 50.00, clinician 20.00, front_office
-# 5.00 -> 60/24/6 gross). VAT is applied as a Stripe tax rate at invoice time and never stored
-# in SQL, so the tax treatment can change without touching the billing engine.
+# Prices in Billing.Profile_Pricing are VAT-INCLUSIVE (full 60.00, clinician 24.00, front_office
+# 6.00 -- what the practice PAYS). Dental treatment is a VAT-exempt supply, so most practices
+# cannot reclaim the VAT we charge: the gross figure is a real cost to them and quoting it is the
+# honest price. Billing.Invoice_Line.Value therefore holds GROSS too.
+#
+# So the Stripe tax rate MUST be INCLUSIVE -- Stripe derives the VAT from the gross rather than
+# adding 20% on top. An exclusive rate against these figures would bill 72.00 for a full seat, and
+# a tax rate's `inclusive` flag cannot be edited after creation.
 #
 # Keys live in Key Vault as stripe-secret-key-<env> -- never an env var, so a key cannot leak
 # through a container spec or a workflow log. Same isolation as Xero.

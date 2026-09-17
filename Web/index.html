@@ -796,7 +796,7 @@
                     <div id="billing-card" style="margin-top:10px">Loading&hellip;</div>
                 </div>
                 <div class="defs-item">
-                    <div class="defs-item-desc">Your monthly bill for Analytically. Each line is a subscribed user for that month; the first part-month at sign-up is pro-rated, and free / trial months show nothing to pay. Amounts shown exclude VAT, which is added at 20% when the invoice is issued.</div>
+                    <div class="defs-item-desc">Your monthly bill for Analytically. Each line is a subscribed user for that month; the first part-month at sign-up is pro-rated, and free / trial months show nothing to pay. Amounts shown include VAT at 20%.</div>
                     <div id="invoices-list" style="margin-top:10px">Loading&hellip;</div>
                 </div>
             </div>
@@ -1982,7 +1982,7 @@
                 '<div style="background:#f4f7f9;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.55">'
                 + _teamProfiles.filter(o => o.key !== 'no_access').map(o =>
                     '<div><strong>' + escHtml(o.name) + '</strong> — ' + escHtml(o.desc || '')
-                    + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo</span></div>').join('')
+                    + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo <span style="font-weight:400;color:#5b6b78">inc. VAT</span></span></div>').join('')
                 + '<div style="margin-top:6px;color:#888">Admin (the Settings tab) is a separate tick at no extra cost — at least one person needs it, and that’s always you.</div>'
                 + '</div>'
                 + people.map(p =>
