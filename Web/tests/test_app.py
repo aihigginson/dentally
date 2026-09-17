@@ -1286,3 +1286,82 @@ def test_contact_sync_failure_never_loses_the_save(appmod, monkeypatch):
     monkeypatch.setattr(appmod, '_stripe', _boom)
     monkeypatch.setattr(appmod, '_tenant_invoice_email', lambda tid: 'accounts@practice.co.uk')
     assert appmod._stripe_sync_customer_contact(wh, 11) is False
+
+
+# ── Removing the card on file ─────────────────────────────────────────────────
+# Policy: replace-only while being billed. The refusal is the feature -- a practice that
+# deleted its last card mid-subscription would look fine and silently stop paying.
+
+def _remove_env(appmod, monkeypatch, paid_from, cancelled_at, cards=None,
+                customer_id='cus_EXISTING', primary='owner@practice.co.uk',
+                caller='owner@practice.co.uk'):
+    cards = [_card('pm_ONE')] if cards is None else cards
+    wh = _RecCursor({'Stripe_Customer_ID, Paid_From, Cancelled_At':
+                         [(customer_id, paid_from, cancelled_at)]})
+    ap = _RecCursor({'Primary_Email': [(primary,)] if primary else []})
+    calls = []
+    monkeypatch.setattr(appmod, '_auth', lambda: (caller, None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    monkeypatch.setattr(appmod, '_stripe', lambda: _fake_stripe(calls, 'pm_ONE', cards))
+    return wh, ap, calls
+
+
+def test_remove_card_refused_while_being_billed(client, appmod, monkeypatch):
+    # The core guard. Paid_From in the past and no cancellation = actively charged.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2026, 1, 1), cancelled_at=None)
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 409
+    assert 'subscription is active' in r.get_json()['error']
+    assert not [c for c in calls if c[0] == 'pm.detach']      # card untouched
+
+
+def test_remove_card_refused_when_paid_from_is_null(client, appmod, monkeypatch):
+    # NULL Paid_From means "bill from first access" (no trial) -- i.e. billing. Treating NULL as
+    # "not charging" would let a paying practice delete its only card.
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=None, cancelled_at=None)
+    assert client.post('/api/stripe/remove-card', json={}).status_code == 409
+    assert not [c for c in calls if c[0] == 'pm.detach']
+
+
+def test_remove_card_allowed_during_a_trial(client, appmod, monkeypatch):
+    # Paid_From in the future = trial or free-forever. Nothing to bill, so nothing to protect.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None)
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200 and r.get_json()['has_card'] is False
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_ONE']
+
+
+def test_remove_card_allowed_once_cancellation_has_taken_effect(client, appmod, monkeypatch):
+    # Cancelled_At is the START OF NEXT MONTH, so a cancellation dated in the past means the
+    # subscription has actually ended and the final invoice is behind us.
+    from datetime import date, datetime as dt
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2026, 1, 1),
+                                cancelled_at=dt(2026, 2, 1))
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200
+    assert [pm for name, pm in calls if name == 'pm.detach'] == ['pm_ONE']
+    # and the default must be cleared, not left pointing at a detached card
+    mod = [kw for name, kw in calls if name == 'customer.modify']
+    assert mod and mod[0][1]['invoice_settings']['default_payment_method'] == ''
+
+
+def test_remove_card_detaches_every_card_not_just_the_default(client, appmod, monkeypatch):
+    # Belt and braces: if a stray second card ever got attached, "remove" must mean remove.
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None,
+                                cards=[_card('pm_ONE'), _card('pm_TWO')])
+    r = client.post('/api/stripe/remove-card', json={})
+    assert r.status_code == 200 and r.get_json()['removed'] == 2
+    assert sorted(pm for name, pm in calls if name == 'pm.detach') == ['pm_ONE', 'pm_TWO']
+
+
+def test_remove_card_refuses_non_primary(client, appmod, monkeypatch):
+    from datetime import date
+    wh, ap, calls = _remove_env(appmod, monkeypatch, paid_from=date(2100, 1, 1), cancelled_at=None,
+                                primary='someoneelse@practice.co.uk')
+    assert client.post('/api/stripe/remove-card', json={}).status_code == 403
+    assert not calls

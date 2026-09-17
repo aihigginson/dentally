@@ -2097,9 +2097,18 @@
                     ? '<div style="color:#8a6d3b;font-size:12px;margin-bottom:8px">No card was saved.</div>'
                     : '');
             _billingReturn = '';
+            // "Remove card" is shown whenever there is a card and the caller may manage billing --
+            // even while the subscription is active, when the API will refuse. A control that
+            // explains why is better than one that isn't there: someone hunting for it should find
+            // an answer rather than conclude we won't let go of their card details.
             const btn = pm.can_manage
                 ? '<button id="billing-card-btn" class="settings-save" style="margin-top:0">'
                   + (pm.has_card ? 'Change card' : 'Add a card') + '</button>'
+                  + (pm.has_card
+                      ? ' <button id="billing-card-remove" style="background:none;border:none;'
+                        + 'color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;'
+                        + 'padding:0;margin-left:10px">Remove card</button>'
+                      : '')
                 : '';
             const state = pm.has_card
                 ? '<div style="font-size:13px">' + escHtml((pm.brand || 'Card').toUpperCase())
@@ -2114,8 +2123,29 @@
                 + '<div id="billing-card-msg" class="settings-msg"></div>';
             const b = document.getElementById('billing-card-btn');
             if (b) b.addEventListener('click', startCardSetup);
+            const rm = document.getElementById('billing-card-remove');
+            if (rm) rm.addEventListener('click', removeCard);
         } catch (e) {
             el.textContent = 'Could not load the payment method.';
+        }
+    }
+
+    async function removeCard() {
+        const msg = document.getElementById('billing-card-msg');
+        const warn = 'Remove the card on file?' + '\n\n'
+            + 'This only works if there is nothing left to bill. While your subscription '
+            + 'is active the card can be replaced but not removed, because the next '
+            + 'invoice would have nothing to pay it.';
+        if (!confirm(warn)) return;
+        if (msg) msg.textContent = '';
+        try {
+            const res  = await authFetch('/api/stripe/remove-card', { method: 'POST' });
+            const body = await res.json().catch(() => ({}));
+            // A 409 here is the expected refusal, not a fault -- show its reason verbatim.
+            if (!res.ok) throw new Error(body.error || ('status ' + res.status));
+            loadPaymentMethod();
+        } catch (e) {
+            if (msg) msg.textContent = e.message || 'Could not remove the card.';
         }
     }
 

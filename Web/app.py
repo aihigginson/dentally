@@ -2083,6 +2083,18 @@ def get_invoices():
 #
 # Keys live in Key Vault as stripe-secret-key-<env> -- never an env var, so a key cannot leak
 # through a container spec or a workflow log. Same isolation as Xero.
+#
+# DECIDED POLICY, for the monthly charge job to implement (2026-09-17):
+#   * Cards: replace-only while a practice is being billed. Removal is allowed only when there is
+#     nothing to charge -- trial, free-forever, or a cancelled subscription that has ended. See
+#     /api/stripe/remove-card.
+#   * Cancellation detaches the card AFTER the final invoice settles, not when the button is
+#     pressed: Cancelled_At is the start of next month, so billing runs to month end and that last
+#     invoice still needs a card.
+#   * Repeated payment failures EMAIL Sales@ and do nothing else. No automatic suspension of
+#     access -- at this scale a human makes the call, because cutting off a practice over a failed
+#     card is not a decision to automate while there are few enough customers to phone. Revisit
+#     when the volume makes that impractical.
 
 STRIPE_ENV = APP_ENV if APP_ENV in ('dev', 'prod') else 'prod'
 _stripe_singleton = None
@@ -2401,6 +2413,74 @@ def stripe_setup_session():
         return jsonify({'url': sess.url})
     except Exception as e:
         return _server_error(e, 'stripe_setup_session')
+
+
+@app.route('/api/stripe/remove-card', methods=['POST'])
+def stripe_remove_card():
+    """Remove the card on file. REFUSES while the practice is actively being billed.
+
+    Policy (decided 2026-09-17): replace-only while active. A practice that is being charged
+    cannot delete its last card, because the next invoice would have nothing to pay it -- the
+    account would look fine and silently stop paying. "I want my card removed" while active is
+    really "I want to stop subscribing", so the refusal points at that instead.
+
+    The control EXISTS and explains itself rather than being hidden: someone looking for it
+    should find an answer, not an absence. Removal IS allowed when there is nothing to bill --
+    during a trial, on a free-forever account, or once a cancelled subscription has actually
+    ended. Cancelling also detaches the card automatically after the final invoice settles, so
+    the normal route needs no button at all.
+
+    Note the final invoice is why cancelling does not detach immediately: Cancelled_At is the
+    START OF NEXT MONTH, so billing runs to month end and that last invoice still needs a card.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur  = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None or not tids:
+            conn.close(); return jsonify({'error': 'Forbidden'}), 403
+
+        ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+        try:
+            gate = _lead_account_error(upn, tids, acur, action='manage billing')
+        finally:
+            ac.close()
+        if gate:
+            conn.close(); return gate
+
+        cur.execute("SELECT Stripe_Customer_ID, Paid_From, Cancelled_At "
+                    "FROM Billing.Account_Billing WHERE Tenant_ID = ?", tids[0])
+        row = cur.fetchone()
+        conn.close()
+        if not row or not (row[0] or '').strip():
+            return jsonify({'ok': True, 'has_card': False})   # nothing to remove
+        cust_id, paid_from, cancelled_at = (row[0] or '').strip(), row[1], row[2]
+
+        # Paid_From NULL means "bill from first access" (no trial), so NULL counts as billing.
+        today       = datetime.utcnow().date()
+        not_charging = paid_from is not None and paid_from > today
+        ended        = cancelled_at is not None and cancelled_at.date() <= today
+        if not (not_charging or ended):
+            return jsonify({'error': 'Your subscription is active, so the card on file cannot be '
+                                     'removed — the next invoice would have nothing to pay it. '
+                                     'Use "Change card" to replace it, or end the subscription, '
+                                     'which removes the card once the final invoice is settled.'}), 409
+
+        st    = _stripe()
+        cards = st.PaymentMethod.list(customer=cust_id, type='card').data
+        for pm in cards:
+            try:
+                st.PaymentMethod.detach(pm.id)
+            except Exception:
+                app.logger.warning("stripe: could not detach %s for tenant %s", pm.id, tids[0])
+        st.Customer.modify(cust_id, invoice_settings={'default_payment_method': ''})
+        app.logger.info("stripe: removed %d card(s) for tenant %s by %r", len(cards), tids[0], upn)
+        return jsonify({'ok': True, 'has_card': False, 'removed': len(cards)})
+    except Exception as e:
+        return _server_error(e, 'stripe_remove_card')
 
 
 @app.route('/api/team', methods=['POST'])
