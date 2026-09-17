@@ -1,0 +1,43 @@
+# =====================================================================
+# Release V160 -- Input_Stage landing tables for AppDB on Azure SQL
+# =====================================================================
+# Creates the Input_Stage schema and eight landing tables. INERT ON DEPLOY: nothing reads or
+# writes them yet. The sync procs still do their three-part read of [AppDB].[Input].[X], and keep
+# working exactly as before until V161 repoints them.
+#
+# WHY: AppDB has moved off the Fabric capacity to Azure SQL (AppDB/MIGRATION.md). Both the dev and
+# prod Fabric SQL Database endpoints refused connections for ~25 minutes on 2026-09-17 -- identical
+# 15.1s TCP timeouts from the container apps and a workstation -- while WH_Dentally on the SAME
+# capacity answered in 0.6s. A capacity bounce cleared it, for the second time.
+#
+# A three-part name only resolves for a Fabric item in the same workspace, so an Azure SQL database
+# cannot be read that way. Web/appdb_sync.py (a Container Apps Job) lands the rows here instead,
+# and V161 points the procs at these tables. Their MERGE logic does not change -- only the source.
+#
+# Deliberately a Container Apps Job rather than a Fabric notebook or Copy activity: the job runs on
+# the Container Apps static egress IP, which the SQL firewall already allows, so it needs no
+# allow-all-Azure rule -- and it keeps the 10-minute access sync off the capacity that keeps hanging.
+#
+# Tables are GENERATED from the live AppDB schema by Scripts/Generate_Input_Stage_DDL.py, so the
+# staging shapes cannot drift from the source by a transcription slip. One type is remapped:
+# TINYINT -> SMALLINT (Practice_Config.FY_Start_Month), which the Fabric Warehouse has no
+# equivalent for. Values are 1-12, so the widening costs nothing.
+#
+# No PKs: the Fabric Warehouse does not enforce constraints, so declaring them would imply a
+# guarantee the engine does not give. The real PKs live in AppDB.
+#
+# All eight are guarded CREATEs, so this is idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V160__input_stage_for_appdb_on_azure_sql.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Input_Stage.Application_Users.Table.sql
+DEPLOY   Fabric\Input_Stage.Access_Log.Table.sql
+DEPLOY   Fabric\Input_Stage.Metric_Variance.Table.sql
+DEPLOY   Fabric\Input_Stage.Plan_Capitation_Rate.Table.sql
+DEPLOY   Fabric\Input_Stage.Practice_Config.Table.sql
+DEPLOY   Fabric\Input_Stage.Practitioner_Pay.Table.sql
+DEPLOY   Fabric\Input_Stage.Practitioner_Role.Table.sql
+DEPLOY   Fabric\Input_Stage.Targets.Table.sql
+
+TEST
