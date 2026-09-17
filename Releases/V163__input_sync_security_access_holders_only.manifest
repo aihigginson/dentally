@@ -1,0 +1,31 @@
+# =====================================================================
+# Release V163 -- usp_Sync_Input_From_AppDB: Security = access-holders only
+# =====================================================================
+# Brings this proc in line with usp_Sync_Access_From_AppDB, which adopted the rule on 28/07 in its
+# *02 and was never mirrored here. Adds the REVOKE delete and the access-holders filter on INSERT.
+# The two procs' Security logic is now statement-for-statement identical.
+#
+# THE BUG: this proc inserted the WHOLE roster into Security.Application_Users, so every nightly
+# build inflated it -- prod 7 -> 66, dev 19 -> 98 -- and the next access sync trimmed it back. The
+# two procs have been fighting each other since July.
+#
+# Harmless, which is why nobody noticed: an access-less Security row fails closed in
+# _get_user_info (there is a test for exactly that), so no one ever gained access they should not
+# have. But for up to 10 minutes after every build, Security held dozens of rows with no business
+# being there -- and Security is the auth surface, so it should mean what it says.
+#
+# REVOKE FIRST, for the same reason the access proc does: a user downgraded to no_access must LOSE
+# the row, not keep an all-zero one. Only rows that JOIN to a staging row are touched, so support
+# logins inserted straight into Security by SQL -- grace@ and andy@ on dev, which have no AppDB
+# counterpart -- are left alone. That exclusion is load-bearing: sweeping them would lock support
+# out of a tenant it may still need to act on.
+#
+# EXPECTED AFTER DEPLOY: running the nightly no longer changes Security.Application_Users at all.
+# dev stays at its access-holder count, prod stays at 7. Before this, the count would spike.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V163__input_sync_security_access_holders_only.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+TEST
