@@ -1634,9 +1634,21 @@ def _get_user_info(cur, upn):
     # It changes only WHICH practice, never WHAT the support login may do: display_name, the module
     # flags and Maintain_Targets still come from their own row above.
     acting = _acting_client_id(upn)
-    if acting is not None and acting != client_id:
-        app.logger.info('staff %s acting as client %s', upn, acting)
-        client_id = acting
+    if acting is not None and str(acting) != str(client_id):
+        # RESOLVE IT AGAINST THE DATABASE BEFORE USING IT, and compare as text. The header arrives
+        # as a string while Client_ID is an int, so passing it straight to the tenant lookup made
+        # SQL Server raise a conversion error on any non-numeric value -- a 500 from an unhandled
+        # driver exception, not the clean refusal this was supposed to be. Casting also keeps the
+        # check working if the column type ever changes. The canonical value comes back from the
+        # row, so client_id stays the type the rest of the app expects.
+        cur.execute("SELECT TOP 1 Client_ID FROM Audit.Tenants "
+                    "WHERE CAST(Client_ID AS VARCHAR(64)) = ? AND ISNULL(Is_Active, 1) = 1", str(acting))
+        row = cur.fetchone()
+        if not row:
+            app.logger.warning('staff %s asked for unknown/inactive client %r', upn, acting)
+            return None, None, [], False
+        app.logger.info('staff %s acting as client %s', upn, row[0])
+        client_id = row[0]
 
     cur.execute(
         "SELECT Tenant_ID FROM Audit.Tenants WHERE Client_ID = ? AND ISNULL(Is_Active, 1) = 1",
@@ -3572,6 +3584,26 @@ def admin_billing():
         return _server_error(e, 'admin_billing')
 
 
+class _StripeDown(Exception):
+    """Stripe could not be reached or is not configured here."""
+
+
+def _stripe_or_refuse():
+    """Stripe, or a refusal the operator can act on.
+
+    Every write below turns on what Stripe says, so "Stripe is unreadable" must never be answered
+    with a guess. An unhandled failure here surfaced as a bare 500, which reads like a broken
+    screen rather than a temporary outage and invites a retry that cannot work.
+    """
+    try:
+        return _stripe()
+    except Exception as e:
+        app.logger.warning('admin: Stripe unavailable: %s', e)
+        raise _StripeDown('Stripe cannot be reached right now, so I cannot tell whether that '
+                          'invoice has already been issued. Nothing has been changed — try again '
+                          'shortly.')
+
+
 def _finalised_in_stripe(br, st, cur, tid, ym):
     """Is this month's invoice beyond a draft? Asked of STRIPE, not of our table.
 
@@ -3622,7 +3654,11 @@ def admin_billing_adjust():
         # It changes what a practice is charged. In six months the only account of why will be this.
         return jsonify({'error': 'Please give a reason — it is the only record of why.'}), 400
     try:
-        conn = _fabric_conn(); cur = conn.cursor()
+        # autocommit=True, and it MUST be. _fabric_conn defaults to a transaction and these
+        # handlers close without committing, so every write here silently rolled back --
+        # while the response reported success, because the endpoint read the figures back
+        # inside its own uncommitted transaction. It looked like it had worked.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
         tid, terr = _admin_tenant(cur, upn, body.get('tenant_id'))
         if terr:
             conn.close(); return terr
@@ -3636,7 +3672,7 @@ def admin_billing_adjust():
                 tid, ym, target, action, value, reason[:500],
                 datetime.utcnow().replace(microsecond=0), upn[:255])
 
-        st = _stripe()
+        st = _stripe_or_refuse()
         status, _inv = _finalised_in_stripe(_billing(), st, cur, tid, ym)
         if status:
             conn.close()
@@ -3649,6 +3685,8 @@ def admin_billing_adjust():
         n, total = cur.fetchone()
         conn.close()
         return jsonify({'ok': True, 'regenerated': True, 'lines': n, 'total': float(total or 0)})
+    except _StripeDown as e:
+        return jsonify({'error': str(e)}), 503
     except Exception as e:
         return _server_error(e, 'admin_billing_adjust')
 
@@ -3668,8 +3706,12 @@ def admin_billing_raise():
         return jsonify({'error': 'Bad month'}), 400
     try:
         br = _billing(); br.new_run_id()
-        st = _stripe()
-        conn = _fabric_conn(); cur = conn.cursor()
+        st = _stripe_or_refuse()
+        # autocommit=True, and it MUST be. _fabric_conn defaults to a transaction and these
+        # handlers close without committing, so every write here silently rolled back --
+        # while the response reported success, because the endpoint read the figures back
+        # inside its own uncommitted transaction. It looked like it had worked.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
         tid, terr = _admin_tenant(cur, upn, (request.get_json(silent=True) or {}).get('tenant_id'))
         if terr:
             conn.close(); return terr
@@ -3718,6 +3760,8 @@ def admin_billing_raise():
                         'total': (d.get('total') or 0) / 100,
                         'tax': br.invoice_tax_pence(inv) / 100,
                         'lines': len(t['lines']), 'hosted_url': d.get('hosted_invoice_url')})
+    except _StripeDown as e:
+        return jsonify({'error': str(e)}), 503
     except Exception as e:
         return _server_error(e, 'admin_billing_raise')
 
@@ -3746,16 +3790,22 @@ def admin_billing_credit_note():
                 f'{ym // 100}-{ym % 100:02d}. A corrected invoice follows.')
     try:
         br = _billing(); br.new_run_id()
-        conn = _fabric_conn(); cur = conn.cursor()
+        # autocommit=True, and it MUST be. _fabric_conn defaults to a transaction and these
+        # handlers close without committing, so every write here silently rolled back --
+        # while the response reported success, because the endpoint read the figures back
+        # inside its own uncommitted transaction. It looked like it had worked.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
         tid, terr = _admin_tenant(cur, upn, body.get('tenant_id'))
         if terr:
             conn.close(); return terr
-        out = _capture(br.credit_note, _stripe(), cur, tid, ym, reason, memo,
+        out = _capture(br.credit_note, _stripe_or_refuse(), cur, tid, ym, reason, memo,
                        to_balance=bool(body.get('to_balance')))
         conn.close()
         issued, text = out
         app.logger.info('admin: %s credit-note tenant %s %s -> issued=%s', upn, tid, ym, issued)
         return jsonify({'ok': bool(issued), 'issued': bool(issued), 'detail': text})
+    except _StripeDown as e:
+        return jsonify({'error': str(e)}), 503
     except Exception as e:
         return _server_error(e, 'admin_billing_credit_note')
 

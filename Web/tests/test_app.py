@@ -1480,20 +1480,30 @@ def test_invoices_never_expose_the_stripe_invoice_id(client, appmod, monkeypatch
 # whatever this decides, correct or not.
 
 class _SwitchCursor:
-    """Returns the user row first, then the tenant list -- and REMEMBERS which Client_ID the
-    tenant lookup was asked about, which is the thing under test."""
-    def __init__(self, user_row, tenants):
-        self._user, self._tenants, self._n = user_row, tenants, 0
+    """Models the three queries _get_user_info makes: the user row, the staff override lookup, and
+    the tenant list -- and REMEMBERS which Client_ID the tenant list was asked for, which is the
+    thing under test.
+
+    `known` is the set of active Client_IDs, so an override naming something else resolves to
+    nothing, exactly as the database would answer.
+    """
+    def __init__(self, user_row, tenants, known=('CLIENT-A', 'CLIENT-B')):
+        self._user, self._tenants, self._known = user_row, tenants, [str(k) for k in known]
+        self._next_one = user_row
         self.asked_client = None
 
     def execute(self, sql, *args):
-        self._n += 1
-        if 'Audit.Tenants' in sql and 'Client_ID = ?' in sql:
+        if 'CAST(Client_ID AS VARCHAR' in sql:                      # the override lookup
+            asked = str(args[0]) if args else ''
+            self._next_one = (asked,) if asked in self._known else None
+        elif 'Audit.Tenants' in sql and 'Client_ID = ?' in sql:     # the tenant list
             self.asked_client = args[0] if args else None
+        else:
+            self._next_one = self._user
         return self
 
     def fetchone(self):
-        return self._user
+        return self._next_one
 
     def fetchall(self):
         return self._tenants
@@ -1534,8 +1544,18 @@ def test_staff_without_the_header_stay_in_their_own_practice(appmod):
 def test_an_unknown_practice_fails_closed_rather_than_falling_back(appmod):
     # The dangerous failure is not an error -- it is quietly serving the support login's OWN
     # practice while the screen says they are looking at someone else's.
-    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [])   # no active tenant
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
     with _ctx(appmod, {'X-Acting-Client': 'NO-SUCH-CLIENT'}):
+        assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+    assert cur.asked_client is None, 'it must never fall through to a tenant lookup'
+
+
+def test_a_non_numeric_practice_is_refused_not_passed_to_sql(appmod):
+    # Client_ID is an int. Handing the raw header to the tenant query made SQL Server raise a
+    # conversion error -- a 500 from the driver, not the clean refusal this was meant to be. The
+    # override is now resolved against the database first, compared as text.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Client': "'; DROP TABLE x --"}):
         assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
 
 
@@ -1610,3 +1630,29 @@ def test_admin_rejects_a_nonsense_month(client, appmod, monkeypatch):
     for bad in ('202613', 'abc', '0'):
         r = client.get('/api/admin/billing?year_month=' + bad, headers={'Authorization': 'Bearer x'})
         assert r.status_code == 400, bad
+
+
+def test_admin_writes_commit(client, appmod, monkeypatch):
+    """Every admin write must open its connection with autocommit.
+
+    _fabric_conn defaults to a transaction and these handlers close without committing, so a
+    missing autocommit rolls the write back -- while the response still reports success, because
+    the figures are read back inside the same uncommitted transaction. It looks like it worked,
+    which is why this is asserted rather than left to a reviewer to notice.
+    """
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    seen = []
+
+    def _fake_conn(autocommit=False):
+        seen.append(autocommit)
+        return FakeConn(FakeCursor(one_row=None, all_rows=[]))   # unprovisioned -> 403, harmlessly
+
+    monkeypatch.setattr(appmod, '_fabric_conn', _fake_conn)
+    monkeypatch.setattr(appmod, '_stripe', lambda: object())
+    for url, body in (('/api/admin/billing/adjust',
+                       {'year_month': 202609, 'upn': 'x@y.com', 'action': 'exclude', 'reason': 'r'}),
+                      ('/api/admin/billing/raise', {'year_month': 202609}),
+                      ('/api/admin/billing/credit-note', {'year_month': 202609})):
+        seen.clear()
+        client.post(url, headers={'Authorization': 'Bearer x'}, json=body)
+        assert seen and all(seen), f'{url} opened a connection without autocommit: {seen}'
