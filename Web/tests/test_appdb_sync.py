@@ -170,3 +170,49 @@ def test_the_failure_email_carries_the_error_and_the_environment(monkeypatch):
     assert js.APP_ENV in subject and 'access' in subject
     assert 'row counts differ for Targets' in body
     assert js.APPDB_DB in body
+
+
+def test_a_none_connection_is_opened_rather_than_failing_open(monkeypatch):
+    """THE bug this suite missed, found only by breaking the real job.
+
+    AppDB unreachable -- the commonest failure, and the one this job exists to survive -- raises
+    before tgt_cn is ever assigned, so _alert was handed None. None.cursor() blew up, the fail-open
+    branch caught it and emailed anyway, and dedup never ran: one broken run sent FOUR identical
+    alerts (two executions x replicaRetryLimit 1). Every test here passed throughout, because they
+    all handed _alert a working connection.
+    """
+    sent, opened = [], []
+    monkeypatch.setattr(js, '_send_alert_email', lambda s, b: sent.append((s, b)))
+    monkeypatch.setattr(js, '_token_struct', lambda: b'token')
+    monkeypatch.setattr(js, '_connect', lambda *a, **k: opened.append(a) or _Conn(_runs('FAILED')))
+
+    js._alert(None, 'access', NOW, 'FAILED', error=RuntimeError('AppDB unreachable'))
+
+    assert opened, 'it must open its own connection rather than give up on the history'
+    assert sent == [], 'the previous run already failed -- this is a repeat, not a transition'
+
+
+def test_a_none_connection_still_alerts_on_the_first_failure(monkeypatch):
+    # The mirror: opening its own connection must not make it go quiet when it SHOULD speak.
+    sent = []
+    monkeypatch.setattr(js, '_send_alert_email', lambda s, b: sent.append((s, b)))
+    monkeypatch.setattr(js, '_token_struct', lambda: b'token')
+    monkeypatch.setattr(js, '_connect', lambda *a, **k: _Conn(_runs('SUCCEEDED')))
+
+    js._alert(None, 'access', NOW, 'FAILED', error=RuntimeError('AppDB unreachable'))
+    assert len(sent) == 1
+    assert 'AppDB unreachable' in sent[0][1]
+
+
+def test_the_history_connection_is_closed(monkeypatch):
+    closed = []
+
+    class _C(_Conn):
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(js, '_send_alert_email', lambda s, b: None)
+    monkeypatch.setattr(js, '_token_struct', lambda: b'token')
+    monkeypatch.setattr(js, '_connect', lambda *a, **k: _C(_runs('SUCCEEDED')))
+    js._alert(None, 'access', NOW, 'FAILED', error=RuntimeError('x'))
+    assert closed, 'a connection opened here must not leak -- this runs every ten minutes'

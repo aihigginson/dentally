@@ -245,10 +245,20 @@ def _alert(tgt_cn, mode, started, status, error=None):
     thing this exists to prevent.
     """
     process = 'appdb_sync.' + mode
+    own = None
     try:
         kind, detail = None, None
         try:
-            kind, detail = _alert_decision(tgt_cn.cursor(), process, started, status)
+            cn = tgt_cn
+            if cn is None:
+                # AppDB unreachable -- the commonest failure, and the one this job exists to
+                # survive -- throws before tgt_cn is ever assigned, so open a connection purely to
+                # read the history. WITHOUT THIS the decision blew up on None.cursor(), the
+                # fail-open below caught it, and every single attempt emailed: four identical
+                # alerts from one broken run (two executions x replicaRetryLimit 1). Dedup never
+                # ran on the one failure mode it was needed for.
+                own = cn = _connect(FABRIC_SERVER, FABRIC_DB, _token_struct())
+            kind, detail = _alert_decision(cn.cursor(), process, started, status)
         except Exception as e:
             if status == 'FAILED':
                 kind, detail = 'failed', f'(could not read run history: {str(e)[:120]})'
@@ -279,6 +289,12 @@ def _alert(tgt_cn, mode, started, status, error=None):
         print(f'alert sent ({kind}) to {", ".join(ALERT_TO)}')
     except Exception as e:                                  # noqa: BLE001 -- see docstring
         print('WARNING: could not send the alert email: ' + str(e)[:300])
+    finally:
+        if own is not None:
+            try:
+                own.close()
+            except Exception:
+                pass
 
 
 def _log_run(tgt_cn, mode, started, status, error=None, rows=None):
