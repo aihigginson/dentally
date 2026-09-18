@@ -1,0 +1,34 @@
+# =====================================================================
+# Release V164 -- Billing.Stripe_Invoice (the billing-run idempotency guard)
+# =====================================================================
+# One row per (Tenant_ID, Year_Month): the Stripe invoice raised for that month and its state.
+#
+# WHY IT EXISTS: it is the control that stops a practice being billed twice. Web/billing_run.py
+# skips any tenant-month that already has a row here, so re-running after a crash, a partial
+# failure, or an operator running it twice cannot raise a second invoice. Stripe's own
+# idempotency_key is belt and braces on top, but it only covers a 24-hour window and is invisible
+# from SQL -- this is the primary guard and it is permanent.
+#
+# Billing.Invoice_Line remains the authority on WHAT is owed. This records only the Stripe side.
+#
+# Status mirrors Stripe's own vocabulary verbatim (draft / open / paid / uncollectible / void)
+# rather than inventing a parallel one. Amount_Pence is GROSS integer pence as sent to Stripe --
+# Profile_Pricing is VAT-inclusive and the Stripe tax rate is inclusive, so Stripe derives the VAT
+# from that figure. Stored so a reconciliation can compare against SUM(Invoice_Line.Value) without
+# re-deriving the rounding.
+#
+# NO PK: the Fabric Warehouse does not enforce constraints, so declaring one would imply a
+# guarantee the engine does not give. billing_run deletes any existing row for the tenant-month
+# before inserting, so duplicates cannot accumulate through the supported path.
+#
+# INERT ON DEPLOY: nothing reads or writes it until billing_run.py is run, which is manual-only
+# and creates DRAFT invoices that charge nothing until a human finalises them in Stripe.
+#
+# Guarded CREATE, so idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V164__stripe_invoice_idempotency_table.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Stripe_Invoice.Table.sql
+
+TEST
