@@ -2185,9 +2185,17 @@
                     '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 18px;font-size:12px;border-top:1px solid #f0f0f0">'
                     + '<span>' + escHtml(l.name) + ' <span style="color:#aaa;font-size:11px">' + escHtml(l.profile) + '</span></span>'
                     + '<span>£' + l.value.toFixed(2) + '</span></div>').join('');
+                // Status badge. A month with lines and no status has simply not been through the
+                // billing run yet -- say so rather than leaving a blank, which reads as an error.
+                const _sc = { paid: '#1a7f4b', open: '#b3261e', uncollectible: '#b3261e',
+                              void: '#5b6b78', draft: '#5b6b78' }[m.status] || '#5b6b78';
+                const badge = '<span style="font-size:11px;font-weight:600;color:' + _sc + ';'
+                    + 'border:1px solid ' + _sc + '33;background:' + _sc + '14;'
+                    + 'border-radius:10px;padding:1px 8px;margin-left:10px;white-space:nowrap">'
+                    + escHtml(m.status_label || 'Not yet issued') + '</span>';
                 return '<details style="border:1px solid #eee;border-radius:6px;margin-bottom:8px;padding:8px 12px">'
                     + '<summary style="display:flex;justify-content:space-between;cursor:pointer;font-size:13px">'
-                    + '<span style="font-weight:600">' + _ymLabel(m.year_month) + '</span>'
+                    + '<span style="font-weight:600">' + _ymLabel(m.year_month) + badge + '</span>'
                     + '<span style="font-weight:600">£' + m.total.toFixed(2) + '</span></summary>'
                     + '<div style="margin-top:6px">' + lines + '</div></details>';
             }).join('');

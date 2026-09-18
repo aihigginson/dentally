@@ -2031,11 +2031,25 @@ def get_team():
         return _server_error(e, 'get_team')
 
 
+# Stripe's invoice status -> what a practice should be told. Stripe's own words are right for
+# us but not for them: "draft" is an internal state meaning we have not issued it yet, and
+# "uncollectible" is accountancy language for "this did not get paid".
+_INVOICE_STATUS_LABEL = {
+    'draft':         'Not yet issued',
+    'open':          'Due',
+    'paid':          'Paid',
+    'void':          'Cancelled',
+    'uncollectible': 'Unpaid',
+}
+
+
 @app.route('/api/invoices', methods=['GET'])
 def get_invoices():
     """Billing history for the caller's practice: Billing.Invoice_Line grouped by month (each line is a
-    subscribed user; the first part-month at sign-up is pro-rated). Read-only, owner-only. DEV generates
-    real lines but issues no payment request; free-forever / trial months simply have no lines."""
+    subscribed user; the first part-month at sign-up is pro-rated), with the Stripe status of each
+    month overlaid from Billing.Stripe_Invoice. Read-only, owner-only. A month with lines and no
+    status simply has not been through the billing run yet -- that is the normal state, not a
+    fault; free-forever / trial months have no lines at all."""
     upn, err = _auth()
     if err:
         return err
@@ -2057,11 +2071,26 @@ def get_invoices():
                 f"ORDER BY Year_Month DESC, Value DESC, Display_Name", tids)
             for ym, name, email, pk, val in cur.fetchall():
                 if ym not in by_month:
-                    by_month[ym] = {'year_month': ym, 'total': 0.0, 'lines': []}
+                    by_month[ym] = {'year_month': ym, 'total': 0.0, 'lines': [],
+                                    'status': None, 'status_label': None}
                     order.append(ym)
                 by_month[ym]['lines'].append({'name': name or email, 'email': email,
                                               'profile': plabels.get(pk, pk), 'value': float(val or 0)})
                 by_month[ym]['total'] += float(val or 0)
+            # Overlay what Stripe knows. Deliberately a SEPARATE query rather than a join: a
+            # month with lines but no Stripe row is the normal state before the billing run, and
+            # an outer join would invite a reader to treat a missing row as an error.
+            # Billing.Stripe_Invoice.Status is refreshed from Stripe by billing_run, so this is
+            # reported state, not a guess -- and the Stripe invoice id is never sent to the
+            # browser, since it is of no use to a practice and is internal plumbing.
+            cur.execute(
+                f"SELECT Year_Month, Status FROM Billing.Stripe_Invoice "
+                f"WHERE Tenant_ID IN ({ph})", tids)
+            for ym, status in cur.fetchall():
+                if ym in by_month:
+                    st = (status or '').lower()
+                    by_month[ym]['status'] = st or None
+                    by_month[ym]['status_label'] = _INVOICE_STATUS_LABEL.get(st)
             months = [by_month[y] for y in order]
         conn.close()
         return jsonify({'months': months})

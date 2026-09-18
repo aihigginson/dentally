@@ -4,6 +4,7 @@ These cover the security-critical paths: token -> UPN, UPN -> (client, tenants),
 and that the embed endpoint refuses to mint a token unless RLS roles are set AND
 the caller is a provisioned tenant user. Everything external is monkeypatched.
 """
+import json
 import jwt
 from conftest import FakeCursor, FakeConn
 
@@ -1419,3 +1420,55 @@ def test_stripe_still_refuses_a_restricted_key_from_the_wrong_environment(appmod
         assert 'rk_test_' in str(e)
     finally:
         appmod._stripe_singleton = None
+
+# ── invoice status overlaid from Stripe ───────────────────────────────────────
+
+def _invoices_env(appmod, monkeypatch, lines, stripe_rows):
+    wh = _RecCursor({
+        'FROM Billing.Invoice_Line': lines,
+        'FROM Billing.Stripe_Invoice': stripe_rows,
+    })
+    monkeypatch.setattr(appmod, '_auth', lambda: ('owner@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    return wh
+
+
+def test_invoice_month_reports_paid_status(client, appmod, monkeypatch):
+    # The practice should be told a month is settled. Status comes from Billing.Stripe_Invoice,
+    # which billing_run refreshes FROM Stripe -- so this is reported state, not a guess.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                  stripe_rows=[(202608, 'paid')])
+    m = client.get('/api/invoices').get_json()['months'][0]
+    assert m['status'] == 'paid' and m['status_label'] == 'Paid'
+
+
+def test_invoice_month_with_no_stripe_row_is_not_yet_issued(client, appmod, monkeypatch):
+    # The normal state before the billing run. Must not read as an error.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202609, 'Craig Jack', 'craig@x.co.uk', 'full', 60.00)],
+                  stripe_rows=[])
+    m = client.get('/api/invoices').get_json()['months'][0]
+    assert m['status'] is None and m['status_label'] is None
+
+
+def test_stripe_statuses_are_translated_for_the_customer(client, appmod, monkeypatch):
+    # Stripe's vocabulary is right for us, wrong for them: "draft" means we have not issued it,
+    # and "uncollectible" is accountancy language for "this did not get paid".
+    for raw, shown in (('draft', 'Not yet issued'), ('open', 'Due'), ('paid', 'Paid'),
+                       ('void', 'Cancelled'), ('uncollectible', 'Unpaid')):
+        _invoices_env(appmod, monkeypatch,
+                      lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                      stripe_rows=[(202608, raw)])
+        m = client.get('/api/invoices').get_json()['months'][0]
+        assert m['status_label'] == shown, raw
+
+
+def test_invoices_never_expose_the_stripe_invoice_id(client, appmod, monkeypatch):
+    # Internal plumbing, of no use to a practice, and not something to hand the browser.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                  stripe_rows=[(202608, 'paid')])
+    body = client.get('/api/invoices').get_json()
+    assert 'in_' not in json.dumps(body)
