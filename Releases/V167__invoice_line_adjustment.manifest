@@ -1,0 +1,39 @@
+# =====================================================================
+# Release V167 -- Billing.Invoice_Line_Adjustment (amend one line on one invoice)
+# =====================================================================
+# A recorded manual correction to ONE user's line on ONE month: drop it, or charge a different
+# figure. The Admin screen writes it; usp_Generate_Invoice_Lines applies it last.
+#
+# ==> WHY NEITHER EXISTING ROUTE WORKS. <== Asked how to take a leaver off an invoice, the two
+# obvious answers both fail:
+#   * "Set them to No access on Subscriptions" -- does NOT remove the charge for the current month.
+#     The generator bills from Security.Access_Log intervals and its rule is that mid-month changes
+#     stay FULL month (pro-rata is sign-up only), so an access change stamped today still bills the
+#     whole of this month. It only stops the next one.
+#   * "Let the Dentally deactivation handle it" (V165) -- removes the row from
+#     Security.Application_Users, which drops that user from EVERY month that is ever regenerated,
+#     past ones included.
+# Neither expresses "this user should not have been on THIS invoice". This table does.
+#
+# WHY NOT JUST EDIT Billing.Invoice_Line: it is DELETEd and rebuilt on every generation, and the
+# billing run regenerates freely while a month is still a draft. A hand-edited line would revert
+# silently, most likely between someone checking it and the invoice going out. Adjustments sit
+# outside the rebuild and are re-applied every time.
+#
+# An 'override' with a NULL value is IGNORED rather than honoured -- a missing figure is a mistake,
+# and billing nothing is not the safe reading of it. Reason and Created_By are stored because this
+# changes what a practice is charged, and a bank statement will disagree with it months later.
+#
+# A month that already holds a FINALISED invoice is still protected: billing_run refuses to
+# regenerate it, so an adjustment added after the fact does nothing until the invoice is credited.
+# That is the intended order -- credit, then amend, then re-issue.
+#
+# Guarded CREATE + a proc redeploy, so idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V167__invoice_line_adjustment.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Invoice_Line_Adjustment.Table.sql
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+
+TEST

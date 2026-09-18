@@ -1,0 +1,39 @@
+# =====================================================================
+# Release V165 -- revoke Security access when a user is deactivated in Dentally
+# =====================================================================
+# A user switched off in Dentally (permission level 0) kept their Security.Application_Users row
+# and went on being BILLED, while vanishing from the Subscriptions screen -- which filters on
+# COALESCE(u.Permission_Level, sp.perm, 1) > 0. So there was no way to stop it: you cannot
+# un-subscribe someone the screen does not draw. Found on dev as Kelly Edge, Practice Manager,
+# permission 0, last login 2025-03-04, still billed front_office (£6/month) and still appearing on
+# the September invoice.
+#
+# Both sync procs now use the SAME expression as the roster, so the screen and billing agree by
+# construction rather than by coincidence.
+#
+# ==> IT HAD TO GATE BOTH THE DELETE AND THE INSERT. <== A revoke alone would not hold: AppDB still
+# carries the user with their access flags set, so the next run's access-holders-only INSERT would
+# re-add them, and the row would oscillate every 10 minutes. The same shape of bug V163 fixed.
+#
+# ==> ABSENCE IS NOT DEACTIVATION. <== Only a user who HAS a Dim_Users row reading 0 is revoked.
+# A failed or part-loaded Gold.Dim_Users would otherwise revoke an entire practice's access in a
+# single run. The COALESCE default of 1 likewise keeps a NULL Permission_Level -- every row before
+# the Bronze.usp_Load_Users *04 backfill -- meaning "assume active". Both defaults fail OPEN on
+# purpose: wrongly keeping access for a few minutes is recoverable, wrongly cutting a practice off
+# is not.
+#
+# Support logins are untouched: they have no Gold.Dim_Users row at all (they are inserted straight
+# into Security by SQL), so the EXISTS never matches them.
+#
+# NOTE ON BILLING HISTORY: removing the Security row stops future billing, and because
+# usp_Generate_Invoice_Lines draws its user list from Security, a REGENERATED past month would no
+# longer include them. That is contained -- billing_run refuses to regenerate a month that holds a
+# finalised invoice -- but it is the reason not to regenerate freely.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V165__revoke_access_on_dentally_deactivation.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Sync_Access_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+TEST

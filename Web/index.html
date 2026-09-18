@@ -376,6 +376,21 @@
         .tgrid td.col-role input { color: #666; border-color: #dcdcdc; background: #fcfcfc; }
         .fte-badge { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; color: #7a5b00;
             background: #fff3d6; border: 1px solid #f0dca0; border-radius: 3px; padding: 0 3px; vertical-align: middle; letter-spacing: .02em; }
+        /* Staff practice picker. Deliberately loud: acting as another practice is a state you must
+           never be in by accident, and a neutral control would blend into the practice's own chrome. */
+        .staff-picker { margin-right: 10px; padding: 3px 8px; border-radius: 4px; border: 1px solid #00b7f2;
+                        background: #082254; color: #fff; font-size: 11px; font-weight: 600; max-width: 200px; cursor: pointer; }
+        body.acting-as .app-header { box-shadow: inset 0 -3px 0 #00b7f2; }
+        .adm-row { display: grid; grid-template-columns: 1fr 108px 92px auto; gap: 10px; align-items: center;
+                   padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,.06); font-size: 13px; }
+        .adm-row.adj { background: #fff8e6; }
+        .adm-row.off  { opacity: .55; text-decoration: line-through; }
+        .adm-note { font-size: 11px; color: #8a6d1f; }
+        .adm-panel { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.6; }
+        .adm-kv { display: flex; justify-content: space-between; gap: 12px; }
+        .adm-out { white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+                   background: #f6f8fa; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; margin-top: 10px; }
+        .adm-danger { background: #b3261e; }
         .settings-save-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
         .settings-save:disabled, .settings-btn:disabled, .targets-save-btn:disabled { opacity: .45; cursor: default; }
         .var-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--navy); margin: 16px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; max-width: 560px; }
@@ -511,6 +526,7 @@
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
             </button>
         </div>
+        <select class="staff-picker" id="staff-practice" title="Act as another practice" style="display:none"></select>
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
     </div>
@@ -656,6 +672,7 @@
                 <button class="settings-tab" data-stab="plans">Plan rates</button>
                 <button class="settings-tab" data-stab="team">Subscriptions</button>
                 <button class="settings-tab" data-stab="invoices">Invoices</button>
+                <button class="settings-tab" data-stab="admin" id="stab-admin-btn" style="display:none">Admin</button>
             </div>
 
             <div class="settings-pane active" id="stab-finance">
@@ -783,6 +800,41 @@
                     <div id="team-cancel-wrap" style="margin-top:22px;padding-top:14px;border-top:1px solid #eee;display:none">
                         <button id="team-cancel-btn" style="background:none;border:none;color:#b3261e;font-size:12px;text-decoration:underline;cursor:pointer;padding:0">Stop using Analytically</button>
                     </div>
+                </div>
+            </div>
+
+            <div class="settings-pane" id="stab-admin">
+                <div class="defs-group">Billing console &mdash; Analytically staff only</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">
+                        Acts on the practice selected in the header. Nothing here charges a card:
+                        raising an invoice creates a <strong>draft</strong>, and finalising it &mdash; the act
+                        that takes the money &mdash; stays in the Stripe dashboard. Issuing a credit note
+                        <strong>does</strong> refund money.
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+                        <label style="font-size:13px">Month
+                            <select id="adm-month" style="margin-left:6px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"></select>
+                        </label>
+                        <button id="adm-refresh" class="settings-btn">Refresh</button>
+                        <span id="adm-msg" style="font-size:12px"></span>
+                    </div>
+                </div>
+                <div class="defs-item">
+                    <div id="adm-position">Loading&hellip;</div>
+                </div>
+                <div class="defs-group">Lines</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">Click a line to drop it from this month's invoice or charge a different amount. A reason is required &mdash; it is the only record of why.</div>
+                    <div id="adm-lines" style="margin-top:10px">&nbsp;</div>
+                </div>
+                <div class="defs-group">Actions</div>
+                <div class="defs-item">
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                        <button id="adm-raise" class="settings-btn">Raise / re-raise draft</button>
+                        <button id="adm-credit" class="settings-btn adm-danger">Credit note &amp; refund&hellip;</button>
+                    </div>
+                    <div id="adm-out" class="adm-out" style="display:none"></div>
                 </div>
             </div>
 
@@ -1038,12 +1090,29 @@
         }
     }
 
+    // ── Acting as another practice (Analytically staff only) ─────────────────
+    // Held per TAB, not per browser: investigating one practice in one tab while looking at
+    // another elsewhere is the normal way to work, and a browser-wide setting would make the
+    // second tab silently wrong. The server re-checks that the caller is staff on every request
+    // -- this is a statement of intent, never of permission.
+    const ACTING_KEY = '_anly_acting_client';
+    function actingClient()      { try { return sessionStorage.getItem(ACTING_KEY) || ''; } catch (e) { return ''; } }
+    function setActingClient(v)  {
+        try { v ? sessionStorage.setItem(ACTING_KEY, v) : sessionStorage.removeItem(ACTING_KEY); } catch (e) {}
+    }
+
     async function authFetch(url, options) {
         const token = await getIdToken();
+        const acting = actingClient();
         const res = await fetch(url, {
             ...options,
-            headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${token}` },
+            headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${token}`,
+                       ...(acting ? { 'X-Acting-Client': acting } : {}) },
         });
+        // A 403 while acting as a practice usually means that practice has gone (cancelled, or a
+        // stale pick from an earlier session). Drop the override and reload rather than showing
+        // "contact us" to our own support login, which would look like THEIR access had broken.
+        if (res.status === 403 && acting) { setActingClient(''); location.reload(); return res; }
         if (res.status === 403) {
             showContactPage();
             throw new Error('Forbidden');
@@ -1219,8 +1288,29 @@
         }
         if (o && data.practice_name) o.textContent = data.practice_name;
         if (data.env === 'dev') document.body.classList.add('dev-mode');
+
+        // ── The staff practice picker ────────────────────────────────────────
+        // Switching reloads the app rather than re-fetching in place. Half the screen is Power BI
+        // embeds holding tokens minted for the OLD practice's RLS; refreshing the data around them
+        // would leave one practice's reports under another's name, which is the one mistake this
+        // control must never make.
+        if (data.is_staff && (data.practices || []).length) {
+            const sel = document.getElementById('staff-practice');
+            if (sel) {
+                sel.innerHTML = data.practices.map(pr =>
+                    '<option value="' + escHtml(pr.client_id) + '"'
+                    + (pr.client_id === data.client_id ? ' selected' : '') + '>'
+                    + escHtml(pr.name) + '</option>').join('');
+                sel.style.display = '';
+                sel.onchange = () => { setActingClient(sel.value); location.reload(); };
+                if (actingClient()) document.body.classList.add('acting-as');
+            }
+            const ab = document.getElementById('stab-admin-btn');
+            if (ab) ab.style.display = '';
+        }
+
         // Practice admins get the Settings gear (Connect Xero lives there).
-        if (data.maintain_targets) {
+        if (data.maintain_targets || data.is_staff) {
             const st = document.getElementById('settings-toggle');
             if (st) st.style.display = '';
             // Deep link from an alert email, e.g. /?settings=dentally -> open Settings on that tab.
@@ -1793,6 +1883,7 @@
         else if (name === 'targets')   loadTargetGrid();
         else if (name === 'team')      loadTeam();
         else if (name === 'invoices')  loadInvoices();
+        else if (name === 'admin')     loadAdmin();
     }
 
     function _fmtVal(v, fmt) {
@@ -2185,13 +2276,207 @@
                     '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 18px;font-size:12px;border-top:1px solid #f0f0f0">'
                     + '<span>' + escHtml(l.name) + ' <span style="color:#aaa;font-size:11px">' + escHtml(l.profile) + '</span></span>'
                     + '<span>£' + l.value.toFixed(2) + '</span></div>').join('');
+                // Status badge. A month with lines and no status has simply not been through the
+                // billing run yet -- say so rather than leaving a blank, which reads as an error.
+                const _sc = { paid: '#1a7f4b', open: '#b3261e', uncollectible: '#b3261e',
+                              void: '#5b6b78', draft: '#5b6b78' }[m.status] || '#5b6b78';
+                const badge = '<span style="font-size:11px;font-weight:600;color:' + _sc + ';'
+                    + 'border:1px solid ' + _sc + '33;background:' + _sc + '14;'
+                    + 'border-radius:10px;padding:1px 8px;margin-left:10px;white-space:nowrap">'
+                    + escHtml(m.status_label || 'Not yet issued') + '</span>';
                 return '<details style="border:1px solid #eee;border-radius:6px;margin-bottom:8px;padding:8px 12px">'
                     + '<summary style="display:flex;justify-content:space-between;cursor:pointer;font-size:13px">'
-                    + '<span style="font-weight:600">' + _ymLabel(m.year_month) + '</span>'
+                    + '<span style="font-weight:600">' + _ymLabel(m.year_month) + badge + '</span>'
                     + '<span style="font-weight:600">£' + m.total.toFixed(2) + '</span></summary>'
                     + '<div style="margin-top:6px">' + lines + '</div></details>';
             }).join('');
         } catch (e) { list.textContent = 'Could not load invoices.'; }
+    }
+
+    // Admin: the billing console ---------------------------------------------
+    // Staff only, and the server says so on every call -- the tab being hidden is a convenience,
+    // not the control. Acts on whatever practice the header picker has selected.
+    let _adm = null;
+
+    function _admSay(text, bad) {
+        const m = document.getElementById('adm-msg');
+        if (!m) return;
+        m.style.color = bad ? '#b3261e' : '#1a7f4b';
+        m.textContent = text || '';
+        if (text) setTimeout(() => { if (m.textContent === text) m.textContent = ''; }, 8000);
+    }
+
+    function _admOut(text) {
+        const o = document.getElementById('adm-out');
+        if (!o) return;
+        o.style.display = text ? '' : 'none';
+        o.textContent = text || '';
+    }
+
+    async function loadAdmin(ym) {
+        const pos = document.getElementById('adm-position');
+        const sel = document.getElementById('adm-month');
+        pos.textContent = 'Loading\u2026';
+        document.getElementById('adm-lines').innerHTML = '';
+        try {
+            const q = ym ? ('?year_month=' + ym) : '';
+            const res = await authFetch('/api/admin/billing' + q);
+            if (!res.ok) throw new Error('status ' + res.status);
+            const d = await res.json();
+            _adm = d;
+            sel.innerHTML = (d.months || []).map(m =>
+                '<option value="' + m + '"' + (m === d.year_month ? ' selected' : '') + '>'
+                + _ymLabel(m) + '</option>').join('');
+
+            // Ours vs theirs, side by side. The whole reason this screen exists is that the two
+            // can disagree -- our Status is stale the moment a human finalises in the dashboard.
+            const st = d.stripe, ours = d.ours;
+            const money = v => '\u00a3' + (v || 0).toFixed(2);
+            let html = '<div class="adm-panel">'
+                + '<div class="adm-kv"><strong>' + escHtml(d.practice) + '</strong>'
+                + '<span>' + _ymLabel(d.year_month) + '</span></div>'
+                + '<div class="adm-kv"><span>Our lines</span><span>' + money(d.total)
+                + ' &middot; ' + (d.lines || []).filter(l => !l.suppressed).length + ' line(s)</span></div>';
+            if (d.stripe_error) {
+                html += '<div class="adm-kv" style="color:#b3261e">' + escHtml(d.stripe_error) + '</div>';
+            } else if (st) {
+                html += '<div class="adm-kv"><span>Stripe</span><span>' + escHtml(st.number || st.invoice_id)
+                     + ' &middot; <strong>' + escHtml(st.status_label || st.status) + '</strong> &middot; '
+                     + money(st.total) + ' (VAT ' + money(st.tax) + ')</span></div>';
+                if (st.credited > 0)
+                    html += '<div class="adm-kv"><span>Credited</span><span>' + money(st.credited) + '</span></div>';
+                if (!st.agrees)
+                    html += '<div class="adm-kv" style="color:#b3261e"><span>Mismatch</span>'
+                         + '<span>Stripe says ' + money(st.total) + ', we say ' + money(ours ? ours.amount : 0) + '</span></div>';
+                if (st.hosted_url)
+                    html += '<div><a href="' + escHtml(st.hosted_url) + '" target="_blank" rel="noopener">Open in Stripe</a></div>';
+            } else {
+                html += '<div class="adm-kv"><span>Stripe</span><span>No invoice raised for this month</span></div>';
+            }
+            if (d.has_card === false)
+                html += '<div class="adm-kv" style="color:#b3261e"><span>Card</span><span>None on file \u2014 cannot be billed</span></div>';
+            if (d.cancelled_at)
+                html += '<div class="adm-kv"><span>Cancelled</span><span>' + escHtml(d.cancelled_at.slice(0, 10)) + '</span></div>';
+            html += '</div>';
+
+            (d.credit_notes || []).forEach(c => {
+                html += '<div class="adm-panel" style="border-color:#00b7f2">'
+                     + '<div class="adm-kv"><strong>Credit note ' + escHtml(c.number || c.id) + '</strong>'
+                     + '<span>' + money(c.amount) + ' (VAT ' + money(c.tax) + ')</span></div>'
+                     + '<div class="adm-kv"><span>' + (c.refund ? 'Refunded to card' : 'Held as credit')
+                     + '</span><span>' + money(c.refund || c.balance || 0) + '</span></div>'
+                     + '<div style="color:#5b6b78">against ' + escHtml(c.invoice_id) + ' \u2014 '
+                     + escHtml(c.by || '') + ' ' + escHtml((c.at || '').slice(0, 16).replace('T', ' ')) + '</div>'
+                     + (c.memo ? '<div style="color:#5b6b78">' + escHtml(c.memo) + '</div>' : '')
+                     + '</div>';
+            });
+            pos.innerHTML = html;
+            _admRenderLines();
+        } catch (e) {
+            pos.textContent = 'Could not load the billing position.';
+        }
+    }
+
+    function _admRenderLines() {
+        const box = document.getElementById('adm-lines');
+        const d = _adm;
+        if (!d || !(d.lines || []).length) { box.textContent = 'No lines for this month.'; return; }
+        box.innerHTML = d.lines.map(l => {
+            const a = l.adjustment;
+            const cls = 'adm-row' + (a ? ' adj' : '') + (a && a.action === 'exclude' ? ' off' : '');
+            return '<div class="' + cls + '" data-upn="' + escHtml(l.upn) + '">'
+                + '<span>' + escHtml(l.name)
+                + '<span style="color:#aaa;font-size:11px"> \u00b7 ' + escHtml(l.profile_label || '') + '</span>'
+                + (a ? '<div class="adm-note">' + escHtml(a.action === 'exclude' ? 'Excluded' : 'Overridden')
+                       + ' \u2014 ' + escHtml(a.reason || '') + ' (' + escHtml(a.by || '') + ')</div>' : '')
+                + '</span>'
+                + '<span style="text-align:right">\u00a3' + (l.value || 0).toFixed(2) + '</span>'
+                + '<span><button class="settings-btn adm-edit" type="button">Amend</button></span>'
+                + '<span>' + (a ? '<button class="settings-btn adm-clear" type="button">Undo</button>' : '') + '</span>'
+                + '</div>';
+        }).join('');
+        box.querySelectorAll('.adm-edit').forEach(b => b.addEventListener('click', ev =>
+            _admAmend(ev.target.closest('.adm-row').dataset.upn)));
+        box.querySelectorAll('.adm-clear').forEach(b => b.addEventListener('click', ev =>
+            _admAdjust(ev.target.closest('.adm-row').dataset.upn, 'clear', null, '')));
+    }
+
+    async function _admAmend(upn) {
+        const line = (_adm.lines || []).find(l => l.upn === upn);
+        const what = prompt('Amend ' + (line ? line.name : upn) + ' for ' + _ymLabel(_adm.year_month)
+            + '.\n\nLeave blank to DROP the line entirely, or type the amount to charge instead '
+            + '(inc. VAT, e.g. 12.00).', '');
+        if (what === null) return;                       // cancelled
+        const amt = what.trim();
+        if (amt && isNaN(parseFloat(amt))) { _admSay('That is not an amount.', true); return; }
+        const reason = prompt('Why? This is the only record of the decision.', '');
+        if (reason === null) return;
+        if (!reason.trim()) { _admSay('A reason is required.', true); return; }
+        await _admAdjust(upn, amt ? 'override' : 'exclude', amt ? parseFloat(amt) : null, reason.trim());
+    }
+
+    async function _admAdjust(upn, action, value, reason) {
+        try {
+            const res = await authFetch('/api/admin/billing/adjust', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: _adm.tenant_id, year_month: _adm.year_month,
+                                       upn, action, value, reason }) });
+            const j = await res.json();
+            if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
+            _admSay(j.note || (j.regenerated ? 'Saved \u2014 ' + j.lines + ' line(s), \u00a3' + (j.total || 0).toFixed(2)
+                                             : 'Saved.'));
+            await loadAdmin(_adm.year_month);
+        } catch (e) { _admSay('Failed.', true); }
+    }
+
+    async function _admRaise() {
+        if (!confirm('Rebuild ' + _ymLabel(_adm.year_month) + ' and raise a DRAFT invoice for '
+                     + _adm.practice + '?\n\nThis charges nothing. Any existing draft is discarded.')) return;
+        _admOut(''); _admSay('Working\u2026');
+        try {
+            const res = await authFetch('/api/admin/billing/raise', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: _adm.tenant_id, year_month: _adm.year_month }) });
+            const j = await res.json();
+            if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
+            _admSay('Draft raised: \u00a3' + (j.total || 0).toFixed(2) + ' (VAT \u00a3' + (j.tax || 0).toFixed(2)
+                    + '), ' + j.lines + ' line(s). Nothing charged.');
+            await loadAdmin(_adm.year_month);
+        } catch (e) { _admSay('Failed.', true); }
+    }
+
+    async function _admCredit() {
+        const st = _adm.stripe;
+        if (!st || !st.invoice_id) { _admSay('There is no invoice to credit.', true); return; }
+        // Two-step confirmation, and the second step makes them type the amount. This is the only
+        // button in the product that moves money back to a practice, and an accidental click here
+        // is not recoverable -- a credit note cannot be withdrawn.
+        if (!confirm('Credit ' + _ymLabel(_adm.year_month) + ' for ' + _adm.practice + ' IN FULL?\n\n'
+                     + st.number + ' \u2014 \u00a3' + (st.total || 0).toFixed(2) + ' (' + st.status + ')\n\n'
+                     + 'This issues a credit note, emails it to the practice, and refunds the card. '
+                     + 'It cannot be undone.')) return;
+        const typed = prompt('Type the amount to confirm the refund: ' + (st.total || 0).toFixed(2), '');
+        if (typed === null) return;
+        if (parseFloat(typed) !== Math.round((st.total || 0) * 100) / 100) {
+            _admSay('That did not match the invoice total \u2014 nothing done.', true); return;
+        }
+        const memo = prompt('Note for the practice, printed on the credit note PDF.',
+            'Credit note for the Analytically subscription invoice for ' + _ymLabel(_adm.year_month)
+            + '. A corrected invoice follows.');
+        if (memo === null) return;
+        _admOut(''); _admSay('Working\u2026');
+        try {
+            const res = await authFetch('/api/admin/billing/credit-note', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: _adm.tenant_id, year_month: _adm.year_month,
+                                       memo, reason: 'order_change' }) });
+            const j = await res.json();
+            _admOut(j.detail || '');
+            if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
+            _admSay(j.issued ? 'Credit note issued and refunded. Now raise the corrected draft.'
+                             : 'Nothing was issued \u2014 see below.', !j.issued);
+            await loadAdmin(_adm.year_month);
+        } catch (e) { _admSay('Failed.', true); }
     }
 
     // Variances --------------------------------------------------------------
@@ -2512,6 +2797,10 @@
         if (_dirty && !confirm('Discard unsaved changes?')) return;
         clearDirty(); showSettingsTab(b.dataset.stab);
     }));
+    document.getElementById('adm-refresh').addEventListener('click', () => loadAdmin(_adm && _adm.year_month));
+    document.getElementById('adm-month').addEventListener('change', e => loadAdmin(parseInt(e.target.value, 10)));
+    document.getElementById('adm-raise').addEventListener('click', _admRaise);
+    document.getElementById('adm-credit').addEventListener('click', _admCredit);
     document.getElementById('roles-save').addEventListener('click', saveRoles);
     document.getElementById('roles-save-top').addEventListener('click', saveRoles);
     document.getElementById('team-save').addEventListener('click', saveTeam);
@@ -2557,8 +2846,17 @@
     document.getElementById('targets-clear-btn').addEventListener('click', clearTargetGrid);
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
-    settingsOverlay.addEventListener('input', markDirty);
-    settingsOverlay.addEventListener('change', markDirty);
+    // Delegated, so every control in Settings marks the screen dirty -- except the Admin console,
+    // which has no Save button: each action there commits the moment it is taken, so there is
+    // nothing to lose by leaving. Without this, changing the month dropdown armed an
+    // "unsaved changes" prompt over work that had already been written to Stripe.
+    function _maybeDirty(e) {
+        const adm = document.getElementById('stab-admin');
+        if (adm && adm.contains(e.target)) return;
+        markDirty();
+    }
+    settingsOverlay.addEventListener('input', _maybeDirty);
+    settingsOverlay.addEventListener('change', _maybeDirty);
     // Catch an accidental refresh / tab-close / navigate-away while there are unsaved Settings edits.
     window.addEventListener('beforeunload', e => { if (_dirty) { e.preventDefault(); e.returnValue = ''; } });
 

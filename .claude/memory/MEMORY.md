@@ -11,3 +11,5 @@
 - [List Date Unconstrained is deliberate](list-date-unconstrained-is-deliberate.md) — Day Book is the one report the period filter is not forced on; do not merge the date tables.
 - [Container Apps staticIp is ingress, not egress](container-apps-staticip-is-ingress.md) — no stable outbound IP; an IP firewall cannot allow it.
 - [Prod warehouse deploys can run from the laptop](prod-warehouse-deploy-from-the-laptop.md) — delegated token, not a bypass; do not hand them back.
+- [Warehouse writes from the app need autocommit](fabric-writes-from-the-app-need-autocommit.md) — without it a write rolls back while the response reports success.
+- [Local app tests can't read Key Vault](local-app-tests-cant-read-key-vault.md) — load_dotenv puts AZURE_* back; pop them after importing app.

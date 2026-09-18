@@ -50,9 +50,31 @@ BEGIN
         DELETE tgt
         FROM [Security].[Application_Users] tgt
         JOIN [Input_Stage].[Application_Users] src ON LOWER(tgt.User_UPN) = LOWER(src.User_UPN)
-        WHERE NOT (src.Access_Home=1 OR src.Access_Revenue=1 OR src.Access_Patient=1 OR src.Access_Schedule=1
+        WHERE (EXISTS (
+                     -- Deactivated in Dentally. The SAME expression the Subscriptions roster uses
+                     -- (COALESCE(u.Permission_Level, sp.perm, 1) > 0), so the screen and billing
+                     -- agree by construction rather than by coincidence -- they disagreeing is what
+                     -- left Kelly Edge billed at front_office while invisible on the roster.
+                     --
+                     -- NOTE THE JOIN: only a user who HAS a Dim_Users row reading 0 is revoked.
+                     -- Absence is NOT deactivation. A failed or part-loaded Dim_Users would
+                     -- otherwise revoke the entire practice's access in one run, and the
+                     -- COALESCE default of 1 likewise keeps a NULL Permission_Level (every row
+                     -- before the Bronze.usp_Load_Users *04 backfill) meaning "assume active".
+                     SELECT 1
+                     FROM [Gold].[Dim_Users] du
+                     LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(User_Permission_Level) AS perm
+                                FROM [Silver].[Practitioners] GROUP BY Tenant_ID, User_ID) sp
+                            ON sp.Tenant_ID = du.Tenant_ID AND sp.User_ID = du.bk_User_ID
+                     JOIN [Audit].[Tenants] dt ON dt.Tenant_ID = du.Tenant_ID
+                     WHERE du.Is_Current = 1
+                       AND LOWER(LTRIM(RTRIM(du.Email))) = LOWER(LTRIM(RTRIM(src.User_UPN)))
+                       AND dt.Client_ID = src.Client_ID
+                       AND COALESCE(du.Permission_Level, sp.perm, 1) = 0
+                 )
+           OR NOT (src.Access_Home=1 OR src.Access_Revenue=1 OR src.Access_Patient=1 OR src.Access_Schedule=1
                OR src.Access_Clinical=1 OR src.Access_NHS=1 OR src.Access_Day_Book=1 OR src.Access_Finance=1
-               OR src.Access_My_Data=1 OR src.Access_Marketing=1 OR src.Maintain_Targets=1);
+               OR src.Access_My_Data=1 OR src.Access_Marketing=1 OR src.Maintain_Targets=1));
         SET @My_Deletes = @My_Deletes + @@ROWCOUNT;
 
         UPDATE tgt SET tgt.Client_ID=src.Client_ID, tgt.Display_Name=src.Display_Name, tgt.Maintain_Targets=src.Maintain_Targets,
@@ -71,7 +93,29 @@ BEGIN
         WHERE tgt.User_UPN IS NULL
           AND (src.Access_Home=1 OR src.Access_Revenue=1 OR src.Access_Patient=1 OR src.Access_Schedule=1
                OR src.Access_Clinical=1 OR src.Access_NHS=1 OR src.Access_Day_Book=1 OR src.Access_Finance=1
-               OR src.Access_My_Data=1 OR src.Access_Marketing=1 OR src.Maintain_Targets=1);  -- access-holders only (*02)
+               OR src.Access_My_Data=1 OR src.Access_Marketing=1 OR src.Maintain_Targets=1)
+          AND NOT EXISTS (
+                     -- Deactivated in Dentally. The SAME expression the Subscriptions roster uses
+                     -- (COALESCE(u.Permission_Level, sp.perm, 1) > 0), so the screen and billing
+                     -- agree by construction rather than by coincidence -- they disagreeing is what
+                     -- left Kelly Edge billed at front_office while invisible on the roster.
+                     --
+                     -- NOTE THE JOIN: only a user who HAS a Dim_Users row reading 0 is revoked.
+                     -- Absence is NOT deactivation. A failed or part-loaded Dim_Users would
+                     -- otherwise revoke the entire practice's access in one run, and the
+                     -- COALESCE default of 1 likewise keeps a NULL Permission_Level (every row
+                     -- before the Bronze.usp_Load_Users *04 backfill) meaning "assume active".
+                     SELECT 1
+                     FROM [Gold].[Dim_Users] du
+                     LEFT JOIN (SELECT Tenant_ID, User_ID, MAX(User_Permission_Level) AS perm
+                                FROM [Silver].[Practitioners] GROUP BY Tenant_ID, User_ID) sp
+                            ON sp.Tenant_ID = du.Tenant_ID AND sp.User_ID = du.bk_User_ID
+                     JOIN [Audit].[Tenants] dt ON dt.Tenant_ID = du.Tenant_ID
+                     WHERE du.Is_Current = 1
+                       AND LOWER(LTRIM(RTRIM(du.Email))) = LOWER(LTRIM(RTRIM(src.User_UPN)))
+                       AND dt.Client_ID = src.Client_ID
+                       AND COALESCE(du.Permission_Level, sp.perm, 1) = 0
+                 );  -- access-holders only (*02)
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
         -- Access_Log: append rows not already in the warehouse (natural key).

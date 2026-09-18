@@ -1,0 +1,42 @@
+# =====================================================================
+# Release V166 -- Billing.Credit_Note (credit an issued invoice, then re-invoice)
+# =====================================================================
+# The remedy for an invoice that was already ISSUED and is wrong. A finalised invoice cannot be
+# edited and a paid one cannot be voided, so the only honest instrument is a credit note: it
+# withdraws the original in full and leaves a matching document the practice's bookkeeper files
+# against it. Web/billing_run.py --credit-note issues it; this table records it.
+#
+# ==> IT MUST CREDIT LINE BY LINE, NEVER BY FLAT AMOUNT. <== Stripe accepts
+# CreditNote.create(invoice=..., amount=41680) and produces a credit note for exactly that with NO
+# VAT ON IT. Previewed against the real sandbox invoice: crediting by amount gives
+# total_excluding_tax = 41680 and an empty tax list, against an invoice that charged GBP 69.47 of
+# VAT -- VAT collected and never credited, on the one document HMRC expects to mirror the invoice.
+# Crediting each invoice line reproduces the inclusive rate exactly: 416.80 gross = 347.33 net +
+# 69.47 VAT. billing_run re-checks that equality and refuses to issue a credit note that fails it.
+#
+# WHY A SEPARATE TABLE. Billing.Stripe_Invoice holds exactly ONE row per (Tenant, month) -- the
+# invoice in force -- and the whole double-billing guard rests on that. A credit-and-reissue would
+# otherwise put two invoices on one month, so the superseded one is recorded here and its
+# Stripe_Invoice row is REMOVED. That removal is what reopens the month for a corrected draft, and
+# it is safe only because the invoice those lines evidenced has been withdrawn in full.
+#
+# THE INTERACTION THAT HAD TO BE FIXED WITH IT: find_in_stripe() -- the guard that asks Stripe
+# directly whether a month was already billed -- now skips invoices that are void or credited in
+# full. Without that it would find the withdrawn invoice, conclude the month was handled, and
+# silently refuse to raise the replacement. A PARTLY credited invoice still counts as billed:
+# only a full credit withdraws one.
+#
+# NO PK, as with Billing.Stripe_Invoice: the Fabric Warehouse does not enforce constraints.
+# Append-only -- a credit note has been sent to a practice and cannot be edited or withdrawn.
+#
+# INERT ON DEPLOY: nothing reads or writes it until billing_run.py --credit-note is run, which is
+# manual, needs an explicit --tenant, and refuses a draft, a void, or an already-credited invoice.
+#
+# Guarded CREATE, so idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V166__credit_note_table.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Credit_Note.Table.sql
+
+TEST

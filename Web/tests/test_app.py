@@ -4,6 +4,7 @@ These cover the security-critical paths: token -> UPN, UPN -> (client, tenants),
 and that the embed endpoint refuses to mint a token unless RLS roles are set AND
 the caller is a provisioned tenant user. Everything external is monkeypatched.
 """
+import json
 import jwt
 from conftest import FakeCursor, FakeConn
 
@@ -1419,3 +1420,239 @@ def test_stripe_still_refuses_a_restricted_key_from_the_wrong_environment(appmod
         assert 'rk_test_' in str(e)
     finally:
         appmod._stripe_singleton = None
+
+# ── invoice status overlaid from Stripe ───────────────────────────────────────
+
+def _invoices_env(appmod, monkeypatch, lines, stripe_rows):
+    wh = _RecCursor({
+        'FROM Billing.Invoice_Line': lines,
+        'FROM Billing.Stripe_Invoice': stripe_rows,
+    })
+    monkeypatch.setattr(appmod, '_auth', lambda: ('owner@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Owner', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    return wh
+
+
+def test_invoice_month_reports_paid_status(client, appmod, monkeypatch):
+    # The practice should be told a month is settled. Status comes from Billing.Stripe_Invoice,
+    # which billing_run refreshes FROM Stripe -- so this is reported state, not a guess.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                  stripe_rows=[(202608, 'paid')])
+    m = client.get('/api/invoices').get_json()['months'][0]
+    assert m['status'] == 'paid' and m['status_label'] == 'Paid'
+
+
+def test_invoice_month_with_no_stripe_row_is_not_yet_issued(client, appmod, monkeypatch):
+    # The normal state before the billing run. Must not read as an error.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202609, 'Craig Jack', 'craig@x.co.uk', 'full', 60.00)],
+                  stripe_rows=[])
+    m = client.get('/api/invoices').get_json()['months'][0]
+    assert m['status'] is None and m['status_label'] is None
+
+
+def test_stripe_statuses_are_translated_for_the_customer(client, appmod, monkeypatch):
+    # Stripe's vocabulary is right for us, wrong for them: "draft" means we have not issued it,
+    # and "uncollectible" is accountancy language for "this did not get paid".
+    for raw, shown in (('draft', 'Not yet issued'), ('open', 'Due'), ('paid', 'Paid'),
+                       ('void', 'Cancelled'), ('uncollectible', 'Unpaid')):
+        _invoices_env(appmod, monkeypatch,
+                      lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                      stripe_rows=[(202608, raw)])
+        m = client.get('/api/invoices').get_json()['months'][0]
+        assert m['status_label'] == shown, raw
+
+
+def test_invoices_never_expose_the_stripe_invoice_id(client, appmod, monkeypatch):
+    # Internal plumbing, of no use to a practice, and not something to hand the browser.
+    _invoices_env(appmod, monkeypatch,
+                  lines=[(202608, 'Craig Jack', 'craig@x.co.uk', 'full', 30.97)],
+                  stripe_rows=[(202608, 'paid')])
+    body = client.get('/api/invoices').get_json()
+    assert 'in_' not in json.dumps(body)
+
+
+# ── the staff practice picker ─────────────────────────────────────────────────
+# _get_user_info is the one function every route resolves identity through, so the picker is
+# applied there. That makes these the tests that matter: everything else in the app inherits
+# whatever this decides, correct or not.
+
+class _SwitchCursor:
+    """Models the three queries _get_user_info makes: the user row, the staff override lookup, and
+    the tenant list -- and REMEMBERS which Client_ID the tenant list was asked for, which is the
+    thing under test.
+
+    `known` is the set of active Client_IDs, so an override naming something else resolves to
+    nothing, exactly as the database would answer.
+    """
+    def __init__(self, user_row, tenants, known=('CLIENT-A', 'CLIENT-B')):
+        self._user, self._tenants, self._known = user_row, tenants, [str(k) for k in known]
+        self._next_one = user_row
+        self.asked_client = None
+
+    def execute(self, sql, *args):
+        if 'CAST(Client_ID AS VARCHAR' in sql:                      # the override lookup
+            asked = str(args[0]) if args else ''
+            self._next_one = (asked,) if asked in self._known else None
+        elif 'Audit.Tenants' in sql and 'Client_ID = ?' in sql:     # the tenant list
+            self.asked_client = args[0] if args else None
+        else:
+            self._next_one = self._user
+        return self
+
+    def fetchone(self):
+        return self._next_one
+
+    def fetchall(self):
+        return self._tenants
+
+
+def _ctx(appmod, headers):
+    return appmod.app.test_request_context('/api/me', headers=headers)
+
+
+def test_staff_header_switches_the_whole_context(appmod):
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(99,)])
+    with _ctx(appmod, {'X-Acting-Client': 'CLIENT-B'}):
+        name, client_id, tids, maintain = appmod._get_user_info(cur, 'support@analytically.info')
+    assert client_id == 'CLIENT-B'
+    assert cur.asked_client == 'CLIENT-B', 'tenants must be resolved for the PICKED practice'
+    assert tids == [99]
+    # It changes WHICH practice, never WHAT they may do -- their own row still supplies these.
+    assert name == 'Support' and maintain is True
+
+
+def test_a_practice_admin_cannot_use_the_header(appmod):
+    # The header is client-supplied. If it were honoured for anyone but us it would be a
+    # one-line cross-tenant data breach: send someone else's Client_ID, get their reports.
+    cur = _SwitchCursor(_user_row(appmod, 'Alice', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Client': 'CLIENT-B'}):
+        _, client_id, tids, _ = appmod._get_user_info(cur, 'alice@practice.co.uk')
+    assert client_id == 'CLIENT-A'
+    assert cur.asked_client == 'CLIENT-A'
+
+
+def test_staff_without_the_header_stay_in_their_own_practice(appmod):
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {}):
+        _, client_id, _, _ = appmod._get_user_info(cur, 'support@analytically.info')
+    assert client_id == 'CLIENT-A'
+
+
+def test_an_unknown_practice_fails_closed_rather_than_falling_back(appmod):
+    # The dangerous failure is not an error -- it is quietly serving the support login's OWN
+    # practice while the screen says they are looking at someone else's.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Client': 'NO-SUCH-CLIENT'}):
+        assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+    assert cur.asked_client is None, 'it must never fall through to a tenant lookup'
+
+
+def test_a_non_numeric_practice_is_refused_not_passed_to_sql(appmod):
+    # Client_ID is an int. Handing the raw header to the tenant query made SQL Server raise a
+    # conversion error -- a 500 from the driver, not the clean refusal this was meant to be. The
+    # override is now resolved against the database first, compared as text.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Client': "'; DROP TABLE x --"}):
+        assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+
+
+def test_is_staff_is_the_mailbox_domain_only(appmod):
+    assert appmod._is_staff('someone@analytically.info')
+    assert appmod._is_staff('SOMEONE@Analytically.Info')
+    assert not appmod._is_staff('someone@analytically.info.evil.com')
+    assert not appmod._is_staff('analytically.info@practice.co.uk')
+    assert not appmod._is_staff('')
+    assert not appmod._is_staff(None)
+
+
+def test_acting_client_is_ignored_outside_a_request(appmod):
+    # Background callers have no request to read a header from; it must degrade to "no override"
+    # rather than raising and taking the caller down with it.
+    assert appmod._acting_client_id('support@analytically.info') is None
+
+
+# ── the admin console is staff-only, server-side ──────────────────────────────
+
+def _as(appmod, monkeypatch, upn):
+    monkeypatch.setattr(appmod, '_validate_id_token', lambda t: {'preferred_username': upn})
+
+
+ADMIN_ROUTES = [('get',  '/api/admin/billing?year_month=202609'),
+                ('post', '/api/admin/billing/adjust'),
+                ('post', '/api/admin/billing/raise'),
+                ('post', '/api/admin/billing/credit-note')]
+
+
+def test_admin_routes_refuse_a_practice_admin(client, appmod, monkeypatch):
+    # Hiding the tab in the UI is a convenience. THIS is the control.
+    _as(appmod, monkeypatch, 'alice@practice.co.uk')
+    for verb, url in ADMIN_ROUTES:
+        r = getattr(client, verb)(url, headers={'Authorization': 'Bearer x'}, json={})
+        assert r.status_code == 403, url
+
+
+def test_admin_routes_refuse_an_anonymous_caller(client, appmod):
+    for verb, url in ADMIN_ROUTES:
+        r = getattr(client, verb)(url, json={})
+        assert r.status_code == 401, url
+
+
+def test_adjust_insists_on_a_reason(client, appmod, monkeypatch):
+    # The reason is the only account of why a practice was charged something other than the
+    # figure the access history implies. A blank one is refused before any tenant lookup.
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'exclude'})
+    assert r.status_code == 400 and 'reason' in r.get_json()['error'].lower()
+
+
+def test_adjust_insists_on_a_figure_when_overriding(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'override',
+                          'reason': 'part month'})
+    assert r.status_code == 400
+
+
+def test_adjust_refuses_a_negative_override(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'override',
+                          'value': -10, 'reason': 'oops'})
+    assert r.status_code == 400
+
+
+def test_admin_rejects_a_nonsense_month(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    for bad in ('202613', 'abc', '0'):
+        r = client.get('/api/admin/billing?year_month=' + bad, headers={'Authorization': 'Bearer x'})
+        assert r.status_code == 400, bad
+
+
+def test_admin_writes_commit(client, appmod, monkeypatch):
+    """Every admin write must open its connection with autocommit.
+
+    _fabric_conn defaults to a transaction and these handlers close without committing, so a
+    missing autocommit rolls the write back -- while the response still reports success, because
+    the figures are read back inside the same uncommitted transaction. It looks like it worked,
+    which is why this is asserted rather than left to a reviewer to notice.
+    """
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    seen = []
+
+    def _fake_conn(autocommit=False):
+        seen.append(autocommit)
+        return FakeConn(FakeCursor(one_row=None, all_rows=[]))   # unprovisioned -> 403, harmlessly
+
+    monkeypatch.setattr(appmod, '_fabric_conn', _fake_conn)
+    monkeypatch.setattr(appmod, '_stripe', lambda: object())
+    for url, body in (('/api/admin/billing/adjust',
+                       {'year_month': 202609, 'upn': 'x@y.com', 'action': 'exclude', 'reason': 'r'}),
+                      ('/api/admin/billing/raise', {'year_month': 202609}),
+                      ('/api/admin/billing/credit-note', {'year_month': 202609})):
+        seen.clear()
+        client.post(url, headers={'Authorization': 'Bearer x'}, json=body)
+        assert seen and all(seen), f'{url} opened a connection without autocommit: {seen}'
