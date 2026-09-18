@@ -1,0 +1,55 @@
+# =====================================================================
+# Release V169 -- finish what V168 started: no raw UPN comparisons left
+# =====================================================================
+# V168 fixed the billing generator after prod turned up a user who could never be billed because
+# Application_Users and Access_Log disagreed on letter case. The warehouse collation is
+# Latin1_General_100_BIN2_UTF8 -- BINARY -- so that is a real difference, not a cosmetic one. Three
+# other places compared UPNs the same way. This is the class, closed.
+#
+# ==> THE LIVE HAZARD IS THE SEED SCRIPT. <== Security.Access_Log.Data.sql exists for precisely the
+# problem V168 fixed: its own comment says users "seeded straight into Application_Users would
+# otherwise never be billed". It looks for an existing Access_Log row with a raw join, finds nothing
+# for the mismatched user, so IS NULL passes and it INSERTS A SECOND row in the other casing.
+#
+# That got worse the moment V168 shipped. The generator now normalises, so both rows land in ONE
+# interval chain -- and the spurious 'seed' entry, dated at Account_Billing.Access_From, can drag
+# that user's Bill_Start earlier than it should be and bill months they should not be charged for.
+# A re-run does not merely fail to help; it corrupts the history it exists to create. Nothing has
+# re-run it since the casing diverged (zero duplicate rows in dev and prod), so this lands before
+# any harm is done rather than after.
+#
+# The other two are the Access_Log dedup join in both sync procs ("append rows not already in the
+# warehouse, by natural key"). Lower risk, because source and target both come from AppDB and so
+# agree today -- but a single re-cased UPN in AppDB would insert a duplicate Access_Log row on every
+# ten-minute run, and duplicate rows at one Effective_At produce zero-length billing intervals.
+# Hardened while the lesson is fresh.
+#
+# Profile_Key is deliberately NOT normalised: its values come from a fixed vocabulary in the app
+# (full / clinician / front_office / no_access), so lowering it would imply a doubt that does not
+# exist and hide a genuine data fault if one ever arose.
+#
+# EXPECTED AFTER DEPLOY -- and note the seed script RUNS on deploy, so this is not a no-op:
+#
+#   * Dev inserted 2 Access_Log rows, for grace@ and andy@analytically.info. Nothing to do with the
+#     normalisation: the seed had simply not been deployed since those two support logins were
+#     provisioned. Billing-inert -- usp_Generate_Invoice_Lines excludes '%@analytically.info'
+#     outright -- and the September invoice stayed at 14 lines / 386.80 across the deploy. (An
+#     earlier draft of this manifest claimed "nothing changes anywhere". That was wrong.)
+#
+#   * Prod, checked read-only against live data before deploying, will insert 1 row (grace@,
+#     equally inert) and -- the point of the release -- will NOT insert a duplicate for
+#     StephenRoberts@mapledental.co.uk. With the raw join he reads as "would INSERT"; with V169 he
+#     reads as "found". That duplicate is the corruption this release exists to prevent.
+#
+# The seed inserting rows for our own logins at all is an inconsistency with the billing layer,
+# which ignores them. Harmless, deliberately left alone: tightening the seed's WHERE clause is a
+# behaviour change beyond fixing the comparison, and belongs in its own release if it is wanted.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V169__normalise_remaining_upn_comparisons.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Meta.usp_Sync_Access_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Security.Access_Log.Data.sql
+
+TEST

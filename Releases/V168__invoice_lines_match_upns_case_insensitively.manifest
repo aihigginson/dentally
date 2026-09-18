@@ -1,0 +1,43 @@
+# =====================================================================
+# Release V168 -- bill every user, whatever case their UPN was stored in
+# =====================================================================
+# A user with app access was NEVER BILLED because of letter case. Found by dry-running the billing
+# run against prod before the first paying practice, not by a customer complaint.
+#
+# ==> THE WAREHOUSE COLLATION IS BINARY. <== Latin1_General_100_BIN2_UTF8 is the Fabric Warehouse
+# default: 'StephenRoberts@mapledental.co.uk' and 'stephenroberts@mapledental.co.uk' are simply
+# different strings, and a plain = between them is false.
+#
+# Security.Application_Users takes its UPN from the Dentally roster; Security.Access_Log takes its
+# from whatever the Subscriptions screen posted. Nothing has ever forced those two to agree on case,
+# and in prod they did not for one user. usp_Generate_Invoice_Lines joins the two on raw User_UPN to
+# work out what profile someone held, so that user resolved to no access history at all, produced no
+# line, and would have been invisible on every invoice. At 60.00/month that is 720 a year, silently.
+#
+# ==> DEV HAD NO MISMATCHES, WHICH IS WHY IT NEVER SHOWED UP. <== Dev's roster happens to be
+# consistently lower-cased. The bug needed prod's data to appear at all, and prod had never run a
+# billing cycle -- it is free-forever (Paid_From 2100-01-01), so the dry run reported "nothing to
+# bill" for the legitimate reason and would have hidden this for as long as that stayed true.
+#
+# Both comparison joins are now LOWER(LTRIM(RTRIM(...))), matching what the sync procs (V165) and
+# the adjustment join (V167) already do. Normalising inside `intervals` also keeps one user's
+# history as ONE chain: two casings would otherwise each get their own LEAD() sequence and produce
+# overlapping intervals for the same person.
+#
+# The billed row still carries the ORIGINAL casing -- only the comparisons are normalised, so
+# Billing.Invoice_Line and the Stripe line item read as the practice would expect.
+#
+# NOT FIXED HERE, deliberately: the two tables are still free to disagree on case at write time.
+# Normalising on write means touching the app, the AppDB Input tables and the sync procs, and would
+# not make this join safe on data that already exists. Reading defensively is the smaller and more
+# complete fix.
+#
+# EXPECTED AFTER DEPLOY: dev is byte-identical (it has no mismatches); prod gains the missing user
+# the moment it is ever billed.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V168__invoice_lines_match_upns_case_insensitively.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+
+TEST
