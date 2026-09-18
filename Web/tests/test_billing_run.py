@@ -166,3 +166,84 @@ def test_a_successful_raise_replaces_the_row():
     ins = next(s for s in stmts if s.startswith('INSERT INTO Billing.Stripe_Invoice'))
     assert 'Stripe_Invoice_ID' in ins
     assert ('in_NEW', 'draft') == (cur.sql[-1][1][2], cur.sql[-1][1][4])
+
+
+# ── crediting an issued invoice ───────────────────────────────────────────────
+
+class _Meta:
+    """Stripe hands metadata back as a StripeObject with .to_dict(), NOT a plain dict -- and
+    find_in_stripe reads it that way. A bare dict here would quietly return {} and make every
+    invoice look like another month's, so the double has to carry the same shape."""
+    def __init__(self, d):
+        self._d = d
+    def to_dict(self):
+        return dict(self._d)
+
+
+class _Inv:
+    """A Stripe invoice double. Attribute access only -- Stripe objects are not dicts."""
+    def __init__(self, **d):
+        self._d = {'status': 'paid', 'total': 41680, 'metadata': _Meta({'year_month': '202609'}),
+                   'pre_payment_credit_notes_amount': 0, 'post_payment_credit_notes_amount': 0}
+        self._d.update(d)
+        self.id = self._d.setdefault('id', 'in_X')
+    def __getattr__(self, k):
+        try:
+            return self._d[k]
+        except KeyError:
+            raise AttributeError(k)
+    def to_dict(self):
+        return dict(self._d)
+
+
+class _StripeList:
+    def __init__(self, invoices):
+        self.data = invoices
+
+
+class _St:
+    def __init__(self, invoices):
+        self._invoices = invoices
+        self.Invoice = self
+    def list(self, customer=None, limit=None):
+        return _StripeList(self._invoices)
+
+
+def test_credited_pence_sums_both_sides_of_payment():
+    assert br.credited_pence(_Inv(pre_payment_credit_notes_amount=100,
+                                  post_payment_credit_notes_amount=250)) == 350
+
+
+def test_a_fully_credited_invoice_does_not_count_as_already_billed():
+    # THE interaction that makes credit-and-reissue work at all. find_in_stripe is the guard that
+    # stops a second invoice for a month; if it counted a withdrawn invoice, the corrected one
+    # could never be raised and --credit-note would be a dead end.
+    credited = _Inv(id='in_OLD', post_payment_credit_notes_amount=41680)
+    assert br.find_in_stripe(_St([credited]), 'cus_X', 202609) is None
+
+
+def test_a_voided_invoice_does_not_count_as_already_billed():
+    assert br.find_in_stripe(_St([_Inv(id='in_V', status='void')]), 'cus_X', 202609) is None
+
+
+def test_a_live_invoice_still_blocks_a_second_one():
+    live = _Inv(id='in_LIVE')
+    assert br.find_in_stripe(_St([live]), 'cus_X', 202609).id == 'in_LIVE'
+
+
+def test_the_replacement_is_found_ahead_of_the_credited_original():
+    # After a reissue Stripe holds BOTH, newest first. The live one must win.
+    st = _St([_Inv(id='in_NEW'), _Inv(id='in_OLD', post_payment_credit_notes_amount=41680)])
+    assert br.find_in_stripe(st, 'cus_X', 202609).id == 'in_NEW'
+
+
+def test_a_partly_credited_invoice_still_counts_as_billed():
+    # Only a FULL credit withdraws an invoice. A partial one leaves it in force, and raising a
+    # second invoice against it would bill the practice twice for the uncredited remainder.
+    part = _Inv(id='in_P', post_payment_credit_notes_amount=600)
+    assert br.find_in_stripe(_St([part]), 'cus_X', 202609).id == 'in_P'
+
+
+def test_another_months_invoice_is_ignored():
+    other = _Inv(id='in_AUG', metadata=_Meta({'year_month': '202608'}))
+    assert br.find_in_stripe(_St([other]), 'cus_X', 202609) is None

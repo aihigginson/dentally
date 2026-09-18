@@ -13,9 +13,19 @@ schedule would need one, and this is not that yet.
     python billing_run.py                           # regenerate lines + raise drafts, month just ended
     python billing_run.py --year-month 202609       # a specific month
     python billing_run.py --status                   # what has already been raised
+    python billing_run.py --year-month 202609 --tenant 100 --credit-note --dry-run
+    python billing_run.py --year-month 202609 --tenant 100 --credit-note
 
 Runnable on ANY day of the following month, and re-runnable until the money moves: an existing
 DRAFT is discarded and re-raised with current figures, while a FINALISED invoice is never touched.
+
+PUTTING RIGHT AN INVOICE THAT WAS ALREADY ISSUED is --credit-note, and it is the only route: a
+finalised invoice cannot be edited and a paid one cannot be voided. It credits the invoice IN FULL,
+line by line so the VAT mirrors it (crediting by flat amount produces a credit note with no VAT on
+it -- see credit_note()), refunds the card, and removes the Billing.Stripe_Invoice row. That last
+step is what reopens the month, so an ordinary run afterwards regenerates the lines from current
+data and raises the corrected draft. Two deliberate steps, because the credit note reaches the
+practice before the replacement does.
 
 WHAT IS OWED comes from SQL and only SQL: Billing.usp_Generate_Invoice_Lines bills each user for
 the highest-priced profile they held in the month, pro-rates the sign-up month, excludes our own
@@ -279,14 +289,31 @@ def find_in_stripe(st, cust_id, ym):
     Uses list+filter rather than Invoice.search: search is index-backed and lags creation by
     seconds to a minute, which is exactly the window a re-run happens in. Listing a customer's
     invoices is immediate and exact, and a practice has one invoice a month.
+
+    AN INVOICE THAT HAS BEEN CREDITED IN FULL IS NOT "ALREADY BILLED". It has been withdrawn: the
+    money is back with the practice and the month is owed again. Without this, --credit-note would
+    be a dead end -- the guard above would find the credited invoice, conclude the month was
+    handled, and silently refuse to raise the corrected one. Voided invoices go the same way.
     """
     if not cust_id:
         return None
-    for inv in st.Invoice.list(customer=cust_id, limit=100).data:
+    for inv in st.Invoice.list(customer=cust_id, limit=100).data:   # newest first
         md = inv.metadata.to_dict() if hasattr(inv.metadata, 'to_dict') else {}
-        if str(md.get('year_month')) == str(ym):
-            return inv
+        if str(md.get('year_month')) != str(ym):
+            continue
+        if (inv.status or '').lower() == 'void':
+            continue
+        if credited_pence(inv) >= (inv.total or 0) > 0:
+            continue
+        return inv
     return None
+
+
+def credited_pence(inv):
+    """How much of this invoice has been credited, before and after payment."""
+    d = inv.to_dict() if hasattr(inv, 'to_dict') else dict(inv)
+    return ((d.get('pre_payment_credit_notes_amount') or 0)
+            + (d.get('post_payment_credit_notes_amount') or 0))
 
 
 def reconcile(st, cur, ym):
@@ -373,6 +400,143 @@ def record(cur, t, ym, invoice=None, error=None):
         invoice.total, 'gbp', len(t['lines']), now, now)
 
 
+def credit_note(st, cur, tid, ym, reason, memo, to_balance=False, dry_run=False):
+    """Credit an issued invoice IN FULL, so the month can be corrected and re-invoiced.
+
+    The remedy when a practice queries an invoice that is simply wrong -- a user billed who had
+    already left, a price applied that should not have been. A finalised invoice cannot be edited
+    and a paid one cannot be voided; the only honest instrument is a credit note, which withdraws
+    the original and leaves a matching document the practice's bookkeeper can file against it.
+
+    ==> IT CREDITS LINE BY LINE, NEVER BY FLAT AMOUNT. <== Stripe will happily take
+    CreditNote.create(invoice=..., amount=41680) and produce a credit note for exactly that -- with
+    NO VAT ON IT. The preview is unambiguous: crediting £416.80 by amount yields total_excluding_tax
+    = 41680 and an empty tax list, against an invoice that charged £69.47 of VAT. We would have
+    collected VAT and credited none of it, on a document HMRC expects to mirror the invoice.
+    Crediting each invoice line reproduces the invoice's own inclusive rate exactly: £416.80 gross,
+    £347.33 net, £69.47 VAT. Verified against a real sandbox invoice before this was written.
+
+    WHERE THE MONEY GOES. A paid invoice must have its credit allocated somewhere, and Stripe
+    requires us to say where: back to the card (the default, and what a practice expects when they
+    have queried a charge) or onto their Stripe credit balance, which is applied to the next invoice
+    automatically. An issued-but-unpaid invoice needs neither -- the credit reduces what is owed.
+
+    AFTERWARDS the Billing.Stripe_Invoice row is REMOVED, which is what reopens the month: the
+    normal run then regenerates the lines and raises a corrected draft. That is safe here, and only
+    here, because the invoice those lines were evidence for has been withdrawn in full. It is NOT a
+    second billing -- find_in_stripe skips fully-credited invoices precisely so the corrected one
+    can be raised.
+
+    Deliberately does NOT re-invoice: the credit note is a document going to a practice, and a human
+    should see it land before the replacement goes out.
+    """
+    cur.execute("SELECT si.Stripe_Invoice_ID, si.Stripe_Customer_ID, t.Tenant_Name "
+                "FROM Billing.Stripe_Invoice si "
+                "LEFT JOIN Audit.Tenants t ON t.Tenant_ID = si.Tenant_ID "
+                "WHERE si.Tenant_ID = ? AND si.Year_Month = ?", tid, ym)
+    row = cur.fetchone()
+    if not row or not row[0]:
+        print(f'  tenant {tid}: no invoice recorded for {ym // 100}-{ym % 100:02d} -- nothing to '
+              f'credit. (--status lists what has been raised.)')
+        return 0
+    inv_id, cust_id, tname = row[0], (row[1] or '').strip(), row[2] or f'Tenant {tid}'
+
+    inv = st.Invoice.retrieve(inv_id)
+    status = (inv.status or '').lower()
+    print(f'  {tname} (tenant {tid}): {inv_id} [{inv.number or "-"}] is {status}, '
+          f'£{(inv.total or 0) / 100:.2f}')
+
+    # A draft has been sent to nobody and taken nothing. Crediting one is meaningless -- and Stripe
+    # refuses anyway. The ordinary run already discards and re-raises drafts.
+    if status == 'draft':
+        print(f'  -> REFUSED: that invoice is still a DRAFT -- nothing has been issued or charged. '
+              f'Just re-run:  python billing_run.py --year-month {ym}')
+        return 0
+    if status == 'void':
+        print('  -> REFUSED: that invoice is already void.')
+        return 0
+
+    # Stripe is the authority on what has already been credited, not our table: a credit note may
+    # have been raised by hand in the dashboard. Without this, a second run would refund the
+    # practice TWICE -- the credit-note equivalent of double billing, and just as damaging.
+    already = credited_pence(inv)
+    if already >= (inv.total or 0) > 0:
+        print(f'  -> REFUSED: already credited in full (£{already / 100:.2f}). Nothing to do.')
+        return 0
+    if already:
+        print(f'  -> REFUSED: partially credited already (£{already / 100:.2f}); this issues FULL '
+              f'credit notes only. Finish it in the Stripe dashboard.')
+        return 0
+
+    lines = list(st.Invoice.list_lines(inv_id, limit=100).auto_paging_iter())
+    total = sum(l.amount for l in lines)
+    if total != (inv.total or 0):
+        raise RuntimeError(f'invoice {inv_id}: lines sum to {total} but the invoice total is '
+                           f'{inv.total} -- refusing to credit a figure I cannot explain')
+
+    params = {
+        'invoice': inv_id,
+        'reason': reason,
+        'memo': memo,
+        'lines': [{'type': 'invoice_line_item', 'invoice_line_item': l.id, 'amount': l.amount}
+                  for l in lines],
+        'metadata': {'tenant_id': str(tid), 'year_month': str(ym), 'app_env': APP_ENV},
+    }
+    # Only the part that was actually PAID can be refunded or credited to the balance; any unpaid
+    # remainder simply comes off the invoice.
+    allocate = min(inv.amount_paid or 0, total)
+    if allocate > 0:
+        params['credit_amount' if to_balance else 'refund_amount'] = allocate
+
+    pv  = st.CreditNote.preview(**{k: v for k, v in params.items() if k != 'metadata'})
+    pvd = pv.to_dict()
+    vat = sum((t.get('amount') or 0) for t in (pvd.get('total_taxes') or []))
+    where = ('credit balance, applied to the next invoice' if to_balance else 'refunded to the card') \
+        if allocate else 'deducted from the amount owed'
+    print(f'      {len(lines)} line(s), £{total / 100:.2f} gross '
+          f'= net £{(pvd.get("total_excluding_tax") or 0) / 100:.2f} '
+          f'+ VAT £{vat / 100:.2f}   -> {where}')
+
+    # The check the whole function exists to pass. A credit note that does not mirror the invoice's
+    # VAT is worse than none at all, because it looks right on the total line.
+    if vat != invoice_tax_pence(inv):
+        raise RuntimeError(f'credit note VAT £{vat / 100:.2f} does not match the invoice VAT '
+                           f'£{invoice_tax_pence(inv) / 100:.2f} -- refusing to issue it')
+
+    if dry_run:
+        print('  -> DRY RUN: no credit note issued, nothing refunded.')
+        return 0
+
+    cn  = st.CreditNote.create(**params,
+                               idempotency_key=f'cn-{STRIPE_ENV}-{tid}-{ym}-{RUN_ID}')
+    cnd = cn.to_dict()
+    cn_vat = sum((t.get('amount') or 0) for t in (cnd.get('total_taxes') or []))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cur.execute(
+        "INSERT INTO Billing.Credit_Note (Tenant_ID, Year_Month, Stripe_Credit_Note_ID, "
+        " Credit_Note_Number, Stripe_Invoice_ID, Invoice_Number, Stripe_Customer_ID, Amount_Pence, "
+        " Tax_Pence, Currency, Refund_Pence, Credit_Balance_Pence, Reason, Memo, Created_At, "
+        " Created_By) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        tid, ym, cn.id, cnd.get('number'), inv_id, inv.number, cust_id, cnd.get('total'), cn_vat,
+        'gbp', (allocate if (allocate and not to_balance) else None),
+        (allocate if (allocate and to_balance) else None), reason, (memo or '')[:1000], now,
+        (os.environ.get('USERNAME') or 'billing_run')[:128])
+
+    # Reopen the month. Done AFTER the credit note is safely recorded, so a failure here leaves the
+    # month closed rather than open -- the direction that cannot double-bill.
+    cur.execute("DELETE FROM Billing.Stripe_Invoice WHERE Tenant_ID = ? AND Year_Month = ?", tid, ym)
+
+    print(f'  -> CREDIT NOTE {cn.id} [{cnd.get("number") or "-"}] for £{(cnd.get("total") or 0) / 100:.2f}')
+    print(f'     {"credited to their Stripe balance" if to_balance else "refunded to the card"}: '
+          f'£{allocate / 100:.2f}' if allocate else '     deducted from the amount owed')
+    print()
+    print(f'  The month is now OPEN again. To raise the corrected invoice:')
+    print(f'      python billing_run.py --year-month {ym}')
+    print(f'  That regenerates the lines from current data and raises a DRAFT. Nothing is charged '
+          f'until you finalise it.')
+    return 1
+
+
 def log_run(cur, ym, status, started, error=None, n=None):
     """Audit row, best effort -- same posture as appdb_sync: never mask the real error."""
     try:
@@ -396,6 +560,16 @@ def main():
     ap.add_argument('--status', action='store_true', help='show what has already been raised')
     ap.add_argument('--reconcile', action='store_true',
                     help='make our table agree with Stripe for this month (Stripe wins)')
+    ap.add_argument('--credit-note', action='store_true',
+                    help='credit an ISSUED invoice in full so the month can be re-invoiced; '
+                         'requires --tenant')
+    ap.add_argument('--tenant', type=int, default=None, help='tenant id, for --credit-note')
+    ap.add_argument('--reason', default='order_change',
+                    choices=['duplicate', 'fraudulent', 'order_change', 'product_unsatisfactory'],
+                    help='Stripe credit note reason (default order_change)')
+    ap.add_argument('--memo', default=None, help='note printed on the credit note PDF')
+    ap.add_argument('--credit-balance', action='store_true',
+                    help='hold the credit on the customer balance instead of refunding the card')
     args = ap.parse_args()
     ym = args.year_month or last_month()
 
@@ -408,6 +582,28 @@ def main():
     if args.reconcile:
         reconcile(stripe_client(), cur, ym)
         return 0
+
+    if args.credit_note:
+        # --tenant is REQUIRED, with no "all tenants" convenience. A credit note refunds real money
+        # and is emailed to the practice; it is a remedy for one practice's queried invoice, and
+        # anything that could fan it out across every practice on a mistyped month is not worth the
+        # keystrokes it saves.
+        if args.tenant is None:
+            print('  --credit-note needs --tenant <id>. It refunds money and emails a document to '
+                  'the practice, so it is deliberately one practice at a time.')
+            return 2
+        memo = args.memo or (f'Credit note for the Analytically subscription invoice for '
+                             f'{ym // 100}-{ym % 100:02d}. A corrected invoice follows.')
+        try:
+            n = credit_note(stripe_client(), cur, args.tenant, ym, args.reason, memo,
+                            to_balance=args.credit_balance, dry_run=args.dry_run)
+            log_run(cur, ym, 'SUCCEEDED', started, n=n)
+            return 0
+        except Exception as e:
+            log_run(cur, ym, 'FAILED', started, error=e)
+            raise
+        finally:
+            cn.close()
 
     if args.status:
         prior = already_raised(cur, ym)
