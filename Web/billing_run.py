@@ -116,7 +116,20 @@ def stripe_client():
     return _stripe
 
 
-def vat_rate_id():
+def new_run_id():
+    """Start a fresh idempotency scope.
+
+    RUN_ID exists to collapse network retries within ONE action, and the script gets a new one per
+    invocation. A long-lived process -- the web app -- would otherwise keep the SAME key for its
+    whole lifetime, so a deliberate second raise for a tenant-month would silently hand back the
+    first (now deleted) invoice instead of creating one. Every admin action calls this first.
+    """
+    global RUN_ID
+    RUN_ID = uuid.uuid4().hex[:12]
+    return RUN_ID
+
+
+def vat_rate_id(st=None):
     """The one active GB 20% INCLUSIVE VAT rate, resolved by its properties.
 
     Deliberately not configuration. A pinned txr_ id that is stale or mistyped would render a
@@ -127,7 +140,7 @@ def vat_rate_id():
     derives the VAT from the gross figure rather than adding 20% on top. An exclusive rate here
     would bill 72.00 for a 60.00 seat.
     """
-    st = stripe_client()
+    st = st or stripe_client()
     m = [r for r in st.TaxRate.list(active=True, limit=100).data
          if r.percentage == 20.0 and r.inclusive and r.country == 'GB']
     if len(m) != 1:

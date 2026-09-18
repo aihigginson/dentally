@@ -1472,3 +1472,141 @@ def test_invoices_never_expose_the_stripe_invoice_id(client, appmod, monkeypatch
                   stripe_rows=[(202608, 'paid')])
     body = client.get('/api/invoices').get_json()
     assert 'in_' not in json.dumps(body)
+
+
+# ── the staff practice picker ─────────────────────────────────────────────────
+# _get_user_info is the one function every route resolves identity through, so the picker is
+# applied there. That makes these the tests that matter: everything else in the app inherits
+# whatever this decides, correct or not.
+
+class _SwitchCursor:
+    """Returns the user row first, then the tenant list -- and REMEMBERS which Client_ID the
+    tenant lookup was asked about, which is the thing under test."""
+    def __init__(self, user_row, tenants):
+        self._user, self._tenants, self._n = user_row, tenants, 0
+        self.asked_client = None
+
+    def execute(self, sql, *args):
+        self._n += 1
+        if 'Audit.Tenants' in sql and 'Client_ID = ?' in sql:
+            self.asked_client = args[0] if args else None
+        return self
+
+    def fetchone(self):
+        return self._user
+
+    def fetchall(self):
+        return self._tenants
+
+
+def _ctx(appmod, headers):
+    return appmod.app.test_request_context('/api/me', headers=headers)
+
+
+def test_staff_header_switches_the_whole_context(appmod):
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(99,)])
+    with _ctx(appmod, {'X-Acting-Client': 'CLIENT-B'}):
+        name, client_id, tids, maintain = appmod._get_user_info(cur, 'support@analytically.info')
+    assert client_id == 'CLIENT-B'
+    assert cur.asked_client == 'CLIENT-B', 'tenants must be resolved for the PICKED practice'
+    assert tids == [99]
+    # It changes WHICH practice, never WHAT they may do -- their own row still supplies these.
+    assert name == 'Support' and maintain is True
+
+
+def test_a_practice_admin_cannot_use_the_header(appmod):
+    # The header is client-supplied. If it were honoured for anyone but us it would be a
+    # one-line cross-tenant data breach: send someone else's Client_ID, get their reports.
+    cur = _SwitchCursor(_user_row(appmod, 'Alice', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Client': 'CLIENT-B'}):
+        _, client_id, tids, _ = appmod._get_user_info(cur, 'alice@practice.co.uk')
+    assert client_id == 'CLIENT-A'
+    assert cur.asked_client == 'CLIENT-A'
+
+
+def test_staff_without_the_header_stay_in_their_own_practice(appmod):
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {}):
+        _, client_id, _, _ = appmod._get_user_info(cur, 'support@analytically.info')
+    assert client_id == 'CLIENT-A'
+
+
+def test_an_unknown_practice_fails_closed_rather_than_falling_back(appmod):
+    # The dangerous failure is not an error -- it is quietly serving the support login's OWN
+    # practice while the screen says they are looking at someone else's.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [])   # no active tenant
+    with _ctx(appmod, {'X-Acting-Client': 'NO-SUCH-CLIENT'}):
+        assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+
+
+def test_is_staff_is_the_mailbox_domain_only(appmod):
+    assert appmod._is_staff('someone@analytically.info')
+    assert appmod._is_staff('SOMEONE@Analytically.Info')
+    assert not appmod._is_staff('someone@analytically.info.evil.com')
+    assert not appmod._is_staff('analytically.info@practice.co.uk')
+    assert not appmod._is_staff('')
+    assert not appmod._is_staff(None)
+
+
+def test_acting_client_is_ignored_outside_a_request(appmod):
+    # Background callers have no request to read a header from; it must degrade to "no override"
+    # rather than raising and taking the caller down with it.
+    assert appmod._acting_client_id('support@analytically.info') is None
+
+
+# ── the admin console is staff-only, server-side ──────────────────────────────
+
+def _as(appmod, monkeypatch, upn):
+    monkeypatch.setattr(appmod, '_validate_id_token', lambda t: {'preferred_username': upn})
+
+
+ADMIN_ROUTES = [('get',  '/api/admin/billing?year_month=202609'),
+                ('post', '/api/admin/billing/adjust'),
+                ('post', '/api/admin/billing/raise'),
+                ('post', '/api/admin/billing/credit-note')]
+
+
+def test_admin_routes_refuse_a_practice_admin(client, appmod, monkeypatch):
+    # Hiding the tab in the UI is a convenience. THIS is the control.
+    _as(appmod, monkeypatch, 'alice@practice.co.uk')
+    for verb, url in ADMIN_ROUTES:
+        r = getattr(client, verb)(url, headers={'Authorization': 'Bearer x'}, json={})
+        assert r.status_code == 403, url
+
+
+def test_admin_routes_refuse_an_anonymous_caller(client, appmod):
+    for verb, url in ADMIN_ROUTES:
+        r = getattr(client, verb)(url, json={})
+        assert r.status_code == 401, url
+
+
+def test_adjust_insists_on_a_reason(client, appmod, monkeypatch):
+    # The reason is the only account of why a practice was charged something other than the
+    # figure the access history implies. A blank one is refused before any tenant lookup.
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'exclude'})
+    assert r.status_code == 400 and 'reason' in r.get_json()['error'].lower()
+
+
+def test_adjust_insists_on_a_figure_when_overriding(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'override',
+                          'reason': 'part month'})
+    assert r.status_code == 400
+
+
+def test_adjust_refuses_a_negative_override(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    r = client.post('/api/admin/billing/adjust', headers={'Authorization': 'Bearer x'},
+                    json={'year_month': 202609, 'upn': 'x@y.com', 'action': 'override',
+                          'value': -10, 'reason': 'oops'})
+    assert r.status_code == 400
+
+
+def test_admin_rejects_a_nonsense_month(client, appmod, monkeypatch):
+    _as(appmod, monkeypatch, 'support@analytically.info')
+    for bad in ('202613', 'abc', '0'):
+        r = client.get('/api/admin/billing?year_month=' + bad, headers={'Authorization': 'Bearer x'})
+        assert r.status_code == 400, bad

@@ -414,6 +414,19 @@ def me():
                     days = (pf - datetime.utcnow().date()).days
                     trial = {'status': 'active' if days > 0 else 'expired',
                              'days_left': days, 'paid_from': pf.isoformat()}
+        # The practice picker, for our own logins only. Sent with /api/me so the picker is populated
+        # in the same round trip that establishes who you are -- there is no moment where the app
+        # knows it is staff but not yet which practices exist.
+        practices = []
+        if _is_staff(upn):
+            cur.execute(
+                "SELECT t.Client_ID, MIN(ps.Practice_Name), COUNT(DISTINCT t.Tenant_ID) "
+                "FROM Audit.Tenants t "
+                "LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = t.Tenant_ID "
+                "WHERE ISNULL(t.Is_Active, 1) = 1 AND t.Client_ID IS NOT NULL "
+                "GROUP BY t.Client_ID ORDER BY MIN(ps.Practice_Name)")
+            practices = [{'client_id': r[0], 'name': r[1] or r[0], 'tenants': r[2]}
+                         for r in cur.fetchall()]
         conn.close()
         return jsonify({
             'display_name':         display_name or upn,
@@ -425,6 +438,8 @@ def me():
             'practitioner_full_name': practitioner_name,
             'env':                  APP_ENV,
             'trial':                trial,
+            'is_staff':             _is_staff(upn),
+            'practices':            practices,
         })
     except Exception as e:
         return _server_error(e, 'me')
@@ -1561,6 +1576,29 @@ def monitor_health():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _is_staff(upn):
+    """Our own people, by mailbox domain -- the same test the cancel exemption already uses.
+
+    Deliberately not a flag in Security.Application_Users: that table is fed from AppDB by the
+    nightly sync, so a flag there would be editable through the same path a practice admin uses to
+    manage their own team. The domain is asserted by Entra at sign-in and cannot be granted from
+    inside the product.
+    """
+    return (upn or '').lower().endswith('@analytically.info')
+
+
+def _acting_client_id(upn):
+    """The practice a support login has picked, or None.
+
+    STAFF ONLY, and re-checked on every request rather than trusted from a previous one -- the
+    header is client-supplied, so it is an assertion of intent, never of permission. A practice
+    admin sending the same header gets None and stays in their own practice.
+    """
+    if not _is_staff(upn) or not has_request_context():
+        return None
+    return (request.headers.get('X-Acting-Client') or '').strip() or None
+
+
 def _get_user_info(cur, upn):
     """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
 
@@ -1587,15 +1625,30 @@ def _get_user_info(cur, upn):
     display_name, client_id, maintain_targets = row[0], row[1], bool(row[2])
     if not maintain_targets and not any(bool(v) for v in row[3:]):
         return None, None, [], False   # row grants nothing -> treat as unprovisioned
+    # OUR OWN STAFF MAY ACT AS ANOTHER PRACTICE. Investigating a practice used to mean running SQL
+    # to repoint the support login's Client_ID; the picker does it per request instead. It is applied
+    # HERE, at the one function every route resolves identity through, so the whole app moves
+    # together -- reports, Subscriptions, invoices, Admin -- and there is exactly one place the
+    # restriction has to be right, rather than a tenant argument on every endpoint to forget.
+    #
+    # It changes only WHICH practice, never WHAT the support login may do: display_name, the module
+    # flags and Maintain_Targets still come from their own row above.
+    acting = _acting_client_id(upn)
+    if acting is not None and acting != client_id:
+        app.logger.info('staff %s acting as client %s', upn, acting)
+        client_id = acting
+
     cur.execute(
-        "SELECT t.Tenant_ID FROM Security.Application_Users a "
-        "JOIN Audit.Tenants t ON a.Client_ID = t.Client_ID "
-        "WHERE LOWER(a.User_UPN) = LOWER(?) AND ISNULL(t.Is_Active, 1) = 1",
-        upn,
+        "SELECT Tenant_ID FROM Audit.Tenants WHERE Client_ID = ? AND ISNULL(Is_Active, 1) = 1",
+        client_id,
     )
     tids = [r[0] for r in cur.fetchall()]
     if not tids:
-        return None, None, [], False   # no ACTIVE tenant (e.g. cancelled subscription) -> fail closed
+        # No ACTIVE tenant -- a cancelled subscription, or a staff override naming a client that
+        # does not exist. Fails closed either way: callers read client_id None as Forbidden, so a
+        # bad override yields 403 rather than quietly falling back to the support login's own
+        # practice and showing one practice's figures under another's name.
+        return None, None, [], False
     return display_name, client_id, tids, maintain_targets
 
 
@@ -3325,6 +3378,401 @@ def save_target_grid():
         return jsonify({'ok': True})
     except Exception as e:
         return _server_error(e, 'save_target_grid')
+
+
+# ── Admin: the billing console (our own staff only) ──────────────────────────
+# Everything the monthly run does, in one screen, for the practice the picker has selected: what
+# Stripe actually thinks, what we think, the lines, a manual correction to any of them, a credit
+# note, and the corrected re-issue.
+#
+# It acts on the CURRENT practice and takes no tenant argument of its own. The picker has already
+# moved the whole app (see _acting_client_id), so the Admin screen resolves identity exactly like
+# every other route and cannot reach a practice the caller is not looking at.
+#
+# The logic is billing_run's, imported rather than reimplemented. Two engines deciding what a
+# practice owes is how billing systems silently diverge, and a console that disagreed with the
+# command line would be worse than no console.
+
+def _require_staff():
+    """(upn, None) for our own logins; (None, 403) for anyone else.
+
+    Enforced on every admin route rather than inferred from the UI hiding the tab. The tab being
+    invisible is a convenience; this is the control.
+    """
+    upn, err = _auth()
+    if err:
+        return None, err
+    if not _is_staff(upn):
+        return None, (jsonify({'error': 'Forbidden'}), 403)
+    return upn, None
+
+
+def _billing():
+    """billing_run, imported lazily.
+
+    At module scope this would make the whole app fail to start if a billing dependency were
+    missing -- reports would go down over a screen almost nobody opens.
+    """
+    import billing_run
+    return billing_run
+
+
+def _admin_tenant(cur, upn, body_tenant=None):
+    """The tenant this admin action applies to, or (None, error).
+
+    Resolved from the CALLER's current practice and then checked against the id the browser sent,
+    so a stale tab that still names the previous practice is refused rather than silently acting on
+    the one now selected.
+    """
+    _, client_id, tids, _ = _get_user_info(cur, upn)
+    if client_id is None or not tids:
+        return None, (jsonify({'error': 'Forbidden'}), 403)
+    if body_tenant is None:
+        return tids[0], None
+    try:
+        tid = int(body_tenant)
+    except (TypeError, ValueError):
+        return None, (jsonify({'error': 'Bad tenant'}), 400)
+    if tid not in tids:
+        return None, (jsonify({'error': 'That practice is no longer the one selected. '
+                                        'Reload and try again.'}), 409)
+    return tid, None
+
+
+def _admin_ym(default_last=True):
+    v = (request.args.get('year_month') or (request.get_json(silent=True) or {}).get('year_month'))
+    if v in (None, ''):
+        return _billing().last_month() if default_last else None
+    try:
+        ym = int(v)
+    except (TypeError, ValueError):
+        return None
+    return ym if 190001 <= ym <= 299912 and 1 <= ym % 100 <= 12 else None
+
+
+@app.route('/api/admin/billing', methods=['GET'])
+def admin_billing():
+    """Everything known about one practice-month: our lines, our adjustments, and Stripe's view.
+
+    Stripe is re-read live rather than reported from Billing.Stripe_Invoice. Our Status is stale the
+    moment a human finalises an invoice in the dashboard, and the whole point of this screen is to
+    show the position before someone acts on it.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    ym = _admin_ym()
+    if ym is None:
+        return jsonify({'error': 'Bad month'}), 400
+    try:
+        br   = _billing()
+        conn = _fabric_conn()
+        cur  = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn)
+        if terr:
+            conn.close(); return terr
+
+        cur.execute("SELECT Tenant_Name FROM Audit.Tenants WHERE Tenant_ID = ?", tid)
+        r = cur.fetchone()
+        name = (r[0] if r else None) or f'Tenant {tid}'
+
+        # Months worth offering: anything with lines, an invoice, or an adjustment.
+        cur.execute(
+            "SELECT DISTINCT Year_Month FROM ("
+            "  SELECT Year_Month FROM Billing.Invoice_Line WHERE Tenant_ID = ?"
+            "  UNION ALL SELECT Year_Month FROM Billing.Stripe_Invoice WHERE Tenant_ID = ?"
+            "  UNION ALL SELECT Year_Month FROM Billing.Credit_Note WHERE Tenant_ID = ?"
+            "  UNION ALL SELECT Year_Month FROM Billing.Invoice_Line_Adjustment WHERE Tenant_ID = ?"
+            ") m ORDER BY Year_Month DESC", tid, tid, tid, tid)
+        months = [r[0] for r in cur.fetchall()]
+        if ym not in months:
+            months = sorted(set(months) | {ym}, reverse=True)
+
+        cur.execute(
+            "SELECT User_UPN, Display_Name, Profile_Key, Value FROM Billing.Invoice_Line "
+            "WHERE Tenant_ID = ? AND Year_Month = ? ORDER BY Value DESC, Display_Name", tid, ym)
+        lines = [{'upn': a, 'name': b or a, 'profile': c,
+                  'profile_label': br.PROFILE_LABEL.get(c, c), 'value': float(d or 0)}
+                 for a, b, c, d in cur.fetchall()]
+
+        cur.execute(
+            "SELECT User_UPN, Action, Override_Value, Reason, Created_At, Created_By "
+            "FROM Billing.Invoice_Line_Adjustment WHERE Tenant_ID = ? AND Year_Month = ?", tid, ym)
+        adj = {(a or '').lower(): {'action': b, 'value': float(c) if c is not None else None,
+                                   'reason': d, 'at': e.isoformat() if e else None, 'by': f}
+               for a, b, c, d, e, f in cur.fetchall()}
+        for l in lines:
+            l['adjustment'] = adj.get(l['upn'].lower())
+        # An adjustment can name someone who no longer produces a line at all -- an excluded user,
+        # most obviously. Show them, or the screen would offer no way to undo the exclusion.
+        for upn_k, a in adj.items():
+            if not any(l['upn'].lower() == upn_k for l in lines):
+                lines.append({'upn': upn_k, 'name': upn_k, 'profile': None, 'profile_label': '—',
+                              'value': 0.0, 'adjustment': a, 'suppressed': True})
+
+        cur.execute("SELECT Stripe_Invoice_ID, Stripe_Customer_ID, Status, Amount_Pence, Line_Count "
+                    "FROM Billing.Stripe_Invoice WHERE Tenant_ID = ? AND Year_Month = ?", tid, ym)
+        r = cur.fetchone()
+        ours = {'invoice_id': r[0], 'customer': r[1], 'status': r[2],
+                'amount': (r[3] or 0) / 100, 'line_count': r[4]} if r else None
+
+        cur.execute(
+            "SELECT Stripe_Credit_Note_ID, Credit_Note_Number, Stripe_Invoice_ID, Amount_Pence, "
+            " Tax_Pence, Refund_Pence, Credit_Balance_Pence, Reason, Memo, Created_At, Created_By "
+            "FROM Billing.Credit_Note WHERE Tenant_ID = ? AND Year_Month = ? ORDER BY Created_At",
+            tid, ym)
+        credits = [{'id': a, 'number': b, 'invoice_id': c, 'amount': (d or 0) / 100,
+                    'tax': (e or 0) / 100, 'refund': (f or 0) / 100 if f else None,
+                    'balance': (g or 0) / 100 if g else None, 'reason': h, 'memo': i,
+                    'at': j.isoformat() if j else None, 'by': k}
+                   for a, b, c, d, e, f, g, h, i, j, k in cur.fetchall()]
+
+        cur.execute("SELECT Stripe_Customer_ID, Paid_From, Cancelled_At FROM Billing.Account_Billing "
+                    "WHERE Tenant_ID = ?", tid)
+        r = cur.fetchone()
+        customer  = (r[0] or '').strip() if r else ''
+        cancelled = r[2] if r else None
+        conn.close()
+
+        # Stripe's own view. Never fatal: the screen is still useful with our side alone, and an
+        # outage here must not hide the lines or the audit trail.
+        stripe_view, has_card, err_msg = None, None, None
+        try:
+            st = _stripe()
+            if ours and ours['invoice_id']:
+                inv = st.Invoice.retrieve(ours['invoice_id'])
+                d   = inv.to_dict()
+                stripe_view = {
+                    'invoice_id': inv.id, 'number': d.get('number'), 'status': inv.status,
+                    'status_label': _INVOICE_STATUS_LABEL.get((inv.status or '').lower()),
+                    'total': (d.get('total') or 0) / 100,
+                    'tax': br.invoice_tax_pence(inv) / 100,
+                    'credited': br.credited_pence(inv) / 100,
+                    'amount_paid': (d.get('amount_paid') or 0) / 100,
+                    'hosted_url': d.get('hosted_invoice_url'),
+                    'agrees': bool(ours) and (d.get('total') or 0) == round(ours['amount'] * 100),
+                }
+            if customer:
+                c = st.Customer.retrieve(customer, expand=['invoice_settings.default_payment_method'])
+                has_card = getattr(getattr(c, 'invoice_settings', None),
+                                   'default_payment_method', None) is not None
+        except Exception as e:
+            app.logger.warning('admin_billing: Stripe unreadable: %s', e)
+            err_msg = 'Stripe could not be read just now. The figures below are ours, not theirs.'
+
+        total = round(sum(l['value'] for l in lines if not l.get('suppressed')), 2)
+        return jsonify({
+            'tenant_id': tid, 'practice': name, 'year_month': ym, 'months': months,
+            'lines': lines, 'total': total, 'ours': ours, 'stripe': stripe_view,
+            'credit_notes': credits, 'customer': customer, 'has_card': has_card,
+            'cancelled_at': cancelled.isoformat() if cancelled else None,
+            'stripe_error': err_msg, 'env': APP_ENV,
+        })
+    except Exception as e:
+        return _server_error(e, 'admin_billing')
+
+
+def _finalised_in_stripe(br, st, cur, tid, ym):
+    """Is this month's invoice beyond a draft? Asked of STRIPE, not of our table.
+
+    Our Status is stale from the instant someone finalises in the dashboard, and every destructive
+    action below turns on this answer. Returns (status or None, invoice_id or None).
+    """
+    cur.execute("SELECT Stripe_Invoice_ID FROM Billing.Stripe_Invoice "
+                "WHERE Tenant_ID = ? AND Year_Month = ?", tid, ym)
+    r = cur.fetchone()
+    if not r or not r[0]:
+        return None, None
+    try:
+        inv = st.Invoice.retrieve(r[0])
+    except Exception:
+        return None, r[0]        # gone from Stripe -> treat as absent, same as the run does
+    s = (inv.status or '').lower()
+    return (s if s not in ('draft', '') else None), inv.id
+
+
+@app.route('/api/admin/billing/adjust', methods=['POST'])
+def admin_billing_adjust():
+    """Record (or clear) a manual correction to one user's line, then rebuild the month.
+
+    The rebuild is the point: an adjustment that did not show up in the figures immediately would
+    leave someone guessing whether it had taken. A month holding a FINALISED invoice is NOT rebuilt
+    -- those lines are the evidence of what was charged -- but the adjustment is still recorded, so
+    it applies the moment the invoice is credited.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    body   = request.get_json(silent=True) or {}
+    ym     = _admin_ym()
+    action = (body.get('action') or '').strip().lower()
+    target = (body.get('upn') or '').strip()
+    reason = (body.get('reason') or '').strip()
+    if ym is None or not target or action not in ('exclude', 'override', 'clear'):
+        return jsonify({'error': 'Bad request'}), 400
+    value = None
+    if action == 'override':
+        try:
+            value = round(float(body.get('value')), 2)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'A replacement amount is required.'}), 400
+        if value < 0:
+            return jsonify({'error': 'A replacement amount cannot be negative.'}), 400
+    if action != 'clear' and not reason:
+        # It changes what a practice is charged. In six months the only account of why will be this.
+        return jsonify({'error': 'Please give a reason — it is the only record of why.'}), 400
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn, body.get('tenant_id'))
+        if terr:
+            conn.close(); return terr
+        cur.execute("DELETE FROM Billing.Invoice_Line_Adjustment "
+                    "WHERE Tenant_ID = ? AND Year_Month = ? AND LOWER(User_UPN) = LOWER(?)",
+                    tid, ym, target)
+        if action != 'clear':
+            cur.execute(
+                "INSERT INTO Billing.Invoice_Line_Adjustment (Tenant_ID, Year_Month, User_UPN, "
+                " Action, Override_Value, Reason, Created_At, Created_By) VALUES (?,?,?,?,?,?,?,?)",
+                tid, ym, target, action, value, reason[:500],
+                datetime.utcnow().replace(microsecond=0), upn[:255])
+
+        st = _stripe()
+        status, _inv = _finalised_in_stripe(_billing(), st, cur, tid, ym)
+        if status:
+            conn.close()
+            return jsonify({'ok': True, 'regenerated': False, 'invoice_status': status,
+                            'note': f'Recorded. The {ym // 100}-{ym % 100:02d} invoice is already '
+                                    f'{status}, so the figures are unchanged until it is credited.'})
+        cur.execute("EXEC Billing.usp_Generate_Invoice_Lines @Year_Month = ?", ym)
+        cur.execute("SELECT COUNT(1), ISNULL(SUM(Value), 0) FROM Billing.Invoice_Line "
+                    "WHERE Tenant_ID = ? AND Year_Month = ?", tid, ym)
+        n, total = cur.fetchone()
+        conn.close()
+        return jsonify({'ok': True, 'regenerated': True, 'lines': n, 'total': float(total or 0)})
+    except Exception as e:
+        return _server_error(e, 'admin_billing_adjust')
+
+
+@app.route('/api/admin/billing/raise', methods=['POST'])
+def admin_billing_raise():
+    """Rebuild the month and raise (or re-raise) its Stripe DRAFT. Charges nothing.
+
+    Same posture as the command line: drafts only. Finalising is what takes the money and stays a
+    deliberate act in the Stripe dashboard, by a human who has read the figures.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    ym = _admin_ym()
+    if ym is None:
+        return jsonify({'error': 'Bad month'}), 400
+    try:
+        br = _billing(); br.new_run_id()
+        st = _stripe()
+        conn = _fabric_conn(); cur = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn, (request.get_json(silent=True) or {}).get('tenant_id'))
+        if terr:
+            conn.close(); return terr
+
+        status, inv_id = _finalised_in_stripe(br, st, cur, tid, ym)
+        if status:
+            conn.close()
+            return jsonify({'error': f'That invoice is already {status}. Credit it first, then '
+                                     f're-issue.'}), 409
+
+        cur.execute("EXEC Billing.usp_Generate_Invoice_Lines @Year_Month = ?", ym)
+        t = br.fetch_month(cur, ym).get(tid)
+        if not t:
+            conn.close()
+            return jsonify({'error': 'Nothing to bill for that month.'}), 409
+
+        has_card = False
+        if t['customer']:
+            c = st.Customer.retrieve(t['customer'], expand=['invoice_settings.default_payment_method'])
+            has_card = getattr(getattr(c, 'invoice_settings', None),
+                               'default_payment_method', None) is not None
+        why = br.blocked_reason(t, has_card)
+        if why:
+            conn.close(); return jsonify({'error': f'Cannot raise it: {why}.'}), 409
+
+        # Discard the old draft first, so the practice is never left holding two invoices for one
+        # month. Invoice.delete refuses anything but a draft, which is the safety we want.
+        if inv_id:
+            try:
+                st.Invoice.delete(inv_id)
+            except Exception as e:
+                conn.close()
+                return jsonify({'error': f'Could not discard the previous draft: {str(e)[:160]}'}), 409
+        # Belt and braces, exactly as the run does: Stripe may hold an invoice we lost the row for.
+        elif br.find_in_stripe(st, t['customer'], ym) is not None:
+            conn.close()
+            return jsonify({'error': 'Stripe already holds an invoice for that month that we have '
+                                     'no record of. Reconcile before raising another.'}), 409
+
+        inv = br.raise_draft(st, t, ym, br.vat_rate_id(st))
+        br.record(cur, t, ym, invoice=inv)
+        conn.close()
+        d = inv.to_dict()
+        app.logger.info('admin: %s raised draft %s for tenant %s %s', upn, inv.id, tid, ym)
+        return jsonify({'ok': True, 'invoice_id': inv.id, 'status': inv.status,
+                        'total': (d.get('total') or 0) / 100,
+                        'tax': br.invoice_tax_pence(inv) / 100,
+                        'lines': len(t['lines']), 'hosted_url': d.get('hosted_invoice_url')})
+    except Exception as e:
+        return _server_error(e, 'admin_billing_raise')
+
+
+@app.route('/api/admin/billing/credit-note', methods=['POST'])
+def admin_billing_credit_note():
+    """Credit an ISSUED invoice in full and refund it, reopening the month for a corrected one.
+
+    THE ONE PLACE IN THIS APP THAT RETURNS MONEY. It is billing_run.credit_note verbatim: full
+    credit, line by line so the VAT mirrors the invoice, refusing a draft, a void, or anything
+    already credited. The confirmation is the caller's job; the refusals are this code's.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    body   = request.get_json(silent=True) or {}
+    ym     = _admin_ym()
+    reason = (body.get('reason') or 'order_change').strip()
+    memo   = (body.get('memo') or '').strip()
+    if ym is None:
+        return jsonify({'error': 'Bad month'}), 400
+    if reason not in ('duplicate', 'fraudulent', 'order_change', 'product_unsatisfactory'):
+        return jsonify({'error': 'Bad reason'}), 400
+    if not memo:
+        memo = (f'Credit note for the Analytically subscription invoice for '
+                f'{ym // 100}-{ym % 100:02d}. A corrected invoice follows.')
+    try:
+        br = _billing(); br.new_run_id()
+        conn = _fabric_conn(); cur = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn, body.get('tenant_id'))
+        if terr:
+            conn.close(); return terr
+        out = _capture(br.credit_note, _stripe(), cur, tid, ym, reason, memo,
+                       to_balance=bool(body.get('to_balance')))
+        conn.close()
+        issued, text = out
+        app.logger.info('admin: %s credit-note tenant %s %s -> issued=%s', upn, tid, ym, issued)
+        return jsonify({'ok': bool(issued), 'issued': bool(issued), 'detail': text})
+    except Exception as e:
+        return _server_error(e, 'admin_billing_credit_note')
+
+
+def _capture(fn, *a, **kw):
+    """Run one of billing_run's functions and collect what it prints.
+
+    Those functions report by printing -- they were written for a human reading a terminal, and the
+    text is genuinely the best explanation of what happened and why something was refused. Rather
+    than duplicate that reasoning in two places and let the two drift, the console shows the same
+    words the command line would have.
+    """
+    import contextlib, io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        n = fn(*a, **kw)
+    return n, buf.getvalue().strip()
 
 
 if __name__ == '__main__':
