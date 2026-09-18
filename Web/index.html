@@ -2846,8 +2846,17 @@
     document.getElementById('targets-clear-btn').addEventListener('click', clearTargetGrid);
     document.getElementById('targets-fy').addEventListener('change', e => loadTargetGrid(+e.target.value));
     document.getElementById('assoc-pay-save-top').addEventListener('click', savePractitionerPay);
-    settingsOverlay.addEventListener('input', markDirty);
-    settingsOverlay.addEventListener('change', markDirty);
+    // Delegated, so every control in Settings marks the screen dirty -- except the Admin console,
+    // which has no Save button: each action there commits the moment it is taken, so there is
+    // nothing to lose by leaving. Without this, changing the month dropdown armed an
+    // "unsaved changes" prompt over work that had already been written to Stripe.
+    function _maybeDirty(e) {
+        const adm = document.getElementById('stab-admin');
+        if (adm && adm.contains(e.target)) return;
+        markDirty();
+    }
+    settingsOverlay.addEventListener('input', _maybeDirty);
+    settingsOverlay.addEventListener('change', _maybeDirty);
     // Catch an accidental refresh / tab-close / navigate-away while there are unsaved Settings edits.
     window.addEventListener('beforeunload', e => { if (_dirty) { e.preventDefault(); e.returnValue = ''; } });
 
