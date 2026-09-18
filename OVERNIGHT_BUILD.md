@@ -31,13 +31,30 @@ in §2 is retained as the alternative wiring if you ever prefer a pure-pipeline 
 
 Each stage runs only if the previous succeeded (Fabric "on success" dependency).
 
-**Demo vs real data (important):** today prod tenant 11 (and dev T11–T14) are loaded into
-**Stage** by the Python seeder (`API/seed_onelake.py --env dev|prod`), run
-out-of-band — there is **no live Dentally API extract** yet. So until the real API extract is
-wired, **Stage stage [1] is a placeholder** and the nightly job effectively runs [2]→[3]→[4]
-against the already-seeded Stage. Keep activity [1] in the pipeline but disabled/empty for now;
-swap in the Dentally extract pipeline when real data goes live. [2]→[4] still keep the snapshot
-spine + `Dim_Date` current every night, which is the actual fix for the stale-KPI problem.
+**Real data (updated 2026-09-18):** stage [1] is **live**, not a placeholder. `Ingest_Dentally`
+runs inside `Orchestrate_Build` against the Dentally API for the tenants in `Audit.Tenants`, and
+prod's nightly Bronze loads run against real practice data (Patients, Appointments, Treatment
+Plans, Users, Waiting Lists…) plus Xero. Bearer tokens live in Key Vault, not in
+`Audit.Tenants.API_Key`.
+
+`Audit.Tenants` holds **one tenant in each environment** — 100, Maple Dental. The synthetic mock
+tenants (1–4) and the seeded demo tenants (11–14) were **retired from `Audit.Tenants` on
+2026-07-29** so that dev mirrors prod: real data only. The seed file deletes and rebuilds the
+table on every deploy, so they cannot come back by accident.
+
+Two things that trip people up as a result:
+
+* **Prod has no tenant 11 at all** — no `Audit.Tenants` row and no rows in any Gold table. An
+  earlier version of this note said prod tenant 11 was loaded. It is not.
+* **Dev still holds tenant 11 *data*** — ~42.8k `Fact_Appointments` rows, 9 users, 8
+  practitioners, `Dim_Practice_Sites` "Valley Dental Group" — with **no `Audit.Tenants` row**.
+  It is therefore invisible to the app (tenant resolution and RLS both go through `Audit.Tenants`)
+  but still present in the warehouse. Kept deliberately: it is the **only** source of
+  `Gold.Fact_Finance` rows in dev, so deleting it would leave the Xero/Finance layer with nothing
+  exercising it, and `.claude/plans/t11-regression-fixture.md` plans to make it a deterministic
+  regression fixture. Any aggregate query that does not filter `Tenant_ID` will include it.
+
+`API/seed_onelake.py --env dev|prod` remains the way to regenerate that fixture.
 
 ---
 
