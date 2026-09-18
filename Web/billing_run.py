@@ -267,6 +267,73 @@ def refresh_status(st, cur, ym, prior):
     return prior
 
 
+def find_in_stripe(st, cust_id, ym):
+    """Any invoice Stripe already holds for this customer-month, found via invoice metadata.
+
+    THE SECOND GUARD, and the one that saves us when the first fails. Billing.Stripe_Invoice is the
+    primary idempotency control, but it is only as good as its contents: lose a row -- a bad
+    restore, a manual DELETE, a migration -- and the tenant-month looks unbilled, so the next run
+    would raise a SECOND invoice for a month the practice has already paid. Asking Stripe closes
+    that, because Stripe cannot lose its own invoices.
+
+    Uses list+filter rather than Invoice.search: search is index-backed and lags creation by
+    seconds to a minute, which is exactly the window a re-run happens in. Listing a customer's
+    invoices is immediate and exact, and a practice has one invoice a month.
+    """
+    if not cust_id:
+        return None
+    for inv in st.Invoice.list(customer=cust_id, limit=100).data:
+        md = inv.metadata.to_dict() if hasattr(inv.metadata, 'to_dict') else {}
+        if str(md.get('year_month')) == str(ym):
+            return inv
+    return None
+
+
+def reconcile(st, cur, ym):
+    """Make Billing.Stripe_Invoice agree with Stripe for this month. Stripe wins.
+
+    Stripe is the financial record: it holds invoices we cannot delete and statuses a human changed
+    in the dashboard. Our table is a local index of it, so where they disagree the table is what is
+    wrong.
+    """
+    cur.execute("SELECT Tenant_ID, Stripe_Customer_ID FROM Billing.Account_Billing "
+                "WHERE Stripe_Customer_ID IS NOT NULL")
+    customers = {r[0]: (r[1] or '').strip() for r in cur.fetchall() if (r[1] or '').strip()}
+    ours = already_raised(cur, ym)
+    fixed = 0
+    for tid, cust in sorted(customers.items()):
+        inv  = find_in_stripe(st, cust, ym)
+        mine = ours.get(tid)
+        if inv is None and mine is None:
+            continue
+        if inv is None:
+            print(f'  tenant {tid}: we record {mine["invoice"]} but Stripe has no invoice for '
+                  f'this month -- clearing the row')
+            cur.execute("DELETE FROM Billing.Stripe_Invoice WHERE Tenant_ID = ? AND Year_Month = ?",
+                        tid, ym)
+            fixed += 1
+            continue
+        if mine is None:
+            print(f'  tenant {tid}: Stripe holds {inv.id} ({inv.status}) with NO row here '
+                  f'-- restoring it')
+        elif mine['invoice'] != inv.id or (mine['status'] or '') != inv.status:
+            print(f'  tenant {tid}: {mine["invoice"]}/{mine["status"]} -> {inv.id}/{inv.status}')
+        else:
+            continue
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        cur.execute("DELETE FROM Billing.Stripe_Invoice WHERE Tenant_ID = ? AND Year_Month = ?",
+                    tid, ym)
+        cur.execute(
+            "INSERT INTO Billing.Stripe_Invoice (Tenant_ID, Year_Month, Stripe_Invoice_ID, "
+            " Stripe_Customer_ID, Status, Amount_Pence, Currency, Line_Count, Error_Message, "
+            " Created_At, Updated_At) VALUES (?,?,?,?,?,?,?,?,NULL,?,?)",
+            tid, ym, inv.id, cust, inv.status, inv.total, 'gbp',
+            len(inv.lines.data) if getattr(inv, 'lines', None) else None, now, now)
+        fixed += 1
+    print(f'  {fixed} row(s) corrected' if fixed else '  already in agreement with Stripe')
+    return fixed
+
+
 def record(cur, t, ym, invoice=None, error=None):
     """Record the Stripe side of a tenant-month.
 
@@ -327,6 +394,8 @@ def main():
     ap.add_argument('--year-month', type=int, default=None, help='YYYYMM; default = month just ended')
     ap.add_argument('--dry-run', action='store_true', help='compute and report, change nothing')
     ap.add_argument('--status', action='store_true', help='show what has already been raised')
+    ap.add_argument('--reconcile', action='store_true',
+                    help='make our table agree with Stripe for this month (Stripe wins)')
     args = ap.parse_args()
     ym = args.year_month or last_month()
 
@@ -335,6 +404,10 @@ def main():
     cur = cn.cursor()
     print(f'billing run [{APP_ENV}]  month {ym // 100}-{ym % 100:02d}'
           f'{"  (DRY RUN -- nothing will change)" if args.dry_run else ""}')
+
+    if args.reconcile:
+        reconcile(stripe_client(), cur, ym)
+        return 0
 
     if args.status:
         prior = already_raised(cur, ym)
@@ -393,6 +466,24 @@ def main():
             head  = f'  {t["name"]} (tenant {tid}): {len(t["lines"])} line(s), £{gross:.2f} inc. VAT'
 
             existing = prior.get(tid)
+
+            # Belt and braces: even with no row here, Stripe may already hold an invoice for this
+            # month -- our row could have been lost. Raising a second one would bill a practice
+            # twice for the same period, which is the failure that matters most.
+            if not existing and not args.dry_run:
+                orphan = find_in_stripe(st, t['customer'], ym)
+                if orphan is not None:
+                    print(f'{head}  -> Stripe already holds {orphan.id} ({orphan.status}) for this '
+                          f'month with no row here; recording it and skipping')
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                    cur.execute("INSERT INTO Billing.Stripe_Invoice (Tenant_ID, Year_Month, "
+                                " Stripe_Invoice_ID, Stripe_Customer_ID, Status, Amount_Pence, "
+                                " Currency, Line_Count, Created_At, Updated_At) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                                tid, ym, orphan.id, t['customer'], orphan.status, orphan.total,
+                                'gbp', len(t['lines']), now, now)
+                    continue
+
             if existing and tid in finalised:
                 print(f'{head}  -> SKIPPED: {existing["invoice"]} is {existing["status"]}, '
                       f'already sent to the practice')

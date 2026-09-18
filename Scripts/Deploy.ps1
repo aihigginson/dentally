@@ -23,7 +23,11 @@
 #   EXEC     <tsql>   Run an inline T-SQL batch. i.e. RUN a proc / reload /
 #                     backfill / regenerate views. The whole remainder of the
 #                     line is sent as one batch (declare OUT params inline).
-#   TEST    [plain]   Run Scripts\Run_Tests.ps1 as a gate (no -Promote;
+#   TEST    [plain]   Run Scripts\Run_Tests.ps1 as a gate. SKIPPED UNLESS -RunTests IS PASSED
+#                     (changed 18/09/2026 -- the gate is CU-expensive on a shared F4 and was
+#                      being paid on every deploy regardless of risk). A manifest may still
+#                      carry a TEST line; it simply does nothing without the switch.
+#                     (no -Promote;
 #                     promotion stays a deliberate human step). Fails the
 #                     deploy if the tests fail.
 #
@@ -43,7 +47,21 @@ param(
     [Parameter(Mandatory = $true)][string] $Manifest,
     [switch] $WhatIf,
     [switch] $Log,
-    [switch] $SkipTests    # skip the TEST regression gate (e.g. wide-sweeping schema changes on
+    [switch] $RunTests,    # RUN the TEST regression gate. OFF BY DEFAULT since 18/09/2026: the
+                           # gate deploys the 11-file test framework, captures and compares on every
+                           # invocation, which is a real slice of a shared F4 -- four deploys in one
+                           # day helped push the capacity into throttling and took the reports down.
+                           # Most manifests are a guarded ALTER or a seed change and do not warrant
+                           # it. Ask for it deliberately on anything that reshapes the build.
+                           # While pre-revenue an F8 is not an option, so CU is spent on purpose.
+                           #
+                           # ==> REVERT THIS AT GO-LIVE. <== The trade only holds because releases
+                           # currently land several times a day against no paying customers. Once
+                           # live, releases are infrequent and every change is gated: the CU cost
+                           # becomes trivial per release and the risk of an ungated one becomes
+                           # real. Make -RunTests the default again (or drop the switch) rather
+                           # than relying on whoever deploys to remember to pass it.
+    [switch] $SkipTests    # retained for compatibility; the gate is off by default now, so this is
                            # synthetic data that is itself about to be regenerated -- the gate only
                            # checks small fixes didn't disturb the build, which doesn't apply then)
 )
@@ -229,8 +247,9 @@ try {
                 # Run_Tests authenticates with the SP client secret (dev). Prod connects via a
                 # pre-acquired OIDC token (FABRIC_ACCESS_TOKEN) and has no SP secret, and prod is
                 # verified separately -- so skip the inline gate when a pre-acquired token is in use.
-                if ($SkipTests) {
-                    Write-Host "$tag  skipped (-SkipTests)" -ForegroundColor Yellow
+                if ($SkipTests -or -not $RunTests) {
+                    $why = if ($SkipTests) { '-SkipTests' } else { 'default; pass -RunTests to run it' }
+                    Write-Host "$tag  skipped ($why)" -ForegroundColor Yellow
                 }
                 elseif ($PreToken) {
                     Write-Host "$tag  skipped (pre-acquired token / prod; verified separately)" -ForegroundColor Yellow
