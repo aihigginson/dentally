@@ -1,4 +1,4 @@
---DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC [Meta].[usp_Sync_Access_From_AppDB] @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC [Meta].[usp_Sync_Access_From_AppDB] @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 -----------------------------------------------------------------------------------------------------
 --    Stored Procedure : Meta.usp_Sync_Access_From_AppDB
 --    Author           : AIH
@@ -122,7 +122,7 @@ BEGIN
         INSERT INTO [Security].[Access_Log] (Tenant_ID, User_UPN, Profile_Key, Effective_At, Changed_By)
         SELECT src.Tenant_ID, src.User_UPN, src.Profile_Key, src.Effective_At, src.Changed_By
         FROM [Input_Stage].[Access_Log] src
-        LEFT JOIN [Security].[Access_Log] tgt ON tgt.User_UPN = src.User_UPN AND tgt.Effective_At = src.Effective_At AND tgt.Profile_Key = src.Profile_Key
+        LEFT JOIN [Security].[Access_Log] tgt ON LOWER(LTRIM(RTRIM(tgt.User_UPN))) = LOWER(LTRIM(RTRIM(src.User_UPN))) AND tgt.Effective_At = src.Effective_At AND tgt.Profile_Key = src.Profile_Key
         WHERE tgt.User_UPN IS NULL;
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
     END TRY
