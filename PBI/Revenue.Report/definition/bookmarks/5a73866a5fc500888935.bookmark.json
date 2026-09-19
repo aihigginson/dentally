@@ -13,7 +13,8 @@
       "2291c66f67b0093c5ce8",
       "553a234395511b50b112",
       "35da7ab5d003a991bd8d",
-      "75b829ab6ee608ddc022"
+      "75b829ab6ee608ddc022",
+      "6af642ed5ff4439ab1e1"
     ],
     "suppressData": true
   },
@@ -96,6 +97,15 @@
             "singleVisual": {
               "visualType": "actionButton",
               "objects": {}
+            }
+          },
+          "6af642ed5ff4439ab1e1": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           }
         }

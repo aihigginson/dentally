@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "By Category",
-  "name": "18fca6a35144be4fca39",
+  "displayName": "Contribution",
+  "name": "93e612c8b3d0427d8921",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -27,13 +27,19 @@
           "45d512a640162d50a944": {
             "singleVisual": {
               "visualType": "columnChart",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "ac8e94c4e406705e3499": {
             "singleVisual": {
               "visualType": "slicer",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "f9e62a7305b3b2d2c389": {
@@ -102,10 +108,7 @@
           "6af642ed5ff4439ab1e1": {
             "singleVisual": {
               "visualType": "tableEx",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           }
         }
