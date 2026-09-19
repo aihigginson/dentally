@@ -1,4 +1,4 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Patients
 --  Author           :  AIH
 --  Initital Date    :  29/04/2026
@@ -40,6 +40,7 @@ BEGIN
             , LEFT(active,                             255)         AS Active
             , LEFT(first_name,                    255)            AS First_Name
             , LEFT(last_name,                     255)            AS Last_Name
+            , LEFT(date_of_birth,                 255)            AS Date_Of_Birth
             , LEFT(email_address,                 255)            AS Email_Address
             , LEFT(mobile_phone,                  255)            AS Mobile_Phone
             , LEFT(home_phone,                    255)            AS Home_Phone
@@ -69,6 +70,7 @@ BEGIN
             , tgt.Active                   = src.Active
             , tgt.First_Name               = src.First_Name
             , tgt.Last_Name                = src.Last_Name
+            , tgt.Date_Of_Birth            = src.Date_Of_Birth
             , tgt.Email_Address            = src.Email_Address
             , tgt.Mobile_Phone             = src.Mobile_Phone
             , tgt.Home_Phone               = src.Home_Phone
@@ -101,6 +103,7 @@ BEGIN
             Active,
             First_Name,
             Last_Name,
+            Date_Of_Birth,
             Email_Address,
             Mobile_Phone,
             Home_Phone,
@@ -130,6 +133,7 @@ BEGIN
             src.Active,
             src.First_Name,
             src.Last_Name,
+            src.Date_Of_Birth,
             src.Email_Address,
             src.Mobile_Phone,
             src.Home_Phone,

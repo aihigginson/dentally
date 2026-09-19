@@ -1,4 +1,4 @@
-/****** Object:  Table [Silver].[Patients]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Silver].[Patients]    Script Date: 20/04/2026 10:15:06 ******/
 -- Data-minimised patient table (V011, 2026-06-17). Special-category and excess-
 -- identifier fields removed (Title/Middle name, DOB, Gender, Ethnicity, NHS/NI/PPS
 -- numbers, phone country codes, Work phone, full Address, Custom fields, Status,
@@ -23,6 +23,7 @@ CREATE TABLE [Silver].[Patients](
 	[First_Name] [VARCHAR](100) NULL,
 	[Last_Name] [VARCHAR](100) NULL,
 	[Preferred_Name] [VARCHAR](100) NULL,
+	[Date_Of_Birth] [DATE] NULL,
 	[Email_Address] [VARCHAR](255) NULL,
 	[Mobile_Phone] [VARCHAR](50) NULL,
 	[Home_Phone] [VARCHAR](50) NULL,

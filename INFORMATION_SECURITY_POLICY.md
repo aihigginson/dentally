@@ -26,7 +26,7 @@ held by different people.
 - **Confidential — patient/practice data:** identity & contact details (active patients),
   appointment, treatment (structured codes/categories/values only), and financial data.
 - **By design we do NOT hold** special-category/health-identifying data or free-text
-  clinical content (no clinical notes, medical history, NHS/NI numbers, DOB, gender,
+  clinical content (no clinical notes, medical history, NHS/NI numbers, gender,
   ethnicity, full address, images or correspondence) — removed end-to-end (releases
   V011–V012) and verified in the regression suite. Inactive patients are pseudonymised
   in the analytics layer (V013–V014). See the DPIA §2/§7.

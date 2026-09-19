@@ -18,8 +18,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "dentally_data")
 
 # Special-category / PII to NEVER land (DPIA V011/V012). Patients.
+# ==> date_of_birth was REMOVED from this list by V171 and IS now landed. <== It is the one
+# field brought back from the V011 minimisation, on a deliberate decision recorded in
+# DPIA.md 7.3: without it the warehouse cannot tell an adult from a child, which blocks NHS
+# banding, age-appropriate recall intervals, and judging whether a patient with no contact
+# details is a child reachable through a parent. Nothing else on this list has moved.
 PII_DROP = {
-    "date_of_birth", "gender", "ethnicity", "nhs_number", "ni_number", "pps_number",
+    "gender", "ethnicity", "nhs_number", "ni_number", "pps_number",
     "medical_alert", "medical_alert_text", "special_needs", "occupation", "school_name",
     "emergency_contact_name", "emergency_contact_phone", "emergency_contact_phone_country",
     "emergency_contact_phone_normalized", "emergency_contact_relationship",
