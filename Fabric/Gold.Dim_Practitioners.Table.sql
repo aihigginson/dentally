@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Gold].[Dim_Practitioners]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -20,6 +20,7 @@ CREATE TABLE [Gold].[Dim_Practitioners](
 	[Role] [VARCHAR](100) NULL,
 	[Custom_Role] [varchar](100) NULL,
 	[FTE] [DECIMAL](4,2) NULL,
+	[Associate_Pct]          [decimal](6,3)  NULL,   -- associate pay share, whole percent; NULL = no rate recorded (keeps all revenue)
 	[Permission_Level] [int] NULL,
 	[Active] [bit] NULL,
 	[Colour] [VARCHAR](50) NULL,

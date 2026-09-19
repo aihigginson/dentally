@@ -1,0 +1,57 @@
+# =====================================================================
+# Release V170 -- carry the associate pay % onto Gold.Dim_Practitioners
+# =====================================================================
+# Adds Associate_Pct (whole percent, as entered on the app's Finance settings page) to the
+# practitioner dimension, so the model can split revenue per practitioner.
+#
+# WHY HERE AND NOT A NEW TABLE. The rate already exists in Input.Practitioner_Pay, and
+# Gold.Aggregate_Practitioner_Contribution already applies it -- but only to PRODUCTION
+# (SUM(Fact_Invoice_Items.Total_Price)), which is invoice-priced and therefore EXCLUDES NHS/UDA
+# income and plan capitation. The new Earnings/Contribution measures are wanted on Total Revenue,
+# which includes both. Rather than rebuild that aggregate on a wider base, the rate rides on the
+# dimension that the revenue fact ALREADY joins to -- so there is no new relationship to wire into
+# the semantic model, and the split can be evaluated per practitioner in DAX over any revenue base.
+#
+# NULL IS NOT ZERO. A practitioner with no rate recorded -- a principal, typically -- is left NULL
+# and keeps the whole of their revenue. That is the same assumption
+# Gold.Aggregate_Practitioner_Contribution already makes, and writing 0 instead would mean the same
+# thing here but the opposite thing if the column were ever read as "their share".
+#
+# ==> FIVE PLACES, AND MISSING ONE IS SILENT. <== The load is a hash-gated MERGE:
+#   * the #src SELECT        -- where the value comes from (Practitioner_PAY; note FTE beside it
+#                               comes from Practitioner_ROLE, and both Input tables carry an FTE
+#                               column, which is an easy mis-read)
+#   * the UPDATE SET list    -- or an edited rate never reaches an existing practitioner
+#   * BOTH sides of the hash -- omit either and a rate change hashes identical, so the MERGE skips
+#                               the row: the rate would update for new practitioners only, and
+#                               changing an existing one would appear to do nothing
+#   * the INSERT column list -- or a newly-arrived practitioner lands with a NULL rate
+#
+# The PBI view is regenerated so 'List Practitioners' exposes the column; the semantic model still
+# needs the table refreshed in Power BI Desktop before the column appears there.
+#
+# Guarded ALTER, so idempotent and safe to re-run.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V170__associate_pct_on_dim_practitioners.manifest
+# =====================================================================
+
+# The column is added by a GUARDED ALTER, NOT by deploying Gold.Dim_Practitioners.Table.sql.
+# That file opens with DROP TABLE IF EXISTS -- it is the canonical full-rebuild script. Dropping
+# this dimension would reassign every pk_Practitioner (the load numbers them from
+# MAX(pk)+ROW_NUMBER()), and the facts that reference them are HASH-GATED: unchanged fact rows are
+# skipped on reload, so their fk_Practitioner would keep pointing at surrogate keys that now mean a
+# different person. Silent, and wrong in the reports rather than in an error. The canonical file
+# carries the column too, so a genuine full rebuild includes it.
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practitioners' AND COLUMN_NAME='Associate_Pct') ALTER TABLE [Gold].[Dim_Practitioners] ADD [Associate_Pct] [decimal](6,3) NULL;
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+# Gold.vw_Dim_Practitioners OVERRIDES the table: Meta.usp_Create_Gold_Views skips a Gold table
+# whenever a vw_<table> exists, so PBI.[List Practitioners] is generated from this view's
+# explicit column list. Adding the column to the TABLE alone leaves the model unable to see it
+# -- which is exactly what happened on the first run of this release.
+DEPLOY   Fabric\Gold.vw_Dim_Practitioners.View.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Practitioners @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
