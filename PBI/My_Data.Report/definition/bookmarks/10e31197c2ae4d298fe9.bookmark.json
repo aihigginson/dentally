@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Show Revenue",
-  "name": "e0937b362042d398b93d",
+  "displayName": "Earnings",
+  "name": "10e31197c2ae4d298fe9",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -229,6 +229,9 @@
                     }
                   }
                 ]
+              },
+              "display": {
+                "mode": "hidden"
               }
             }
           },
@@ -611,10 +614,7 @@
           "c6edb867631e411d9ccc": {
             "singleVisual": {
               "visualType": "tableEx",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
+              "objects": {}
             }
           }
         }

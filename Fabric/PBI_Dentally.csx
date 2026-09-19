@@ -1718,12 +1718,45 @@ VAR _rev = CALCULATE([Total Revenue], REMOVEFILTERS('List Date'), REMOVEFILTERS(
 RETURN DIVIDE(_rev, 52)",
     "£#,##0");
 
-// Earnings: the practitioner's own pay -- production x their associate rate. Already materialised
-// in Gold.Aggregate_Practitioner_Contribution[Associate_Pay] (= Production * Associate_Pct/100 from
-// admin-entered Input.Practitioner_Pay), so this is a straight SUM. Reads 0 until the owner enters
-// each associate's Associate_Pct in the app; rates are stored as whole percent (the load divides by 100).
+// ---------------------------------------------------------------------------------------------
+// Earnings / Contribution -- splitting revenue between the fee-earner and the practice.
+//
+// Earnings      = the fee-earner's own share    = Associate_Pct% x their revenue
+// Contribution  = what the practice retains     = the rest
+//
+// ON TOTAL REVENUE, NOT PRODUCTION. Earnings previously read
+// SUM('Aggregate Practitioner Contribution'[Associate Pay]), which applies the rate to Production
+// (SUM of Fact_Invoice_Items.Total_Price). Production is invoice-priced, so it EXCLUDES NHS/UDA
+// income and plan capitation -- an NHS-heavy practitioner's earnings were understated, silently.
+// V170 carries Associate_Pct onto List Practitioners so the same rate can be applied to whatever
+// revenue base is in context.
+//
+// PER PRACTITIONER, NOT ON THE TOTAL. Rates differ per person, so the split has to be evaluated
+// one practitioner at a time and summed -- applying an average rate to a total would be wrong
+// wherever a mix of rates is in context, which is every practice-level figure on the page.
+// CALCULATE inside SUMX does the context transition, so both the rate and the revenue are
+// evaluated for that single practitioner.
+//
+// A BLANK rate contributes BLANK, which SUMX skips -- so a principal with no rate recorded earns
+// nothing here and keeps the lot, the same assumption Gold.Aggregate_Practitioner_Contribution
+// already makes. That is why the rate is left NULL rather than defaulted to 0.
 add("Earnings",
-    @"SUM('Aggregate Practitioner Contribution'[Associate Pay])",
+    @"SUMX(
+    VALUES('List Practitioners'[pk Practitioner]),
+    VAR _pct = CALCULATE(MAX('List Practitioners'[Associate Pct]))
+    VAR _rev = CALCULATE([Total Revenue])
+    RETURN _rev * DIVIDE(_pct, 100)
+)",
+    "£#,##0");
+
+// Contribution is deliberately the RESIDUAL, not (1 - rate) x revenue computed in parallel.
+// Computing both from the rate would silently drop any revenue that has no practitioner attached
+// (the unknown -1 member, or a fact row whose fk never resolved): it would appear in neither
+// figure, and the two would quietly fail to reconcile to Total Revenue. As a residual they add up
+// by construction, and unattributed revenue lands in Contribution -- where the practice, which is
+// the party that actually keeps it, can see it.
+add("Contribution",
+    @"[Total Revenue] - [Earnings]",
     "£#,##0");
 
 add("NHS Revenue",
