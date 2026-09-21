@@ -19,10 +19,24 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+    <link rel="preload" href="/fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
     <style>
+    /* Fonts are SELF-HOSTED, deliberately. Linking fonts.googleapis.com sends every visitor's IP
+       to Google before the consent banner has been answered, which sits badly with a site that
+       publishes a DPIA and runs Consent Mode v2. Both families are SIL OFL, so redistributing
+       them is permitted. IBM Plex Sans and Source Serif 4 are variable fonts -- one file each
+       covers the whole weight range, which is why the weight is declared as a range. */
+    @font-face{font-family:'Source Serif 4';font-style:normal;font-weight:400 700;font-display:swap;
+      src:url('/fonts/source-serif-4.woff2') format('woff2')}
+    @font-face{font-family:'Source Serif 4';font-style:italic;font-weight:400 700;font-display:swap;
+      src:url('/fonts/source-serif-4-italic.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400 600;font-display:swap;
+      src:url('/fonts/ibm-plex-sans.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+      src:url('/fonts/ibm-plex-mono-400.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;
+      src:url('/fonts/ibm-plex-mono-600.woff2') format('woff2')}
     :root{
       /* Brand, as used by the app and the rest of the site */
       --navy:#1A527A; --navy-deep:#163F5E; --teal:#5EC4C0; --teal-deep:#2E8C88;
