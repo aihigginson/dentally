@@ -15,3 +15,4 @@
 - [Local app tests can't read Key Vault](local-app-tests-cant-read-key-vault.md) — load_dotenv puts AZURE_* back; pop them after importing app.
 - [Don't re-raise settled decisions](dont-re-raise-settled-decisions.md) — flag a risk once; stop listing it as "remaining" every turn.
 - [Fabric is canonical for notebooks and pipelines](fabric-is-canonical-for-notebooks-and-pipelines.md) — repo copies are reference; promote dev→prod with the deployment pipeline.
+- [Just do the thing](just-do-the-thing.md) — act first; one line of caveat, not a menu of options.
