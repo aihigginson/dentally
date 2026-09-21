@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Patients] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Silver].[usp_Load_Patients] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Silver.usp_Load_Patients
 --  Author           :  AIH
@@ -59,6 +59,7 @@ BEGIN
                     ISNULL(CAST(staged.[First_Name] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Last_Name] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Preferred_Name] AS VARCHAR(500)), ''),
+                    ISNULL(CAST(staged.[Date_Of_Birth] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Email_Address] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Mobile_Phone] AS VARCHAR(500)), ''),
                     ISNULL(CAST(staged.[Home_Phone] AS VARCHAR(500)), ''),
@@ -94,6 +95,9 @@ BEGIN
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(First_Name,    100) ELSE 'Inactive' END AS First_Name,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Last_Name,     100) ELSE 'Patient'  END AS Last_Name,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Name,100) END AS Preferred_Name,
+                    -- V013 gating applies: DOB is an IDENTIFIER, so an inactive patient keeps none,
+                    -- exactly as they keep no name, phone or email.
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN TRY_CAST(NULLIF(TRIM(Date_Of_Birth),'') AS DATE) END AS Date_Of_Birth,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN Email_Address            END AS Email_Address,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Mobile_Phone,   50) END AS Mobile_Phone,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Home_Phone,     50) END AS Home_Phone,
@@ -146,6 +150,7 @@ BEGIN
             [First_Name] = src.[First_Name],
             [Last_Name] = src.[Last_Name],
             [Preferred_Name] = src.[Preferred_Name],
+            [Date_Of_Birth] = src.[Date_Of_Birth],
             [Email_Address] = src.[Email_Address],
             [Mobile_Phone] = src.[Mobile_Phone],
             [Home_Phone] = src.[Home_Phone],
@@ -171,9 +176,9 @@ BEGIN
         WHERE tgt.[_Row_Hash] <> src._Hash;
         SET @My_Updates = @@ROWCOUNT;
 
-        INSERT INTO [Silver].[Patients] ([Tenant_ID], [Patient_ID], [Account_ID], [Site_ID], [Active], [First_Name], [Last_Name], [Preferred_Name], [Email_Address], [Mobile_Phone], [Home_Phone], [Use_Email], [Use_SMS], [Preferred_Phone], [Marketing_Opt_In], [Dentist_Practitioner_ID], [Hygienist_Practitioner_ID], [Payment_Plan_ID], [Acquisition_Source_ID], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Created_At], [Updated_At],
+        INSERT INTO [Silver].[Patients] ([Tenant_ID], [Patient_ID], [Account_ID], [Site_ID], [Active], [First_Name], [Last_Name], [Preferred_Name], [Date_Of_Birth], [Email_Address], [Mobile_Phone], [Home_Phone], [Use_Email], [Use_SMS], [Preferred_Phone], [Marketing_Opt_In], [Dentist_Practitioner_ID], [Hygienist_Practitioner_ID], [Payment_Plan_ID], [Acquisition_Source_ID], [Dentist_Recall_Date], [Dentist_Recall_Interval], [Hygienist_Recall_Date], [Hygienist_Recall_Interval], [Recall_Method], [Created_At], [Updated_At],
                 [DW_Created_At], [DW_Updated_At], [_Row_Hash])
-        SELECT src.[Tenant_ID], src.[Patient_ID], src.[Account_ID], src.[Site_ID], src.[Active], src.[First_Name], src.[Last_Name], src.[Preferred_Name], src.[Email_Address], src.[Mobile_Phone], src.[Home_Phone], src.[Use_Email], src.[Use_SMS], src.[Preferred_Phone], src.[Marketing_Opt_In], src.[Dentist_Practitioner_ID], src.[Hygienist_Practitioner_ID], src.[Payment_Plan_ID], src.[Acquisition_Source_ID], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Created_At], src.[Updated_At],
+        SELECT src.[Tenant_ID], src.[Patient_ID], src.[Account_ID], src.[Site_ID], src.[Active], src.[First_Name], src.[Last_Name], src.[Preferred_Name], src.[Date_Of_Birth], src.[Email_Address], src.[Mobile_Phone], src.[Home_Phone], src.[Use_Email], src.[Use_SMS], src.[Preferred_Phone], src.[Marketing_Opt_In], src.[Dentist_Practitioner_ID], src.[Hygienist_Practitioner_ID], src.[Payment_Plan_ID], src.[Acquisition_Source_ID], src.[Dentist_Recall_Date], src.[Dentist_Recall_Interval], src.[Hygienist_Recall_Date], src.[Hygienist_Recall_Interval], src.[Recall_Method], src.[Created_At], src.[Updated_At],
                 SYSUTCDATETIME(), SYSUTCDATETIME(), src._Hash
         FROM #src AS src
         WHERE NOT EXISTS (

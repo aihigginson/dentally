@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Gold].[Dim_Patients]    Script Date: 20/04/2026 10:15:06 ******/
 -- Data-minimised patient dimension (V011, 2026-06-17). Special-category and
 -- excess-identifier fields removed (NHS/NI/PPS numbers, Ethnicity, DOB/Age,
 -- Gender, Medical Alert, full Address, Emergency Contact, Title/Middle name,
@@ -22,6 +22,8 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Last_Name]                          [varchar](100)  NULL,
     [Preferred_Name]                     [varchar](100)  NULL,
     [Full_Name]                          [varchar](255)  NULL,
+    [Date_Of_Birth]                      [date]          NULL,   -- V171: re-landed after V011; see DPIA 7.3
+    [Age]                                [int]           NULL,   -- derived AS AT THE LOAD, so at most a day stale
     [Email_Address]                      [varchar](255)  NULL,
     [Home_Phone]                         [varchar](50)   NULL,
     [Mobile_Phone]                       [varchar](50)   NULL,

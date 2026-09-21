@@ -1,0 +1,69 @@
+# =====================================================================
+# Release V171 -- re-land patient date of birth
+# =====================================================================
+# ==> THIS REVERSES PART OF V011, AND V011 WAS A DPIA DECISION. <== Read that before deploying.
+#
+# DPIA.md 7.3 listed Date of Birth/Age under "Not required -- now removed (V011, 2026-06-17)" and
+# stated the removal was verified end-to-end on dev and production. That claim is no longer true
+# for this field, so DPIA.md, INFORMATION_SECURITY_POLICY.md and DENTALLY_RECONCILIATION.md are
+# updated in the same commit. Those documents are customer-facing: shipping the data change without
+# them would leave three compliance documents stating something false about what we process.
+#
+# WHY IT WAS REVERSED, on a deliberate decision (2026-09-19): without DOB the warehouse cannot tell
+# an adult from a child. That blocks NHS banding, age-appropriate recall intervals, and -- the case
+# that raised it -- judging whether a patient with no contact details is a child who is reachable
+# through a parent or an adult who is genuinely stranded. The question was asked of 19 active
+# patients with no phone and no email and could not be answered at all.
+#
+# ONLY THIS FIELD MOVED. gender, ethnicity, nhs_number, ni_number, pps_number, medical_alert,
+# special_needs, occupation, school_name, emergency contacts, proof_of_identification,
+# suspicious_identity, image_url and metadata all remain in PII_DROP, and V012's removal of every
+# free-text clinical field is untouched.
+#
+# IT INHERITS V013 GATING. DOB is an identifier, so Silver holds it for ACTIVE patients only --
+# an inactive patient keeps no DOB, exactly as they keep no name, phone or email.
+#
+# AGE IS DERIVED IN THE GOLD LOAD, not in each report, so they cannot disagree, and it is stored
+# rather than computed in DAX so it can drive a slicer. It is AS AT THE LOAD -- at most a day stale,
+# which never matters for banding but would for an exact birthday. Age is in BOTH sides of the
+# change hash on purpose: without it a row only updates when something else changes, so a patient's
+# age would freeze at whatever it was the day the row was written.
+#
+# ==> STAGE MUST BE RE-INGESTED FIRST. <== The field is not in OneLake at all -- the transform has
+# been dropping it since V011 -- so Bronze has nothing to read until Ingest_Dentally has run with
+# the updated notebook. Order:
+#   1. update Ingest_Dentally IN FABRIC (Fabric is canonical for notebooks; the repo copy is
+#      reference) and promote dev->prod with the DEV TO PROD deployment pipeline
+#   2. clear Bronze.Patients for the tenant -- the ingest takes its watermark from
+#      MAX(Bronze.Patients.Updated_At), so an empty table forces the cold-start FULL pull that an
+#      incremental run would never do for patients whose records have not changed
+#   3. run the nightly build   4. deploy this   5. re-run the Bronze->Silver->Gold chain.
+#
+# Gold.Dim_Patients is altered by a GUARDED ALTER, never by deploying its Table.sql -- that file
+# opens with DROP TABLE IF EXISTS and dropping the dimension would reassign every pk_Patient, which
+# the hash-gated facts would not re-resolve.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V171__ingest_date_of_birth.manifest
+# =====================================================================
+
+# ==> THE STAGE VIEW MUST BE REBUILT FIRST. <== Stage.Patients is `SELECT * FROM
+# LH_Dentally.dbo.stage_patients`, and SQL binds a SELECT * view's column list at CREATE time. The
+# ingest lands date_of_birth in the lakehouse table, but the view keeps serving the old column list
+# until it is recreated -- so the warehouse cannot see the column and
+# Bronze.usp_Load_Patients fails to compile with "Invalid column name 'date_of_birth'". That is not
+# a hypothetical: it is exactly how this release failed on its first run.
+DEPLOY   Fabric\Stage.Views.sql
+
+DEPLOY   Fabric\Bronze.Patients.Table.sql
+DEPLOY   Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Silver.Patients.Table.sql
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Date_Of_Birth') ALTER TABLE [Gold].[Dim_Patients] ADD [Date_Of_Birth] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Age') ALTER TABLE [Gold].[Dim_Patients] ADD [Age] [int] NULL;
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
