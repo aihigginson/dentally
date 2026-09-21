@@ -31,8 +31,13 @@
 #
 # ==> STAGE MUST BE RE-INGESTED FIRST. <== The field is not in OneLake at all -- the transform has
 # been dropping it since V011 -- so Bronze has nothing to read until Ingest_Dentally has run with
-# the regenerated notebook. Deploying this before a fresh ingest lands the column empty. Order:
-#   1. publish Fabric/Notebooks/Ingest_Dentally.ipynb  2. run it  3. deploy this  4. refresh the model.
+# the updated notebook. Order:
+#   1. update Ingest_Dentally IN FABRIC (Fabric is canonical for notebooks; the repo copy is
+#      reference) and promote dev->prod with the DEV TO PROD deployment pipeline
+#   2. clear Bronze.Patients for the tenant -- the ingest takes its watermark from
+#      MAX(Bronze.Patients.Updated_At), so an empty table forces the cold-start FULL pull that an
+#      incremental run would never do for patients whose records have not changed
+#   3. run the nightly build   4. deploy this   5. re-run the Bronze->Silver->Gold chain.
 #
 # Gold.Dim_Patients is altered by a GUARDED ALTER, never by deploying its Table.sql -- that file
 # opens with DROP TABLE IF EXISTS and dropping the dimension would reassign every pk_Patient, which
@@ -40,6 +45,14 @@
 #
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V171__ingest_date_of_birth.manifest
 # =====================================================================
+
+# ==> THE STAGE VIEW MUST BE REBUILT FIRST. <== Stage.Patients is `SELECT * FROM
+# LH_Dentally.dbo.stage_patients`, and SQL binds a SELECT * view's column list at CREATE time. The
+# ingest lands date_of_birth in the lakehouse table, but the view keeps serving the old column list
+# until it is recreated -- so the warehouse cannot see the column and
+# Bronze.usp_Load_Patients fails to compile with "Invalid column name 'date_of_birth'". That is not
+# a hypothetical: it is exactly how this release failed on its first run.
+DEPLOY   Fabric\Stage.Views.sql
 
 DEPLOY   Fabric\Bronze.Patients.Table.sql
 DEPLOY   Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
