@@ -7,139 +7,458 @@
     <script src="/consent.js"></script>
     <!-- First-touch marketing attribution capture (UTM / gclid / referrer) -->
     <script src="/attribution.js"></script>
-    <title>Analytically — Dental practice analytics</title>
-    <meta name="description" content="Analytically turns your Dentally practice data into clear, secure dashboards and operational lists.">
+    <title>Analytically — the business half of your Dentally</title>
+    <meta name="description" content="Dentally books the appointments. Analytically reads the same data and tells a practice owner how the business is doing — and who to phone today. 30-day free trial.">
+    <link rel="canonical" href="https://analytically.info/">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://analytically.info/">
+    <meta property="og:title" content="Analytically — the business half of your Dentally">
+    <meta property="og:description" content="Your practice turns over seven figures. Dentally books the appointments and stops there. See how the business is actually doing, and who to pick up the phone to.">
+    <meta property="og:site_name" content="Analytically">
+    <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
     <style>
-        :root {
-            --navy:        #1A527A;
-            --navy-dark:   #163f5e;
-            --teal-bright: #5EC4C0;
-            --bg-page:     #FFFFFF;
-            --bg-subtle:   #F8FAFC;
-            --border:      #E4E8EE;
-            --text:        #1F2937;
-            --text-2:      #6B7280;
-            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: var(--font); color: var(--text);
-            background: linear-gradient(160deg, #F8FAFC 0%, #EBF3F9 100%);
-            min-height: 100vh; display: flex; flex-direction: column;
-        }
+    :root{
+      /* Brand, as used by the app and the rest of the site */
+      --navy:#1A527A; --navy-deep:#163F5E; --teal:#5EC4C0; --teal-deep:#2E8C88;
+      /* Neutrals biased toward the navy, so they read as chosen rather than default grey */
+      --ink:#16232E; --body:#41535F; --mute:#71838F;
+      --paper:#FBFCFD; --panel:#FFFFFF; --sink:#F2F6F9; --rule:#DFE7ED;
+      /* The product's own traffic-light language */
+      --good:#1A7F4B; --good-bg:#E8F4ED; --warn:#B87200; --warn-bg:#FBF1E0;
+      --bad:#B3261E;  --bad-bg:#FBEBEA;
+      --shadow:0 1px 2px rgba(26,82,122,.07), 0 10px 28px -14px rgba(26,82,122,.22);
+      --display:"Source Serif 4",Georgia,"Times New Roman",serif;
+      --sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+      --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+      --wrap:1120px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--paper);color:var(--body);
+      font-family:var(--sans);font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
+    h1,h2,h3{font-family:var(--display);color:var(--ink);text-wrap:balance;margin:0;
+      line-height:1.14;letter-spacing:-.012em}
+    h1{font-size:clamp(2.05rem,4.5vw,3.45rem);font-weight:700}
+    h2{font-size:clamp(1.58rem,3vw,2.25rem);font-weight:600}
+    h3{font-size:1.08rem;font-weight:600;line-height:1.3}
+    p{margin:0}
+    a{color:var(--teal-deep);text-decoration-thickness:1px;text-underline-offset:2px}
+    :focus-visible{outline:2.5px solid var(--teal);outline-offset:3px;border-radius:3px}
+    .wrap{max-width:var(--wrap);margin-inline:auto;padding-inline:clamp(18px,4vw,34px)}
+    section{padding-block:clamp(48px,7vw,86px)}
+    .eyebrow{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--teal-deep)}
+    .lede{font-size:clamp(1.01rem,1.5vw,1.15rem);color:var(--body);max-width:63ch}
 
-        /* Header */
-        .site-header {
-            background: var(--navy); color: white; height: 56px;
-            display: flex; align-items: center; padding: 0 24px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-        }
-        .brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
-        .brand span { color: var(--teal-bright); }
-        .nav-spacer { flex: 1; }
-        .nav-link { color: #CFE0EC; text-decoration: none; font-size: 14px; font-weight: 600; }
-        .nav-link:hover { color: white; }
+    /* ── masthead ──────────────────────────────────────── */
+    .site-header{background:var(--navy);color:#fff;position:sticky;top:0;z-index:30;
+      box-shadow:0 1px 4px rgba(0,0,0,.18)}
+    .site-header .wrap{display:flex;align-items:center;gap:20px;min-height:56px}
+    .brand{font-family:var(--display);font-size:1.28rem;font-weight:700;letter-spacing:-.02em;color:#fff}
+    .brand span{color:var(--teal)}
+    .site-header nav{margin-left:auto;display:flex;align-items:center;gap:22px;font-size:.88rem}
+    .nav-link{color:#CFE0EC;text-decoration:none;font-weight:600}
+    .nav-link:hover{color:#fff}
+    .btn{display:inline-block;font-weight:600;font-size:.93rem;padding:10px 18px;border-radius:8px;
+      text-decoration:none;border:1.5px solid transparent;transition:background .14s ease,transform .12s ease}
+    .btn-primary{background:var(--navy);color:#fff}
+    .btn-primary:hover{background:var(--navy-deep);transform:translateY(-1px)}
+    .btn-ghost{border-color:var(--rule);color:var(--ink);background:var(--panel)}
+    .btn-ghost:hover{background:var(--sink)}
+    .btn-teal{background:var(--teal);color:#0E3A38}
+    .btn-teal:hover{background:#4FB3AF;transform:translateY(-1px)}
+    .nav-cta{background:var(--teal);color:#0E3A38;padding:8px 15px;border-radius:7px;
+      text-decoration:none;font-weight:600;font-size:.87rem}
+    .nav-cta:hover{background:#4FB3AF}
+    @media (max-width:820px){.site-header nav .hide-sm{display:none}}
 
-        /* Main */
-        main {
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            padding: 40px 24px;
-        }
-        .card {
-            background: white; border: 1px solid var(--border); border-radius: 16px;
-            box-shadow: 0 8px 40px rgba(26,82,122,0.10);
-            max-width: 560px; width: 100%; padding: 56px 48px; text-align: center;
-        }
-        .logo { width: 132px; height: 132px; object-fit: contain; margin-bottom: 24px; }
-        h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 14px; }
-        h1 .accent { color: var(--navy); }
-        .lede { font-size: 16px; color: var(--text-2); line-height: 1.65; margin-bottom: 36px; }
+    /* ── hero ──────────────────────────────────────────── */
+    .hero{padding-top:clamp(38px,6vw,72px);padding-bottom:0}
+    .hero h1{max-width:19ch;margin-top:14px}
+    .hero .lede{margin-top:20px}
+    .cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+    .note{font-family:var(--mono);font-size:.76rem;color:var(--mute);margin-top:14px}
 
-        .cta {
-            display: inline-block; background: var(--navy); color: white;
-            text-decoration: none; font-size: 15px; font-weight: 600;
-            padding: 14px 36px; border-radius: 10px; transition: background 0.12s;
-        }
-        .cta:hover { background: var(--navy-dark); }
-        .cta-group { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .cta.secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-        .cta.secondary:hover { background: var(--bg-subtle); }
+    .board{margin-top:clamp(32px,5vw,52px);border:1px solid var(--rule);border-radius:12px;
+      background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+    .board-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--sink)}
+    .board-head .t{font-family:var(--mono);font-size:.71rem;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--mute)}
+    .board-head .t b{color:var(--ink);font-weight:600}
+    .tiles{display:grid;grid-template-columns:repeat(4,1fr)}
+    .tile{padding:18px 16px 20px;border-right:1px solid var(--rule);
+      display:flex;flex-direction:column;gap:5px}
+    .tile:last-child{border-right:0}
+    .tile .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--mute)}
+    .tile .v{font-family:var(--mono);font-size:1.6rem;font-weight:600;color:var(--ink);
+      font-variant-numeric:tabular-nums;line-height:1.1}
+    .tile .d{font-size:.83rem;color:var(--mute);line-height:1.45}
+    .pill{align-self:flex-start;font-family:var(--mono);font-size:.67rem;font-weight:600;
+      padding:2px 8px;border-radius:99px;letter-spacing:.04em}
+    .p-good{background:var(--good-bg);color:var(--good)}
+    .p-warn{background:var(--warn-bg);color:var(--warn)}
+    .p-bad{background:var(--bad-bg);color:var(--bad)}
+    @media (max-width:860px){.tiles{grid-template-columns:repeat(2,1fr)}
+      .tile:nth-child(2){border-right:0}
+      .tile:nth-child(-n+2){border-bottom:1px solid var(--rule)}}
+    @media (max-width:460px){.tiles{grid-template-columns:1fr}
+      .tile{border-right:0;border-bottom:1px solid var(--rule)}
+      .tile:last-child{border-bottom:0}}
 
-        .divider {
-            border: 0; border-top: 1px solid var(--border);
-            margin: 40px 0 28px;
-        }
-        .contact-label {
-            font-size: 12px; font-weight: 600; text-transform: uppercase;
-            letter-spacing: 0.6px; color: var(--text-2); margin-bottom: 16px;
-        }
-        .contacts {
-            display: flex; flex-direction: column; gap: 10px;
-            font-size: 15px; align-items: center;
-        }
-        .contacts a { color: var(--navy); text-decoration: none; font-weight: 600; }
-        .contacts a:hover { text-decoration: underline; }
-        .contacts .row { color: var(--text-2); }
+    /* ── the gap ───────────────────────────────────────── */
+    .band{background:var(--sink);border-block:1px solid var(--rule)}
+    .split{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(28px,5vw,64px);align-items:start}
+    @media (max-width:840px){.split{grid-template-columns:1fr}}
+    .ledger{border:1px solid var(--rule);border-radius:10px;background:var(--panel);overflow:hidden}
+    .ledger .lr{display:flex;gap:14px;padding:11px 16px;border-bottom:1px solid var(--rule);
+      font-size:.92rem;align-items:baseline}
+    .ledger .lr:last-child{border-bottom:0}
+    .ledger .who{font-family:var(--mono);font-size:.69rem;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--mute);min-width:82px;flex:none}
+    .ledger .does{color:var(--ink)}
+    .ledger .us .who{color:var(--teal-deep)}
 
-        /* Footer */
-        footer {
-            text-align: center; padding: 24px; font-size: 12px; color: var(--text-2);
-            line-height: 1.6;
-        }
+    /* ── pillars ───────────────────────────────────────── */
+    .pillars{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--rule);
+      border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin-top:34px}
+    @media (max-width:780px){.pillars{grid-template-columns:1fr}}
+    .pillar{background:var(--panel);padding:24px 22px 26px;display:flex;flex-direction:column;gap:9px}
+    .pillar .q{font-family:var(--display);font-size:1.15rem;font-weight:600;color:var(--ink);line-height:1.3}
+    .pillar p{font-size:.93rem}
+    .pillar .ex{margin-top:6px;padding-top:12px;border-top:1px dashed var(--rule);
+      font-family:var(--mono);font-size:.78rem;color:var(--mute);line-height:1.55}
+    .pillar .ex b{color:var(--ink);font-weight:600}
 
-        @media (max-width: 520px) {
-            .card { padding: 40px 24px; }
-            h1 { font-size: 23px; }
-            .logo { width: 104px; height: 104px; }
-        }
+    /* ── acting on it ──────────────────────────────────── */
+    .acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));gap:14px;margin-top:30px}
+    .act{border:1px solid var(--rule);border-left:3px solid var(--teal);border-radius:8px;
+      background:var(--panel);padding:16px 17px}
+    .act .n{font-family:var(--mono);font-size:1.28rem;font-weight:600;color:var(--ink);
+      font-variant-numeric:tabular-nums}
+    .act .l{font-size:.88rem;margin-top:3px}
+    .callout{margin-top:30px;border-left:3px solid var(--navy);padding:4px 0 4px 20px}
+    .callout q{font-family:var(--display);font-size:clamp(1.08rem,2vw,1.32rem);font-style:italic;
+      color:var(--ink);display:block;line-height:1.42;quotes:none}
+    .callout cite{display:block;margin-top:9px;font-family:var(--mono);font-size:.74rem;
+      font-style:normal;color:var(--mute);letter-spacing:.05em}
+
+    /* ── contribution table ────────────────────────────── */
+    .rows .lr .who{min-width:158px;color:var(--ink);font-weight:500;text-transform:none;
+      letter-spacing:0;font-size:.85rem}
+    .rows .lr .does{font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums;
+      color:var(--body)}
+
+    /* ── pricing ───────────────────────────────────────── */
+    .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:30px}
+    @media (max-width:760px){.prices{grid-template-columns:1fr}}
+    .price{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:22px 20px}
+    .price.lead{border-color:var(--teal);box-shadow:var(--shadow)}
+    .price .who{font-family:var(--mono);font-size:.71rem;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--teal-deep)}
+    .price .amt{font-family:var(--mono);font-size:2.05rem;font-weight:600;color:var(--ink);
+      margin-top:8px;font-variant-numeric:tabular-nums;line-height:1}
+    .price .amt small{font-size:.78rem;font-weight:400;color:var(--mute);letter-spacing:0}
+    .price p{font-size:.9rem;margin-top:9px}
+    .vat{font-family:var(--mono);font-size:.78rem;color:var(--mute);margin-top:18px}
+
+    /* ── trust ─────────────────────────────────────────── */
+    .trust{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;margin-top:28px}
+    .trust h3{margin-bottom:5px}
+    .trust p{font-size:.9rem}
+
+    /* ── close ─────────────────────────────────────────── */
+    .close{background:var(--navy)}
+    .close .wrap{text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px}
+    .close h2{color:#F2F8FB;max-width:22ch}
+    .close p{color:#CFE0EC;max-width:56ch}
+
+    footer{border-top:1px solid var(--rule);background:var(--panel);
+      padding-block:30px;font-size:.85rem;color:var(--mute);text-align:center;line-height:1.75}
+    footer a{color:var(--navy);font-weight:600;text-decoration:none}
+    footer a:hover{text-decoration:underline}
+    @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
     </style>
 </head>
 <body>
-    <header class="site-header">
-        <div class="brand">Analytic<span>ally</span></div>
-        <span class="nav-spacer"></span>
-        <a class="nav-link" href="https://app.analytically.info/pricing" style="margin-right:20px">Pricing</a>
-        <a class="nav-link" href="/enquiry.html" style="margin-right:20px">Enquire</a>
-        <a class="nav-link" href="/documents.html">Trust &amp; documents</a>
-    </header>
 
-    <main>
-        <div class="card">
-            <img class="logo" src="/logo-icon.png" alt="Analytically logo">
-            <h1>Analytics for <span class="accent">dental practices</span></h1>
-            <p class="lede">
-                Analytically turns your Dentally practice data into clear, secure
-                dashboards and operational lists — so you can see performance at a
-                glance and act on what matters.
-            </p>
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">Analytic<span>ally</span></div>
+    <nav>
+      <a class="nav-link hide-sm" href="#what">What it shows</a>
+      <a class="nav-link hide-sm" href="#act">Acting on it</a>
+      <a class="nav-link" href="https://app.analytically.info/pricing">Pricing</a>
+      <a class="nav-link hide-sm" href="/documents.html">Trust &amp; documents</a>
+      <a class="nav-cta" href="https://app.analytically.info/onboarding">Start free trial</a>
+    </nav>
+  </div>
+</header>
 
-            <div class="cta-group">
-                <a class="cta" href="https://app.analytically.info/onboarding">Start your 30-day trial &rarr;</a>
-                <a class="cta secondary" href="https://app.analytically.info">Sign in to the app</a>
-                <a class="cta secondary" href="/enquiry.html">Tell us about your practice</a>
-            </div>
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">The analytics layer for Dentally practices</p>
+    <h1>Be as professional about running your business as you are about caring for your patients.</h1>
+    <p class="lede">Your practice turns over seven figures. Dentally books the appointments, records the
+      treatment and raises the invoices — and stops there. Analytically reads the same data and tells you
+      how the business is actually doing, and who to pick up the phone to.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://app.analytically.info/onboarding">Start your 30-day trial &rarr;</a>
+      <a class="btn btn-ghost" href="#what">See what it shows</a>
+      <a class="btn btn-ghost" href="https://app.analytically.info">Sign in to the app</a>
+    </div>
+    <p class="note">No card required · Connects to Dentally in minutes · £60/month for full access</p>
 
-            <hr class="divider">
-
-            <div class="contact-label">Get in touch</div>
-            <div class="contacts">
-                <a href="mailto:sales@analytically.info">sales@analytically.info</a>
-                <span class="row">Security: <a href="mailto:security@analytically.info">security@analytically.info</a></span>
-            </div>
+    <div class="board">
+      <div class="board-head">
+        <span class="t"><b>Practice overview</b> · last 3 months · all practitioners</span>
+      </div>
+      <div class="tiles">
+        <div class="tile">
+          <span class="k">Total revenue</span>
+          <span class="v">£493,100</span>
+          <span class="pill p-warn">1% below target</span>
+          <span class="d">Against the target you set. Split private, plan and NHS.</span>
         </div>
-    </main>
+        <div class="tile">
+          <span class="k">Patient growth</span>
+          <span class="v">−132</span>
+          <span class="pill p-bad">Losing patients</span>
+          <span class="d">New patients in, lapsed patients out, net for the quarter.</span>
+        </div>
+        <div class="tile">
+          <span class="k">Diary fill</span>
+          <span class="v">86%</span>
+          <span class="pill p-good">On target</span>
+          <span class="d">Booked hours against the hours your clinicians were available.</span>
+        </div>
+        <div class="tile">
+          <span class="k">Overdue recalls</span>
+          <span class="v">167</span>
+          <span class="pill p-bad">Not contacted</span>
+          <span class="d">Patients due back who nobody has chased. Names on request.</span>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:12px">Figures from a live practice, anonymised.</p>
+  </div>
+</section>
 
-    <footer>
-        Analytically is operated by Analytically Limited (company no.&nbsp;16242443).<br>
-        &copy; <span id="year">2026</span> Analytically Limited. All rights reserved.<br>
-        <a href="/doc.html?doc=COOKIE_POLICY" style="color:var(--navy);font-weight:600;text-decoration:none">Cookie policy</a>
-        &nbsp;&middot;&nbsp;
-        <a href="#" onclick="anlyCookieSettings();return false;" style="color:var(--navy);font-weight:600;text-decoration:none">Cookie settings</a>
-    </footer>
+<section class="band" id="what">
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">The gap</p>
+      <h2 style="margin-top:12px">Dentally runs your appointments. It was never meant to run your business.</h2>
+      <p class="lede" style="margin-top:18px">It does what you would expect a practice management system to
+        do, and it does it well. But none of it answers the questions an owner actually has to answer — is
+        the money where it should be, are we keeping our patients, is the diary earning, and who needs
+        chasing this week.</p>
+      <p class="lede" style="margin-top:14px">That is the missing half, and it is the half your accountant,
+        your bank and one day your buyer will ask about.</p>
+    </div>
+    <div class="ledger">
+      <div class="lr"><span class="who">Dentally</span><span class="does">Books appointments</span></div>
+      <div class="lr"><span class="who">Dentally</span><span class="does">Records treatment</span></div>
+      <div class="lr"><span class="who">Dentally</span><span class="does">Raises invoices and takes payment</span></div>
+      <div class="lr us"><span class="who">Analytically</span><span class="does">Tells you whether you hit your numbers</span></div>
+      <div class="lr us"><span class="who">Analytically</span><span class="does">Tells you which patients you are losing</span></div>
+      <div class="lr us"><span class="who">Analytically</span><span class="does">Tells you what each chair and each clinician earns</span></div>
+      <div class="lr us"><span class="who">Analytically</span><span class="does">Tells you who to phone today</span></div>
+    </div>
+  </div>
+</section>
 
-    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+<section>
+  <div class="wrap">
+    <p class="eyebrow">What it shows</p>
+    <h2 style="margin-top:12px;max-width:20ch">Four questions, answered every morning.</h2>
+    <p class="lede" style="margin-top:16px">Every figure is traffic-lit against a target you set — for the
+      whole practice, for a group such as associates or hygienists, or for one person. Miss a target and it
+      turns amber before it turns red.</p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <span class="eyebrow">Revenue</span>
+        <p class="q">Is the money where it should be?</p>
+        <p>Private, plan and NHS income side by side. Revenue per clinical hour. Debt, discounts and
+          deposits. Costs and EBITDA pulled straight from Xero, so profit is a number rather than a guess.</p>
+        <p class="ex">A principal billing <b>£399/hour</b> beside a hygienist at <b>£77</b> and an
+          implantologist over <b>£1,000</b> — the same chair, very different economics.</p>
+      </div>
+      <div class="pillar">
+        <span class="eyebrow">Patients</span>
+        <p class="q">Are we keeping them?</p>
+        <p>Active patients, retention, and the net number you gained or lost. Where new patients came from.
+          Recalls due, sent and overdue — and how long the overdue ones have been waiting.</p>
+        <p class="ex">At <b>80% retention</b>, one patient in five never comes back. On a list of 7,000
+          that is <b>1,400 people</b> a year leaving quietly.</p>
+      </div>
+      <div class="pillar">
+        <span class="eyebrow">Scheduling</span>
+        <p class="q">Is the diary earning?</p>
+        <p>Diary fill against available hours, and chair utilisation against the time patients were
+          actually in the room. Cancellations, short-notice cancellations, DNAs, rebooking rates, and how
+          many days until the next free appointment.</p>
+        <p class="ex">Booked 15 minutes, in the chair 10: <b>100% diary fill but 66% chair fill</b>.
+          Shorten the slot and the same day earns more.</p>
+      </div>
+      <div class="pillar">
+        <span class="eyebrow">Clinical</span>
+        <p class="q">What work are we doing?</p>
+        <p>Treatment mix per clinician, average plan value, first-plan value, exam-to-treatment ratio and
+          open courses of treatment. NHS practices get UDA delivery against contract.</p>
+        <p class="ex">A first-visit plan averaging <b>£600</b> is worth a conversation — patients quoted
+          big numbers on day one often do not come back at all.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="act">
+  <div class="wrap">
+    <p class="eyebrow">Acting on it</p>
+    <h2 style="margin-top:12px;max-width:24ch">A number tells you there is a problem. A name lets you fix it.</h2>
+    <p class="lede" style="margin-top:16px">This is the part most dashboards skip. Every operational figure
+      opens into the actual list — the patients behind it, with their phone numbers — so your front desk
+      has a morning's work rather than a statistic.</p>
+
+    <div class="acts">
+      <div class="act"><div class="n">46</div><div class="l">Cancellations with no new appointment booked</div></div>
+      <div class="act"><div class="n">167</div><div class="l">Recalls due that nobody has contacted</div></div>
+      <div class="act"><div class="n">21</div><div class="l">Patients seen this week who left without an email on file</div></div>
+      <div class="act"><div class="n">38</div><div class="l">Open courses of treatment with no appointment booked</div></div>
+    </div>
+
+    <div class="callout">
+      <q>At the end of the day the reports tell you what is on your system. They do not tell you what
+        reality is, if you are not careful.</q>
+      <cite>— Andy Higginson, founder</cite>
+    </div>
+    <p class="lede" style="margin-top:22px">Which is why it also flags the data itself: patients assigned to
+      a dentist who left, courses left open for two years, patients with no way to contact them at all. Fix
+      those and every other number on the page becomes more honest.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">For the owner</p>
+      <h2 style="margin-top:12px">What the practice keeps, and what it pays out.</h2>
+      <p class="lede" style="margin-top:18px">Set each fee-earner's share once. Analytically splits every
+        pound of income between what the clinician earns and what the practice retains — per person, per
+        site, per month — so contribution stops being a spreadsheet you rebuild every quarter.</p>
+      <p class="lede" style="margin-top:14px">Owners who pay themselves as associates see both halves:
+        their own earnings, and the residual the partnership shares.</p>
+    </div>
+    <div class="board" style="margin-top:0">
+      <div class="board-head"><span class="t"><b>Contribution</b> · August</span></div>
+      <div class="ledger rows" style="border:0;border-radius:0">
+        <div class="lr"><span class="who">Principal · 47.5%</span><span class="does">£13,420 earned · £14,833 retained</span></div>
+        <div class="lr"><span class="who">Associate · 45%</span><span class="does">£13,888 earned · £16,975 retained</span></div>
+        <div class="lr"><span class="who">Specialist · 50%</span><span class="does">£3,607 earned · £3,607 retained</span></div>
+        <div class="lr"><span class="who">Hygienist · salaried</span><span class="does">£0 earned · £4,278 retained</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="pricing">
+  <div class="wrap">
+    <p class="eyebrow">Pricing</p>
+    <h2 style="margin-top:12px">Per person, per month. Cancel whenever.</h2>
+    <p class="lede" style="margin-top:16px">You choose who sees what. Most practices put the owner and the
+      practice manager on full access, then add the clinicians who want their own numbers.</p>
+    <div class="prices">
+      <div class="price lead">
+        <div class="who">Full access</div>
+        <div class="amt">£60<small> /month</small></div>
+        <p>Every report, every practitioner, all settings and targets. What an owner or practice manager
+          needs.</p>
+      </div>
+      <div class="price">
+        <div class="who">Clinician</div>
+        <div class="amt">£24<small> /month</small></div>
+        <p>Their own numbers only — revenue, treatment mix, plan values, retention. Useful at appraisal
+          time, and it takes the guesswork out of the conversation.</p>
+      </div>
+      <div class="price">
+        <div class="who">Front office</div>
+        <div class="amt">£6<small> /month</small></div>
+        <p>The day book: cancellations to rebook, recalls to chase, DNAs, open plans. The working lists,
+          not the financials.</p>
+      </div>
+    </div>
+    <p class="vat">All prices include VAT · 30 days free, no card required · You are never charged for a
+      login you have not switched on</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://app.analytically.info/onboarding">Start your 30-day trial &rarr;</a>
+      <a class="btn btn-ghost" href="/enquiry.html">Tell us about your practice</a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Trust</p>
+    <h2 style="margin-top:12px;max-width:26ch">Built to hold less of your patients' data, not more.</h2>
+    <div class="trust">
+      <div>
+        <h3>No clinical content</h3>
+        <p>No notes, medical histories, correspondence, documents or images. No NHS numbers, ethnicity or
+          addresses. We hold names, contact details and the operational figures — and nothing we do not
+          need.</p>
+      </div>
+      <div>
+        <h3>Inactive means invisible</h3>
+        <p>Once a patient is inactive, their identifying data is removed from the platform automatically.
+          They remain in your history as a number, not as a person.</p>
+      </div>
+      <div>
+        <h3>UK-hosted, per-practice isolation</h3>
+        <p>Microsoft Azure UK South. Row-level security means one practice's data is unreachable from
+          another's, enforced by the database rather than by the application.</p>
+      </div>
+      <div>
+        <h3>Documented, not asserted</h3>
+        <p>Security overview, data processing agreement, sub-processor register and cookie policy — written
+          down and <a href="/documents.html">available to read</a> before you sign anything.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="close">
+  <div class="wrap">
+    <h2>Your Dentally is doing half the job.</h2>
+    <p>Connect in a few minutes and see your own practice's numbers — not a demo, not sample data.
+      Thirty days free, no card, and nothing to uninstall if you walk away.</p>
+    <a class="btn btn-teal" href="https://app.analytically.info/onboarding">Start your 30-day trial &rarr;</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a href="mailto:sales@analytically.info">sales@analytically.info</a>
+    &nbsp;&middot;&nbsp;
+    Security: <a href="mailto:security@analytically.info">security@analytically.info</a>
+    &nbsp;&middot;&nbsp;
+    <a href="/documents.html">Trust &amp; documents</a>
+    <br>
+    Analytically is operated by Analytically Limited (company no.&nbsp;16242443).<br>
+    &copy; <span id="year">2026</span> Analytically Limited. All rights reserved.<br>
+    <a href="/doc.html?doc=COOKIE_POLICY">Cookie policy</a>
+    &nbsp;&middot;&nbsp;
+    <a href="#" onclick="anlyCookieSettings();return false;">Cookie settings</a>
+  </div>
+</footer>
+
+<script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
