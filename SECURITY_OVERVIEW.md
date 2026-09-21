@@ -27,8 +27,9 @@ We process the **minimum needed** for analytics and the contact workflow:
 
 **We do *not* collect or store** clinical notes, treatment free-text descriptions,
 medical histories, correspondence, uploaded documents or diagnostic images, nor
-NHS/NI numbers, date of birth, gender, ethnicity, full addresses, or medical-alert
-content. Patient identifying/contact data is held **only for active patients**;
+NHS/NI numbers, gender, ethnicity, full addresses, or medical-alert
+content. Date of birth **is** held, for active patients only, to distinguish adults from children.
+Patient identifying/contact data is held **only for active patients**;
 inactive patients' identifying data is obfuscated.
 
 ## Hosting and data residency

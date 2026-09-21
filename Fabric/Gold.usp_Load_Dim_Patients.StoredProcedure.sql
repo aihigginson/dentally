@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Patients] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Patients] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Patients
 --  Author           :  AIH
@@ -69,6 +69,16 @@ BEGIN
             NULLIF(CONCAT_WS(' ',
                 NULLIF(TRIM(p.First_Name), ''),
                 NULLIF(TRIM(p.Last_Name), '')), '')                                                 AS Full_Name,
+            p.Date_Of_Birth                                                                         AS Date_Of_Birth,
+            -- Age AS AT THE LOAD. Derived here rather than left to each report so they cannot
+            -- disagree, and stored rather than computed in DAX so it can drive a slicer. The dim
+            -- rebuilds nightly, so it is at most a day stale -- which never matters for banding
+            -- but would if anyone used it for an exact birthday.
+            CASE WHEN p.Date_Of_Birth IS NULL THEN NULL
+                 ELSE DATEDIFF(year, p.Date_Of_Birth, CAST(SYSUTCDATETIME() AS DATE))
+                      - CASE WHEN DATEADD(year, DATEDIFF(year, p.Date_Of_Birth, CAST(SYSUTCDATETIME() AS DATE)), p.Date_Of_Birth)
+                                  > CAST(SYSUTCDATETIME() AS DATE) THEN 1 ELSE 0 END
+            END                                                                                     AS Age,
             NULLIF(TRIM(p.Email_Address), '')                                                       AS Email_Address,
             NULLIF(TRIM(p.Home_Phone), '')                                                          AS Home_Phone,
             NULLIF(TRIM(p.Mobile_Phone), '')                                                        AS Mobile_Phone,
@@ -186,6 +196,8 @@ BEGIN
             Last_Name                           = src.Last_Name,
             Preferred_Name                      = src.Preferred_Name,
             Full_Name                           = src.Full_Name,
+            Date_Of_Birth                       = src.Date_Of_Birth,
+            Age                                 = src.Age,
             Email_Address                       = src.Email_Address,
             Home_Phone                          = src.Home_Phone,
             Mobile_Phone                        = src.Mobile_Phone,
@@ -231,6 +243,8 @@ BEGIN
            ISNULL(CAST(tgt.[Last_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Preferred_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Full_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Date_Of_Birth] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Age] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Email_Address] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Home_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Mobile_Phone] AS VARCHAR(500)), ''),
@@ -274,6 +288,8 @@ BEGIN
            ISNULL(CAST(src.[Last_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Preferred_Name] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Full_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Date_Of_Birth] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Age] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Email_Address] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Home_Phone] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Mobile_Phone] AS VARCHAR(500)), ''),
@@ -318,7 +334,7 @@ BEGIN
         INSERT INTO Gold.Dim_Patients (
             pk_Patient,
             Tenant_ID, Patient_ID, Account_ID, First_Name, Last_Name, Preferred_Name, Full_Name,
-            Email_Address, Home_Phone, Mobile_Phone, Is_Email_Missing, Is_Phone_Missing,
+            Date_Of_Birth, Age, Email_Address, Home_Phone, Mobile_Phone, Is_Email_Missing, Is_Phone_Missing,
             Active, Payment_Plan_ID, Standard_Payment_Plan, Site_ID,
             Acquisition_Source_ID, fk_Acquisition_Source, Dentist_Practitioner_ID, Hygienist_Practitioner_ID,
             Dentist_Recall_Date, Dentist_Recall_Interval_Months,
@@ -334,7 +350,7 @@ BEGIN
         SELECT
             @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
             src.Tenant_ID, src.Patient_ID, src.Account_ID, src.First_Name, src.Last_Name,
-            src.Preferred_Name, src.Full_Name, src.Email_Address,
+            src.Preferred_Name, src.Full_Name, src.Date_Of_Birth, src.Age, src.Email_Address,
             src.Home_Phone, src.Mobile_Phone, src.Is_Email_Missing, src.Is_Phone_Missing,
             src.Active, src.Payment_Plan_ID, src.Standard_Payment_Plan, src.Site_ID,
             src.Acquisition_Source_ID, src.fk_Acquisition_Source, src.Dentist_Practitioner_ID, src.Hygienist_Practitioner_ID,

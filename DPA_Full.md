@@ -165,9 +165,11 @@ training.
 **Practice staff (e.g. practitioners) — limited:**
 - Name, professional identifiers, role/site, performance-related aggregates
 
+**Date of birth** is processed (added 2026-09-19) to distinguish adults from children, which is necessary to interpret NHS banding and age-appropriate recall. It is held for active patients only.
+
 **NOT processed** (excluded by design): special-category / health-identifying data —
 clinical notes, treatment free-text descriptions, medical history, medical-alert
-content, NHS number, NI number, date of birth, gender, ethnicity, full address,
+content, NHS number, NI number, gender, ethnicity, full address,
 diagnostic images, uploaded documents, correspondence.
 
 ### 5. Categories of data subjects

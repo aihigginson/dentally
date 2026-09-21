@@ -1,4 +1,4 @@
-/****** Object:  Table [Bronze].[Patients]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Bronze].[Patients]    Script Date: 20/04/2026 10:15:06 ******/
 -- Data-minimised patient table (V011, 2026-06-17). Special-category and excess-
 -- identifier fields are no longer landed in the warehouse (Title/Middle name, DOB,
 -- Gender, Ethnicity, NHS/NI numbers, phone country codes, Work phone, Address,
@@ -22,6 +22,7 @@ CREATE TABLE [Bronze].[Patients](
 	[Dentist_ID] [decimal](18, 4) NULL,
 	[Dentist_Recall_Date] [VARCHAR](255) NULL,
 	[Dentist_Recall_Interval] [decimal](18, 4) NULL,
+	[Date_Of_Birth] [VARCHAR](255) NULL,   -- raw, as every Bronze value is; Silver casts it
 	[Email_Address] [VARCHAR](255) NULL,
 	[First_Name] [VARCHAR](255) NULL,
 	[Home_Phone] [VARCHAR](255) NULL,
