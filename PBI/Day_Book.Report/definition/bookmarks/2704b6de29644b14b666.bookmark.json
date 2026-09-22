@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Diary",
-  "name": "0da7b0c0de00000000f1",
+  "displayName": "Data Quality",
+  "name": "2704b6de29644b14b666",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -27,31 +27,46 @@
           "562aac806c3470958019": {
             "singleVisual": {
               "visualType": "pivotTable",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "5067b86607613e911275": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "56e58c2930642ad7d04e": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "a1b11d25c0ee82de129e": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "f1d4784d3a00b09db074": {
             "singleVisual": {
               "visualType": "actionButton",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "0da7b0c0de00000000b2": {
@@ -75,22 +90,25 @@
           "ff4d42860e0186700781": {
             "singleVisual": {
               "visualType": "pivotTable",
-              "objects": {}
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           },
           "526a35f139aaaa5b8691": {
-            "singleVisual": {
-              "visualType": "tableEx",
-              "objects": {}
-            }
-          },
-          "7db78ccb254242c7bcf4": {
             "singleVisual": {
               "visualType": "tableEx",
               "objects": {},
               "display": {
                 "mode": "hidden"
               }
+            }
+          },
+          "7db78ccb254242c7bcf4": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {}
             }
           }
         }

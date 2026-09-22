@@ -13,7 +13,8 @@
       "0da7b0c0de00000000b2",
       "0da7b0c0de00000000c3",
       "ff4d42860e0186700781",
-      "526a35f139aaaa5b8691"
+      "526a35f139aaaa5b8691",
+      "7db78ccb254242c7bcf4"
     ],
     "suppressData": true
   },
@@ -90,6 +91,15 @@
             }
           },
           "526a35f139aaaa5b8691": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "7db78ccb254242c7bcf4": {
             "singleVisual": {
               "visualType": "tableEx",
               "objects": {},

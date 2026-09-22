@@ -1,0 +1,68 @@
+# =====================================================================
+# Release V172 -- the data-quality scorecard
+# =====================================================================
+# Turns the ad-hoc data-quality review into a standing feature: Gold.Aggregate_Data_Quality,
+# one row per check per practice, surfaced as a third bookmark view ("Data Quality") on the
+# Day Book page beside the existing Diary and Unadopted Patients views.
+#
+# WHAT IT IS NOT. It does not replace Gold.Dim_Patient_Data_Quality -- that view is the NAMED
+# LIST behind "Unadopted Patients" (patients whose assigned clinician has left, or who have no
+# dentist at all), and it stays exactly as it is. The scorecard is the layer above: counts,
+# severity and what to do about each, across patients, diary, recalls, people and treatments.
+# PAT_NO_DENTIST deliberately overlaps that view and its What_To_Do points the reader at it.
+#
+# ==> PASSING CHECKS MUST STILL PRODUCE A ROW. <== The final SELECT is built catalogue-first --
+# tenants CROSS JOIN Config.Data_Quality_Check LEFT JOIN the counts -- so a check with nothing
+# to report renders as a visible 0 rather than vanishing. A scorecard that only listed problems
+# would be indistinguishable from a scorecard that had failed to run, which is the one way this
+# feature could actively mislead a practice.
+#
+# ==> A CATALOGUE ROW WITH NO COUNTING BRANCH REPORTS 0 FOR EVER. <== Check_Code is the join
+# between Config.Data_Quality_Check (wording, severity, guidance) and the UNION ALL of counting
+# branches in the load proc. Adding a check means BOTH. A typo in either leaves a row on the
+# report permanently reading "clean" -- see the note at the top of both files.
+#
+# WINDOWS. DIARY_NOT_CLOSED and DIARY_LEFT_OPEN look back 90 days only. Unbounded, the first is
+# ~27,000 rows of history on tenant 100 that no practice will ever work through; 90 days is the
+# span where setting the real outcome on an appointment is still plausible.
+#
+# TENANT SPINE comes from Gold.Dim_Patients, so a part-populated test tenant with appointments
+# but no patients (tenant 11 on dev) is scored as nothing rather than as a practice failing
+# every patient check.
+#
+# NEW TABLES, so both Table.sql files DEPLOY normally. The usual prohibition on deploying a
+# Gold *.Table.sql does not apply here: it exists because DROP TABLE reassigns surrogate keys
+# that hash-gated facts still point at, and nothing points at pk_Data_Quality -- the aggregate
+# is a full DELETE + INSERT rebuild with no dependants.
+#
+# AFTER DEPLOYING, IN POWER BI DESKTOP (the model is a .pbix; a new table cannot be added from
+# here):
+#   1. import PBI.[Aggregate Data Quality]
+#   2. add it to the RLS role, filtering [Tenant ID] the same way as every other table --
+#      Scripts\Check_RLS_Coverage.ps1 fails the build if this is missed, and a miss is a
+#      cross-tenant leak
+#   3. save + publish, then open Day Book -- the new "Data Quality" bookmark appears on the
+#      navigator by itself
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V172__data_quality_scorecard.manifest
+# =====================================================================
+
+# The check catalogue: wording, severity and guidance, owner-curated. Deployed before the
+# aggregate because the load proc CROSS JOINs it -- an empty catalogue produces an empty
+# scorecard with no error.
+DEPLOY   Fabric\Config.Data_Quality_Check.Table.sql
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+
+DEPLOY   Fabric\Gold.Aggregate_Data_Quality.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+
+# Registers GOLD_AGG_DATA_QUALITY in the DAG so the nightly build runs it. The dependency file
+# is GENERATED -- it was rebuilt by Scripts\Generate_Process_Dependencies.ps1, not hand-edited,
+# and it places the new aggregate at level 5, after the six Gold objects it reads.
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
