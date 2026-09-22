@@ -66,12 +66,25 @@ BEGIN
         WHERE pk_Patient > 0;
 
         -- ── Appointments with a real calendar date ───────────────────────────
+        -- ==> A DIARY BLOCK IS NOT AN APPOINTMENT. <== Lunch, admin time and held slots are
+        -- stored in Fact_Appointments exactly like bookings, but carry NO PATIENT
+        -- (fk_Patient is the -1 unknown sentinel). Every diary check below therefore tests
+        -- Is_Patient_Appointment, and so do the two diary denominators.
+        --
+        -- This is not a hypothetical tidy-up. Without it, on tenant 100:
+        --   * "booked with a clinician who has left" reported 305, every one of them a 13:00
+        --     Lunch block against two departed dentists -- the true answer is 0
+        --   * "never closed off" reported 373, of which 355 were blocks that can never be
+        --     closed because there is nobody to close them for -- the true answer is 18
+        -- Both would have been the loudest numbers on the scorecard, and both were noise.
         SELECT a.Tenant_ID,
                a.fk_Patient,
                a.fk_Practitioner,
                a.State,
                ISNULL(a.Is_Cancelled, 0)   AS Is_Cancelled,
-               d.Full_Date                 AS Appt_Date
+               d.Full_Date                 AS Appt_Date,
+               CAST(CASE WHEN a.fk_Patient > 0 THEN 1 ELSE 0 END AS BIT)
+                                           AS Is_Patient_Appointment
         INTO #appt
         FROM Gold.Fact_Appointments a
         JOIN Gold.Dim_Date d ON d.pk_Date = a.fk_Date_Start;
@@ -83,11 +96,13 @@ BEGIN
                                     AND p.Active = 1),
                FUTURE_APPOINTMENTS = (SELECT COUNT(*) FROM #appt a
                                   WHERE a.Tenant_ID = t.Tenant_ID
-                                    AND a.Appt_Date > @Today AND a.Is_Cancelled = 0),
+                                    AND a.Appt_Date > @Today AND a.Is_Cancelled = 0
+                                    AND a.Is_Patient_Appointment = 1),
                RECENT_APPOINTMENTS = (SELECT COUNT(*) FROM #appt a
                                   WHERE a.Tenant_ID = t.Tenant_ID
                                     AND a.Appt_Date <  @Today
-                                    AND a.Appt_Date >= DATEADD(DAY, -@Recent_Days, @Today)),
+                                    AND a.Appt_Date >= DATEADD(DAY, -@Recent_Days, @Today)
+                                    AND a.Is_Patient_Appointment = 1),
                OVERDUE_RECALLS = (SELECT COUNT(*) FROM Gold.Fact_Recalls r
                                   WHERE r.Tenant_ID = t.Tenant_ID
                                     AND r.Days_Overdue > 0 AND ISNULL(r.Is_In_Scope, 0) = 1),
@@ -110,7 +125,8 @@ BEGIN
             FROM #appt a
             JOIN Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
                                           AND pr.Tenant_ID       = a.Tenant_ID
-            WHERE a.Appt_Date > @Today AND a.Is_Cancelled = 0 AND pr.Active = 0
+            WHERE a.Appt_Date > @Today AND a.Is_Cancelled = 0
+              AND a.Is_Patient_Appointment = 1 AND pr.Active = 0
             GROUP BY a.Tenant_ID
 
             UNION ALL
@@ -119,6 +135,7 @@ BEGIN
             JOIN Gold.Dim_Patients p ON p.pk_Patient = a.fk_Patient
                                     AND p.Tenant_ID  = a.Tenant_ID
             WHERE a.Appt_Date > @Today AND a.Is_Cancelled = 0
+              AND a.Is_Patient_Appointment = 1
               AND p.pk_Patient > 0 AND p.Active = 0
             GROUP BY a.Tenant_ID
 
@@ -127,6 +144,7 @@ BEGIN
             FROM #appt a
             WHERE a.Appt_Date <  @Today
               AND a.Appt_Date >= DATEADD(DAY, -@Recent_Days, @Today)
+              AND a.Is_Patient_Appointment = 1
               AND a.State IN ('Pending', 'Confirmed')
             GROUP BY a.Tenant_ID
 
@@ -135,6 +153,7 @@ BEGIN
             FROM #appt a
             WHERE a.Appt_Date <  @Today
               AND a.Appt_Date >= DATEADD(DAY, -@Recent_Days, @Today)
+              AND a.Is_Patient_Appointment = 1
               AND a.State IN ('Arrived', 'In surgery')
             GROUP BY a.Tenant_ID
 
