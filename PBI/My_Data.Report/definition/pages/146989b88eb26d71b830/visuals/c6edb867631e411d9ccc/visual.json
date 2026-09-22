@@ -1,48 +1,59 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "c6edb867631e411d9ccc",
   "position": {
-    "x": 8,
-    "y": 76,
+    "x": 8.19112627986348,
+    "y": 127.98634812286689,
     "z": 9000,
-    "height": 508,
-    "width": 1264,
+    "height": 456.14334470989758,
+    "width": 1263.9931740614334,
     "tabOrder": 9000
   },
   "visual": {
-    "visualType": "tableEx",
+    "visualType": "pivotTable",
     "query": {
       "queryState": {
-        "Values": {
+        "Columns": {
           "projections": [
             {
               "field": {
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Practitioners"
+                      "Entity": "List Date"
                     }
                   },
-                  "Property": "Full Name"
+                  "Property": "Week Ending Date"
                 }
               },
-              "queryRef": "List Practitioners.Full Name",
-              "nativeQueryRef": "Full Name"
-            },
+              "queryRef": "List Date.Week Ending Date",
+              "nativeQueryRef": "Week Ending Date",
+              "active": true,
+              "format": "d"
+            }
+          ]
+        },
+        "Rows": {
+          "projections": [
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Measures"
+                      "Entity": "List Treatments"
                     }
                   },
-                  "Property": "Total Revenue"
+                  "Property": "Treatment Category Name"
                 }
               },
-              "queryRef": "_Measures.Total Revenue",
-              "nativeQueryRef": "Total Revenue"
-            },
+              "queryRef": "List Treatments.Treatment Category Name",
+              "nativeQueryRef": "Treatment Category Name",
+              "active": true
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
             {
               "field": {
                 "Measure": {
@@ -104,11 +115,18 @@
       ],
       "total": [
         {
+          "properties": {}
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "stylePreset": [
+        {
           "properties": {
-            "totals": {
+            "name": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "'None'"
                 }
               }
             }
@@ -116,6 +134,52 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "5c8ad5e8db7acc1c2440",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Treatments"
+              }
+            },
+            "Property": "Treatment Category Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8bb1c157eecda69d0050",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Earnings"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "b912ab0168303c17aa12",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Week Ending Date"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   },
   "isHidden": true
 }
