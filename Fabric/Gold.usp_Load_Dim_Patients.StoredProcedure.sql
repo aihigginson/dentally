@@ -116,6 +116,7 @@ BEGIN
             -- wrongly by whoever meets it next: NULL here means NEVER ASKED, not "no".
             CASE WHEN p.Marketing_Opt_In = 1 THEN 'Opted in'
                  WHEN p.Marketing_Opt_In = 0 THEN 'Opted out'
+                 ELSE 'Never asked'
             END                                                                                     AS Marketing_Consent,
             TRY_CAST(NULLIF(TRIM(ps.First_Appointment_Date), '') AS DATE)                           AS First_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date), '') AS DATE)                            AS Last_Appointment_Date,

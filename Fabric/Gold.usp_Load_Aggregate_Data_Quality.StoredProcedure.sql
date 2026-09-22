@@ -203,10 +203,15 @@ BEGIN
             GROUP BY p.Tenant_ID
 
             UNION ALL
+            -- ==> MOVES WITH Gold.usp_Load_Dim_Patients. <== V174 named the third state
+            -- 'Never asked' instead of leaving it NULL, so this test had to change with it.
+            -- Left as IS NULL it would have matched nothing and reported a permanent 0, which
+            -- on this scorecard reads as a passing check. The ISNULL keeps it correct either
+            -- way, so a rebuilt dimension mid-release cannot make the row lie.
             SELECT 'PAT_NO_MARKETING_PREF', p.Tenant_ID, COUNT(*)
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
-              AND p.Marketing_Consent IS NULL
+              AND ISNULL(p.Marketing_Consent, 'Never asked') = 'Never asked'
             GROUP BY p.Tenant_ID
 
             -- Recalls

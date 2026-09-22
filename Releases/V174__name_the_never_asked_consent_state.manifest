@@ -1,0 +1,42 @@
+# =====================================================================
+# Release V174 -- name the third consent state
+# =====================================================================
+# V173 made Gold.Dim_Patients.Marketing_Consent hold all three states, as
+# 'Opted in' / 'Opted out' / NULL. This names the third one 'Never asked'.
+#
+# WHY IT IS WORTH A RELEASE OF ITS OWN. A NULL is not a category. In a slicer it appears as
+# "(Blank)" if it appears at all; in a chart the rows silently drop out rather than showing as
+# the largest group, which on tenant 100 is 6,739 of 7,029 active patients -- by far the most
+# important thing the field has to say. A reader also has to be TOLD that NULL means "never
+# asked" rather than "no", and nobody reads the load procedure. The value says it instead.
+#
+# ==> THE DATA-QUALITY CHECK HAD TO MOVE IN THE SAME RELEASE. <== PAT_NO_MARKETING_PREF in
+# Gold.usp_Load_Aggregate_Data_Quality tested `Marketing_Consent IS NULL`. Once the load writes
+# a string, that predicate matches nothing and the check reports a permanent 0 -- which on this
+# scorecard is indistinguishable from a practice with nothing to fix. Shipping the rename alone
+# would have silently switched the check off. It is now
+# `ISNULL(Marketing_Consent, 'Never asked') = 'Never asked'`, which is correct against both the
+# old and the new representation, so the order the two procedures run in cannot make it lie.
+#
+# COLLATION. The warehouse is Latin1_General_100_BIN2_UTF8 -- binary, case-sensitive -- so the
+# literal in the check must match the literal in the load exactly, character for character.
+# Both are written as 'Never asked'. Changing the casing in one place only would break the
+# check silently, in the same way IS NULL would have.
+#
+# STILL NO CONSUMERS. PBI/ and Web/ reference Marketing_Consent nowhere, so the values remain
+# free to change. This is the last moment that is true for free.
+#
+# Gold.usp_Load_Dim_Patients is hash-gated and Marketing_Consent sits in both sides of the hash
+# by column name, so every row re-hashes and updates on the next run. No Silver change, no
+# Bronze clear.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V174__name_the_never_asked_consent_state.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST
