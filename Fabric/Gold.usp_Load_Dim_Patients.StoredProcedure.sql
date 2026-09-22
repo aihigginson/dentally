@@ -109,7 +109,14 @@ BEGIN
             p.Use_Email                                                                             AS Use_Email,
             p.Use_SMS                                                                               AS Use_SMS,
             NULLIF(TRIM(p.Preferred_Phone), '')                                                     AS Preferred_Phone,
-            NULLIF(p.Marketing_Opt_In, 0)                                                           AS Marketing_Consent,
+            -- THE SECOND COLLAPSE, removed in V173. This read NULLIF(p.Marketing_Opt_In, 0),
+            -- which threw "opted out" away a second time -- so even once Silver preserved the
+            -- three states, Gold would still have shown only "opted in" or nothing. Mapped to
+            -- words because the column is varchar and a bare 1/0/NULL on a consent field is read
+            -- wrongly by whoever meets it next: NULL here means NEVER ASKED, not "no".
+            CASE WHEN p.Marketing_Opt_In = 1 THEN 'Opted in'
+                 WHEN p.Marketing_Opt_In = 0 THEN 'Opted out'
+            END                                                                                     AS Marketing_Consent,
             TRY_CAST(NULLIF(TRIM(ps.First_Appointment_Date), '') AS DATE)                           AS First_Appointment_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Appointment_Date), '') AS DATE)                            AS Last_Appointment_Date,
             next_apt.Next_Appointment_Date                                                          AS Next_Appointment_Date,

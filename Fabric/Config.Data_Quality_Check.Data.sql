@@ -85,21 +85,16 @@ VALUES
      'Capture the date of birth at the next visit.',
      'ACTIVE_PATIENTS', 1, 100),
 
--- SEEDED INACTIVE (Is_Active = 0), and it must stay that way until Silver is fixed.
--- Dentally holds marketing as THREE states -- yes, no, never asked. Silver.Patients.Marketing_Opt_In
--- is a BIT, so "no" and "never asked" both land as 0, and Gold then maps 0 to NULL. On tenant 100
--- that silently merges 170 patients who gave an answer with 27,491 who were never asked.
--- The check would therefore report "no preference recorded" for people who recorded one -- on a
--- consent field, which is the one place that distinction carries legal weight. It would also read
--- 97.7%, so as a finding it is noise a practice cannot act on.
--- Re-enable it once Silver preserves the third state; the counting branch in the load proc is
--- already there and correct.
+-- Re-enabled by V173. Silver.Patients.Marketing_Opt_In now preserves Dentally's three states
+-- (true / false / absent) instead of folding "no" in with "never asked", and Gold maps them to
+-- 'Opted in' / 'Opted out' / NULL. So Marketing_Consent IS NULL now means what this check says
+-- it means: nobody ever asked. Before V173 it also swept up everyone who had answered no.
     ('PAT_NO_MARKETING_PREF', 'Patients',
      'Active patients with no marketing preference recorded',
      'Low', 3,
      'With no recorded preference they cannot safely be included in any marketing, so the reachable audience is far smaller than the patient list suggests.',
      'Ask at the next visit, or run a one-off preference request to those who can be contacted.',
-     'ACTIVE_PATIENTS', 0, 110),
+     'ACTIVE_PATIENTS', 1, 110),
 
 -- Recalls ----------------------------------------------------------------------------
     ('RECALL_NO_REMINDER', 'Recalls',
