@@ -68,6 +68,22 @@
                       "Entity": "_Data Quality Detail"
                     }
                   },
+                  "Property": "Next Appointment Date"
+                }
+              },
+              "queryRef": "_Data Quality Detail.Next Appointment Date",
+              "nativeQueryRef": "Next Appointment Date",
+              "displayName": "Next in",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Data Quality Detail"
+                    }
+                  },
                   "Property": "Detail Label"
                 }
               },
@@ -119,7 +135,7 @@
                     "Entity": "_Data Quality Detail"
                   }
                 },
-                "Property": "Detail Date"
+                "Property": "Next Appointment Days"
               }
             },
             "direction": "Ascending"
@@ -239,6 +255,20 @@
           "selector": {
             "metadata": "_Data Quality Detail.Detail Date"
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "85D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Data Quality Detail.Next Appointment Date"
+          }
         }
       ]
     },
@@ -249,7 +279,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Records behind this check — oldest first'"
+                  "Value": "'Records behind this check — soonest back in the practice first'"
                 }
               }
             },
