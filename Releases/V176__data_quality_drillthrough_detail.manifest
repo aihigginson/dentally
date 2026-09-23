@@ -1,0 +1,65 @@
+# =====================================================================
+# Release V176 -- the named list behind every data-quality count
+# =====================================================================
+# V172 gave the practice counts. A count is not a worklist: "471 overdue recalls with no
+# reminder" tells a practice manager that something is wrong and nothing about what to do on
+# Monday morning. Gold.Fact_Data_Quality_Detail is the same finding at row grain -- one row per
+# offending record per check, with the name, the Dentally id, the date that matters and a
+# one-line note.
+#
+# LONG FORMAT, DELIBERATELY. The checks span patients, appointments, recalls, clinicians and
+# treatments; no wide shape suits all five. Every row instead carries the same six presentation
+# columns, and Detail_Label says what Detail_Date means for that check ('Last seen', 'Recall
+# due', 'Registered'). One drillthrough page serves all fourteen checks, and a fifteenth check
+# needs no report change at all.
+#
+# ==> Tenant_Check_Key, NOT Check_Code, IS THE JOIN. <== Check_Code is unique per tenant, not
+# globally, so a relationship on it alone becomes many-to-many the moment a second practice
+# exists -- every tenant's rows would fan into every other tenant's. RLS hides other tenants
+# from a VIEWER, but the semantic model resolves relationships against the whole table, where
+# they are all present. The key is Tenant_ID + '|' + Check_Code and it is added to
+# Gold.Aggregate_Data_Quality in this release for that purpose.
+#
+# ==> THE TWO PROCEDURES MUST AGREE AND NOTHING ENFORCES IT. <== The aggregate and the detail
+# answer the same question at different grains, with the predicates written out twice. If they
+# drift, the scorecard says 471 and the drillthrough lists 460 -- worse than no drillthrough at
+# all, because the practice then trusts neither number. Every detail branch is a copy of its
+# opposite number with COUNT(*) replaced by identifying columns. CHANGE ONE, CHANGE THE OTHER.
+# The EXEC at the end of this manifest re-checks every check total after the load and raises if
+# any disagree, so a drift cannot be deployed silently.
+#
+# The aggregate TABLE is deployed rather than ALTERed: it is an Aggregate, rebuilt DELETE +
+# INSERT every run with pk from ROW_NUMBER(), and nothing holds a foreign key to it. The usual
+# prohibition protects surrogate keys that hash-gated facts point at; there are none here.
+#
+# AFTER DEPLOYING, IN POWER BI DESKTOP:
+#   1. import PBI.[_Data Quality Detail]
+#   2. RLS filter on [Tenant ID], as for every other table -- Check_RLS_Coverage.ps1 fails the
+#      build without it, and a miss is a cross-tenant leak
+#   3. relationship: 'Aggregate Data Quality'[Tenant Check Key] 1 --> * '_Data Quality Detail'
+#      [Tenant Check Key], single direction
+#   4. refresh 'Aggregate Data Quality' too -- it has a new column
+#   5. save + publish
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V176__data_quality_drillthrough_detail.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Aggregate_Data_Quality.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Data_Quality_Detail.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# The reconciliation. Counts the detail rows per check and compares them with the scorecard's
+# own Records_Affected. Any disagreement is the two procedures having drifted, and it fails the
+# deploy rather than shipping a drillthrough that contradicts the number it was reached from.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @bad > 0 BEGIN SET @msg = 'V176 reconciliation FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' check(s) where the detail row count does not match Records_Affected. The aggregate and detail procedures have drifted.'; THROW 50176, @msg, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

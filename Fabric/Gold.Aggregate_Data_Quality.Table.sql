@@ -21,6 +21,7 @@ GO
 CREATE TABLE [Gold].[Aggregate_Data_Quality] (
     [pk_Data_Quality]   [bigint]        NOT NULL,
     [Tenant_ID]         [int]           NOT NULL,
+    [Tenant_Check_Key]  [varchar](80)   NOT NULL,   -- 1:many join to Fact_Data_Quality_Detail
     [Check_Code]        [varchar](50)   NOT NULL,
     [Check_Category]    [varchar](30)   NOT NULL,
     [Check_Name]        [varchar](200)  NOT NULL,
