@@ -5,7 +5,7 @@
     "x": 1000,
     "y": 140,
     "z": 5000,
-    "height": 170,
+    "height": 300,
     "width": 272,
     "tabOrder": 5000
   },
@@ -68,6 +68,13 @@
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
                 }
               }
             }
