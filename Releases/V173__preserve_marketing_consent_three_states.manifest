@@ -1,0 +1,56 @@
+# =====================================================================
+# Release V173 -- stop throwing away "opted out"
+# =====================================================================
+# Dentally holds marketing consent as THREE states: true (opted in), false (opted OUT) and
+# absent (never asked). The warehouse was collapsing it to two, TWICE, in different places --
+# so by the time it reached Gold there was no way to tell someone who had said no from someone
+# who had never been asked.
+#
+#   Silver.usp_Load_Patients   CASE WHEN ... IN ('true','1') THEN 1 ELSE CAST(0 AS bit) END
+#                              -> "false" and "never asked" both landed as 0
+#   Gold.usp_Load_Dim_Patients NULLIF(p.Marketing_Opt_In, 0)
+#                              -> and then 0 was thrown away a second time
+#
+# The net effect on tenant 100: 173 patients who answered yes survived; 170 who answered NO
+# were merged with 27,491 who were never asked. On a consent field, that is the one distinction
+# that carries legal weight -- an opt-out is an instruction, an absence is a gap.
+#
+# NO TYPE CHANGE IS NEEDED. Silver.Patients.Marketing_Opt_In is already [bit] NULL, and Gold's
+# Marketing_Consent is already varchar(255). Both columns could always have held three states;
+# the loads simply refused to put them there. This release is two expressions, no DDL.
+#
+# GOLD NOW STORES WORDS -- 'Opted in' / 'Opted out' / NULL. The column is varchar, and a bare
+# 1/0/NULL on a consent field invites exactly the misreading this release exists to fix: NULL
+# here means NEVER ASKED, not "no". Spelling it out makes the report self-describing and leaves
+# the third state visibly distinct rather than merely absent.
+#
+# NOTHING CONSUMES IT YET. Grepping PBI/ and Web/ for Marketing_Consent returns nothing, so the
+# representation can change freely today in a way it could not once a report or a measure is
+# built on it. That is the reason to do it now rather than when it is first needed.
+#
+# NO BRONZE CLEAR, NO FULL REFRESH. Silver.usp_Load_Patients scans all of Bronze.Patients and
+# gates on _Row_Hash; Marketing_Opt_In is inside that hash, so changing the expression changes
+# the hash and every affected row updates on the next run. Gold.usp_Load_Dim_Patients is
+# hash-gated the same way and Marketing_Consent is in both sides of its hash by column name, so
+# the new values propagate without touching the hash construction. Order matters only in that
+# Silver must run before Gold.
+#
+# Re-enables PAT_NO_MARKETING_PREF in the V172 scorecard. It was seeded Is_Active = 0 precisely
+# because of this bug: "no marketing preference recorded" would have counted the people who had
+# recorded one. The counting branch (Marketing_Consent IS NULL) needs no change -- after this
+# release it finally means what it says.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V173__preserve_marketing_consent_three_states.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+
+# Silver before Gold: Gold reads Silver.Patients, so running these the other way round would
+# rebuild the dimension from the old two-state values and look like the fix had not worked.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

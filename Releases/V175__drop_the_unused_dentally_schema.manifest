@@ -1,0 +1,35 @@
+# =====================================================================
+# Release V175 -- drop the unused [dentally] schema
+# =====================================================================
+# An empty schema that has been sitting in both warehouses since the start, cluttering the
+# schema list in SSMS between Meta and queryinsights.
+#
+# WHERE IT CAME FROM. Fabric\dentally.Schema.sql, added in the Initial Commit (937cdcc) as
+# scaffolding before the medallion schemas existed. No release manifest has ever deployed it --
+# it reached both warehouses by hand, early on, and was then forgotten. Nothing in the repo
+# references [dentally].<anything>, and no code creates it.
+#
+# IT IS EMPTY IN BOTH ENVIRONMENTS, verified before writing this: sys.objects returns 0 rows for
+# the schema on dev and on prod. That is checked again by the guard below rather than trusted,
+# because the gap between writing a release and running it is exactly where that stops being
+# true.
+#
+# THE GUARD IS BELT AND BRACES, not the safety net. DROP SCHEMA refuses outright if the schema
+# contains anything -- it does not cascade -- so the worst case without the guard is a failed
+# deploy, never lost objects. The guard is there to make the release idempotent and to keep the
+# EXISTS test honest if it is ever re-run against an environment that has already had it.
+#
+# Fabric\dentally.Schema.sql is DELETED in the same commit. Left in place it is a landmine: a
+# file whose whole content is CREATE SCHEMA [dentally], sitting alongside thirteen other
+# *.Schema.sql files that ARE legitimate, waiting for someone to deploy the set.
+#
+# X.Schema.sql and Y.Schema.sql are the same kind of Initial Commit scaffolding, but neither
+# schema was ever created in either warehouse, so there is nothing to drop and they are left
+# alone. Worth a tidy of their own some day; not this release.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V175__drop_the_unused_dentally_schema.manifest
+# =====================================================================
+
+EXEC     IF EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'dentally') AND NOT EXISTS (SELECT 1 FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'dentally') EXEC('DROP SCHEMA [dentally]');
+
+TEST

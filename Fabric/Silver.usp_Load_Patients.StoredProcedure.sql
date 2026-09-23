@@ -122,9 +122,16 @@ BEGIN
                                   NULLIF(TRIM(Home_Phone),   '')
                               ), 50)
                     END AS Preferred_Phone,
-                    -- Bronze Marketing is VARCHAR; map to Silver Marketing_Opt_In bit
-                    CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')
-                         THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Marketing_Opt_In,
+                    -- Bronze Marketing is VARCHAR and carries THREE states, which the column
+                    -- must preserve: 'true' = opted in, 'false' = opted OUT, absent = never asked.
+                    -- ==> NO ELSE 0 HERE. <== An explicit "no" is a recorded preference and is the
+                    -- one value with legal weight; folding it in with "never asked" loses exactly
+                    -- the distinction that makes the field worth holding. Until V173 this read
+                    -- ELSE CAST(0 AS bit), which merged 170 patients who answered with 27,491 who
+                    -- were never asked. Anything unrecognised stays NULL rather than guessing.
+                    CASE WHEN LOWER(TRIM(Marketing)) IN ('true','1')  THEN CAST(1 AS bit)
+                         WHEN LOWER(TRIM(Marketing)) IN ('false','0') THEN CAST(0 AS bit)
+                    END                                                      AS Marketing_Opt_In,
                     TRY_CAST(ROUND(TRY_CAST(Dentist_ID AS float),0) AS int)      AS Dentist_Practitioner_ID,
                     TRY_CAST(ROUND(TRY_CAST(Hygienist_ID AS float),0) AS int)    AS Hygienist_Practitioner_ID,
                     Payment_Plan_ID                                          AS Payment_Plan_ID,
