@@ -2647,3 +2647,45 @@ RETURN
     rc.DisplayFolder = g; rc.FormatString = "#,##0";
     rc.Description = "Rows on the Recall Details page -- recalls, not patients.";
 }
+
+// ===================== Data Quality =====================
+{
+// =====================================================================
+// Day Book -> Data Quality. The scorecard COUNTS MUST BE MEASURES, not the stored
+// Records_Affected column on 'Aggregate Data Quality'.
+//
+// A stored count cannot respond to a filter. With the column, slicing the detail to "coming in
+// within 7 days" changed the drillthrough list but left the summary showing the full 6,742 --
+// so the two disagreed on screen, which is the one thing this feature cannot afford. As a
+// measure, the summary and the detail are the same number by construction, at every filter.
+//
+// The relationship '_Data Quality Detail'[Tenant Check Key] * --> 1 'Aggregate Data Quality'
+// does the work: the aggregate row supplies the check, the measure counts whatever detail rows
+// survive the slicers. Aggregate Data Quality stays in the model as the CHECK DIMENSION --
+// name, severity, guidance, population -- and its Records_Affected column remains only as the
+// baseline the V176/V177 deploy reconciliation compares against. Do not put it on a visual.
+//
+// "+ 0" is load-bearing. COUNTROWS returns BLANK for a check with nothing wrong, and a blank
+// row drops out of the table -- so a passing check would vanish and be indistinguishable from
+// a check that had not run. 0 is the whole point of a scorecard.
+// =====================================================================
+var t = Model.Tables["_Measures"];
+var g = "Data Quality";
+
+foreach (var existing in t.Measures.Where(m => m.DisplayFolder == g).ToList())
+    existing.Delete();
+
+Action<string,string,string> add = (name, dax, fmt) => {
+    var m = t.AddMeasure(name, dax);
+    m.DisplayFolder = g;
+    if (fmt != "") m.FormatString = fmt;
+};
+
+add("DQ Records", "COUNTROWS('_Data Quality Detail') + 0", "#,##0");
+
+// Population is the denominator for the whole check (all active patients, all future
+// appointments) and never varies with the slicer, so it is read from the dimension rather than
+// recounted. MAX over a single aggregate row is just "the value on this row".
+add("DQ % of Group",
+    "DIVIDE([DQ Records], MAX('Aggregate Data Quality'[Population]))", "0.0%");
+}

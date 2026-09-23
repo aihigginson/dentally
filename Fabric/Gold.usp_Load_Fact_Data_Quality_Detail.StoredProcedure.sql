@@ -291,13 +291,18 @@ BEGIN
             -- 'Not applicable' and 'None booked' are different answers and must not merge: the
             -- first means the row is not about a patient at all (a clinician, a treatment), the
             -- second means it IS about a patient and there is no way to catch them at the desk.
-            CASE WHEN h.fk_Patient IS NULL                      THEN 'Not applicable'
+            -- Numbered for the same reason Severity is: the band is a text column, and plain
+            -- text sorts alphabetically -- Later, None booked, Not applicable, Today, Within 7
+            -- days -- which is meaningless. The rank in the value makes the slicer and any sort
+            -- correct without the model needing a sort-by-column set by hand, which is one more
+            -- thing to forget on every republish.
+            CASE WHEN h.fk_Patient IS NULL                      THEN '6: Not applicable'
                  WHEN np.Next_Appointment_Date IS NULL
-                   OR np.Next_Appointment_Date < @Today         THEN 'None booked'
-                 WHEN np.Next_Appointment_Date = @Today         THEN 'Today'
-                 WHEN np.Next_Appointment_Date <= DATEADD(DAY,  7, @Today) THEN 'Within 7 days'
-                 WHEN np.Next_Appointment_Date <= DATEADD(DAY, 30, @Today) THEN 'Within 30 days'
-                 ELSE 'Later' END,
+                   OR np.Next_Appointment_Date < @Today         THEN '5: None booked'
+                 WHEN np.Next_Appointment_Date = @Today         THEN '1: Today'
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY,  7, @Today) THEN '2: Within 7 days'
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY, 30, @Today) THEN '3: Within 30 days'
+                 ELSE '4: Later' END,
             CASE WHEN h.fk_Patient IS NULL                      THEN 6
                  WHEN np.Next_Appointment_Date IS NULL
                    OR np.Next_Appointment_Date < @Today         THEN 5
