@@ -61,7 +61,7 @@ VALUES
     ('PAT_NO_RECALL_DATE', 'Patients',
      'No Recall Date',
      '1: High', 1,
-     'A patient with no recall date is never called back. They appear on no recall list, so nothing ever flags them as overdue -- they simply stop coming.',
+     'A patient with no recall date is never called back. They appear on no recall list, so nothing ever flags them as overdue -- they simply stop coming. Patients who already have an appointment booked are excluded: they are coming in regardless.',
      'Set a dentist and/or hygienist recall interval on each record.',
      'ACTIVE_PATIENTS', 1, 60),
 
@@ -108,7 +108,7 @@ VALUES
     ('RECALL_NO_REMINDER', 'Recalls',
      'Recalls Never Chased',
      '1: High', 1,
-     'These patients are overdue and have not been asked once. Unlike an ignored reminder, this is the practice failing to make contact rather than the patient declining.',
+     'These patients are overdue and have not been asked once. Unlike an ignored reminder, this is the practice failing to make contact rather than the patient declining. Patients who already have an appointment booked are excluded: there is nothing to chase.',
      'Send the first reminder, and check why the recall run skipped them -- usually a missing contact detail or recall method.',
      'OVERDUE_RECALLS', 1, 120),
 

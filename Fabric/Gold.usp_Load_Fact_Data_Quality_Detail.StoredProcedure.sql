@@ -163,6 +163,9 @@ BEGIN
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Dentist_Recall_Date IS NULL AND p.Hygienist_Recall_Date IS NULL
+              -- See the note on this check in usp_Load_Aggregate_Data_Quality: a future
+              -- appointment answers the finding, so it is not on the worklist.
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
 
             UNION ALL
             SELECT 'PAT_DORMANT', p.Tenant_ID, p.pk_Patient, 'Patient',
@@ -226,6 +229,8 @@ BEGIN
             WHERE r.Days_Overdue > 0
               AND ISNULL(r.Is_In_Scope, 0) = 1
               AND ISNULL(r.Is_Reminder_Sent, 0) = 0
+              -- You do not chase someone who is already coming in.
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
 
             -- People ──────────────────────────────────────────────────────────
             UNION ALL

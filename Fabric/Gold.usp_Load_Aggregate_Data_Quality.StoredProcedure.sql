@@ -166,10 +166,19 @@ BEGIN
             GROUP BY p.Tenant_ID
 
             UNION ALL
+            -- ==> AN APPOINTMENT VOIDS THIS FINDING. <== You do not chase someone who is
+            -- already coming in. This and PAT_NO_RECALL_DATE are the two checks about GETTING
+            -- THE PATIENT BACK, so a future booking answers them outright. It is the opposite
+            -- for the data-gap checks -- No Contact Details, No Date of Birth, No Marketing
+            -- Preference -- where an imminent appointment is the OPPORTUNITY to fix the gap,
+            -- which is what Next_Appointment_Band is for. Do not copy this predicate there.
+            -- PAT_DORMANT and PAT_NEVER_SEEN already excluded booked patients; these two were
+            -- the inconsistency.
             SELECT 'PAT_NO_RECALL_DATE', p.Tenant_ID, COUNT(*)
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Dentist_Recall_Date IS NULL AND p.Hygienist_Recall_Date IS NULL
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -216,11 +225,17 @@ BEGIN
 
             -- Recalls
             UNION ALL
+            -- Joined to the patient ONLY to read Next_Appointment_Date. The join is INNER to
+            -- match the detail branch exactly; it drops nothing today (472 = 472 through the
+            -- reconciliation) because every in-scope recall resolves to a real patient.
             SELECT 'RECALL_NO_REMINDER', r.Tenant_ID, COUNT(*)
             FROM Gold.Fact_Recalls r
+            JOIN Gold.Dim_Patients p ON p.pk_Patient = r.fk_Patient
+                                    AND p.Tenant_ID  = r.Tenant_ID
             WHERE r.Days_Overdue > 0
               AND ISNULL(r.Is_In_Scope, 0) = 1
               AND ISNULL(r.Is_Reminder_Sent, 0) = 0
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
             GROUP BY r.Tenant_ID
 
             -- People
