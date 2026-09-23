@@ -163,6 +163,9 @@ BEGIN
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Dentist_Recall_Date IS NULL AND p.Hygienist_Recall_Date IS NULL
+              -- See the note on this check in usp_Load_Aggregate_Data_Quality: a future
+              -- appointment answers the finding, so it is not on the worklist.
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
 
             UNION ALL
             SELECT 'PAT_DORMANT', p.Tenant_ID, p.pk_Patient, 'Patient',
@@ -226,6 +229,8 @@ BEGIN
             WHERE r.Days_Overdue > 0
               AND ISNULL(r.Is_In_Scope, 0) = 1
               AND ISNULL(r.Is_Reminder_Sent, 0) = 0
+              -- You do not chase someone who is already coming in.
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
 
             -- People ──────────────────────────────────────────────────────────
             UNION ALL
@@ -268,6 +273,8 @@ BEGIN
             pk_Data_Quality_Detail, Tenant_ID, Tenant_Check_Key, Check_Code, Check_Category,
             Check_Name, Severity, Severity_Sort, fk_Patient, Record_Type, Record_Name,
             Record_Reference, Detail_Date, Detail_Label, Detail_Note,
+            fk_Date_Next_Appointment, Next_Appointment_Date, Next_Appointment_Days,
+            Next_Appointment_Band, Next_Appointment_Band_Sort,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -277,11 +284,44 @@ BEGIN
             h.Check_Code, c.Check_Category, c.Check_Name, c.Severity, c.Severity_Sort,
             h.fk_Patient, h.Record_Type, h.Record_Name, h.Record_Reference,
             h.Detail_Date, h.Detail_Label, h.Detail_Note,
+            -- ── When are they next in? ────────────────────────────────────────────
+            -- Computed HERE rather than in each branch: fk_Patient is already on #hits, so one
+            -- LEFT JOIN answers it for all fourteen checks at once. Adding it to the branches
+            -- would be fourteen chances to write it differently.
+            CASE WHEN np.Next_Appointment_Date >= @Today
+                 THEN Gold.fn_Get_Date_Key(np.Next_Appointment_Date) END,
+            CASE WHEN np.Next_Appointment_Date >= @Today THEN np.Next_Appointment_Date END,
+            CASE WHEN np.Next_Appointment_Date >= @Today
+                 THEN DATEDIFF(DAY, @Today, np.Next_Appointment_Date) END,
+            -- 'Not applicable' and 'None booked' are different answers and must not merge: the
+            -- first means the row is not about a patient at all (a clinician, a treatment), the
+            -- second means it IS about a patient and there is no way to catch them at the desk.
+            -- Numbered for the same reason Severity is: the band is a text column, and plain
+            -- text sorts alphabetically -- Later, None booked, Not applicable, Today, Within 7
+            -- days -- which is meaningless. The rank in the value makes the slicer and any sort
+            -- correct without the model needing a sort-by-column set by hand, which is one more
+            -- thing to forget on every republish.
+            CASE WHEN h.fk_Patient IS NULL                      THEN '6: Not applicable'
+                 WHEN np.Next_Appointment_Date IS NULL
+                   OR np.Next_Appointment_Date < @Today         THEN '5: None booked'
+                 WHEN np.Next_Appointment_Date = @Today         THEN '1: Today'
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY,  7, @Today) THEN '2: Within 7 days'
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY, 30, @Today) THEN '3: Within 30 days'
+                 ELSE '4: Later' END,
+            CASE WHEN h.fk_Patient IS NULL                      THEN 6
+                 WHEN np.Next_Appointment_Date IS NULL
+                   OR np.Next_Appointment_Date < @Today         THEN 5
+                 WHEN np.Next_Appointment_Date = @Today         THEN 1
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY,  7, @Today) THEN 2
+                 WHEN np.Next_Appointment_Date <= DATEADD(DAY, 30, @Today) THEN 3
+                 ELSE 4 END,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #hits h
         -- Catalogue-gated: a check switched off in Config.Data_Quality_Check must not leave
         -- orphan detail rows behind a count that is no longer on the scorecard.
-        JOIN Config.Data_Quality_Check c ON c.Check_Code = h.Check_Code AND c.Is_Active = 1;
+        JOIN Config.Data_Quality_Check c ON c.Check_Code = h.Check_Code AND c.Is_Active = 1
+        LEFT JOIN Gold.Dim_Patients np ON np.pk_Patient = h.fk_Patient
+                                      AND np.Tenant_ID  = h.Tenant_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #hits;

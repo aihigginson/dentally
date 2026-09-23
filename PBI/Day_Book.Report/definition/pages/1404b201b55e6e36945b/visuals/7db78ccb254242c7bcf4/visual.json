@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "7db78ccb254242c7bcf4",
   "position": {
-    "x": 16,
-    "y": 116,
+    "x": 0,
+    "y": 74.36871508379889,
     "z": 12000,
-    "height": 470,
-    "width": 1248,
+    "height": 512,
+    "width": 1264.2681564245811,
     "tabOrder": 12000
   },
   "visual": {
@@ -61,32 +61,32 @@
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "Aggregate Data Quality"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Records Affected"
+                  "Property": "DQ Records"
                 }
               },
-              "queryRef": "Aggregate Data Quality.Records Affected",
-              "nativeQueryRef": "Records Affected",
+              "queryRef": "_Measures.DQ Records",
+              "nativeQueryRef": "DQ Records",
               "displayName": "Records"
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "Aggregate Data Quality"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Pct Affected"
+                  "Property": "DQ % of Group"
                 }
               },
-              "queryRef": "Aggregate Data Quality.Pct Affected",
-              "nativeQueryRef": "Pct Affected",
+              "queryRef": "_Measures.DQ % of Group",
+              "nativeQueryRef": "DQ % of Group",
               "displayName": "% of group"
             },
             {
@@ -117,20 +117,20 @@
                     "Entity": "Aggregate Data Quality"
                   }
                 },
-                "Property": "Severity Sort"
+                "Property": "Severity"
               }
             },
             "direction": "Ascending"
           },
           {
             "field": {
-              "Column": {
+              "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "Aggregate Data Quality"
+                    "Entity": "_Measures"
                   }
                 },
-                "Property": "Records Affected"
+                "Property": "DQ Records"
               }
             },
             "direction": "Descending"
@@ -186,7 +186,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "60D"
+                  "Value": "70D"
                 }
               }
             }
@@ -214,7 +214,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "380D"
+                  "Value": "230D"
                 }
               }
             }
@@ -234,7 +234,7 @@
             }
           },
           "selector": {
-            "metadata": "Aggregate Data Quality.Records Affected"
+            "metadata": "_Measures.DQ Records"
           }
         },
         {
@@ -248,7 +248,7 @@
             }
           },
           "selector": {
-            "metadata": "Aggregate Data Quality.Pct Affected"
+            "metadata": "_Measures.DQ % of Group"
           }
         }
       ]
@@ -260,7 +260,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Data Quality — what is worth putting right in Dentally'"
+                  "Value": "'Data Quality — select a row, then Detail'"
                 }
               }
             },
@@ -283,6 +283,94 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "02b2979903b4ab0c261e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "Severity"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c8ed17e56a1176b6aac5",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "Check Category"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "a6178a4356939808c65c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "Check Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0593dde77000b0810663",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "Records Affected"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "94267964b89d3de5a033",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "Pct Affected"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "dd96934f0a544d790070",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Aggregate Data Quality"
+              }
+            },
+            "Property": "What To Do"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   },
   "isHidden": true
 }

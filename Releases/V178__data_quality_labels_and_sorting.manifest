@@ -1,0 +1,57 @@
+# =====================================================================
+# Release V178 -- labels, not sentences; and ranks that sort
+# =====================================================================
+# Three presentation fixes to the data-quality feature. No structural change: same tables, same
+# relationships, same rows.
+#
+# 1. CHECK NAMES ARE LABELS NOW. They read as sentences -- "Active patients with no phone number
+#    and no email address" -- which is inconsistent with every other label in the product.
+#    Config.Metric_Definitions uses short Title Case noun phrases ("Lapsed Patients", "Recalls
+#    Overdue Not Sent") and these now match: "No Contact Details", "Recalls Never Chased",
+#    "Booked with a Departed Clinician". Nothing is lost -- the sentence was always duplicated
+#    in Why_It_Matters, which is where a reader who wants the reasoning looks.
+#
+# 2. SEVERITY CARRIES ITS OWN RANK: '1: High' / '2: Medium' / '3: Low'. Clicking a text column
+#    sorts alphabetically, which for High/Medium/Low gives High, Low, Medium -- the least
+#    urgent band in the middle. The rank in the value makes the column sort by urgency with no
+#    sort-by-column to configure in the model, which is one less thing to forget on a republish.
+#
+# 3. THE SAME TREATMENT FOR Next_Appointment_Band, for the same reason and to retire the
+#    "set Next Appointment Band to sort by Next Appointment Band Sort" step V177 left behind.
+#    Alphabetically that column read Later, None booked, Not applicable, Today, Within 7 days --
+#    meaningless. Now '1: Today' .. '6: Not applicable'.
+#
+# Severity_Sort and Next_Appointment_Band_Sort are KEPT. They are still the right thing for a
+# visual's stored default sort, and dropping columns to save nothing is how a report that
+# referenced them breaks silently on the next refresh.
+#
+# ==> THE REPORT SIDE OF THIS RELEASE IS NOT OPTIONAL. <== The scorecard counts move from the
+# stored Records_Affected column to a new [DQ Records] measure over '_Data Quality Detail'. A
+# stored count cannot respond to a filter: slicing the detail to "coming in within 7 days"
+# changed the drill list while the summary still showed the unfiltered 6,742, so the two
+# contradicted each other on screen -- the one thing this feature cannot afford. The measure
+# counts through the existing relationship, so summary and detail agree at every filter by
+# construction. Records_Affected stays in the warehouse purely as the baseline the V176/V177
+# deploy reconciliation compares against.
+#
+# IN POWER BI DESKTOP AFTER THIS DEPLOYS:
+#   1. run Fabric\PBI_Dentally.csx in Tabular Editor -- it adds the "Data Quality" measure
+#      folder with [DQ Records] and [DQ % of Group]
+#   2. refresh 'Aggregate Data Quality' and '_Data Quality Detail' for the new label values
+#   3. save + publish
+# No import, no new relationship, no RLS change. The Next Appointment Band sort-by-column step
+# from V177 is no longer needed.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V178__data_quality_labels_and_sorting.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# Relabelling must not change WHICH rows either table holds. Same reconciliation as V176/V177.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @bad > 0 BEGIN SET @msg = 'V178 reconciliation FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' check(s) where the detail row count no longer matches Records_Affected.'; THROW 50178, @msg, 1; END;
+
+TEST

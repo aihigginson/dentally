@@ -1,0 +1,55 @@
+# =====================================================================
+# Release V177 -- when is this person next through the door?
+# =====================================================================
+# A list of 6,742 patients with no marketing preference is not a worklist. The 338 of them due
+# in the next seven days is, because the fix for most of these checks is to ask at the desk
+# while the patient is standing there. This adds that to Gold.Fact_Data_Quality_Detail:
+#
+#   fk_Date_Next_Appointment    Gold.Dim_Date key (days-since-1999), for relating if wanted
+#   Next_Appointment_Date       the date itself, to show and to sort on
+#   Next_Appointment_Days       days from now, so ascending sort puts the imminent ones first
+#   Next_Appointment_Band       Today / Within 7 days / Within 30 days / Later / None booked /
+#                               Not applicable
+#   Next_Appointment_Band_Sort  1..6, because the band sorts alphabetically otherwise
+#
+# 'None booked' and 'Not applicable' are DIFFERENT ANSWERS and must not merge. The first means
+# the row is about a patient who cannot be caught at the desk -- for several checks that is the
+# finding, not an absence of one. The second means the row is not about a patient at all: a
+# clinician with no GDC number, a treatment with no code.
+#
+# COMPUTED ONCE, IN THE FINAL INSERT, not in the fourteen branches. fk_Patient is already on
+# #hits, so one LEFT JOIN to Dim_Patients answers it for every check at the same time. Writing
+# it into each branch would be fourteen chances to write it fourteen different ways, and the
+# branches already carry the burden of matching the aggregate's predicates exactly.
+#
+# ==> I HAVE DELIBERATELY NOT WIRED A MODEL RELATIONSHIP FOR fk_Date_Next_Appointment. <==
+# The column is there so you can, but think before you do. Day Book deliberately runs on
+# 'List Date Unconstrained' -- it is the one report the period filter is not forced on. Relate
+# the detail to a date table and any date slicer starts filtering the drillthrough while the
+# scorecard it was reached from stays unfiltered, so the two numbers stop agreeing and rows the
+# practice needs can vanish without anyone touching the Data Quality page. Next_Appointment_Band
+# gives you "coming in the next few days" as a slicer with none of that risk, which is why the
+# report uses the band.
+#
+# The table is DEPLOYed rather than ALTERed: it is an Aggregate, rebuilt DELETE + INSERT every
+# run with pk from ROW_NUMBER(), and nothing holds a foreign key to it.
+#
+# AFTER DEPLOYING, IN POWER BI DESKTOP: refresh '_Data Quality Detail' for the five new columns,
+# then set 'Next Appointment Band' to sort by 'Next Appointment Band Sort'. Nothing else changes
+# -- no new table, no new relationship, RLS untouched.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V177__next_appointment_on_data_quality_detail.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Data_Quality_Detail.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# The V176 reconciliation, re-run. Adding columns must not change WHICH rows the detail holds,
+# and this is the check that proves it rather than assuming it.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @bad > 0 BEGIN SET @msg = 'V177 reconciliation FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' check(s) where the detail row count no longer matches Records_Affected.'; THROW 50177, @msg, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

@@ -41,6 +41,14 @@ CREATE TABLE [Gold].[Fact_Data_Quality_Detail] (
     [Detail_Date]            [date]              NULL,   -- the date that matters for this check
     [Detail_Label]           [varchar](50)       NULL,   -- what Detail_Date means
     [Detail_Note]            [varchar](300)      NULL,   -- contact, clinician, state -- per check
+    -- When is this person next through the door? A list of 6,742 patients is not a worklist;
+    -- the 338 of them due in the next seven days is, because the fix for most of these checks
+    -- is to ask at the desk. NULL/'Not applicable' for clinician and treatment rows.
+    [fk_Date_Next_Appointment]   [int]           NULL,   -- Gold.Dim_Date, days-since-1999 epoch
+    [Next_Appointment_Date]      [date]          NULL,
+    [Next_Appointment_Days]      [int]           NULL,   -- days from now; sort ascending
+    [Next_Appointment_Band]      [varchar](20)   NOT NULL,
+    [Next_Appointment_Band_Sort] [smallint]      NOT NULL,
     [DW_Created_At]          [datetime2](6)  NOT NULL,
     [DW_Updated_At]          [datetime2](6)  NOT NULL
 )

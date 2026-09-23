@@ -1,0 +1,48 @@
+# =====================================================================
+# Release V179 -- do not chase a patient who is already coming in
+# =====================================================================
+# "Recalls Never Chased" and "No Recall Date" were both counting patients who already have a
+# future appointment. Both checks exist to answer ONE question -- how do we get this patient
+# back in? -- and a booking answers it. Chasing them is work the practice does not need to do,
+# and every such row makes the worklist less trustworthy.
+#
+# ==> THIS IS NOT A RULE TO APPLY EVERYWHERE. <== The data-gap checks -- No Contact Details, No
+# Date of Birth, No Marketing Preference -- must NOT exclude booked patients. There an imminent
+# appointment is the OPPORTUNITY to close the gap, at the desk, while the patient is standing
+# there. That is exactly what Next_Appointment_Band is for, and excluding them would throw away
+# the most actionable rows on the list. The distinction is whether an appointment makes the
+# finding MOOT (these two) or makes it FIXABLE (the rest).
+#
+# PAT_DORMANT and PAT_NEVER_SEEN already excluded booked patients from the day they were
+# written. These two were the inconsistency, not the new behaviour.
+#
+# RECALL_NO_REMINDER gains an INNER join to Dim_Patients, purely to read Next_Appointment_Date.
+# Inner rather than left so it matches the detail branch exactly, which has always joined that
+# way; it drops nothing today -- the reconciliation had 472 = 472 -- because every in-scope
+# overdue recall resolves to a real patient. If that ever stops being true both sides move
+# together, which is the property that matters.
+#
+# Both procedures are edited in the same release, as always: they state the same predicates
+# twice and the reconciliation below is what proves they still agree.
+#
+# IN POWER BI DESKTOP: refresh 'Aggregate Data Quality' and '_Data Quality Detail'. No model
+# change -- no measures, no relationships, no RLS.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V179__recall_checks_exclude_booked_patients.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# Narrowing two checks must narrow them IDENTICALLY on both sides.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @bad > 0 BEGIN SET @msg = 'V179 reconciliation FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' check(s) where the detail row count no longer matches Records_Affected.'; THROW 50179, @msg, 1; END;
+
+# Neither check may still contain a patient with a future appointment. The reconciliation only
+# proves the two sides agree -- this proves they agree on the RIGHT rows.
+EXEC     DECLARE @leak INT, @m2 VARCHAR(4000); SELECT @leak = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code IN ('RECALL_NO_REMINDER','PAT_NO_RECALL_DATE') AND p.Next_Appointment_Date > CAST(SYSUTCDATETIME() AS DATE); IF @leak > 0 BEGIN SET @m2 = 'V179 FAILED: ' + CAST(@leak AS VARCHAR(10)) + ' row(s) on the recall checks still belong to a patient with a future appointment.'; THROW 50189, @m2, 1; END;
+
+TEST

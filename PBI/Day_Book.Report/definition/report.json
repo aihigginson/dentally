@@ -57,6 +57,16 @@
           "name": "Dentally_Analytics5186659068301307.json",
           "path": "Dentally_Analytics5186659068301307.json",
           "type": "Image"
+        },
+        {
+          "name": "drill_magnifier.png",
+          "path": "drill_magnifier.png",
+          "type": "Image"
+        },
+        {
+          "name": "drill_magnifier_off.png",
+          "path": "drill_magnifier_off.png",
+          "type": "Image"
         }
       ]
     },
