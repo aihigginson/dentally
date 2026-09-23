@@ -253,14 +253,20 @@ BEGIN
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO Gold.Aggregate_Data_Quality (
-            pk_Data_Quality, Tenant_ID, Check_Code, Check_Category, Check_Name,
+            pk_Data_Quality, Tenant_ID, Tenant_Check_Key, Check_Code, Check_Category, Check_Name,
             Severity, Severity_Sort, Why_It_Matters, What_To_Do,
             Records_Affected, Population, Pct_Affected, Has_Issue, Display_Order,
             DW_Created_At, DW_Updated_At
         )
         SELECT
             ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.Display_Order, s.Check_Code),
-            s.Tenant_ID, s.Check_Code, s.Check_Category, s.Check_Name,
+            s.Tenant_ID,
+            -- The tenant has to be IN the key. Check_Code is unique per tenant, not globally,
+            -- so a relationship on it alone would be many-to-many the moment a second practice
+            -- exists. RLS hides other tenants from a viewer but the model resolves
+            -- relationships against the whole table, where every tenant's rows are present.
+            CAST(s.Tenant_ID AS VARCHAR(20)) + '|' + s.Check_Code,
+            s.Check_Code, s.Check_Category, s.Check_Name,
             s.Severity, s.Severity_Sort, s.Why_It_Matters, s.What_To_Do,
             s.Records_Affected,
             s.Population,
