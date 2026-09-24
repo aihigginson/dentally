@@ -53,6 +53,17 @@ BEGIN
         --**** Procedure logic starts  ****
         --*********************************
 
+-- ==> "NOTHING BOOKED" MEANS NO APPOINTMENT FROM TODAY ONWARDS, NOT FROM TOMORROW. <==
+        -- These four checks all exclude a patient who has an appointment coming. They used
+        -- Next_Appointment_Date <= @Today, which admits an appointment TODAY -- so a patient
+        -- sitting in the waiting room counted as having nothing booked. On tenant 100 that put
+        -- 9 rows on the worklist that contradicted themselves on screen: the Next in column
+        -- said "1: Today" beside a finding whose whole premise is that nothing is booked.
+        -- Tony Rushbrook, last seen January 2020, in the chair today, listed as Dormant.
+        --
+        -- The band below uses >= @Today, so < @Today here makes the two exact complements:
+        -- a row shows a Next in date if and only if the check has excluded it. No gap, and
+        -- the contradiction cannot come back by one of the pair being edited alone.
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
@@ -178,7 +189,7 @@ BEGIN
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Dentist_Recall_Date IS NULL AND p.Hygienist_Recall_Date IS NULL
-              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -186,7 +197,7 @@ BEGIN
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
-              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -201,7 +212,7 @@ BEGIN
             FROM Gold.Dim_Patients p
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date IS NULL
-              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -235,7 +246,7 @@ BEGIN
             WHERE r.Days_Overdue > 0
               AND ISNULL(r.Is_In_Scope, 0) = 1
               AND ISNULL(r.Is_Reminder_Sent, 0) = 0
-              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date <= @Today)
+              AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
             GROUP BY r.Tenant_ID
 
             -- People

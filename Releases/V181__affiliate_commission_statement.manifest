@@ -1,0 +1,61 @@
+# =====================================================================
+# Release V181 -- the affiliate commission statement
+# =====================================================================
+# Billing.Invoice_Line has carried Affiliate_ID / Affiliate_Commission_Pct /
+# Affiliate_Commission_Value since V102, computed at generation time. Nothing has ever READ it:
+# no view, no report, nothing in the app or billing_run.py. This adds the read side.
+#
+# ==> THIS IS VENDOR MONEY AND MUST NOT GO IN THE CUSTOMER SEMANTIC MODEL. <== 'PBI Dentally' is
+# RLS-scoped per tenant and read by practice owners. A practice must never see what an introducer
+# earns from them, and an affiliate must never see other practices. These views belong in their
+# own small model, shared with nobody. Putting them in the customer model would be a data breach
+# dressed as a convenience.
+#
+# Billing.Affiliate_Payout is NEW and is the reason "outstanding" can exist at all. Invoice_Line
+# records what was EARNED; nothing anywhere recorded what was SETTLED, so every commission would
+# read as forever owing. Vendor-managed like Billing.Affiliate, and an IDEMPOTENT CREATE -- it
+# holds payment history that cannot be regenerated from any other source, so a DROP loses it
+# silently.
+#
+# THREE CORRECTNESS POINTS, all verified against dev data:
+#
+# 1. CREDIT NOTES ARE GROSS; INVOICE LINES ARE NET. Credit_Note.Amount_Pence includes VAT (dev:
+#    £416.80 with £69.47 tax) and Invoice_Line.Value excludes it (£386.80). Clawing commission
+#    back on the gross figure takes 20% too much off the affiliate every time. The view nets it
+#    off as Amount_Pence - Tax_Pence.
+#    Stripe_Invoice.Amount_Pence is NET, unlike Credit_Note. Those two disagree in the existing
+#    schema; this release does not change either, and uses Invoice_Line as the invoiced figure
+#    rather than trusting either.
+#
+# 2. EARNED ON INVOICING, PAYABLE ON COLLECTION. Commission_Accrued is what the invoice
+#    generated. Commission_Payable is 0 until Stripe reports the customer actually paid --
+#    otherwise a payout funds a partner out of our own pocket against money we never collected.
+#
+# 3. THE RATE COMES OFF THE LINE, NOT THE AFFILIATE. Invoice_Line.Affiliate_Commission_Pct is
+#    frozen at generation, so changing an affiliate's rate does not retrospectively restate every
+#    statement they have already been paid against. Name and email ARE read live -- for contact
+#    details, current is what you want.
+#
+# PROD HAS NO AFFILIATES. Billing.Affiliate is empty there and no tenant is linked, so the views
+# deploy and return zero rows. That is correct, not a failure: they populate the month after an
+# affiliate is onboarded and a tenant is pointed at them. Dev has one test affiliate and real
+# numbers to check the arithmetic against.
+#
+# NO MODEL OR REPORT IS CREATED BY THIS RELEASE -- the report is built in the Fabric workspace
+# over these two views. See the note at the end of the release for the steps.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V181__affiliate_commission_statement.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Billing.Affiliate_Payout.Table.sql
+DEPLOY   Fabric\Billing.vw_Affiliate_Commission.View.sql
+
+# The arithmetic, checked rather than assumed. Commission_Due must equal the accrued figure less
+# the NET credit at the line's own rate, to the penny, on every row. A failure here means the
+# gross/net trap above has come back.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM [Billing].[vw_Affiliate_Commission] WHERE ABS(Commission_Due - (Commission_Accrued + Commission_On_Credits)) > 0.005; IF @bad > 0 BEGIN SET @msg = 'V181 FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' statement row(s) where Commission_Due does not equal Commission_Accrued + Commission_On_Credits.'; THROW 50181, @msg, 1; END;
+
+# Nothing may be payable on an invoice the customer has not paid.
+EXEC     DECLARE @bad2 INT, @m2 VARCHAR(4000); SELECT @bad2 = COUNT(*) FROM [Billing].[vw_Affiliate_Commission] WHERE Is_Customer_Paid = 0 AND Commission_Payable <> 0; IF @bad2 > 0 BEGIN SET @m2 = 'V181 FAILED: ' + CAST(@bad2 AS VARCHAR(10)) + ' row(s) report commission payable against an uncollected invoice.'; THROW 50191, @m2, 1; END;
+
+TEST

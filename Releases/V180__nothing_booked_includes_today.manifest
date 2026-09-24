@@ -1,0 +1,50 @@
+# =====================================================================
+# Release V180 -- "nothing booked" means from today, not from tomorrow
+# =====================================================================
+# Four checks exclude patients who already have an appointment coming: Dormant Two Years, Never
+# Attended, No Recall Date and Recalls Never Chased. All four tested
+#
+#     Next_Appointment_Date IS NULL OR Next_Appointment_Date <= @Today
+#
+# which ADMITS an appointment today. A patient sitting in the waiting room counted as having
+# nothing booked.
+#
+# On tenant 100 that is 9 rows, and every one of them contradicted itself on screen: the Next in
+# column read "1: Today" beside a finding whose entire premise is that nothing is booked. Tony
+# Rushbrook, last seen January 2020, in the chair today, listed as Dormant Two Years. Nine rows
+# is nothing; a worklist that visibly argues with itself is not, because the reader stops
+# believing the other 1,300.
+#
+# ==> THE PREDICATE AND THE BAND ARE NOW EXACT COMPLEMENTS. <== Next_Appointment_Band uses
+# >= @Today to decide whether to show a date at all, so the checks now use < @Today. A row shows
+# a Next in date if and only if the check has excluded it. That is the property to preserve: the
+# bug was not the boundary itself but that the two halves were written independently with
+# different ideas of "future", and nothing forced them to agree.
+#
+# The guard at the end of this manifest is the thing that forces it from now on. V179 checked
+# only its own two checks; this checks all four, and fails the deploy if any row on a
+# nothing-booked check belongs to a patient with an appointment today or later.
+#
+# PAT_DORMANT and PAT_NEVER_SEEN carried this from V172; PAT_NO_RECALL_DATE and
+# RECALL_NO_REMINDER inherited it from V179, which copied the existing pattern.
+#
+# IN POWER BI DESKTOP: refresh 'Aggregate Data Quality' and '_Data Quality Detail'. No model
+# change.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V180__nothing_booked_includes_today.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @bad > 0 BEGIN SET @msg = 'V180 reconciliation FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' check(s) where the detail row count does not match Records_Affected.'; THROW 50180, @msg, 1; END;
+
+# No row on a nothing-booked check may belong to a patient with an appointment TODAY or later.
+# Equivalently: none of these four may ever show a Next in date. Generalises the V179 guard from
+# two checks to four, which is what would have caught this.
+EXEC     DECLARE @leak INT, @m2 VARCHAR(4000); SELECT @leak = COUNT(*) FROM Gold.Fact_Data_Quality_Detail WHERE Check_Code IN ('PAT_DORMANT','PAT_NEVER_SEEN','PAT_NO_RECALL_DATE','RECALL_NO_REMINDER') AND Next_Appointment_Date IS NOT NULL; IF @leak > 0 BEGIN SET @m2 = 'V180 FAILED: ' + CAST(@leak AS VARCHAR(10)) + ' row(s) on a nothing-booked check carry a future appointment date. The check predicate and Next_Appointment_Band disagree about what counts as future.'; THROW 50190, @m2, 1; END;
+
+TEST
