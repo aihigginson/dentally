@@ -836,6 +836,39 @@
                     </div>
                     <div id="adm-out" class="adm-out" style="display:none"></div>
                 </div>
+
+                <div class="defs-group">Affiliate</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">
+                        Who introduced this practice, and what they earn on it. The rate is a
+                        <strong>percentage of each invoiced line</strong> &mdash; enter 10 for 10%.
+                        An email we do not already hold creates a new affiliate; one we do reuses
+                        them, and a rate given for an existing affiliate becomes an override for
+                        <em>this practice only</em>.
+                        <br>
+                        Commission applies from the <strong>next invoice run</strong>. Months already
+                        generated keep the commission they were raised with, so linking an affiliate
+                        never pays anyone for billing that happened before they introduced anyone.
+                    </div>
+                    <div id="adm-aff-current" style="margin-top:10px;font-size:13px">Loading&hellip;</div>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:flex-end">
+                        <label style="font-size:13px">Affiliate email
+                            <input id="adm-aff-email" type="email" list="adm-aff-known" placeholder="jo@introducer.co.uk"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:230px">
+                        </label>
+                        <datalist id="adm-aff-known"></datalist>
+                        <label style="font-size:13px">Name
+                            <input id="adm-aff-name" type="text" placeholder="Jo Introducer"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:170px">
+                        </label>
+                        <label style="font-size:13px">Rate %
+                            <input id="adm-aff-pct" type="number" min="0.5" max="100" step="0.5" placeholder="10"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:75px">
+                        </label>
+                        <button id="adm-aff-save" class="settings-btn">Link affiliate</button>
+                        <button id="adm-aff-clear" class="settings-btn adm-danger">Unlink</button>
+                    </div>
+                </div>
             </div>
 
             <div class="settings-pane" id="stab-invoices">
@@ -1883,7 +1916,7 @@
         else if (name === 'targets')   loadTargetGrid();
         else if (name === 'team')      loadTeam();
         else if (name === 'invoices')  loadInvoices();
-        else if (name === 'admin')     loadAdmin();
+        else if (name === 'admin')     { loadAdmin(); loadAffiliate(); }
     }
 
     function _fmtVal(v, fmt) {
@@ -2479,6 +2512,66 @@
         } catch (e) { _admSay('Failed.', true); }
     }
 
+    // Affiliate --------------------------------------------------------------
+    // Acts on whatever practice the header picker has selected, exactly like the billing console
+    // above it. There is deliberately no practice dropdown of its own: the tenant the server acts
+    // on is the one it resolves for the caller, so this screen cannot touch a practice the rest of
+    // the app is not showing.
+    async function loadAffiliate() {
+        const cur = document.getElementById('adm-aff-current');
+        if (!cur) return;
+        const list = document.getElementById('adm-aff-known');
+        cur.textContent = 'Loading\u2026';
+        try {
+            const res = await authFetch('/api/admin/affiliate');
+            if (!res.ok) throw new Error('status ' + res.status);
+            const j = await res.json();
+            list.innerHTML = (j.known || []).map(a =>
+                '<option value="' + escHtml(a.email) + '">' + escHtml(a.name || '')
+                + (a.pct != null ? ' \u2014 ' + a.pct + '%' : '') + '</option>').join('');
+            const c = j.current;
+            if (!c) {
+                cur.innerHTML = '<em>No affiliate on this practice.</em>';
+                document.getElementById('adm-aff-email').value = '';
+                document.getElementById('adm-aff-name').value = '';
+                document.getElementById('adm-aff-pct').value = '';
+                return;
+            }
+            // Show BOTH rates when they differ. An override that only ever rendered as "the rate"
+            // is invisible until the day it surprises someone reconciling a payout.
+            const rate = (c.override_pct != null && c.override_pct !== c.standard_pct)
+                ? c.effective_pct + '% <span style="color:#8a6d3b">(override for this practice '
+                  + '\u2014 their standard is ' + c.standard_pct + '%)</span>'
+                : c.effective_pct + '%';
+            cur.innerHTML = '<strong>' + escHtml(c.name || c.email) + '</strong> &middot; '
+                          + escHtml(c.email || '') + ' &middot; ' + rate;
+            document.getElementById('adm-aff-email').value = c.email || '';
+            document.getElementById('adm-aff-name').value = c.name || '';
+            document.getElementById('adm-aff-pct').value = '';
+        } catch (e) { cur.textContent = 'Could not load the affiliate.'; }
+    }
+
+    async function saveAffiliate(action) {
+        const body = { action: action };
+        if (action === 'set') {
+            body.email = (document.getElementById('adm-aff-email').value || '').trim();
+            body.name = (document.getElementById('adm-aff-name').value || '').trim();
+            const pct = (document.getElementById('adm-aff-pct').value || '').trim();
+            if (pct !== '') body.commission_pct = pct;
+            if (!body.email) { _admSay('An affiliate email is required.', true); return; }
+        }
+        _admSay('Saving\u2026');
+        try {
+            const res = await authFetch('/api/admin/affiliate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body) });
+            const j = await res.json();
+            if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
+            _admSay(j.note || 'Saved.');
+            await loadAffiliate();
+        } catch (e) { _admSay('Failed.', true); }
+    }
+
     // Variances --------------------------------------------------------------
     async function loadVariances() {
         const list = document.getElementById('variances-list'), saveBtn = document.getElementById('variances-save');
@@ -2798,6 +2891,12 @@
         clearDirty(); showSettingsTab(b.dataset.stab);
     }));
     document.getElementById('adm-refresh').addEventListener('click', () => loadAdmin(_adm && _adm.year_month));
+    document.getElementById('adm-aff-save').addEventListener('click', () => saveAffiliate('set'));
+    document.getElementById('adm-aff-clear').addEventListener('click', async () => {
+        if (!(await showConfirm('Unlink the affiliate from this practice? Invoices already raised '
+                                + 'keep the commission they were generated with.', 'Unlink', 'Cancel'))) return;
+        saveAffiliate('clear');
+    });
     document.getElementById('adm-month').addEventListener('change', e => loadAdmin(parseInt(e.target.value, 10)));
     document.getElementById('adm-raise').addEventListener('click', _admRaise);
     document.getElementById('adm-credit').addEventListener('click', _admCredit);
