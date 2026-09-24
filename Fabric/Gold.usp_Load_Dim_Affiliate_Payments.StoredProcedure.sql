@@ -36,6 +36,8 @@ BEGIN
         SELECT p.Payout_ID,
                da.pk_Affiliate                                   AS fk_Affiliate,
                [Gold].[fn_Get_Date_Key](p.Paid_At)               AS fk_Date_Paid,
+               [Gold].[fn_Get_Date_Key](DATEFROMPARTS(p.Year_Month / 100,
+                                                      p.Year_Month % 100, 1)) AS fk_Date_Month,
                da.Affiliate_Email,
                da.Affiliate_Name,
                p.Year_Month,
@@ -51,6 +53,7 @@ BEGIN
         UPDATE tgt
            SET fk_Affiliate    = s.fk_Affiliate,
                fk_Date_Paid    = s.fk_Date_Paid,
+               fk_Date_Month   = s.fk_Date_Month,
                Affiliate_Email = s.Affiliate_Email,
                Affiliate_Name  = s.Affiliate_Name,
                Year_Month      = s.Year_Month,
@@ -65,12 +68,12 @@ BEGIN
         SET @My_Updates = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Dim_Affiliate_Payments]
-            (pk_Affiliate_Payment, bk_Payout_ID, fk_Affiliate, fk_Date_Paid, Affiliate_Email,
+            (pk_Affiliate_Payment, bk_Payout_ID, fk_Affiliate, fk_Date_Paid, fk_Date_Month, Affiliate_Email,
              Affiliate_Name, Year_Month, Month_Start, Amount_Paid, Paid_Date, Reference, Notes,
              Payment_Count, DW_Created_At, DW_Updated_At)
         SELECT ISNULL((SELECT MAX(pk_Affiliate_Payment) FROM [Gold].[Dim_Affiliate_Payments]), 0)
                  + ROW_NUMBER() OVER (ORDER BY s.Payout_ID),
-               s.Payout_ID, s.fk_Affiliate, s.fk_Date_Paid, s.Affiliate_Email, s.Affiliate_Name,
+               s.Payout_ID, s.fk_Affiliate, s.fk_Date_Paid, s.fk_Date_Month, s.Affiliate_Email, s.Affiliate_Name,
                s.Year_Month, s.Month_Start, s.Amount, s.Paid_At, s.Reference, s.Notes,
                1, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src s

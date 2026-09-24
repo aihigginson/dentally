@@ -1,0 +1,66 @@
+# =====================================================================
+# Release V184 -- keys to join on, and the practice dimension that was never loaded
+# =====================================================================
+# The affiliate objects had fk_ columns but the star did not actually close, so the only way I
+# could describe joining them was on an email and a Year_Month integer. Two faults.
+#
+# ==> 1. Gold.Dim_Tenants WAS EMPTY IN BOTH ENVIRONMENTS. <== Gold.usp_Load_Dim_Tenants has
+# existed since the table was created and loads perfectly well from Audit.Tenants -- it was simply
+# never registered in Audit.Process_Config, so it has never run, in dev or prod, ever. Every
+# fk_Tenant on Fact_Affiliate_Payment_Lines resolved to NULL because the dimension it points at
+# has no rows. THIS IS A PRE-EXISTING GAP, not one this feature introduced; the affiliate fact is
+# just the first thing to try to use that dimension and so the first to notice. Registering it
+# adds GOLD_DIM_TENANTS to the nightly build.
+#
+# ==> 2. Dim_Affiliate_Payments HAD NO MONTH KEY. <== It carried fk_Date_Paid (when we sent the
+# money) but nothing for the STATEMENT month, which is what has to line up with the fact. So there
+# was no key path at all between what we owe and what we have paid, and the report would have had
+# to join on Affiliate_Email + Year_Month -- text and an integer, in a dimensional model. It now
+# carries fk_Date_Month as well, and both tables hang off Gold.Dim_Date on their month.
+#
+# The star that results:
+#
+#   Gold.Dim_Affiliates [pk_Affiliate] 1 --> * Fact_Affiliate_Payment_Lines [fk_Affiliate]
+#                                      1 --> * Dim_Affiliate_Payments       [fk_Affiliate]
+#   Gold.Dim_Date       [pk_Date]      1 --> * Fact_Affiliate_Payment_Lines [fk_Date_Month]
+#                                      1 --> * Dim_Affiliate_Payments       [fk_Date_Month]
+#                                      1 --> * Dim_Affiliate_Payments       [fk_Date_Paid]  (inactive)
+#   Gold.Dim_Tenants    [pk_Tenant]    1 --> * Fact_Affiliate_Payment_Lines [fk_Tenant]
+#
+# Earned and paid now meet through Affiliate and Date, which is the whole point of having the
+# dimensions. Relate fk_Date_Paid too if you want to slice by when money actually went out, but
+# keep it INACTIVE -- two active paths from Dim_Date to the same table is ambiguous and Power BI
+# will refuse it.
+#
+# Declared FOREIGN KEY constraints are deliberately NOT added: 1 of 47 Gold tables declares any,
+# so fk_ columns by convention is the pattern here, and diverging is what got this rebuilt twice
+# already.
+#
+# The guards below fail the deploy on any unresolved key, which is what would have caught the
+# empty Dim_Tenants immediately instead of at the point of writing a join.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V184__affiliate_surrogate_keys.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Dim_Affiliate_Payments.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Affiliate_Payments.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+# The practice dimension, for the first time.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Tenants @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Affiliates @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Affiliate_Payments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Affiliate_Payment_Lines @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Every key on the fact must resolve to a row in its dimension. An fk that points at nothing is
+# worse than no fk: the report silently loses rows on an inner join and nobody sees a NULL.
+EXEC     DECLARE @b INT, @m VARCHAR(4000); SELECT @b = COUNT(*) FROM [Gold].[Fact_Affiliate_Payment_Lines] f LEFT JOIN [Gold].[Dim_Affiliates] a ON a.pk_Affiliate = f.fk_Affiliate LEFT JOIN [Gold].[Dim_Tenants] t ON t.pk_Tenant = f.fk_Tenant LEFT JOIN [Gold].[Dim_Date] d ON d.pk_Date = f.fk_Date_Month WHERE a.pk_Affiliate IS NULL OR t.pk_Tenant IS NULL OR d.pk_Date IS NULL; IF @b > 0 BEGIN SET @m = 'V184 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' fact row(s) with an fk that does not resolve to its dimension.'; THROW 50184, @m, 1; END;
+
+# And on the payments dim, including the new month key.
+EXEC     DECLARE @b2 INT, @m2 VARCHAR(4000); SELECT @b2 = COUNT(*) FROM [Gold].[Dim_Affiliate_Payments] p LEFT JOIN [Gold].[Dim_Affiliates] a ON a.pk_Affiliate = p.fk_Affiliate LEFT JOIN [Gold].[Dim_Date] dm ON dm.pk_Date = p.fk_Date_Month LEFT JOIN [Gold].[Dim_Date] dp ON dp.pk_Date = p.fk_Date_Paid WHERE a.pk_Affiliate IS NULL OR dm.pk_Date IS NULL OR dp.pk_Date IS NULL; IF @b2 > 0 BEGIN SET @m2 = 'V184 FAILED: ' + CAST(@b2 AS VARCHAR(10)) + ' payment row(s) with an fk that does not resolve.'; THROW 50194, @m2, 1; END;
+
+TEST

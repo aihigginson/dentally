@@ -17,7 +17,11 @@ CREATE TABLE [Gold].[Dim_Affiliate_Payments](
     [pk_Affiliate_Payment] [bigint]        NOT NULL,
     [bk_Payout_ID]         [int]           NOT NULL,
     [fk_Affiliate]         [bigint]            NULL,
-    [fk_Date_Paid]         [int]               NULL,
+    [fk_Date_Paid]         [int]               NULL,   -- when we sent it
+    -- The STATEMENT month, and the key that lets a report net payments against the fact.
+    -- Both hang off Gold.Dim_Date on their month, so earned and paid meet through the
+    -- date dimension instead of being joined on a Year_Month integer and an email.
+    [fk_Date_Month]        [int]               NULL,
     [Affiliate_Email]      [varchar](255)      NULL,
     [Affiliate_Name]       [varchar](255)      NULL,
     [Year_Month]           [int]           NOT NULL,
