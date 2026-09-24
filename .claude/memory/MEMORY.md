@@ -17,3 +17,4 @@
 - [Fabric is canonical for notebooks and pipelines](fabric-is-canonical-for-notebooks-and-pipelines.md) — repo copies are reference; promote dev→prod with the deployment pipeline.
 - [Just do the thing](just-do-the-thing.md) — act first; one line of caveat, not a menu of options.
 - [SQL files are mostly UTF-8, not UTF-16](sql-files-are-mostly-utf8-not-utf16.md) — CLAUDE.md is stale, and grep silently skips the UTF-16 ones.
+- [Affiliate commission never in the customer model](affiliate-commission-never-in-the-customer-model.md) — vendor money; no RLS, not in PBI Dentally, ever. Absence is the control.
