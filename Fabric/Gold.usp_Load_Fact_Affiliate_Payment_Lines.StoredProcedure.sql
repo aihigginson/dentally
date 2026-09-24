@@ -5,27 +5,30 @@
 --  Initial Date     :  24/09/2026
 --  History          :
 --    *01     24/09/2026  AIH  Initial Release (V182)
+--    *02     24/09/2026  AIH  V183: re-grained to affiliate x practice x month. It was built at
+--                             subscription-line grain, which is not what an affiliate is owed on.
 --  Notes:
---    Grain  : one row per billed user per practice per month.
---    Pattern: full rebuild, pk via ROW_NUMBER() -- as Fact_Patient_At_Risk does.
+--    Grain  : affiliate x practice x month -- one line of what we owe a partner.
+--    Pattern: full rebuild, pk via ROW_NUMBER().
 --    Sources: Billing.Invoice_Line (the money), Billing.Credit_Note, Billing.Stripe_Invoice,
---             Gold.Dim_Affiliates, Gold.Dim_Tenants.
+--             Gold.Dim_Affiliates, Gold.Dim_Tenants, Audit.Tenants.
 --
 --    ==> THREE THINGS THAT ARE EASY TO GET WRONG, ALL VERIFIED AGAINST DEV DATA. <==
 --
 --    1. CREDIT NOTES ARE GROSS; INVOICE LINES ARE NET. Credit_Note.Amount_Pence INCLUDES VAT
 --       (dev: 416.80 with 69.47 tax) while Invoice_Line.Value EXCLUDES it (386.80). Clawing
 --       commission back on the gross figure takes 20% too much off the affiliate every time.
---       Net is Amount_Pence - Tax_Pence. (Stripe_Invoice.Amount_Pence is NET, unlike
---       Credit_Note -- the two disagree in the source schema, which is why neither is used as
---       the invoiced figure. Invoice_Line is.)
+--       Net is Amount_Pence - Tax_Pence. (Stripe_Invoice.Amount_Pence is NET, unlike Credit_Note
+--       -- the source schema disagrees with itself, which is why Invoice_Line is the invoiced
+--       figure and neither of those is.)
 --
 --    2. EARNED ON INVOICING, PAYABLE ON COLLECTION. Commission_Payable stays 0 until Stripe
 --       reports the customer actually paid, or a payout funds a partner out of our own pocket
 --       against money never collected.
 --
 --    3. THE RATE COMES OFF THE LINE. Invoice_Line.Affiliate_Commission_Pct is frozen at
---       generation, so re-rating an affiliate cannot restate statements already settled.
+--       generation, so re-rating an affiliate cannot restate statements already settled. MAX()
+--       over a practice-month reads the one rate those lines were generated with.
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
 GO
@@ -49,15 +52,24 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        -- The month's totals, so a practice-month credit can be shared across its lines.
-        SELECT il.Tenant_ID, il.Year_Month, SUM(il.Value) AS Month_Net
-        INTO #month
+        -- The grain: affiliate x practice x month. The billed users are summed, not carried.
+        SELECT il.Affiliate_ID,
+               il.Tenant_ID,
+               il.Year_Month,
+               MAX(il.Affiliate_Commission_Pct)   AS Commission_Pct,
+               COUNT(*)                           AS Billed_Users,
+               SUM(il.Value)                      AS Invoiced_Net,
+               SUM(il.Affiliate_Commission_Value) AS Commission_Accrued
+        INTO #src
         FROM [Billing].[Invoice_Line] il
         WHERE il.Affiliate_ID IS NOT NULL
-        GROUP BY il.Tenant_ID, il.Year_Month;
+        GROUP BY il.Affiliate_ID, il.Tenant_ID, il.Year_Month;
 
+        -- Credit notes are raised per practice-month, which IS this grain -- so no apportionment
+        -- and one rounding. That is the whole reason the figures reconcile exactly.
         SELECT cn.Tenant_ID, cn.Year_Month,
-               SUM(cn.Amount_Pence - ISNULL(cn.Tax_Pence, 0)) / 100.0 AS Credited_Net
+               CAST(SUM(cn.Amount_Pence - ISNULL(cn.Tax_Pence, 0)) / 100.0 AS DECIMAL(10,2))
+                   AS Credited_Net
         INTO #credit
         FROM [Billing].[Credit_Note] cn
         GROUP BY cn.Tenant_ID, cn.Year_Month;
@@ -73,67 +85,48 @@ BEGIN
         INSERT INTO [Gold].[Fact_Affiliate_Payment_Lines]
             (pk_Affiliate_Payment_Line, fk_Affiliate, fk_Tenant, fk_Date_Month, Tenant_ID,
              Practice_Name, Affiliate_Email, Affiliate_Name, Year_Month, Month_Start,
-             User_UPN, Display_Name, Profile_Key, Commission_Pct,
-             Invoiced_Net, Credited_Net, Net_After_Credits,
+             Commission_Pct, Billed_Users, Invoiced_Net, Credited_Net, Net_After_Credits,
              Commission_Accrued, Commission_On_Credits, Commission_Due,
              Customer_Invoice_Status, Is_Customer_Paid, Commission_Payable,
              Line_Count, DW_Created_At, DW_Updated_At)
         SELECT
-            ROW_NUMBER() OVER (ORDER BY il.Year_Month, il.Tenant_ID, il.User_UPN),
+            ROW_NUMBER() OVER (ORDER BY s.Year_Month, s.Affiliate_ID, s.Tenant_ID),
             da.pk_Affiliate,
             dt.pk_Tenant,
-            [Gold].[fn_Get_Date_Key](DATEFROMPARTS(il.Year_Month / 100, il.Year_Month % 100, 1)),
-            il.Tenant_ID,
+            [Gold].[fn_Get_Date_Key](DATEFROMPARTS(s.Year_Month / 100, s.Year_Month % 100, 1)),
+            s.Tenant_ID,
             t.Tenant_Name,
             da.Affiliate_Email,
             da.Affiliate_Name,
-            il.Year_Month,
-            DATEFROMPARTS(il.Year_Month / 100, il.Year_Month % 100, 1),
-            il.User_UPN,
-            il.Display_Name,
-            il.Profile_Key,
-            il.Affiliate_Commission_Pct,
-            il.Value,
-            cr.Line_Credit,
-            CAST(il.Value - cr.Line_Credit AS DECIMAL(10,2)),
-            il.Affiliate_Commission_Value,
-            -- ==> DUE IS DERIVED FROM THE ROUNDED PARTS, NOT ROUNDED SEPARATELY. <== Rounding
-            -- the clawback and the total independently makes them disagree by a penny wherever
-            -- the two roundings fall opposite ways -- 11 rows on dev, and the deploy guard
-            -- caught it. A statement whose columns do not add up as printed is unusable, so Due
-            -- is Accrued plus the SAME rounded figure shown in Commission_On_Credits.
-            cr.Commission_Credit,
-            CAST(il.Affiliate_Commission_Value + cr.Commission_Credit AS DECIMAL(10,2)),
+            s.Year_Month,
+            DATEFROMPARTS(s.Year_Month / 100, s.Year_Month % 100, 1),
+            s.Commission_Pct,
+            s.Billed_Users,
+            s.Invoiced_Net,
+            ISNULL(c.Credited_Net, 0),
+            CAST(s.Invoiced_Net - ISNULL(c.Credited_Net, 0) AS DECIMAL(10,2)),
+            s.Commission_Accrued,
+            -- Rounded ONCE, at the grain the credit was raised at.
+            CAST(ROUND(-ISNULL(c.Credited_Net, 0) * ISNULL(s.Commission_Pct, 0), 2) AS DECIMAL(10,2)),
+            -- Derived from that same rounded figure, so the columns add up exactly as printed.
+            CAST(s.Commission_Accrued
+                 + ROUND(-ISNULL(c.Credited_Net, 0) * ISNULL(s.Commission_Pct, 0), 2) AS DECIMAL(10,2)),
             ISNULL(i.Customer_Invoice_Status, 'not raised'),
             CAST(CASE WHEN i.Customer_Invoice_Status = 'paid' THEN 1 ELSE 0 END AS BIT),
             CAST(CASE WHEN i.Customer_Invoice_Status = 'paid'
-                      THEN il.Affiliate_Commission_Value + cr.Commission_Credit
+                      THEN s.Commission_Accrued
+                           + ROUND(-ISNULL(c.Credited_Net, 0) * ISNULL(s.Commission_Pct, 0), 2)
                       ELSE 0 END AS DECIMAL(10,2)),
             1, SYSUTCDATETIME(), SYSUTCDATETIME()
-        FROM [Billing].[Invoice_Line] il
-        JOIN #month m ON m.Tenant_ID = il.Tenant_ID AND m.Year_Month = il.Year_Month
-        CROSS APPLY (
-            -- Pro rata: this line's share of the month's credit, by its share of the month's
-            -- value. Month_Net is never 0 here -- a month with no value generates no lines.
-            SELECT CAST(ROUND(ISNULL(c.Credited_Net, 0)
-                              * CASE WHEN m.Month_Net = 0 THEN 0 ELSE il.Value / m.Month_Net END,
-                              2) AS DECIMAL(10,2)) AS Line_Credit,
-                   -- The clawback, rounded ONCE here so the fact's columns are self-consistent.
-                   CAST(ROUND(-ROUND(ISNULL(c.Credited_Net, 0)
-                              * CASE WHEN m.Month_Net = 0 THEN 0 ELSE il.Value / m.Month_Net END, 2)
-                              * ISNULL(il.Affiliate_Commission_Pct, 0), 2) AS DECIMAL(10,2))
-                       AS Commission_Credit
-            FROM (SELECT 1 AS x) _
-            LEFT JOIN #credit c ON c.Tenant_ID = il.Tenant_ID AND c.Year_Month = il.Year_Month
-        ) cr
-        LEFT JOIN #inv i ON i.Tenant_ID = il.Tenant_ID AND i.Year_Month = il.Year_Month
-        LEFT JOIN [Gold].[Dim_Affiliates] da ON da.bk_Affiliate_ID = il.Affiliate_ID
-        LEFT JOIN [Gold].[Dim_Tenants]    dt ON dt.Tenant_ID       = il.Tenant_ID
-        LEFT JOIN [Audit].[Tenants]       t  ON t.Tenant_ID        = il.Tenant_ID
-        WHERE il.Affiliate_ID IS NOT NULL;
+        FROM #src s
+        LEFT JOIN #credit c ON c.Tenant_ID = s.Tenant_ID AND c.Year_Month = s.Year_Month
+        LEFT JOIN #inv    i ON i.Tenant_ID = s.Tenant_ID AND i.Year_Month = s.Year_Month
+        LEFT JOIN [Gold].[Dim_Affiliates] da ON da.bk_Affiliate_ID = s.Affiliate_ID
+        LEFT JOIN [Gold].[Dim_Tenants]    dt ON dt.Tenant_ID       = s.Tenant_ID
+        LEFT JOIN [Audit].[Tenants]       t  ON t.Tenant_ID        = s.Tenant_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
-        DROP TABLE #month;
+        DROP TABLE #src;
         DROP TABLE #credit;
         DROP TABLE #inv;
 
