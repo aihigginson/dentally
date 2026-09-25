@@ -229,8 +229,16 @@ T11 = {
     '_params': {
         'active_rate':             0.95,
         'new_patient_rate':        0.223,
-        'dna_rate':                0.028,
-        'cancel_rate':             0.025,
+        # Measured on the live practice (tenant 100, patient appointments only, last 90
+        # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
+        # against the visit that replaced them, so the cancel rate is solved backwards --
+        # c/(1+c+d) = 0.26 gives c = 0.36, not 0.26.
+        # 0.042, not 0.019, for the same backwards-solve -- and then a little higher again
+        # because a DNA can only be recorded against a date that has passed, so the six
+        # weeks either side of today draw from a thinner supply of source appointments
+        # than the middle of the window does.
+        'dna_rate':                0.042,
+        'cancel_rate':             0.36,
         'treatment_followup_rate': 0.80,
         'max_tx_followups':        2,
         'bbyl_rate_tx':            0.78,

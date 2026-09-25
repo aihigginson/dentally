@@ -9,7 +9,13 @@ from pathlib import Path
 
 random.seed(42)
 TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
-START   = TODAY.replace(year=TODAY.year - 6)
+# Three years of history, not six. Nothing before 2024 is wanted: it halves the data, the seed
+# time and the weekly rebuild's load on the capacity, and three years is still two full prior
+# years for a year-on-year comparison and enough for the 24-month dormancy checks to mean
+# anything. Relative rather than a fixed 2024 floor so it does not silently grow back to six
+# years by 2030.
+YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '3'))
+START   = TODAY.replace(year=TODAY.year - YEARS_BACK)
 FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
 
@@ -1126,8 +1132,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     cr_ids = [c["id"] for c in tdef["cancellation_reasons"]]
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     params = tdef.get("_params", {})
-    dna_rate              = params.get("dna_rate", 0.05)
-    cancel_rate           = params.get("cancel_rate", 0.03)
+    # dna_rate / cancel_rate are read by _add_disruption, not here -- see the note on the
+    # exam state roll below.
     treatment_followup_rate = params.get("treatment_followup_rate", 0.35)
     max_tx_followups      = params.get("max_tx_followups", 1)
     bbyl_rate_tx          = params.get("bbyl_rate_tx", 0.35)
@@ -1214,6 +1220,12 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
         n_exams = (months_in_practice // recall_months) + rng.randint(0, 1)
         n_exams = min(n_exams, (72 // recall_months) + 2)  # cap at ~6.5 years
 
+        # Drawn ONCE per patient: where in their own recall cycle they happen to sit today.
+        # This is the thing that levels the practice's load -- see the comment on the legacy
+        # branch below for what its absence did to the diary.
+        recall_interval = max(30, recall_months * 30)
+        recall_phase = rng.randint(0, recall_interval - 1)
+
         # Spread exams across START..TODAY
         exam_codes_used = []
         prev_exam_date = None
@@ -1223,7 +1235,26 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             if pat_start > START:
                 target = pat_start + timedelta(days=int(exam_num * recall_months * 30))
             else:
-                target = START + timedelta(days=int(exam_num * (36 / n_exams) * 30.5))
+                # ==> LEGACY PATIENTS EACH NEED THEIR OWN PHASE, NOT A SHARED ONE. <== Two
+                # separate bugs have lived on this line, and the second was the dangerous one.
+                #
+                # It first read (36 / n_exams) -- a hardcoded 36 months divided across whatever
+                # window was configured -- so every legacy patient's exam history was crammed
+                # into the first THREE years of a SIX-year window: 13,357 appointments in 2022
+                # against 1,420 in 2026.
+                #
+                # Spreading evenly across the REAL span fixed the years and not the diary. It
+                # still started every legacy patient at exactly START and stepped them in
+                # lockstep, so each one's last exam landed at (n-1)/n of the window and not a
+                # single one fell in the final recall interval. The five months up to today
+                # emptied out -- 624 appointments in April against 100 in September -- which is
+                # precisely the period a demo opens on and the period the traffic-light home
+                # page reads.
+                #
+                # A real practice is phase-random: its patients sit at every point of their own
+                # recall cycle, and that is what makes the load level instead of a wave. So step
+                # from the patient's own phase by their own recall interval.
+                target = START + timedelta(days=recall_phase + exam_num * recall_interval)
             if target >= TODAY:
                 # Future exam
                 target = TODAY + timedelta(days=rng.randint(7, 180))
@@ -1245,13 +1276,12 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             dur = pp_exam_dur if is_first else max(10, pp_exam_dur - 5)
 
             is_past = d < TODAY
-            if is_past:
-                r = rng.random()
-                if r < dna_rate:                    state = "did_not_attend"
-                elif r < dna_rate + cancel_rate:    state = "cancelled"
-                else:                               state = "completed"
-            else:
-                state = "booked"
+            # Disruption is NOT decided here any more. It used to be rolled only on exams,
+            # so treatment and hygiene appointments could never be cancelled or missed and
+            # the practice-wide rates came out at a quarter of what was configured. One pass
+            # at the end of generate_tenant now owns it for every appointment type --
+            # see _add_disruption.
+            state = "completed" if is_past else "booked"
 
             cancel_id = rng.choice(cr_ids) if state in ("cancelled","did_not_attend") else None
             slot_n = used_slots.get(pid, {})
@@ -1432,6 +1462,101 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     return appointments
 
 # ─── TREATMENT PLANS & ITEMS ──────────────────────────────────────────────────
+
+def _add_disruption(tdef, appointments, rng):
+    """Cancellations and DNAs, as ADDITIONAL rows against the visits that replaced them.
+
+    ==> A REAL DIARY IS A QUARTER CANCELLATIONS. <== Measured on the live practice --
+    tenant 100, patient appointments only (fk_Patient > 0, so the lunchtime blocking-out
+    rows are excluded), last 90 days:
+
+        102 appointments per working day   7,034 active patients
+        26.1% cancelled                    1.93% did not attend
+
+    This generator was producing 0.7% and 0.8%: a practice where almost nothing ever goes
+    wrong. That is the tell a dentist spots before they read a single number, and it is the
+    one thing a demo cannot afford, because every recovery feature in the product exists to
+    deal with exactly this churn -- an empty cancellation list makes the product look
+    pointless rather than making the practice look good.
+
+    ==> THEY ARE EXTRA ROWS, NOT RE-ROLLED STATES. <== The obvious implementation is to take
+    an appointment and call it cancelled instead of completed. That is wrong twice over: it
+    deletes a clinical episode that the invoices, treatment plans and NHS claims were all
+    built from, and it makes the practice quieter still when it was already too quiet. What
+    actually happens is that a patient cancels and rebooks, so the SAME visit occupies two
+    slots in the diary and only the second one completes. Cloning to an earlier date models
+    that exactly, leaves every completed visit intact, and is also what closes the density
+    gap -- 33.6 appointments per working day against a pro-rata target of ~58 for a
+    4,000-patient list.
+
+    Rates are solved backwards from the live figures. Cloning at probability c against N
+    completed visits gives c/(1+c+d) cancelled, so 26% needs c~=0.36, not 0.26.
+
+    Runs LAST, after every other generator has consumed the appointment list. Each of them
+    filters on completed-and-past, so an earlier insertion would be harmless today -- but
+    they would silently start linking treatment plans and invoices to cancelled slots the
+    moment one of those filters was relaxed.
+    """
+    params      = tdef.get("_params", {})
+    cancel_rate = params.get("cancel_rate", 0.36)
+    dna_rate    = params.get("dna_rate", 0.042)
+    cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
+    tid         = tdef["tenant_id"]
+    if not cr_ids:
+        return
+
+    next_id = max((a["id"] for a in appointments), default=0)
+    extra   = []
+    today_s = str(TODAY)
+
+    for a in appointments:
+        # Future bookings get a cancelled predecessor too -- a patient who cancels and
+        # rebooks into next month is the single commonest event in a diary. Restricting
+        # this to past visits left the last six weeks with no incoming clones at all
+        # (nothing after today is "completed"), which is exactly the stretch the day book
+        # and the traffic-light page are read on. A DNA, though, can only be recorded
+        # against a date that has actually passed.
+        if a["state"] not in ("completed", "booked"):
+            continue
+        is_future = a["start_time"][:10] >= today_s
+        if is_future and a["state"] != "booked":
+            continue
+        if not is_future and a["state"] != "completed":
+            continue
+        rolls = ((cancel_rate, "cancelled"),) if is_future else                 ((cancel_rate, "cancelled"), (dna_rate, "did_not_attend"))
+        for prob, st in rolls:
+            if rng.random() >= prob:
+                continue
+            orig = date.fromisoformat(a["start_time"][:10])
+            # The abandoned slot sat 3-45 days before the visit that replaced it.
+            cd = orig - timedelta(days=rng.randint(3, 45))
+            if cd < START:
+                continue
+            if cd.weekday() >= 5:               # practices are shut at the weekend
+                cd -= timedelta(days=cd.weekday() - 4)
+            next_id += 1
+            c = dict(a)
+            c.update({
+                "id":                 next_id,
+                "uuid":               _u5("apt", tid, next_id),
+                "start_time":         _iso(cd, a["start_time"][11:19]),
+                "finish_time":        _iso(cd, a["finish_time"][11:19]),
+                "state":              st,
+                "appointment_cancellation_reason_id": rng.choice(cr_ids),
+                # Booked 7-41 days ahead of the slot it was booked into, exactly as
+                # _booked_on does for the appointment this one was cloned from.
+                "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
+                "arrived_at":         None,
+                "completed_at":       None,
+                "in_surgery_at":      None,
+                "confirmed_at":       None,
+                "cancelled_at":       _iso(cd) if st == "cancelled" else None,
+                "did_not_attend_at":  _iso(cd) if st == "did_not_attend" else None,
+            })
+            extra.append(c)
+
+    appointments.extend(extra)
+
 
 def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_map, rng):
     """fee_map: {(pp_id, tx_id): price_float}"""
@@ -2325,6 +2450,8 @@ def generate_tenant(tdef):
         booked_apt = _recall_apt_by_patient.get(r["patient_id"])
         if booked_apt and r["recall_type"] == "Dentist":   # Recall Examination is a dental booking
             r["appointment_id"] = booked_apt
+
+    _add_disruption(tdef, appointments, rng)
 
     return {
         "practice":            tdef["practice"],
