@@ -26,7 +26,7 @@ partner's own VAT number and address.
 **Between:**
 
 **Analytically Limited** (company no. 16242443), whose registered office is at
-`[REGISTERED OFFICE ADDRESS]`, VAT registration number `[ANALYTICALLY VAT NUMBER]`
+34 Gateacre Walk, Manchester M23 9BA, VAT registration number 488 4705 42
 — "the Customer", who will raise the invoices.
 
 **and**
@@ -90,7 +90,6 @@ ceases to be VAT registered.
 
 ### Before sending
 
-- [ ] Analytically's own VAT number and registered office filled in
 - [ ] Partner's legal name, address and VAT number confirmed **in writing** by them
 - [ ] Bank details confirmed by the partner, not taken from an email footer
 - [ ] Once signed: record `Self_Bill_Agreed_On`, `VAT_Number`, `Is_VAT_Registered`, `Address` and
