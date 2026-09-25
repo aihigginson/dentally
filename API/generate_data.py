@@ -1213,6 +1213,9 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     hygiene_rate_private  = params.get("hygiene_rate_private", 0.4)
     bbyl_rate_hyg         = params.get("bbyl_rate_hyg", 0.40)
     recall_booking_rate   = params.get("recall_booking_rate", 0.35)
+    # Exams booked at the previous visit. Defaults to the treatment rate -- the same
+    # behaviour, on the appointment type where it is most common.
+    bbyl_rate_exam        = params.get("bbyl_rate_exam", params.get("bbyl_rate_tx", 0.78))
     # Share of the list who stop attending at some point and never return. Solved against the
     # live practice's 13.7% dormant-two-years and 12.2% at-risk: those overlap, and a patient
     # who lapsed early in the window counts to both, so the draw sits above either figure.
@@ -1463,7 +1466,16 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "appointment_cancellation_reason_id": cancel_id,
                 "online_booking": False,
                 "booked_via_api": False,
-                "pending_at": _booked_on(d, apt_id),
+                # ==> THE CHECK-UP IS THE CLASSIC BOOK-BEFORE-YOU-LEAVE. <== BBYL is measured
+                # as pending_at == the patient's previous appointment date, over ALL
+                # appointments. It was set on treatment, hygiene and recall bookings but never
+                # on exams, which took a generic 7-41 day lead instead -- so the metric read
+                # 37.6% against the live practice's 67.9%, on a practice whose own parameters
+                # say 0.78. Booking the next check-up on the way out is exactly what the
+                # metric is asking about, so it has to be modelled where it actually happens.
+                "pending_at": (_iso(prev_exam_date) if (prev_exam_date is not None
+                                                        and rng.random() < bbyl_rate_exam)
+                               else _booked_on(d, apt_id)),
                 "arrived_at": _iso(d, start_t) if state == "completed" else None,
                 "completed_at": _iso(d, end_t) if state == "completed" else None,
                 "cancelled_at": _iso(d) if state == "cancelled" else None,
@@ -2086,6 +2098,9 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
 # ─── INVOICES & ITEMS ─────────────────────────────────────────────────────────
 
 def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng):
+    # Share of settled invoices that never got paid promptly. The live practice carries
+    # roughly two days of revenue as debt, so this is deliberately small.
+    unpaid_tail_rate = tdef.get("_params", {}).get("unpaid_invoice_rate", 0.005)
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     admin_user_id = 0
@@ -2127,7 +2142,17 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             patient_charge = total_amount * (1 - disc_rate)
             band_num = None
 
-        is_paid = completed_date < TODAY - timedelta(days=30)
+        # ==> A DENTAL PRACTICE TAKES THE MONEY AT THE DESK. <== This marked EVERY invoice
+        # raised in the last 30 days as unpaid and everything older as paid, so outstanding
+        # debt was, by construction, exactly one month of revenue: 69,580 against the live
+        # practice's 8,604, which is about two days' worth. Patients pay at the visit, on the
+        # card, before they leave. What stays outstanding is a small tail of stragglers plus
+        # the day or two still settling -- not a month's billing.
+        _age = (TODAY - completed_date).days
+        if _age <= 2:
+            is_paid = rng.random() < 0.55
+        else:
+            is_paid = rng.random() > unpaid_tail_rate
         outstanding = 0.0 if is_paid else patient_charge
 
         invoices.append({
