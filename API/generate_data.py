@@ -1853,6 +1853,17 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     pat_pp = {p["id"]: p["payment_plan_id"] for p in patients}
     plan_acceptance_rate = tdef.get("_params", {}).get("plan_acceptance_rate", 1.0)
 
+    # ==> A MEMBERSHIP PATIENT DOES NOT PAY FOR THEIR CHECK-UP. <== That is what the monthly
+    # fee buys, and it is also the ONLY evidence the warehouse has that they are on a plan:
+    # Gold.usp_Load_Fact_Revenue derives capitation member-days from completed, non-NHS,
+    # NON-CHARGED Exam/Hygiene courses. Every exam and hygiene here was charged, so no such
+    # course existed, so the demo produced no capitation revenue at all -- against 3.3m and
+    # 1.9m member-day rows on the live practice, where it is the single largest revenue line.
+    # Plan patients were also being billed per visit AND would have been billed monthly, so
+    # charging them was double-counting as well as hiding the stream.
+    cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
+                  if str(pp.get("monthly_charge") or "0").replace(".", "").strip("0")}
+
     # Practitioners available as referrers (dentists/orthodontists/specialists only)
     all_prac_ids = [p["id"] for p in tdef["_prac_defs"]
                     if p["role"] in ("dentist", "orthodontist", "specialist")]
@@ -1951,7 +1962,9 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nhs_cat = tx.get("nhs_treatment_cat") or 0
                 uda_b = tx.get("uda_band") or 0
 
-                if is_nhs:
+                covered = (pp_id in cap_pp_ids
+                           and (code in _EXAM_CODES or code == _HYGIENE_CODE))
+                if is_nhs or covered:
                     price = 0.0
                 else:
                     price = fee_map.get((pp_id, tx_id), 0.0)
@@ -1963,7 +1976,8 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
 
                 item_id += 1
                 item_uuid = _u5("tpi", tid, plan_id, pos)
-                plan_items_data.append((item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos))
+                plan_items_data.append((item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos,
+                                        covered))
 
             uda_val = max_uda if is_nhs else 0
             uda_str = str(uda_val) if uda_val > 0 else "0"
@@ -2005,7 +2019,7 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 "updated_at": _iso(last_date),
             })
 
-            for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos in plan_items_data:
+            for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos, covered in plan_items_data:
                 # ~6% of private items have a referring practitioner (different from treating)
                 referrer_id = None
                 if not is_nhs and rng.random() < 0.06:
@@ -2028,11 +2042,17 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "completed_at": completed_at,
                     "appear_on_invoice": True,
                     "base_chart": None,
-                    "charged": completed,
+                    # Not charged when the monthly fee covers it -- this is the membership
+                    # evidence the capitation half of Fact_Revenue keys on.
+                    "charged": completed and not covered,
                     "position": pos,
                     "nhs_treatment_cat": nhs_cat if is_nhs else None,
                     "uda_band": uda_b if is_nhs else 0,
-                    "nomenclature": tx.get("nomenclature", tx.get("description","")),
+                    # Dentally's own wording, which the capitation query matches literally:
+                    # Nomenclature IN ('Exam','Hygiene 20','Hygiene 30','Routine Hygiene').
+                    "nomenclature": (('Routine Hygiene' if int(tx["code"]) == _HYGIENE_CODE
+                                      else 'Exam') if covered
+                                     else tx.get("nomenclature", tx.get("description",""))),
                     "patient_nomenclature": tx.get("patient_nomenclature", tx.get("description","")),
                     "notes": None,
                     "region": tx.get("region",""),
