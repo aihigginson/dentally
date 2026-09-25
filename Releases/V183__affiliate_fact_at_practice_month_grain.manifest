@@ -1,0 +1,54 @@
+# =====================================================================
+# Release V183 -- the affiliate fact is one line per practice per month
+# =====================================================================
+# V182 built Gold.Fact_Affiliate_Payment_Lines at SUBSCRIPTION-LINE grain: one row per billed user
+# per practice per month. That is not what an affiliate is owed on. A partner is paid for
+# introducing a PRACTICE, not for each user on it, so the grain is affiliate x practice x month and
+# the billed users are a count on the row rather than a dimension of it.
+#
+# ==> THE GRAIN IS WHY THE ARITHMETIC IS NOW EXACT. <== Credit notes are raised per practice-month,
+# which is precisely this grain: a credit attaches to the row it belongs to and is rounded once.
+# At the per-user grain each credit had to be apportioned pro rata across a month's users, and the
+# per-line roundings summed to SIX PENCE away from what the month itself said -- so a statement
+# disagreed with the invoice it came from for no reason a reader could ever have discovered. On
+# dev, September 2026: credited 347.33 and commission due 3.95, matching the month exactly, where
+# the apportioned version gave 347.32 and 3.89.
+#
+# The apportionment reconciliation guard V182 needed is therefore gone -- there is nothing left to
+# apportion. The two guards that still matter are kept: the columns must add up, and nothing may be
+# payable against an uncollected invoice.
+#
+# Commission_Accrued still SUMS the values frozen onto Billing.Invoice_Line at generation rather
+# than recalculating, so re-rating an affiliate cannot restate a statement already settled.
+# Commission_Pct is MAX() over the practice-month, which reads the one rate those lines were
+# generated with.
+#
+# Table is DROP/CREATE: it is a full-rebuild fact with pk from ROW_NUMBER() and nothing holds a
+# foreign key to it, so the usual prohibition on deploying a Gold Table.sql does not apply.
+#
+# No change to Dim_Affiliates or Dim_Affiliate_Payments, and no change to the generated PBI view
+# names -- PBI.[_Affiliate Payment Lines] simply has fewer, coarser rows and gains Billed_Users.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V183__affiliate_fact_at_practice_month_grain.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Affiliate_Payment_Lines.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Affiliate_Payment_Lines.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Affiliate_Payment_Lines @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# The columns must add up as printed.
+EXEC     DECLARE @bad INT, @msg VARCHAR(4000); SELECT @bad = COUNT(*) FROM [Gold].[Fact_Affiliate_Payment_Lines] WHERE ABS(Commission_Due - (Commission_Accrued + Commission_On_Credits)) > 0.005; IF @bad > 0 BEGIN SET @msg = 'V183 FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' fact row(s) where Commission_Due <> Commission_Accrued + Commission_On_Credits.'; THROW 50183, @msg, 1; END;
+
+# Nothing payable against an uncollected invoice.
+EXEC     DECLARE @b2 INT, @m2 VARCHAR(4000); SELECT @b2 = COUNT(*) FROM [Gold].[Fact_Affiliate_Payment_Lines] WHERE Is_Customer_Paid = 0 AND Commission_Payable <> 0; IF @b2 > 0 BEGIN SET @m2 = 'V183 FAILED: ' + CAST(@b2 AS VARCHAR(10)) + ' fact row(s) payable against an uncollected invoice.'; THROW 50193, @m2, 1; END;
+
+# One row per affiliate x practice x month, and no more -- the grain this release exists to set.
+EXEC     DECLARE @b3 INT, @m3 VARCHAR(4000); SELECT @b3 = COUNT(*) FROM (SELECT fk_Affiliate, Tenant_ID, Year_Month FROM [Gold].[Fact_Affiliate_Payment_Lines] GROUP BY fk_Affiliate, Tenant_ID, Year_Month HAVING COUNT(*) > 1) x; IF @b3 > 0 BEGIN SET @m3 = 'V183 FAILED: ' + CAST(@b3 AS VARCHAR(10)) + ' affiliate/practice/month combination(s) appear more than once. The fact is not at the grain it claims.'; THROW 50194, @m3, 1; END;
+
+# And the credit on each row must be the credit actually raised for that practice-month, to the
+# penny -- no apportionment, so no tolerance.
+EXEC     DECLARE @b4 INT, @m4 VARCHAR(4000); SELECT @b4 = COUNT(*) FROM [Gold].[Fact_Affiliate_Payment_Lines] f JOIN (SELECT Tenant_ID, Year_Month, SUM(Amount_Pence - ISNULL(Tax_Pence,0))/100.0 AS raised FROM [Billing].[Credit_Note] GROUP BY Tenant_ID, Year_Month) c ON c.Tenant_ID = f.Tenant_ID AND c.Year_Month = f.Year_Month WHERE ABS(f.Credited_Net - c.raised) > 0.005; IF @b4 > 0 BEGIN SET @m4 = 'V183 FAILED: ' + CAST(@b4 AS VARCHAR(10)) + ' row(s) where Credited_Net is not the credit raised for that practice-month.'; THROW 50195, @m4, 1; END;
+
+TEST

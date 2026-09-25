@@ -3810,6 +3810,154 @@ def admin_billing_credit_note():
         return _server_error(e, 'admin_billing_credit_note')
 
 
+@app.route('/api/admin/affiliate', methods=['GET'])
+def admin_affiliate():
+    """Who introduced the selected practice, and every affiliate we already know about.
+
+    The affiliate list comes back whole so the screen can offer the ones already on the books.
+    The common case is a partner who has introduced several practices, and retyping their email
+    is exactly how you end up with two affiliate records and half the commission going to each.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn)
+        if terr:
+            conn.close(); return terr
+        cur.execute(
+            "SELECT ab.Affiliate_ID, af.Email, af.Name, af.Commission_Pct, "
+            "       ab.Affiliate_Commission_Pct "
+            "FROM Billing.Account_Billing ab "
+            "LEFT JOIN Billing.Affiliate af ON af.Affiliate_ID = ab.Affiliate_ID "
+            "WHERE ab.Tenant_ID = ?", tid)
+        row = cur.fetchone()
+        current = None
+        if row and row[0] is not None:
+            # Standard rate AND override are both returned so it is obvious WHICH is in force.
+            # A screen showing only the effective number makes an override invisible until it
+            # surprises someone.
+            current = {'affiliate_id': row[0], 'email': row[1], 'name': row[2],
+                       'standard_pct': float(row[3]) * 100 if row[3] is not None else None,
+                       'override_pct': float(row[4]) * 100 if row[4] is not None else None,
+                       'effective_pct': float(row[4] if row[4] is not None else (row[3] or 0)) * 100}
+        cur.execute("SELECT Affiliate_ID, Email, Name, Commission_Pct FROM Billing.Affiliate "
+                    "ORDER BY Email")
+        known = [{'affiliate_id': r[0], 'email': r[1], 'name': r[2],
+                  'pct': float(r[3]) * 100 if r[3] is not None else None} for r in cur.fetchall()]
+        conn.close()
+        return jsonify({'tenant_id': tid, 'current': current, 'known': known})
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate')
+
+
+@app.route('/api/admin/affiliate', methods=['POST'])
+def admin_affiliate_set():
+    """Link the selected practice to an affiliate by email, or unlink it.
+
+    ==> THIS DOES NOT PAY ANYONE RETROSPECTIVELY, AND MUST NOT. <== The rate is stamped onto each
+    invoice line by Billing.usp_Generate_Invoice_Lines at generation time, so this takes effect on
+    the NEXT run. Months already generated keep whatever affiliate they had, which is the honest
+    behaviour -- an introducer did not introduce a practice that was already billing. Unlike the
+    adjust route, this deliberately does NOT regenerate the month.
+
+    An unknown email CREATES the affiliate: that is the onboarding path, previously a hand-written
+    INSERT in SSMS. A rate is required with it, because an affiliate with no rate earns nothing and
+    would sit there looking linked while silently paying zero.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    body   = request.get_json(silent=True) or {}
+    action = (body.get('action') or 'set').strip().lower()
+    email  = (body.get('email') or '').strip().lower()
+    name   = (body.get('name') or '').strip()
+    if action not in ('set', 'clear'):
+        return jsonify({'error': 'Bad request'}), 400
+    pct = None
+    if action == 'set':
+        if '@' not in email or '.' not in email.split('@')[-1]:
+            return jsonify({'error': 'A valid affiliate email is required.'}), 400
+        raw = body.get('commission_pct')
+        if raw not in (None, ''):
+            try:
+                pct = round(float(raw), 3)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'The commission rate must be a number.'}), 400
+            # Entered as a PERCENTAGE. 0.1 here would mean a tenth of one percent, which nobody
+            # has ever agreed to -- it means the fraction was typed instead. Refusing beats
+            # silently paying an introducer a hundredth of what was agreed, for the life of the
+            # account, with nothing downstream ever flagging it.
+            if pct < 0.5 or pct > 100:
+                return jsonify({'error': 'Enter the rate as a percentage, e.g. 10 for 10%. '
+                                         'Values below 0.5 look like a fraction.'}), 400
+    try:
+        # autocommit=True -- see admin_billing_adjust. Without it this writes nothing and reports
+        # success.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+        tid, terr = _admin_tenant(cur, upn, body.get('tenant_id'))
+        if terr:
+            conn.close(); return terr
+
+        # A practice that has never been billed has no Account_Billing row to update.
+        cur.execute("SELECT COUNT(1) FROM Billing.Account_Billing WHERE Tenant_ID = ?", tid)
+        if not cur.fetchone()[0]:
+            cur.execute("INSERT INTO Billing.Account_Billing (Tenant_ID, Updated_At) VALUES (?,?)",
+                        tid, datetime.utcnow().replace(microsecond=0))
+
+        now = datetime.utcnow().replace(microsecond=0)
+        if action == 'clear':
+            cur.execute("UPDATE Billing.Account_Billing "
+                        "SET Affiliate_ID = NULL, Affiliate_Commission_Pct = NULL, Updated_At = ? "
+                        "WHERE Tenant_ID = ?", now, tid)
+            conn.close()
+            return jsonify({'ok': True, 'cleared': True,
+                            'note': 'Unlinked. Invoices already generated keep the commission '
+                                    'they were raised with.'})
+
+        cur.execute("SELECT Affiliate_ID, Commission_Pct FROM Billing.Affiliate "
+                    "WHERE LOWER(Email) = ?", email)
+        found = cur.fetchone()
+        created = False
+        if found:
+            aff_id, std = found[0], found[1]
+            if name:
+                cur.execute("UPDATE Billing.Affiliate SET Name = ? WHERE Affiliate_ID = ?",
+                            name[:255], aff_id)
+        else:
+            if pct is None:
+                conn.close()
+                return jsonify({'error': email + ' is new, so a commission rate is required to '
+                                                 'create them.'}), 400
+            # Affiliate_ID is manually assigned by design -- a small vendor-managed set, no
+            # IDENTITY on the table -- so the app takes the next one.
+            cur.execute("SELECT ISNULL(MAX(Affiliate_ID), 0) + 1 FROM Billing.Affiliate")
+            aff_id = cur.fetchone()[0]
+            std = round(pct / 100.0, 5)
+            cur.execute("INSERT INTO Billing.Affiliate (Affiliate_ID, Email, Name, Commission_Pct, "
+                        " Created_At, Notes) VALUES (?,?,?,?,?,?)",
+                        aff_id, email[:255], (name or None), std, now, 'Added by ' + upn[:200])
+            created = True
+
+        # A rate given for an EXISTING affiliate is a PER-TENANT OVERRIDE, never a change to their
+        # standard rate: one practice on different terms must not silently re-rate every other
+        # practice that partner has introduced.
+        override = round(pct / 100.0, 5) if (pct is not None and not created) else None
+        cur.execute("UPDATE Billing.Account_Billing "
+                    "SET Affiliate_ID = ?, Affiliate_Commission_Pct = ?, Updated_At = ? "
+                    "WHERE Tenant_ID = ?", aff_id, override, now, tid)
+        effective = (override if override is not None else std) or 0
+        conn.close()
+        return jsonify({'ok': True, 'created': created, 'affiliate_id': aff_id, 'email': email,
+                        'effective_pct': round(float(effective) * 100, 3),
+                        'note': ('Created and linked. ' if created else 'Linked. ')
+                                + 'Commission applies from the next invoice run; months already '
+                                  'generated are unchanged.'})
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate_set')
+
+
 def _capture(fn, *a, **kw):
     """Run one of billing_run's functions and collect what it prints.
 
