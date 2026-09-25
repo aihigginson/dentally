@@ -1558,6 +1558,36 @@ def _add_disruption(tdef, appointments, rng):
     appointments.extend(extra)
 
 
+# Dentally's own vocabulary, taken from the live practice's appointments. The generator works
+# internally in lowercase snake_case, which is NOT what the source system emits:
+#
+#     generated        live (tenant 100)        rows
+#     completed        Completed             107,171
+#     cancelled        Cancelled              32,182
+#     booked           Pending                 6,966
+#     did_not_attend   Did not attend          3,080
+#
+# Nothing computes on this column -- Gold derives Is_Completed / Is_Cancelled / Is_DNA from the
+# Completed_At / Cancelled_At / Did_Not_Attend_At timestamps -- so it is purely the label a user
+# reads. Which is exactly why it matters on a demo: a day book showing "did_not_attend" beside a
+# patient's name reads as somebody's database, not as their practice management system.
+#
+# Applied as a LAST pass so every generator above it can keep comparing on the internal names.
+# Live also carries Confirmed, Arrived and In surgery, but at 3, 3 and 14 rows against 149,000 --
+# transient same-day states. Synthesising them would be inventing noise, not fidelity.
+_STATE_LABELS = {
+    "completed":      "Completed",
+    "cancelled":      "Cancelled",
+    "booked":         "Pending",
+    "did_not_attend": "Did not attend",
+}
+
+
+def _relabel_states(appointments):
+    for a in appointments:
+        a["state"] = _STATE_LABELS.get(a["state"], a["state"])
+
+
 def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_map, rng):
     """fee_map: {(pp_id, tx_id): price_float}"""
     tid = tdef["tenant_id"]
@@ -2452,6 +2482,7 @@ def generate_tenant(tdef):
             r["appointment_id"] = booked_apt
 
     _add_disruption(tdef, appointments, rng)
+    _relabel_states(appointments)
 
     return {
         "practice":            tdef["practice"],
