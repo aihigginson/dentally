@@ -995,6 +995,7 @@ def gen_patients(tdef, rng):
 
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
+    pp_weights = tdef.get("_pp_weights", {})
 
     patients = []
     for i in range(1, n+1):
@@ -1027,8 +1028,23 @@ def gen_patients(tdef, rng):
         if use_nhs:
             pp_id = nhs_pp_id
         else:
+            # ==> WEIGHTED, NOT UNIFORM. <== rng.choice spreads patients evenly across whatever
+            # private plans the dentist offers, so simply making the Care Plan reachable would
+            # have put two thirds of the list on a monthly membership. The live practice runs
+            # 56.9% Private against 20.1% on capitation plans (eight Denplan tiers), and that
+            # ratio is the recurring-revenue story the plan reporting exists to tell.
             private_pps = [pid for pid in dentist["pp_ids"] if pid != nhs_pp_id]
-            pp_id = rng.choice(private_pps) if private_pps else dentist["pp_ids"][0]
+            if private_pps:
+                _w = [pp_weights.get(pid, 1.0) for pid in private_pps]
+                _r = rng.random() * sum(_w)
+                pp_id = private_pps[-1]
+                for _pid, _wi in zip(private_pps, _w):
+                    _r -= _wi
+                    if _r <= 0:
+                        pp_id = _pid
+                        break
+            else:
+                pp_id = dentist["pp_ids"][0]
 
         # Demographics
         is_female = rng.random() < 0.52
