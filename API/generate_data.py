@@ -3,7 +3,7 @@ generate_data.py  —  rebuilt 2026-05-15; as-of date driven by GENERATE_AS_OF e
 Run:  python API/generate_data.py
       GENERATE_AS_OF=2026-07-01 python API/generate_data.py
 """
-import json, os, random, uuid as _uuid
+import bisect, json, os, random, uuid as _uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -141,6 +141,45 @@ def _contract(tid, site_id, site_code, year, target, uda_val, uoa_target=0, uoa_
         "created_at": _iso(date(y0, 4, 1)),
         "updated_at": _iso(date(y0, 4, 1)),
     }
+
+# Custom roles that take referred, high-value work. Matches the taxonomy the live practice
+# curates in Input.Practitioner_Role (Principal / Associate / Associate Specialist /
+# Implantologist / Hygienist / Locum).
+_SPECIALIST_ROLES = {"Implantologist", "Associate Specialist", "Orthodontist",
+                     "Periodontist", "Endodontist"}
+
+
+def _prac_capacity(p):
+    """Rough weekly clinical hours a practitioner definition implies.
+
+    Used to share patients out in proportion to how much chair time somebody actually has.
+    Mirrors how the diary is generated: working days x (end - start) less an hour for lunch,
+    plus any late evenings.
+    """
+    def _mins(t):
+        return int(t[:2]) * 60 + int(t[3:5])
+    st, et = p.get("start_time") or "09:00", p.get("end_time") or "17:00"
+    day_h = max(0.5, (_mins(et) - _mins(st)) / 60.0 - 1.0)      # less lunch
+    hours = day_h * len(p.get("work_days") or [])
+    late_days, late_end = p.get("late_days") or [], p.get("late_end")
+    if late_days and late_end:
+        hours += max(0.0, (_mins(late_end) - _mins(et)) / 60.0) * len(late_days)
+    return hours
+
+
+def _weighted_prac(rng, items):
+    """Pick a practitioner in proportion to their weekly capacity (one rng draw)."""
+    weights = [_prac_capacity(p) for p in items]
+    total = sum(weights)
+    if total <= 0:
+        return rng.choice(items)
+    r = rng.random() * total
+    for p, w in zip(items, weights):
+        r -= w
+        if r <= 0:
+            return p
+    return items[-1]
+
 
 def _pp(id_, name, nhs=False, monthly="0.00", dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20,
         exam_sp_dur=None, patient_friendly=None, site_id=None, colour=None):
@@ -973,7 +1012,12 @@ def gen_patients(tdef, rng):
         dentists = site_dentists.get(site_id, [])
         if not dentists:
             dentists = [p for p in prac_defs if p["role"]=="dentist"]
-        dentist = rng.choice(dentists)
+        # ==> BY CAPACITY, NOT UNIFORMLY. <== With every dentist full-time this made no
+        # difference, so it was never wrong before. With an FTE ladder it is the difference
+        # between a 0.1-FTE implantologist being handed a sixth of the list and then having
+        # nowhere to see them -- _book_slot would simply fail and the appointments would
+        # vanish, quietly emptying the diary again.
+        dentist = _weighted_prac(rng, dentists)
 
         # Assign hygienist (~75% of adults)
         hyg_list = site_hygienists.get(site_id, [])
@@ -1168,32 +1212,75 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     for pid in prac_dates:
         prac_dates[pid].sort()
 
+    # ==> THE PRACTICE'S SPECIALISTS. <== A share of private treatment is REFERRED to them
+    # rather than done by the patient's own dentist, which is how a real practice works and
+    # the reason a 0.1-FTE implantologist can out-earn a full associate per hour. Implant
+    # placement is 1800 for 90 minutes and an implant crown 1200 for 60 -- around 1200/hour
+    # against an associate's ~210 -- which is the single contrast the whole practitioner
+    # contribution report exists to show. Keyed on custom_role, so role stays 'dentist' and
+    # they remain bookable and countable as one everywhere else.
+    spec_pids = [p["id"] for p in tdef["_prac_defs"]
+                 if (p.get("custom_role") or "") in _SPECIALIST_ROLES]
+    spec_referral_rate = params.get("spec_referral_rate", 0.05)
+
     # Hygienist IDs by site
     site_hygienists = {}
     for p in tdef["_prac_defs"]:
         if p["role"] == "hygienist":
             site_hygienists.setdefault(p["site_id"], []).append(p["id"])
 
+    # ==> A DAY'S SLOTS ARE THAT PRACTITIONER'S OWN DAY. <== _book_slot capped every
+    # practitioner at a flat 20 appointments per day and _slot_times drew a start anywhere in
+    # the first seven hours, both of which assume everybody works a full one. With an FTE
+    # ladder that breaks immediately: the half-day associate specialist and the one-day
+    # hygienist were booked to 151% and 167% of their own diary, and given start times hours
+    # after they had gone home.
+    def _day_mins(p):
+        def _m(t):
+            return int(t[:2]) * 60 + int(t[3:5])
+        hrs = (_m(p.get("end_time") or "17:00") - _m(p.get("start_time") or "09:00")) / 60.0 - 1.0
+        return max(30, int(round(max(0.5, hrs) * 60)))
+
+    # ==> CAP THE DAY IN MINUTES, NOT IN APPOINTMENTS. <== The cap used to be a count of
+    # 30-minute slots, which silently assumes every appointment fills one. They do not: an
+    # exam is 15-25 minutes and the practice average came out at 19-20. Every dentist was
+    # therefore pinned at exactly 100% of their slot count while their diary was only 62%
+    # full -- 15 appointments averaging 20 minutes is five hours of a seven-and-a-half hour
+    # day. Chair utilisation could not exceed about two thirds no matter how the roster was
+    # sized, which is the wall this kept hitting.
+    prac_day_mins = {p["id"]: _day_mins(p) for p in tdef["_prac_defs"]}
+    # Retained only to spread start times across the day.
+    prac_slots = {k: max(1, v // 30) for k, v in prac_day_mins.items()}
+
     # Slot tracker: prac_id → {date_str: count} (O(1) per lookup)
     used_slots = {}
 
-    def _book_slot(pid, dates_list, after_date=None, before_date=None):
-        """Find an unused date for practitioner pid."""
-        for _ in range(50):
-            if not dates_list:
-                return None
-            dstr = rng.choice(dates_list)
-            d = date.fromisoformat(dstr)
-            if after_date and d < after_date:
-                continue
-            if before_date and d > before_date:
-                continue
-            key = (pid, dstr)
-            used = used_slots.setdefault(pid, {})
-            count = used.get(dstr, 0)
-            if count < 20:
-                used[dstr] = count + 1
-                return d
+    def _book_slot(pid, dates_list, after_date=None, before_date=None, dur_min=30):
+        """Find an unused date for practitioner pid, searching the window directly.
+
+        ==> THIS WAS SILENTLY DROPPING APPOINTMENTS. <== It drew 50 random dates from the
+        practitioner's ENTIRE working life and discarded any falling outside the requested
+        window. A 60-day window against a ~1,500-day range is a 4% hit rate per draw, so a
+        meaningful share of bookings ran out of attempts and returned None -- and every
+        caller treats None as "no appointment", so the visit just vanished. Exams were coming
+        out at 0.52 per patient per year against the ~1.2 the recall intervals imply.
+
+        The dates are already sorted, so bisect the window and draw inside it: the miss rate
+        goes to zero and it is faster besides.
+        """
+        if not dates_list:
+            return None
+        lo = bisect.bisect_left(dates_list, str(after_date)) if after_date else 0
+        hi = bisect.bisect_right(dates_list, str(before_date)) if before_date else len(dates_list)
+        if lo >= hi:
+            return None
+        used = used_slots.setdefault(pid, {})
+        cap = prac_day_mins.get(pid, 450)
+        for _ in range(min(50, hi - lo)):
+            dstr = dates_list[rng.randrange(lo, hi)]
+            if used.get(dstr, 0) + dur_min <= cap:
+                used[dstr] = used.get(dstr, 0) + dur_min
+                return date.fromisoformat(dstr)
         return None
 
     def _slot_times(d, slot_n, dur_min):
@@ -1231,7 +1318,13 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             pat_start = max(START, date.fromisoformat(pat_created_str))
         except ValueError:
             pat_start = START
-        recall_months = 6 if is_nhs else 12
+        # ==> READ THE PLAN, DO NOT ASSUME IT. <== This was hardcoded, so the exam cadence
+        # ignored dentist_recall_interval entirely and every private patient was put on a
+        # 12-month recall no matter what their plan said. Changing a plan's interval had no
+        # effect on anything -- which is exactly the kind of setting that looks configured
+        # and is not.
+        recall_months = (pp_by_id.get(pp_id, {}).get("dentist_recall_interval")
+                         or (6 if is_nhs else 12))
         months_in_practice = max(recall_months, (TODAY - pat_start).days // 30)
         n_exams = (months_in_practice // recall_months) + rng.randint(0, 1)
         n_exams = min(n_exams, (72 // recall_months) + 2)  # cap at ~6.5 years
@@ -1304,18 +1397,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             # the live practice's 1.5%. Someone who stopped coming has to have come once.
             if exam_num > 0 and lapse_after is not None and target > lapse_after:
                 break
-            if target >= TODAY:
-                # Future exam
-                target = TODAY + timedelta(days=rng.randint(7, 180))
-                if target > FWD_END:
-                    break
-                d = _book_slot(pid, pdates, after_date=TODAY)
-            else:
-                d = _book_slot(pid, pdates, after_date=target - timedelta(30),
-                               before_date=target + timedelta(30))
-            if d is None:
-                continue
-
+            # Worked out BEFORE booking: the day is now budgeted in minutes, so the slot
+            # has to know how long the appointment is before it can be reserved.
             # First ever appointment = extensive exam (0111), subsequent = routine (0101)
             is_first = (prev_exam_date is None and exam_num == 0)
             exam_code = 111 if is_first else 101
@@ -1323,6 +1406,18 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             tx_id = tx["id"] if tx else None
             pp_exam_dur = pp_by_id.get(pp_id, {}).get("exam_dur", 20)
             dur = pp_exam_dur if is_first else max(10, pp_exam_dur - 5)
+
+            if target >= TODAY:
+                # Future exam
+                target = TODAY + timedelta(days=rng.randint(7, 180))
+                if target > FWD_END:
+                    break
+                d = _book_slot(pid, pdates, after_date=TODAY, dur_min=dur)
+            else:
+                d = _book_slot(pid, pdates, after_date=target - timedelta(30),
+                               before_date=target + timedelta(30), dur_min=dur)
+            if d is None:
+                continue
 
             is_past = d < TODAY
             # Disruption is NOT decided here any more. It used to be rolled only on exams,
@@ -1334,7 +1429,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
 
             cancel_id = rng.choice(cr_ids) if state in ("cancelled","did_not_attend") else None
             slot_n = used_slots.get(pid, {})
-            start_t, end_t = _slot_times(d, rng.randint(0,14), dur)
+            start_t, end_t = _slot_times(d, rng.randint(0, prac_slots.get(pid, 15) - 1), dur)
             apt_id += 1
             appointments.append({
                 "id": apt_id,
@@ -1372,18 +1467,31 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 tx_last_date = d
                 for _tx_i in range(max_tx_followups):
                     if rng.random() < treatment_followup_rate and is_past:
-                        # ~12% chance is a Review-type appointment
-                        if rng.random() < 0.12:
-                            tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                        # Referred to a specialist, or kept in-house? NHS work is not
+                        # referred out -- implant treatment is private by definition.
+                        _ref = (spec_pids and not is_nhs
+                                and rng.random() < spec_referral_rate)
+                        if _ref:
+                            tx_code = rng.choice([2101, 2102, 2103])   # consult / place / crown
+                            tdur    = 90 if tx_code == 2102 else (45 if tx_code == 2101 else 60)
+                            tpid    = rng.choice(spec_pids)
                         else:
-                            tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
+                            # ~12% chance is a Review-type appointment
+                            if rng.random() < 0.12:
+                                tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                            else:
+                                tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
+                            tdur = 30
+                            tpid = pid
                         ttx = tx_by_code.get(tx_code)
-                        tdur = 30
-                        td = _book_slot(pid, pdates,
+                        if tpid not in prac_dates:
+                            tpid = pid
+                        td = _book_slot(tpid, prac_dates[tpid],
                                         after_date=tx_last_date + timedelta(3),
-                                        before_date=tx_last_date + timedelta(42))
+                                        before_date=tx_last_date + timedelta(42),
+                                        dur_min=tdur)
                         if td:
-                            ts_t, te_t = _slot_times(td, rng.randint(0,14), tdur)
+                            ts_t, te_t = _slot_times(td, rng.randint(0, prac_slots.get(tpid, 15) - 1), tdur)
                             tx_state  = "completed" if td < TODAY else "booked"
                             tx_bbyl   = rng.random() < bbyl_rate_tx
                             tx_online = (not tx_bbyl) and rng.random() < 0.20
@@ -1391,8 +1499,11 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                             appointments.append({
                                 "id": apt_id,
                                 "patient_id": pat_id,
-                                "practitioner_id": pid,
-                                "user_id": pid,
+                                # tpid, not pid -- a referred case belongs to the specialist
+                                # who did it, or the contribution report credits the wrong
+                                # practitioner and the whole point of the referral is lost.
+                                "practitioner_id": tpid,
+                                "user_id": tpid,
                                 "payment_plan_id": pp_id,
                                 "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                                 "start_time": _iso(td, ts_t),
@@ -1419,17 +1530,33 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                             })
                             tx_last_date = td
 
-                # Hygiene appointment (every 6 months for care plan / NHS, annually for private)
+                # ==> HYGIENE HAS ITS OWN CADENCE. <== This booked at most ONE hygiene visit
+                # per exam, so a private patient on annual exams got 0.4 scale-and-polishes a
+                # year where their plan says six-monthly -- and a Premium patient on a
+                # three-month hygiene interval got the same 0.4 instead of four. Measured
+                # against the live practice the hygienists were running 17.3 appointment hours
+                # a week against a pro-rata 50.1, on a diary that was already the right size:
+                # 30% chair utilisation purely because the work was never generated.
+                #
+                # Visits per exam cycle is the ratio of the two intervals the payment plan
+                # actually carries, each staggered a hygiene-interval apart, each still
+                # subject to the compliance rate -- not everybody attends.
                 hyg_pids = site_hygienists.get(site_id, [])
                 hyg_chance = hygiene_rate_nhs if (is_nhs or is_care) else hygiene_rate_private
-                if hyg_pids and rng.random() < hyg_chance:
+                _ppd  = pp_by_id.get(pp_id, {})
+                _dr_m = _ppd.get("dentist_recall_interval") or recall_months
+                _hr_m = _ppd.get("hygienist_recall_interval") or _dr_m
+                for _h_i in range(max(1, int(round(_dr_m / max(1, _hr_m))))):
+                    if not (hyg_pids and rng.random() < hyg_chance):
+                        continue
                     hpid = rng.choice(hyg_pids)
                     if hpid in prac_dates:
+                        _h_lo = 14 + int(_h_i * _hr_m * 30)
                         hd = _book_slot(hpid, prac_dates[hpid],
-                                        after_date=d + timedelta(14),
-                                        before_date=d + timedelta(90))
+                                        after_date=d + timedelta(_h_lo),
+                                        before_date=d + timedelta(_h_lo + 76), dur_min=30)
                         if hd:
-                            hs_t, he_t = _slot_times(hd, rng.randint(0,14), 30)
+                            hs_t, he_t = _slot_times(hd, rng.randint(0, prac_slots.get(hpid, 15) - 1), 30)
                             htx = tx_by_code.get(1001)
                             hyg_state  = "completed" if hd < TODAY else "booked"
                             hyg_bbyl   = rng.random() < bbyl_rate_hyg
@@ -1472,9 +1599,10 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
             after_d  = max(TODAY, due_date - timedelta(14))
             before_d = FWD_END
-            fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
+            fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d,
+                            dur_min=20)
             if fd is not None and fd >= TODAY:
-                fs_t, fe_t = _slot_times(fd, rng.randint(0, 14), 20)
+                fs_t, fe_t = _slot_times(fd, rng.randint(0, prac_slots.get(pid, 15) - 1), 20)
                 booked_on   = tx_last_date
                 rc_online   = rng.random() < 0.35
                 rc_bbyl     = (not rc_online) and rng.random() < bbyl_rate_tx

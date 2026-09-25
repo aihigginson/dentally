@@ -154,10 +154,14 @@ T11 = {
          'saturday_open': None, 'saturday_close': None},
     ],
     'payment_plans': [
-        _pp(1, 'NHS',             nhs=True,  dr=6,  hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
-        _pp(2, 'Private',                    dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(3, 'Care Plan',  monthly='14.99', dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(4, 'Premium Private', monthly='29.99', dr=12, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
+        # Six-monthly on every plan. The private plans were on 12-month dentist recalls,
+        # which produced 0.57 exams per patient per year against the live practice's 1.09 --
+        # and the exam is the anchor of the whole diary: it is what generates the treatment
+        # that follows it and the hygiene alongside it.
+        _pp(1, 'NHS',             nhs=True,  dr=6, hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
+        _pp(2, 'Private',                    dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(3, 'Care Plan',  monthly='14.99', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(4, 'Premium Private', monthly='29.99', dr=6, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
     ],
     'contracts': [
         _contract(11, 't11-cl', 'VDX01', 2021, 2000, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
@@ -196,39 +200,99 @@ T11 = {
     'waiting_lists': [
         _wl(11, 't11-cl', 'NHS New Patient', 60), _wl(11, 't11-cl', 'New Private Patient', 30),
     ],
+    # ==> THE ROSTER IS THE PRODUCT DEMO. <== It was 5 dentists and 3 hygienists, every one
+    # of them FTE 1.00 on a five-day week. Measured against the live practice that was wrong
+    # in the way that matters most, because the practitioner contribution report then had
+    # nothing to show: five identical dentists sitting in ~38 diary hours doing ~12 hours of
+    # dentistry, earning 177k-194k each at 89-112 an hour. A flat line demonstrates nothing.
+    #
+    # The live practice has FIFTEEN practitioners and NOT ONE is full-time -- the ladder runs
+    # 0.86 down to 0.06, and the standout is a 0.10-FTE implantologist billing 981 an hour
+    # across four hours a week against an associate's 213. That contrast is precisely what a
+    # principal buys this product to see.
+    #
+    # Sized to ~85 dentist and ~55 hygienist diary hours a week: the live practice pro-rata
+    # to this list (105.5 and 73.1 hours for 7,034 patients, against 5,662 here).
+    #
+    # custom_role and fte are seeded into Input.Practitioner_Role, where they are owner
+    # curated -- they are not carried on the Dentally practitioner record. role stays
+    # dentist/hygienist so booking, site grouping and every role-based report keep working.
     '_prac_defs': [
         {'id': 1, 'first_name': 'Nathan', 'last_name': 'Cole', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Principal', 'fte': 0.85,
          'site_id': 't11-cl', 'gdc_number': '1110001', 'nhs_pct': 0.22,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,2,4], 'performs_nhs': True, 'active': True},
+         'work_days': [0, 1, 2, 3], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [1], 'late_end': '19:30', 'pp_ids': [1, 2, 4], 'performs_nhs': True, 'active': True},
         {'id': 2, 'first_name': 'Amara', 'last_name': 'Singh', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Principal', 'fte': 0.60,
          'site_id': 't11-cl', 'gdc_number': '1110002', 'nhs_pct': 0.15,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2,4], 'performs_nhs': True, 'active': True},
-        {'id': 3, 'first_name': 'Patrick', 'last_name': 'Ryan', 'title': 'Dr', 'role': 'dentist',
-         'site_id': 't11-cl', 'gdc_number': '1110003', 'nhs_pct': 0.20,
-         'work_days': [0,1,2,3], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': True, 'active': True},
+         'work_days': [0, 1, 2], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 4], 'performs_nhs': True, 'active': True},
         {'id': 4, 'first_name': 'Zoe', 'last_name': 'Crawford', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110004', 'nhs_pct': 0.18,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': True, 'active': True},
+         'work_days': [3, 4], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2], 'performs_nhs': True, 'active': True},
         {'id': 5, 'first_name': 'Kwame', 'last_name': 'Asante', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Associate', 'fte': 0.20,
          'site_id': 't11-cl', 'gdc_number': '1110005', 'nhs_pct': 0.20,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': True, 'active': True},
+         'work_days': [4], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2], 'performs_nhs': True, 'active': True},
+        # The high-yield part-timer. Private only -- implant work is private by definition,
+        # which is why nhs_pct is 0 and performs_nhs is False.
+        {'id': 6, 'first_name': 'Rohan', 'last_name': 'Mistry', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Implantologist', 'fte': 0.10,
+         'site_id': 't11-cl', 'gdc_number': '1110006', 'nhs_pct': 0.0,
+         'work_days': [2], 'start_time': '09:00', 'end_time': '14:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [2, 4], 'performs_nhs': False, 'active': True},
+        {'id': 3, 'first_name': 'Patrick', 'last_name': 'Ryan', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Associate Specialist', 'fte': 0.10,
+         'site_id': 't11-cl', 'gdc_number': '1110003', 'nhs_pct': 0.0,
+         'work_days': [1], 'start_time': '09:00', 'end_time': '13:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [2, 4], 'performs_nhs': False, 'active': True},
         {'id': 9, 'first_name': 'Claire', 'last_name': 'Hughes', 'title': 'Ms', 'role': 'hygienist',
+         'custom_role': 'Hygienist', 'fte': 0.55,
          'site_id': 't11-cl', 'gdc_number': '1110009', 'nhs_pct': 0.15,
-         'work_days': [0,2,4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2,3], 'performs_nhs': True, 'active': True},
+         'work_days': [0, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
         {'id': 10, 'first_name': 'Rita', 'last_name': 'Osei', 'title': 'Ms', 'role': 'hygienist',
+         'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110010', 'nhs_pct': 0.1,
-         'work_days': [1,3,4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2,3], 'performs_nhs': True, 'active': True},
+         'work_days': [1, 3], 'start_time': '09:00', 'end_time': '17:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
         {'id': 11, 'first_name': 'Dev', 'last_name': 'Patel', 'title': 'Mr', 'role': 'hygienist',
+         'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110011', 'nhs_pct': 0.12,
-         'work_days': [0,1,3], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2,3], 'performs_nhs': True, 'active': True},
+         'work_days': [0, 3], 'start_time': '09:00', 'end_time': '17:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+        # ==> SIZE THE CHAIRS TO THE DEMAND, NOT TO THE PATIENT COUNT. <== Two corrections
+        # are baked into these hours. Definition hours run ~35% above the measured figure
+        # because holiday absence blocks take roughly a quarter of the year out, and measured
+        # is what every report reads. And chairs cannot be sized by pro-rata alone: scaling
+        # the roster up to the live practice's hours-per-patient simply produced empty
+        # diaries, because appointment volume is driven by recall cadence and treatment
+        # uptake, not by how many chairs are standing there. These land ~78% dentist and ~85%
+        # hygienist fill, which is where the live practice runs.
+        {'id': 7, 'first_name': 'Ines', 'last_name': 'Okafor', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Associate', 'fte': 0.40,
+         'site_id': 't11-cl', 'gdc_number': '1110007', 'nhs_pct': 0.18,
+         'work_days': [0, 1], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2], 'performs_nhs': True, 'active': True},
+        {'id': 8, 'first_name': 'Tom', 'last_name': 'Bradshaw', 'title': 'Dr', 'role': 'dentist',
+         'custom_role': 'Associate', 'fte': 0.40,
+         'site_id': 't11-cl', 'gdc_number': '1110008', 'nhs_pct': 0.24,
+         'work_days': [2, 3], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2], 'performs_nhs': True, 'active': True},
+        {'id': 13, 'first_name': 'Priya', 'last_name': 'Raman', 'title': 'Ms', 'role': 'hygienist',
+         'custom_role': 'Hygienist', 'fte': 0.55,
+         'site_id': 't11-cl', 'gdc_number': '1110013', 'nhs_pct': 0.12,
+         'work_days': [1, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+        {'id': 12, 'first_name': 'Maya', 'last_name': 'Lindqvist', 'title': 'Ms', 'role': 'hygienist',
+         'custom_role': 'Hygienist', 'fte': 0.30,
+         'site_id': 't11-cl', 'gdc_number': '1110012', 'nhs_pct': 0.1,
+         'work_days': [3, 4], 'start_time': '09:00', 'end_time': '16:00',
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
     ],
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
@@ -244,12 +308,21 @@ T11 = {
         # than the middle of the window does.
         'dna_rate':                0.042,
         'cancel_rate':             0.36,
-        'treatment_followup_rate': 0.80,
+        # Rebalanced against the live mix. Treatment was running 47.0 hours a week against a
+        # pro-rata 27.9 while exams ran at half what they should -- 3 hours of treatment for
+        # every hour of examining, where the real practice is about 1:1. With exams now
+        # six-monthly the per-exam rate comes down to match.
+        'treatment_followup_rate': 0.24,
         'max_tx_followups':        2,
         'bbyl_rate_tx':            0.78,
         'bbyl_rate_hyg':           0.78,
         'recall_booking_rate':     0.78,
         'plan_acceptance_rate':    0.65,
+        # Hygiene compliance per exam cycle. Was 0.4 while the cadence bug meant only one
+        # visit was ever generated per exam; with the cadence honoured this is what lands
+        # hygiene on the live practice's pro-rata 44.9 hours a week.
+        'hygiene_rate_private':    0.55,
+        'hygiene_rate_nhs':        0.80,
         'email_rate':              0.75,
         'phone_rate':              0.85,
     },
