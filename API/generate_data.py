@@ -1550,6 +1550,9 @@ def _add_disruption(tdef, appointments, rng):
     params      = tdef.get("_params", {})
     cancel_rate = params.get("cancel_rate", 0.36)
     dna_rate    = params.get("dna_rate", 0.042)
+    # Share of patients with nothing booked who cancelled recently and were never chased.
+    # The live practice carries 79 of 7,034 active on this route, ~1.1%.
+    stranded_rate = params.get("stranded_rate", 0.02)
     cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
     tid         = tdef["tenant_id"]
     if not cr_ids:
@@ -1606,6 +1609,53 @@ def _add_disruption(tdef, appointments, rng):
             extra.append(c)
 
     appointments.extend(extra)
+
+    # ==> AND SOME CANCELLATIONS ARE NEVER REBOOKED. <== Everything above clones a cancelled
+    # slot in FRONT of a visit that went ahead, so by construction every one of them was
+    # rebooked. That left the "Cancelled Not Rebooked" retention route at zero against the
+    # live practice's 79 -- and that route is not incidental, it is the single clearest thing
+    # the product exists to surface: somebody rang up, cancelled, and nobody ever chased them.
+    #
+    # These are the patients Gold.Fact_Patient_At_Risk looks for -- cancelled within 90 days,
+    # no future appointment, still inside the 730-day active window -- so the cancellation is
+    # placed in the recent past and only against patients who have nothing booked ahead.
+    future_pats = {a["patient_id"] for a in appointments
+                   if a["state"] == "booked" and a["start_time"][:10] >= today_s}
+    latest = {}
+    for a in appointments:
+        if a["state"] == "completed" and a["start_time"][:10] < today_s:
+            k = a["patient_id"]
+            if k not in latest or a["start_time"] > latest[k]["start_time"]:
+                latest[k] = a
+    stranded = []
+    for pid_, a in latest.items():
+        if pid_ in future_pats or rng.random() >= stranded_rate:
+            continue
+        cd = TODAY - timedelta(days=rng.randint(3, 89))
+        if cd.weekday() >= 5:
+            cd -= timedelta(days=cd.weekday() - 4)
+        if cd <= date.fromisoformat(a["start_time"][:10]):
+            continue                      # cannot cancel a slot before the last one attended
+        next_id += 1
+        c = dict(a)
+        c.update({
+            "id":                 next_id,
+            "uuid":               _u5("apt", tid, next_id),
+            "start_time":         _iso(cd, a["start_time"][11:19]),
+            "finish_time":        _iso(cd, a["finish_time"][11:19]),
+            "state":              "cancelled",
+            "appointment_cancellation_reason_id": rng.choice(cr_ids),
+            "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
+            "arrived_at":         None,
+            "completed_at":       None,
+            "in_surgery_at":      None,
+            "confirmed_at":       None,
+            "cancelled_at":       _iso(cd),
+            "did_not_attend_at":  None,
+        })
+        stranded.append(c)
+
+    appointments.extend(stranded)
 
 
 # Dentally's own vocabulary, taken from the live practice's appointments. The generator works
