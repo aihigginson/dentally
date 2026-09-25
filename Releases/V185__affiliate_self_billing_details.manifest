@@ -1,0 +1,64 @@
+# =====================================================================
+# Release V185 -- the details a self-billed VAT invoice legally needs
+# =====================================================================
+# Commission is to be settled by SELF-BILLING: we raise the invoice on the partner's behalf and
+# pay it, so they never have to chase us. HMRC VAT Notice 700/62 sets what that requires, and
+# Billing.Affiliate held none of it -- only email, name, rate and notes.
+#
+#   * a self-billed VAT invoice must show the supplier's NAME, ADDRESS and VAT REGISTRATION
+#     NUMBER, plus everything else a full VAT invoice carries
+#   * it may only be issued where a WRITTEN self-billing agreement is already in place
+#   * it may NOT be issued to a supplier who is not VAT registered, or whose VAT number has
+#     changed since the agreement was signed
+#
+# ==> THE AUDIENCE MAKES THIS UNFORGIVING. <== The first partner channel is the NASDAL
+# directory -- 33 specialist dental accountancy firms. A self-bill missing a VAT number, or
+# issued with no agreement behind it, lands with the one audience in the country certain to spot
+# it, and the whole proposition rests on looking like a business that can be trusted near their
+# clients' data.
+#
+# Is_VAT_Registered is SEPARATE from VAT_Number on purpose. A NULL number could mean "not
+# registered" or "we never asked", and those need opposite actions -- issue a plain commission
+# statement, versus stop and ask before paying anything. Can_Self_Bill on the Gold dim therefore
+# requires BOTH a signed agreement date AND a known VAT position: an unanswered VAT question
+# blocks payment by design rather than being assumed away.
+#
+# Bank details are held because payment is by BANK TRANSFER, not Stripe. Stripe collects; paying
+# out needs Connect, with every partner onboarding as a connected account -- real friction to put
+# in front of a firm earning forty pounds a month, and a reason for a good partner to decline. A
+# PDF and a transfer has no onboarding step at all. Revisit only if partner volume justifies it.
+#
+# They are held in Billing and deliberately NOT carried into Gold: bank details are payment
+# instructions, not analytics, and have no business in a semantic model that exists to report
+# earnings.
+#
+# GUARDED ALTERs rather than a table deploy: Billing.Affiliate is created IF OBJECT_ID IS NULL
+# precisely so vendor-managed records survive redeploys, and dropping it would lose the affiliate
+# register. The canonical file carries the new columns too, for a genuine first create.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V185__affiliate_self_billing_details.manifest
+# =====================================================================
+
+# COL_LENGTH is not supported in Fabric Warehouse -- INFORMATION_SCHEMA is what V170 and
+# V171 use for exactly this, so follow them rather than inventing a second idiom.
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Address') ALTER TABLE [Billing].[Affiliate] ADD [Address] [varchar](500) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='VAT_Number') ALTER TABLE [Billing].[Affiliate] ADD [VAT_Number] [varchar](20) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Is_VAT_Registered') ALTER TABLE [Billing].[Affiliate] ADD [Is_VAT_Registered] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Self_Bill_Agreed_On') ALTER TABLE [Billing].[Affiliate] ADD [Self_Bill_Agreed_On] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Bank_Account_Name') ALTER TABLE [Billing].[Affiliate] ADD [Bank_Account_Name] [varchar](255) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Bank_Sort_Code') ALTER TABLE [Billing].[Affiliate] ADD [Bank_Sort_Code] [varchar](10) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Billing' AND TABLE_NAME='Affiliate' AND COLUMN_NAME='Bank_Account_Number') ALTER TABLE [Billing].[Affiliate] ADD [Bank_Account_Number] [varchar](20) NULL;
+
+DEPLOY   Fabric\Gold.Dim_Affiliates.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Affiliates.StoredProcedure.sql
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Affiliates @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Affiliate_Payments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Affiliate_Payment_Lines @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Nobody may be marked payable without both halves: the written agreement AND a known VAT
+# position. This is the guard that stops a self-bill going out to an accountant with a blank
+# VAT number on it.
+EXEC     DECLARE @b INT, @m VARCHAR(4000); SELECT @b = COUNT(*) FROM [Gold].[Dim_Affiliates] WHERE Can_Self_Bill = 1 AND (Self_Bill_Agreed_On IS NULL OR Is_VAT_Registered IS NULL); IF @b > 0 BEGIN SET @m = 'V185 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' affiliate(s) marked self-billable without an agreement date or a known VAT position.'; THROW 50185, @m, 1; END;
+
+TEST

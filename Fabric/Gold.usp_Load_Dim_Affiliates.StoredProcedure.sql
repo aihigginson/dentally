@@ -41,6 +41,15 @@ BEGIN
                a.Commission_Pct,
                CAST(a.Created_At AS DATE) AS Created_Date,
                a.Notes,
+               a.VAT_Number,
+               a.Is_VAT_Registered,
+               a.Self_Bill_Agreed_On,
+               -- Payable only when the written agreement exists AND we know the VAT position.
+               -- "Not registered" is a fine answer; "we never asked" is not, and a NULL cannot
+               -- tell them apart -- so an unanswered VAT question blocks payment by design.
+               CAST(CASE WHEN a.Self_Bill_Agreed_On IS NOT NULL
+                          AND a.Is_VAT_Registered IS NOT NULL
+                         THEN 1 ELSE 0 END AS BIT)          AS Can_Self_Bill,
                (SELECT COUNT(*) FROM [Billing].[Account_Billing] ab
                  WHERE ab.Affiliate_ID = a.Affiliate_ID) AS Practices_Introduced
         INTO #src
@@ -53,6 +62,10 @@ BEGIN
                Practices_Introduced   = s.Practices_Introduced,
                Created_Date           = s.Created_Date,
                Notes                  = s.Notes,
+               VAT_Number             = s.VAT_Number,
+               Is_VAT_Registered      = s.Is_VAT_Registered,
+               Self_Bill_Agreed_On    = s.Self_Bill_Agreed_On,
+               Can_Self_Bill          = s.Can_Self_Bill,
                DW_Updated_At          = SYSUTCDATETIME()
         FROM [Gold].[Dim_Affiliates] tgt
         JOIN #src s ON s.Affiliate_ID = tgt.bk_Affiliate_ID;
@@ -61,11 +74,14 @@ BEGIN
         INSERT INTO [Gold].[Dim_Affiliates]
             (pk_Affiliate, bk_Affiliate_ID, Affiliate_Email, Affiliate_Name,
              Standard_Commission_Pct, Practices_Introduced, Created_Date, Notes,
+             VAT_Number, Is_VAT_Registered, Self_Bill_Agreed_On, Can_Self_Bill,
              Affiliate_Count, DW_Created_At, DW_Updated_At)
         SELECT ISNULL((SELECT MAX(pk_Affiliate) FROM [Gold].[Dim_Affiliates]), 0)
                  + ROW_NUMBER() OVER (ORDER BY s.Affiliate_ID),
                s.Affiliate_ID, s.Email, s.Name, s.Commission_Pct, s.Practices_Introduced,
-               s.Created_Date, s.Notes, 1, SYSUTCDATETIME(), SYSUTCDATETIME()
+               s.Created_Date, s.Notes,
+               s.VAT_Number, s.Is_VAT_Registered, s.Self_Bill_Agreed_On, s.Can_Self_Bill,
+               1, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src s
         WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Dim_Affiliates] t
                            WHERE t.bk_Affiliate_ID = s.Affiliate_ID);

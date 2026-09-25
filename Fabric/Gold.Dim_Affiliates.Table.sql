@@ -24,6 +24,13 @@ CREATE TABLE [Gold].[Dim_Affiliates](
     [Practices_Introduced]    [int]           NULL,
     [Created_Date]        [date]              NULL,
     [Notes]               [varchar](255)      NULL,
+    -- Whether this partner can legally be self-billed yet. Bank details are deliberately
+    -- NOT carried into Gold: they are payment instructions, not analytics, and have no
+    -- business in a semantic model that exists to report earnings.
+    [VAT_Number]          [varchar](20)       NULL,
+    [Is_VAT_Registered]   [bit]               NULL,
+    [Self_Bill_Agreed_On] [date]              NULL,
+    [Can_Self_Bill]       [bit]               NULL,   -- agreement signed AND VAT status known
     [Affiliate_Count]     [int]               NULL,
     [DW_Created_At]       [datetime2](6)  NOT NULL,
     [DW_Updated_At]       [datetime2](6)  NOT NULL
