@@ -1562,6 +1562,19 @@ def _add_disruption(tdef, appointments, rng):
     extra   = []
     today_s = str(TODAY)
 
+    def _cancelled_on(slot_d, seq):
+        """When the patient rang, not when the slot was.
+
+        Gold.Fact_Appointments flags a cancellation as short notice when it was made 0 or 1
+        days before the slot. Recording every one of them ON the slot date made all of them
+        short notice and pinned that metric at 100%, against the live practice's 17% -- a
+        practice where nobody ever gives any warning. Most people cancel days or weeks out.
+        Never earlier than the booking itself, which _booked_on puts 7-41 days ahead.
+        """
+        lead = rng.randint(0, 1) if rng.random() < 0.17 else rng.randint(2, 30)
+        booked = slot_d - timedelta(days=7 + (seq % 35))
+        return max(slot_d - timedelta(days=lead), booked)
+
     for a in appointments:
         # Future bookings get a cancelled predecessor too -- a patient who cancels and
         # rebooks into next month is the single commonest event in a diary. Restricting
@@ -1603,7 +1616,8 @@ def _add_disruption(tdef, appointments, rng):
                 "completed_at":       None,
                 "in_surgery_at":      None,
                 "confirmed_at":       None,
-                "cancelled_at":       _iso(cd) if st == "cancelled" else None,
+                "cancelled_at":       _iso(_cancelled_on(cd, next_id)) if st == "cancelled" else None,
+                # A DNA is recorded on the day itself -- there is nothing to record earlier.
                 "did_not_attend_at":  _iso(cd) if st == "did_not_attend" else None,
             })
             extra.append(c)
@@ -1650,7 +1664,7 @@ def _add_disruption(tdef, appointments, rng):
             "completed_at":       None,
             "in_surgery_at":      None,
             "confirmed_at":       None,
-            "cancelled_at":       _iso(cd),
+            "cancelled_at":       _iso(_cancelled_on(cd, next_id)),
             "did_not_attend_at":  None,
         })
         stranded.append(c)
