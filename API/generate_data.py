@@ -1094,6 +1094,18 @@ def gen_patients(tdef, rng):
         # logic still derives from them.
         patients.append({
             "id": i,
+            # ==> ACTIVE PATIENTS ONLY. <== Date of birth was removed by V011's data
+            # minimisation and REINSTATED by V171 (2026-09-19) with a necessity assessment:
+            # without it the platform cannot tell an adult from a child, which NHS banding,
+            # age-appropriate recall intervals, and "is this uncontactable patient a child
+            # reachable through a parent?" all depend on. It inherits the V013 rule -- an
+            # inactive patient retains no date of birth, as they retain no name or contact
+            # detail either. See DPIA.md sec 7.3.
+            #
+            # dob was computed above (for the age-dependent choices) but never emitted, so
+            # every generated patient failed the "No Date of Birth" check: 100% of the demo
+            # practice against 0% of the live one.
+            "date_of_birth": str(dob) if is_active else None,
             "first_name": first,
             "preferred_name": preferred_name,
             "last_name": last,
