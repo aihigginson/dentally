@@ -1153,6 +1153,10 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     hygiene_rate_private  = params.get("hygiene_rate_private", 0.4)
     bbyl_rate_hyg         = params.get("bbyl_rate_hyg", 0.40)
     recall_booking_rate   = params.get("recall_booking_rate", 0.35)
+    # Share of the list who stop attending at some point and never return. Solved against the
+    # live practice's 13.7% dormant-two-years and 12.2% at-risk: those overlap, and a patient
+    # who lapsed early in the window counts to both, so the draw sits above either figure.
+    lapse_rate            = params.get("lapse_rate", 0.22)
 
     appointments = []
     apt_id = 0
@@ -1238,6 +1242,33 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
         recall_interval = max(30, recall_months * 30)
         recall_phase = rng.randint(0, recall_interval - 1)
 
+        # ==> A REAL LIST HAS A LONG TAIL WHO SIMPLY STOPPED COMING. <== Every generated
+        # patient used to run an unbroken recall cycle right up to today, so essentially
+        # nobody had lapsed. Against the live practice that left the demo's recovery reports
+        # -- the ones the product is actually sold on -- almost empty:
+        #
+        #                       Valley       Maple        proportionate
+        #     at risk           76 (2.0%)    857 (12.2%)  ~460
+        #     dormant 2 years   5 (0.13%)    964 (13.7%)  ~515
+        #
+        # A prospect opening the demo would watch the headline capability find nothing. So a
+        # share of patients stop attending at some point in the window and are never seen
+        # again: no later exams, and no forward recall booking either, or they would not be
+        # lapsed at all. Not before 15% of the window, so a lapsed patient still has enough
+        # history behind them to be recognisable as a patient rather than a stub.
+        lapse_after = None
+        if rng.random() < lapse_rate:
+            lapse_after = START + timedelta(
+                days=rng.randint(int((TODAY - START).days * 0.15), (TODAY - START).days))
+
+        # A practice marks someone inactive BECAUSE they stopped coming, so an inactive
+        # patient is always a lapsed one. Drawing the two independently left 309 patients
+        # (6.1%) holding a future booking against an inactive record -- the "Booked but
+        # Marked Inactive" check -- where the live practice has 4 (0.06%).
+        if not pat.get("active", True) and lapse_after is None:
+            lapse_after = START + timedelta(
+                days=rng.randint(int((TODAY - START).days * 0.15), (TODAY - START).days))
+
         # Spread exams across START..TODAY
         exam_codes_used = []
         prev_exam_date = None
@@ -1267,6 +1298,12 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 # recall cycle, and that is what makes the load level instead of a wave. So step
                 # from the patient's own phase by their own recall interval.
                 target = START + timedelta(days=recall_phase + exam_num * recall_interval)
+            # exam_num > 0: a lapse point drawn before the patient's first exam would leave
+            # them with no appointments at all, which is a different thing entirely -- it
+            # registers as "Never Attended", and pushed that check from 1.1% to 5.2% against
+            # the live practice's 1.5%. Someone who stopped coming has to have come once.
+            if exam_num > 0 and lapse_after is not None and target > lapse_after:
+                break
             if target >= TODAY:
                 # Future exam
                 target = TODAY + timedelta(days=rng.randint(7, 180))
@@ -1430,7 +1467,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
 
         # recall_booking_rate of patients who have had exams get a future booked recall appointment.
         # Simulates patients who have already scheduled their next recall visit.
-        if prev_exam_date is not None and rng.random() < recall_booking_rate:
+        if (prev_exam_date is not None and lapse_after is None
+                and rng.random() < recall_booking_rate):
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
             after_d  = max(TODAY, due_date - timedelta(14))
             before_d = FWD_END

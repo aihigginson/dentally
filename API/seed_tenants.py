@@ -117,7 +117,12 @@ def generate_xero_finance(tdef, data, load_ts):
 # ── Tenant definitions (matches notebook) ─────────────────────────────────────
 
 T11 = {
-    'tenant_id': 11, 'nhs': True, 'has_ortho': False, 'price_mult': 1.0, 'n_patients': 4000,
+    # 6,000, not 4,000. The roster below is 5 dentists and 3 hygienists, and 4,000 patients
+    # could not keep them busy: 34.2 appointments per working day is 4.3 per practitioner,
+    # where the live practice runs 6.4. A dentist seeing four patients a day does not read
+    # as a going concern. Same list size the real practice has, so the same roster, the same
+    # rates and the same per-practitioner load all follow without distorting any of them.
+    'tenant_id': 11, 'nhs': True, 'has_ortho': False, 'price_mult': 1.0, 'n_patients': 6000,
     'domain': 'valleydental.co.uk',
     'practice': {
         'id': _u5('practice', 11), 'name': 'Valley Dental Group', 'nhs': True,
