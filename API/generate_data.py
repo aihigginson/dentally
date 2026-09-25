@@ -2556,6 +2556,17 @@ def generate_tenant(tdef):
                          and float(c.get("target","0")) > 0}
     nhs_claims = gen_nhs_claims(tdef, plans, patients_by_id, contracts_by_site, rng)
 
+    # ==> AFTER THE MONEY, BEFORE THE HISTORY. <== Treatment plans, invoices and payments are
+    # all built from completed-and-past appointments above, and must not see a cancelled slot.
+    # Everything BELOW reads a patient's appointment history and legitimately should: patient
+    # stats carry Last_Cancelled_Appointment_Date, which is the column
+    # Gold.Fact_Patient_At_Risk drives its "Cancelled Not Rebooked" route off.
+    #
+    # Running this last -- safe from the linking side -- meant gen_patient_stats never saw a
+    # single cancellation, so that date was null for every patient and the route stayed empty
+    # no matter how many cancellations were generated.
+    _add_disruption(tdef, appointments, rng)
+
     apts_by_pat = {}
     for a in appointments:
         apts_by_pat.setdefault(a["patient_id"], []).append(a)
@@ -2581,7 +2592,6 @@ def generate_tenant(tdef):
         if booked_apt and r["recall_type"] == "Dentist":   # Recall Examination is a dental booking
             r["appointment_id"] = booked_apt
 
-    _add_disruption(tdef, appointments, rng)
     _relabel_states(appointments)
 
     return {
