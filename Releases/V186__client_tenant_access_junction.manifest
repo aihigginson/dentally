@@ -1,0 +1,51 @@
+# =====================================================================
+# Release V186 -- a tenant may now be visible to more than one client
+# =====================================================================
+# Access was read straight off Audit.Tenants.Client_ID, which is a COLUMN on the tenant. So a
+# tenant belonged to exactly one client, and could therefore be SEEN by exactly one client.
+# One client owning several tenants worked (a group running more than one Dentally instance);
+# one tenant being visible to several clients did not.
+#
+# ==> THAT IS WHAT STOPPED OUR OWN PEOPLE SEEING A DEMO. <== The support login sits on the
+# client that owns Maple, so Power BI's RLS -- which resolves the signed-in UPN through
+# Security.Application_Users to a client, then to that client's tenants -- filtered every
+# report to Maple no matter which practice the app's picker had selected. The picker moved the
+# app and never the report.
+#
+# The old workaround does not survive a real customer. Security.Clients.Data.sql still says
+# "both dev tenants are grouped under Client 1 so dev accounts can see all data" -- done by
+# repointing each tenant's Client_ID. Folding Maple's tenant into an Analytically client would
+# take it away from the client Maple's own staff sign in under and lock them out of their own
+# practice.
+#
+# So the two concerns are separated:
+#     Audit.Tenants.Client_ID          who OWNS a tenant  (billing, subscription, invoices)
+#     Security.Client_Tenant_Access    who may SEE it     (RLS, the app's practice picker)
+#
+# ==> BEHAVIOUR-PRESERVING ON THE DAY IT SHIPS. <== The seed DERIVES a grant for every
+# (owning client, tenant) pair rather than listing them, so no existing access changes and a
+# tenant onboarded later cannot be left without a grant by somebody forgetting this file. The
+# Analytically client (999) is then purely additive, and inert until a user is pointed at it.
+#
+# IDEMPOTENT CREATE, never DROP/CREATE -- same reasoning as Security.Application_Users. A
+# warehouse redeploy must not silently revoke access. Both seed statements are NOT EXISTS
+# guarded, so the release is re-runnable.
+#
+# Web/app.py reads this table in _get_user_info, which is the one function every route resolves
+# identity through -- so THE TABLE MUST EXIST BEFORE THE APP SHIPS, in both environments.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V186__client_tenant_access_junction.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Security.Client_Tenant_Access.Table.sql
+DEPLOY   Fabric\Security.Client_Tenant_Access.Data.sql
+
+# Every pre-existing (client, tenant) relationship must still be granted. If this throws, the
+# release has REVOKED access somewhere and must not be left in place.
+EXEC     DECLARE @m INT, @s VARCHAR(4000); SELECT @m = COUNT(*) FROM [Audit].[Tenants] t WHERE t.Client_ID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [Security].[Client_Tenant_Access] a WHERE a.Client_ID = t.Client_ID AND a.Tenant_ID = t.Tenant_ID); IF @m > 0 BEGIN SET @s = 'V186 FAILED: ' + CAST(@m AS VARCHAR(10)) + ' owning client/tenant pair(s) lost their grant.'; THROW 50186, @s, 1; END;
+
+# Every active tenant must be reachable by the Analytically client, or a support login pointed
+# at it would silently be unable to see a practice.
+EXEC     DECLARE @u INT, @t VARCHAR(4000); SELECT @u = COUNT(*) FROM [Audit].[Tenants] t WHERE ISNULL(t.Is_Active, 1) = 1 AND NOT EXISTS (SELECT 1 FROM [Security].[Client_Tenant_Access] a WHERE a.Client_ID = 999 AND a.Tenant_ID = t.Tenant_ID); IF @u > 0 BEGIN SET @t = 'V186 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' active tenant(s) not granted to the Analytically client.'; THROW 50187, @t, 1; END;
+
+TEST

@@ -116,6 +116,13 @@ def generate_xero_finance(tdef, data, load_ts):
 
 # ── Tenant definitions (matches notebook) ─────────────────────────────────────
 
+# ==> NAMED "DEMONSTRATION PRACTICE", DELIBERATELY. <== Not a plausible practice name. A
+# prospect walking through this must never be able to conclude they are being shown another
+# customer's real data, and a convincing name invites exactly that conclusion. The site inside
+# it was called "Maple Dental" -- the live customer's own name, in the demo tenant -- which is
+# the failure this naming rule exists to prevent. Everything visible carries the same name, and
+# the domain is ours (demo.analytically.info) rather than a practice-shaped one that might
+# belong to somebody real.
 T11 = {
     # 6,000, not 4,000. The roster below is 5 dentists and 3 hygienists, and 4,000 patients
     # could not keep them busy: 34.2 appointments per working day is 4.3 per practitioner,
@@ -123,15 +130,15 @@ T11 = {
     # as a going concern. Same list size the real practice has, so the same roster, the same
     # rates and the same per-practitioner load all follow without distorting any of them.
     'tenant_id': 11, 'nhs': True, 'has_ortho': False, 'price_mult': 1.0, 'n_patients': 6000,
-    'domain': 'valleydental.co.uk',
+    'domain': 'demo.analytically.info',
     'practice': {
-        'id': _u5('practice', 11), 'name': 'Valley Dental Group', 'nhs': True,
+        'id': _u5('practice', 11), 'name': 'Demonstration Practice', 'nhs': True,
         'address_line_1': '22 Queen Square', 'address_line_2': None,
         'town': 'Bristol', 'postcode': 'BS1 4NH',
-        'phone_number': '0117 123 0001', 'email_address': 'info@valleydental.co.uk',
-        'patient_email_address': 'patients@valleydental.co.uk',
-        'website': 'https://valleydental.co.uk', 'logo_url': None,
-        'slug': 'valley-dental', 'time_zone': 'Europe/London',
+        'phone_number': '0117 123 0001', 'email_address': 'info@demo.analytically.info',
+        'patient_email_address': 'patients@demo.analytically.info',
+        'website': 'https://demo.analytically.info', 'logo_url': None,
+        'slug': 'demonstration-practice', 'time_zone': 'Europe/London',
         'medical_history_expiry_days': 365,
         'custom_patient_field_label_1': None, 'custom_patient_field_label_2': None,
         'oh_mon_open': '09:00', 'oh_mon_close': '17:30',
@@ -143,9 +150,9 @@ T11 = {
         'oh_sun_open': None, 'oh_sun_close': None,
     },
     'sites': [
-        {'id': 't11-cl', 'name': 'Maple Dental', 'active': True,
+        {'id': 't11-cl', 'name': 'Demonstration Practice', 'active': True,
          'address_line_1': '22 Queen Square', 'town': 'Bristol', 'postcode': 'BS1 4NH',
-         'phone_number': '0117 123 1001', 'email': 'clinic@valleydental.co.uk',
+         'phone_number': '0117 123 1001', 'email': 'clinic@demo.analytically.info',
          'monday_open': '09:00', 'monday_close': '17:30',
          'tuesday_open': '09:00', 'tuesday_close': '17:30',
          'wednesday_open': '09:00', 'wednesday_close': '17:30',

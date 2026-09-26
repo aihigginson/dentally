@@ -1641,8 +1641,13 @@ def _get_user_info(cur, upn):
         # driver exception, not the clean refusal this was supposed to be. Casting also keeps the
         # check working if the column type ever changes. The canonical value comes back from the
         # row, so client_id stays the type the rest of the app expects.
-        cur.execute("SELECT TOP 1 Client_ID FROM Audit.Tenants "
-                    "WHERE CAST(Client_ID AS VARCHAR(64)) = ? AND ISNULL(Is_Active, 1) = 1", str(acting))
+        # Resolved against the ACCESS table, not Audit.Tenants. A client is valid to act as if
+        # it has at least one active tenant GRANTED to it -- which is not the same as owning
+        # one. The Analytically client owns no tenant at all and can see every one of them.
+        cur.execute("SELECT TOP 1 a.Client_ID FROM Security.Client_Tenant_Access a "
+                    "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+                    "WHERE CAST(a.Client_ID AS VARCHAR(64)) = ? "
+                    "AND ISNULL(t.Is_Active, 1) = 1", str(acting))
         row = cur.fetchone()
         if not row:
             app.logger.warning('staff %s asked for unknown/inactive client %r', upn, acting)
@@ -1650,8 +1655,19 @@ def _get_user_info(cur, upn):
         app.logger.info('staff %s acting as client %s', upn, row[0])
         client_id = row[0]
 
+    # ==> OWNERSHIP AND VISIBILITY ARE DIFFERENT THINGS. <== This read Audit.Tenants.Client_ID,
+    # which is a COLUMN on the tenant -- so a tenant belonged to exactly one client and could
+    # therefore be seen by exactly one client. One client owning several tenants worked; one
+    # tenant being visible to several clients did not, and that is what our own people need in
+    # order to see every practice.
+    #
+    # Audit.Tenants.Client_ID still says who OWNS a tenant, which is what billing, subscriptions
+    # and invoicing care about. Security.Client_Tenant_Access says who may SEE it. Seeded so that
+    # every client keeps access to what it owns, so this change grants nobody anything new.
     cur.execute(
-        "SELECT Tenant_ID FROM Audit.Tenants WHERE Client_ID = ? AND ISNULL(Is_Active, 1) = 1",
+        "SELECT t.Tenant_ID FROM Security.Client_Tenant_Access a "
+        "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+        "WHERE a.Client_ID = ? AND ISNULL(t.Is_Active, 1) = 1",
         client_id,
     )
     tids = [r[0] for r in cur.fetchall()]
