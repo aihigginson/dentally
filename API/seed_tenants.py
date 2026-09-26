@@ -160,8 +160,14 @@ T11 = {
         # that follows it and the hygiene alongside it.
         _pp(1, 'NHS',             nhs=True,  dr=6, hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
         _pp(2, 'Private',                    dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(3, 'Care Plan',  monthly='14.99', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(4, 'Premium Private', monthly='29.99', dr=6, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
+        # ==> A DENTAL PLAN IS ABOUT 30 POUNDS A MONTH. <== These were 14.99 and 29.99, so
+        # the demo averaged 17.75 per plan patient per month against the live practice's 35 --
+        # capitation revenue came out at 205k against a pro-rata 489k. The live practice's
+        # Denplan tiers run 8 to 65 with a 35.77 default, so a 29.99 core plan and a 44.99
+        # premium tier bracket it properly. Input.Plan_Capitation_Rate carries the same
+        # figures -- that table, not this one, is what the revenue is actually computed from.
+        _pp(3, 'Care Plan',  monthly='29.99', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(4, 'Premium Private', monthly='44.99', dr=6, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
     ],
     'contracts': [
         _contract(11, 't11-cl', 'VDX01', 2021, 2000, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
@@ -232,12 +238,12 @@ T11 = {
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110004', 'nhs_pct': 0.18,
          'work_days': [3, 4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 5, 'first_name': 'Kwame', 'last_name': 'Asante', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate', 'fte': 0.20,
          'site_id': 't11-cl', 'gdc_number': '1110005', 'nhs_pct': 0.20,
          'work_days': [4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         # The high-yield part-timer. Private only -- implant work is private by definition,
         # which is why nhs_pct is 0 and performs_nhs is False.
         {'id': 6, 'first_name': 'Rohan', 'last_name': 'Mistry', 'title': 'Dr', 'role': 'dentist',
@@ -254,17 +260,17 @@ T11 = {
          'custom_role': 'Hygienist', 'fte': 0.55,
          'site_id': 't11-cl', 'gdc_number': '1110009', 'nhs_pct': 0.15,
          'work_days': [0, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 10, 'first_name': 'Rita', 'last_name': 'Osei', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110010', 'nhs_pct': 0.1,
          'work_days': [1, 3], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 11, 'first_name': 'Dev', 'last_name': 'Patel', 'title': 'Mr', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110011', 'nhs_pct': 0.12,
          'work_days': [0, 3], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         # ==> SIZE THE CHAIRS TO THE DEMAND, NOT TO THE PATIENT COUNT. <== Two corrections
         # are baked into these hours. Definition hours run ~35% above the measured figure
         # because holiday absence blocks take roughly a quarter of the year out, and measured
@@ -277,29 +283,33 @@ T11 = {
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110007', 'nhs_pct': 0.18,
          'work_days': [0, 1], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 8, 'first_name': 'Tom', 'last_name': 'Bradshaw', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110008', 'nhs_pct': 0.24,
          'work_days': [2, 3], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 13, 'first_name': 'Priya', 'last_name': 'Raman', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.55,
          'site_id': 't11-cl', 'gdc_number': '1110013', 'nhs_pct': 0.12,
          'work_days': [1, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
         {'id': 12, 'first_name': 'Maya', 'last_name': 'Lindqvist', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.30,
          'site_id': 't11-cl', 'gdc_number': '1110012', 'nhs_pct': 0.1,
          'work_days': [3, 4], 'start_time': '09:00', 'end_time': '16:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
     ],
     # ==> THE CARE PLAN HAD NO PATIENTS ON IT AT ALL. <== A patient's plan is drawn from
     # their DENTIST'S pp_ids, and plan 3 was listed only against the hygienists -- so a plan
     # the practice sells, prices and reports on was unreachable, and plan-patient percentage
     # read 0. Weights below reproduce the live practice's mix: ~57% Private against ~20% on a
     # monthly capitation plan, the rest NHS.
-    '_pp_weights': {2: 0.739, 3: 0.157, 4: 0.104},
+    # Premium Private came out at 4.3% against Care Plan's 12.4% -- not the weights, but
+    # because it was listed against only two of the six general dentists and the draw is made
+    # from the patient's own dentist's plans. With it offered practice-wide these land plan
+    # patients at ~20% overall, as the live practice runs, averaging ~35/month.
+    '_pp_weights': {2: 0.75, 3: 0.16, 4: 0.09},
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
         'active_rate':             0.95,
