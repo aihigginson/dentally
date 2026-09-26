@@ -1953,6 +1953,20 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pat_pp = {p["id"]: p["payment_plan_id"] for p in patients}
     plan_acceptance_rate = tdef.get("_params", {}).get("plan_acceptance_rate", 1.0)
+    # ==> AN OPEN COURSE USUALLY HAS THE NEXT VISIT BOOKED. <== Gold splits open courses into
+    # 'In Progress' (a future appointment is attached) and 'Open - No Appointment' -- the
+    # status its own loader calls "the leaky bucket" -- and open_courses counts BOTH while
+    # open_courses_without_appt counts only the second. The generator attached a future
+    # appointment to no course at all, so 'In Progress' was empty and the two metrics were
+    # identical by construction: 396 and 396, which reads as every single open course having
+    # been abandoned.
+    #
+    # 0.7 rather than a half: the ratio is (In Progress + No Appt) / No Appt, so booking half
+    # of them gives 2.0x, not the 3-4x a practice that chases its treatment plans would show.
+    inprogress_booked_rate = tdef.get("_params", {}).get("inprogress_booked_rate", 0.7)
+    _prac_days = {pr["id"]: pr.get("work_days") or [0, 1, 2, 3, 4]
+                  for pr in tdef.get("_prac_defs", [])}
+    _next_apt_id = max((a["id"] for a in appointments), default=0)
 
     # ==> A MEMBERSHIP PATIENT DOES NOT PAY FOR THEIR CHECK-UP. <== That is what the monthly
     # fee buys, and it is also the ONLY evidence the warehouse has that they are on a plan:
@@ -2191,6 +2205,60 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "created_at": _iso(first_date),
                     "updated_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                 })
+
+            # The next visit in a course that is still running. Placed on a day the
+            # practitioner actually works, or it lands outside the diary and quietly damages
+            # the fill figures it has nothing to do with.
+            if in_progress and rng.random() < inprogress_booked_rate:
+                _pr = first_apt["practitioner_id"]
+                _days = _prac_days.get(_pr, [0, 1, 2, 3, 4])
+                if _days:
+                    _d = TODAY + timedelta(days=rng.randint(3, 56))
+                    for _ in range(7):
+                        if _d.weekday() in _days:
+                            break
+                        _d += timedelta(days=1)
+                    if _d.weekday() in _days:
+                        _next_apt_id += 1
+                        _open_tx = next((x[2] for x in plan_items_data
+                                         if not (completed or (in_progress and x[7] < done_upto))),
+                                        None)
+                        _st = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
+                        _en = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
+                        appointments.append({
+                            "id": _next_apt_id, "patient_id": pat_id,
+                            "practitioner_id": _pr, "user_id": _pr,
+                            "payment_plan_id": pp_id, "room_id": None,
+                            "start_time": _iso(_d, _st), "finish_time": _iso(_d, _en),
+                            "duration": 30, "state": "booked",
+                            "reason": "Continuing Treatment",
+                            "treatment_id": (_open_tx or {}).get("id"),
+                            "appointment_cancellation_reason_id": None,
+                            "online_booking": False, "booked_via_api": False,
+                            "pending_at": _iso(last_date),
+                            "arrived_at": None, "completed_at": None, "cancelled_at": None,
+                            "did_not_attend_at": None,
+                            "uuid": _u5("apt", tid, _next_apt_id),
+                            "patient_name": None, "patient_image_url": None, "notes": None,
+                            "treatment_description": None, "confirmed_at": None,
+                            "in_surgery_at": None,
+                        })
+                        # The LINK is what Gold reads -- an appointment on its own does not
+                        # make a course 'In Progress'; the Treatment_Appointments row does.
+                        ta_seq += 1
+                        t_appts.append({
+                            "id": _u5("ta", tid, _next_apt_id, plan_id),
+                            "appointment_id": _next_apt_id,
+                            "treatment_plan_id": plan_id,
+                            "patient_id": pat_id,
+                            "position": len(cluster),
+                            "bookable": True,
+                            "completed": False,
+                            "completed_at": None,
+                            "notes": None,
+                            "created_at": _iso(last_date),
+                            "updated_at": _iso(last_date),
+                        })
 
             # Treatment appointment join records
             for pos, apt in enumerate(cluster):
