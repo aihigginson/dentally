@@ -1814,9 +1814,21 @@ def _add_disruption(tdef, appointments, rng):
         # their last attended visit puts terminal events across the whole window, and still
         # lands recent ones inside the 90 days the at-risk route looks at.
         last_d = date.fromisoformat(a["start_time"][:10])
+        # ==> ONLY PATIENTS WHO HAVE ACTUALLY DRIFTED. <== "No future appointment" describes
+        # most of an active list on any given day -- someone seen last month who has not
+        # rebooked yet is not a leaver. Applying a terminal no-show to all of them invented
+        # 1,600 recent ones and took the diary from 50 appointments per working day to 85.
+        # Four months without a visit is the point at which not rebooking means something.
+        if last_d > TODAY - timedelta(days=120):
+            continue
         cd = last_d + timedelta(days=rng.randint(7, 60))
         if cd >= TODAY:
-            cd = TODAY - timedelta(days=rng.randint(3, 40))
+            # They were seen recently and simply have nothing booked yet -- which is most of
+            # the list on any given day, not a leaver. Relocating these into the last 40 days
+            # instead of skipping them piled 1,600 invented no-shows into the recent window:
+            # appointments per working day went from 50 to 87, and the at-risk "Cancelled Not
+            # Rebooked" route from 82 to 287 against the live practice's 79.
+            continue
         if cd.weekday() >= 5:
             cd -= timedelta(days=cd.weekday() - 4)
         if cd <= last_d:
