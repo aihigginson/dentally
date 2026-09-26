@@ -526,7 +526,11 @@
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
             </button>
         </div>
-        <select class="staff-picker" id="staff-practice" title="Act as another practice" style="display:none"></select>
+        <select class="staff-picker" id="staff-practice" title="Act as another client" style="display:none"></select>
+        <!-- The PRACTICE picker. Shown to everyone, not just staff: a client may own several
+             practices and each practice is one tenant, so a group customer needs it too. Only
+             appears when there is a genuine choice to make. -->
+        <select class="staff-picker" id="practice-tenant" title="Practice" style="display:none"></select>
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
     </div>
@@ -1130,7 +1134,12 @@
     // second tab silently wrong. The server re-checks that the caller is staff on every request
     // -- this is a statement of intent, never of permission.
     const ACTING_KEY = '_anly_acting_client';
+    const TENANT_KEY = '_anly_acting_tenant';
     function actingClient()      { try { return sessionStorage.getItem(ACTING_KEY) || ''; } catch (e) { return ''; } }
+    function actingTenant()      { try { return sessionStorage.getItem(TENANT_KEY) || ''; } catch (e) { return ''; } }
+    function setActingTenant(v)  {
+        try { v ? sessionStorage.setItem(TENANT_KEY, v) : sessionStorage.removeItem(TENANT_KEY); } catch (e) {}
+    }
     function setActingClient(v)  {
         try { v ? sessionStorage.setItem(ACTING_KEY, v) : sessionStorage.removeItem(ACTING_KEY); } catch (e) {}
     }
@@ -1138,14 +1147,20 @@
     async function authFetch(url, options) {
         const token = await getIdToken();
         const acting = actingClient();
+        const tenant = actingTenant();
         const res = await fetch(url, {
             ...options,
             headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${token}`,
-                       ...(acting ? { 'X-Acting-Client': acting } : {}) },
+                       ...(acting ? { 'X-Acting-Client': acting } : {}),
+                       ...(tenant ? { 'X-Acting-Tenant': tenant } : {}) },
         });
         // A 403 while acting as a practice usually means that practice has gone (cancelled, or a
         // stale pick from an earlier session). Drop the override and reload rather than showing
         // "contact us" to our own support login, which would look like THEIR access had broken.
+        // A stale PRACTICE pick 403s the same way -- after switching client, the tenant held in
+        // session belongs to the client we just left. Clear that first and retry before giving
+        // up on the client override, or the reload loops on the same refusal.
+        if (res.status === 403 && tenant) { setActingTenant(''); location.reload(); return res; }
         if (res.status === 403 && acting) { setActingClient(''); location.reload(); return res; }
         if (res.status === 403) {
             showContactPage();
@@ -1328,6 +1343,30 @@
         // embeds holding tokens minted for the OLD practice's RLS; refreshing the data around them
         // would leave one practice's reports under another's name, which is the one mistake this
         // control must never make.
+        // ── The practice picker ──────────────────────────────────────────────
+        // Switching reloads for the same reason the client picker does: half the screen is
+        // Power BI embeds holding tokens minted for the OLD practice's RLS.
+        //
+        // DEFAULTS TO THE FIRST rather than leaving nothing selected. With no practice chosen
+        // the reports receive every tenant the client can see and ADD THEM UP, which is how
+        // two practices ended up under one name -- so there is always exactly one in scope.
+        const tsel = document.getElementById('practice-tenant');
+        const cps  = data.client_practices || [];
+        if (tsel && cps.length > 1) {
+            const current = String(data.tenant_ids && data.tenant_ids.length === 1
+                                   ? data.tenant_ids[0] : (actingTenant() || cps[0].tenant_id));
+            tsel.innerHTML = cps.map(pr =>
+                '<option value="' + escHtml(pr.tenant_id) + '"'
+                + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
+                + escHtml(pr.name) + '</option>').join('');
+            tsel.style.display = '';
+            tsel.onchange = () => { setActingTenant(tsel.value); location.reload(); };
+            if (!actingTenant()) { setActingTenant(current); location.reload(); return; }
+        } else if (tsel) {
+            tsel.style.display = 'none';
+            if (actingTenant()) setActingTenant('');
+        }
+
         if (data.is_staff && (data.practices || []).length) {
             const sel = document.getElementById('staff-practice');
             if (sel) {
@@ -1336,7 +1375,12 @@
                     + (pr.client_id === data.client_id ? ' selected' : '') + '>'
                     + escHtml(pr.name) + '</option>').join('');
                 sel.style.display = '';
-                sel.onchange = () => { setActingClient(sel.value); location.reload(); };
+                sel.onchange = () => {
+                    // The practice in session belongs to the client being left behind.
+                    setActingTenant('');
+                    setActingClient(sel.value);
+                    location.reload();
+                };
                 if (actingClient()) document.body.classList.add('acting-as');
             }
             const ab = document.getElementById('stab-admin-btn');

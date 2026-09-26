@@ -455,6 +455,19 @@ def me():
                 "GROUP BY c.Client_ID, c.Client_Name ORDER BY c.Client_Name")
             practices = [{'client_id': r[0], 'name': r[1] or r[0], 'tenants': r[2]}
                          for r in cur.fetchall()]
+
+        # The PRACTICE picker: the tenants inside the client currently in scope. Returned for
+        # everyone, not just staff -- a group customer needs to choose between their own
+        # practices. Sent with /api/me so the picker is populated in the same round trip that
+        # establishes who you are, exactly as the client picker is.
+        cur.execute(
+            "SELECT t.Tenant_ID, COALESCE(MIN(ps.Practice_Name), MIN(t.Tenant_Name)) "
+            "FROM Security.Client_Tenant_Access a "
+            "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+            "LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = t.Tenant_ID "
+            "WHERE a.Client_ID = ? AND ISNULL(t.Is_Active, 1) = 1 "
+            "GROUP BY t.Tenant_ID ORDER BY 2", client_id)
+        client_practices = [{'tenant_id': r[0], 'name': r[1]} for r in cur.fetchall()]
         conn.close()
         return jsonify({
             'display_name':         display_name or upn,
@@ -468,6 +481,7 @@ def me():
             'trial':                trial,
             'is_staff':             _is_staff(upn),
             'practices':            practices,
+            'client_practices':     client_practices,
         })
     except Exception as e:
         return _server_error(e, 'me')
@@ -1627,6 +1641,20 @@ def _acting_client_id(upn):
     return (request.headers.get('X-Acting-Client') or '').strip() or None
 
 
+def _acting_tenant_id(upn):
+    """The practice selected WITHIN the current client, or None.
+
+    ==> NOT STAFF-ONLY, unlike the client picker. <== A client may own several tenants and
+    each tenant is exactly one practice, so a group customer running three practices needs
+    this every bit as much as a support login does. It is validated against the caller's own
+    permitted set in _get_user_info, so it asserts WHICH practice, never WHETHER they may see
+    it -- a header naming one they are not entitled to buys them nothing.
+    """
+    if not has_request_context():
+        return None
+    return (request.headers.get('X-Acting-Tenant') or '').strip() or None
+
+
 def _get_user_info(cur, upn):
     """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
 
@@ -1705,6 +1733,32 @@ def _get_user_info(cur, upn):
         # bad override yields 403 rather than quietly falling back to the support login's own
         # practice and showing one practice's figures under another's name.
         return None, None, [], False
+
+    # ==> ONE PRACTICE AT A TIME. <== The model is Client 1..* Tenant 1..1 Practice 1..* Site,
+    # and the app could only ever select the ends of it: a client, then a site. Nothing chose
+    # the PRACTICE in between. While every client owned exactly one tenant that gap was
+    # invisible, because picking the client picked the practice by implication.
+    #
+    # It stopped being invisible the moment a client could see several. A report handed more
+    # than one tenant does not pick one, it ADDS THEM UP -- and the site filter cannot stand
+    # in, because it sits a level below and 18 of the 42 active metrics do not support site at
+    # all. Two practices' figures under one practice's name is the result.
+    #
+    # Narrowed HERE, in the one function every route resolves identity through, so the whole
+    # app scopes together -- reports, Day Book, Admin, billing -- rather than each endpoint
+    # being trusted to remember.
+    acting_t = _acting_tenant_id(upn)
+    if acting_t is not None:
+        chosen = [t for t in tids if str(t) == str(acting_t)]
+        if chosen:
+            tids = chosen
+        else:
+            # Names a practice this caller cannot see: a stale tab after switching client, or
+            # a hand-set header. Refused rather than widened -- falling back to the full set
+            # would answer a question about one practice with the total of several.
+            app.logger.warning('%s asked for tenant %r outside their set %r', upn, acting_t, tids)
+            return None, None, [], False
+
     return display_name, client_id, tids, maintain_targets
 
 
