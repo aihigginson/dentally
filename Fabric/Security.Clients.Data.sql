@@ -15,10 +15,15 @@
 -- dangerous -- but they show up in any list of clients, which is no way to read a
 -- production table.
 --
--- Client 999 is OURS. It owns no tenant and is granted access to every active one, which is
+-- CLIENT 1 IS OURS. It owns no tenant and is granted access to every active one, which is
 -- what lets a support login move between practices -- in the reports as well as the app,
--- since RLS resolves through the same junction. Kept well outside the range real clients are
--- assigned from.
+-- since RLS resolves through the same junction.
+--
+-- REAL CLIENTS START AT 100. Everything below that is internal, which is why this is 1 and
+-- not some number off the end -- a high id would read as a customer to anyone scanning the
+-- table, and the range is the thing that carries the meaning. Client 1 held this role once
+-- before: the note this file used to carry said "both dev tenants are grouped under Client 1
+-- so dev accounts can see all data".
 --
 -- DELETE-then-INSERT, so anything edited directly in a warehouse is replaced on the next
 -- deploy. Client_Name is therefore the same in both environments by design; dev's tenant
@@ -30,10 +35,10 @@ GO
 
 INSERT INTO Security.Clients (Client_ID, Client_Name)
 VALUES
+-- Us. Owns no tenant; sees every active one via Security.Client_Tenant_Access.
+  (1,   'Analytically'),
 -- Demonstration data (dev only; deliberately not a convincing practice name)
   (11,  'Demonstration Practice'),
 -- Real practices (loaded via Ingest_Dentally)
-  (100, 'Maple Dental'),
--- Us. Sees every active tenant via Security.Client_Tenant_Access.
-  (999, 'Analytically');
+  (100, 'Maple Dental');
 GO

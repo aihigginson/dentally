@@ -10,11 +10,11 @@
 --      switch between practices -- in the reports as well as the app, because RLS reads the
 --      same table.
 --
--- Client 999 is deliberately outside the range real clients are assigned from.
+-- Client 1 is ours. Real clients start at 100, so everything below that is internal.
 -- =============================================================================
 
-IF NOT EXISTS (SELECT 1 FROM [Security].[Clients] WHERE Client_ID = 999)
-    INSERT INTO [Security].[Clients] (Client_ID, Client_Name) VALUES (999, 'Analytically');
+IF NOT EXISTS (SELECT 1 FROM [Security].[Clients] WHERE Client_ID = 1)
+    INSERT INTO [Security].[Clients] (Client_ID, Client_Name) VALUES (1, 'Analytically');
 GO
 
 INSERT INTO [Security].[Client_Tenant_Access] (Client_ID, Tenant_ID, Granted_At, Granted_By)
@@ -26,9 +26,9 @@ WHERE  t.Client_ID IS NOT NULL
 GO
 
 INSERT INTO [Security].[Client_Tenant_Access] (Client_ID, Tenant_ID, Granted_At, Granted_By)
-SELECT 999, t.Tenant_ID, SYSUTCDATETIME(), 'seed:analytically'
+SELECT 1, t.Tenant_ID, SYSUTCDATETIME(), 'seed:analytically'
 FROM   [Audit].[Tenants] t
 WHERE  ISNULL(t.Is_Active, 1) = 1
   AND  NOT EXISTS (SELECT 1 FROM [Security].[Client_Tenant_Access] a
-                    WHERE a.Client_ID = 999 AND a.Tenant_ID = t.Tenant_ID);
+                    WHERE a.Client_ID = 1 AND a.Tenant_ID = t.Tenant_ID);
 GO
