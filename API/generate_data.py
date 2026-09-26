@@ -2563,16 +2563,36 @@ def gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat):
 
 # ─── RECALLS ──────────────────────────────────────────────────────────────────
 
-def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.01, ramp_days=30):
+def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.03, ramp_days=30):
     """Linear ramp: rate_recent at day 0, rate_old at ramp_days+, flat thereafter."""
     t = min(1.0, days_since_due / ramp_days)
     return rate_recent + (rate_old - rate_recent) * t
 
-def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed):
-    """One recall record (dental or hygiene) with realistic reminder/suppression state."""
+def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed,
+                  status=None):
+    """One recall record (dental or hygiene) with realistic reminder/suppression state.
+
+    ==> DENTALLY'S OWN STATUSES, NOT INVENTED ONES. <== This produced "Pending" and
+    "Overdue", with a comment claiming they were TitleCased to match the real API. They are
+    not in it. The live practice carries Completed, Unbooked, Booked and Missed, and every
+    recall metric keys on those literally:
+
+        dentist/hygiene_recall_conversion   Status IN ('Completed','Missed') AND reminded
+        overdue_recalls                     Status = 'Unbooked' AND NOT reminded AND due
+        Fact_Patient_At_Risk "Recall Active" Status IN ('Unbooked','Booked')
+
+    So all three read nothing for the demo, and the at-risk detail said "No Recall" for every
+    patient -- not because the data disagreed but because the words did.
+    """
     reminder_lead = timedelta(days=42)   # first reminder 6 weeks before due
     second_lead   = timedelta(days=14)   # second reminder 2 weeks before due
-    status = "Overdue" if due_date < today else "Pending"   # TitleCase to match real API
+    if status is None:
+        status = "Unbooked"
+    # ==> A MISSED CYCLE IS MOSTLY ONE NOBODY CHASED. <== On the live practice 390 of the 440
+    # missed recalls had no reminder against them and only 50 did -- which is largely why they
+    # were missed. It also decides recall conversion, whose denominator is concluded cycles
+    # WITH a reminder: reminding every missed cycle put conversion at 71.8% against 98.5%.
+    silent = (status == "Missed" and rng.random() < 0.88)
     # Reminders are sent once within the window; a ramping proportion are suppressed
     # to simulate unactioned / partially-actioned recalls.
     first_sent  = due_date - reminder_lead
@@ -2583,7 +2603,7 @@ def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed)
         suppress_first = rng.random() < _suppress_rate(max(0, (today - first_sent).days))
     else:
         suppress_first = False
-    has_first = has_first_window and not suppress_first
+    has_first = has_first_window and not suppress_first and not silent
     if has_second_window and has_first:
         suppress_second = rng.random() < _suppress_rate(max(0, (today - second_sent).days))
     else:
@@ -2642,6 +2662,21 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
     today = TODAY
     exam_tx_ids    = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
     hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
+    # 'Booked' means an appointment for THAT discipline is already in the diary, so the
+    # practice has nothing to chase. Worked out once rather than per patient.
+    booked_ahead = {"Dentist": set(), "Hygiene": set()}
+    for plist in apts_by_pat.values():
+        for a in plist:
+            if a["state"] != "booked" or a["start_time"][:10] < str(TODAY):
+                continue
+            t = a.get("treatment_id")
+            if t in exam_tx_ids:
+                booked_ahead["Dentist"].add(a["patient_id"])
+            elif t in hygiene_tx_ids:
+                booked_ahead["Hygiene"].add(a["patient_id"])
+    # Share of patients whose previous cycle is still on file as concluded.
+    concluded_rate = tdef.get("_params", {}).get("recall_concluded_rate", 0.9)
+
     recalls = []
     for pat in patients:
         pid = pat["id"]
@@ -2653,19 +2688,46 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
         exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
         hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
 
-        # ── Dental recall (only if the patient attends for exams) ──
-        if exams:
-            last_exam = date.fromisoformat(exams[-1]["start_time"][:10])
-            d_due = _add_months(last_exam, rng.choices([6, 9, 12, 15, 18], weights=[38, 8, 38, 8, 8])[0])
-            if not any(date.fromisoformat(a["start_time"][:10]) >= d_due for a in exams):
-                recalls.append(_build_recall(tid, pid, pat["site_id"], "Dentist", d_due, today, rng, "recall"))
+        # ==> A FULFILLED CYCLE IS 'Completed', NOT DELETED. <== The note here said "as in
+        # Dentally, a recall is deleted once the patient reattends, so those are skipped" --
+        # and on that assumption the demo had not one concluded cycle, against 4,727 on the
+        # live practice. Dentally MARKS them. Concluded cycles are the entire denominator of
+        # recall conversion, so skipping them left the metric with nothing to divide.
+        for kind, visits, seed in (("Dentist", exams, "recall"),
+                                   ("Hygiene", hygiene_apts, "recall_hyg")):
+            if not visits:
+                continue
+            months = ([6, 9, 12, 15, 18], [38, 8, 38, 8, 8]) if kind == "Dentist"                 else ([3, 6, 12], [30, 55, 15])
 
-        # ── Hygiene recall (only if the patient attends for hygiene) ──
-        if hygiene_apts:
-            last_hyg = date.fromisoformat(hygiene_apts[-1]["start_time"][:10])
-            h_due = _add_months(last_hyg, rng.choices([3, 6, 12], weights=[30, 55, 15])[0])
-            if not any(date.fromisoformat(a["start_time"][:10]) >= h_due for a in hygiene_apts):
-                recalls.append(_build_recall(tid, pid, pat["site_id"], "Hygiene", h_due, today, rng, "recall_hyg"))
+            # The cycle the patient answered: due after one visit, closed by the next.
+            for back in (2, 3):
+                if len(visits) < back or rng.random() >= concluded_rate:
+                    continue
+                prev_d = date.fromisoformat(visits[-back]["start_time"][:10])
+                c_due  = _add_months(prev_d, rng.choices(months[0], weights=months[1])[0])
+                if c_due < date.fromisoformat(visits[-back + 1]["start_time"][:10]):
+                    recalls.append(_build_recall(tid, pid, pat["site_id"], kind, c_due, today,
+                                                 rng, seed + "_done%d" % back,
+                                                 status="Completed"))
+
+            # The one they are on now.
+            last_d = date.fromisoformat(visits[-1]["start_time"][:10])
+            due    = _add_months(last_d, rng.choices(months[0], weights=months[1])[0])
+            if any(date.fromisoformat(a["start_time"][:10]) >= due for a in visits):
+                continue                              # already answered by a later visit
+            if pid in booked_ahead.get(kind, ()):
+                # Booked AND still open as a recall is the minority case: most are closed at
+                # the desk when the appointment is made. The live practice carries 509 of
+                # these against 3,589 unbooked.
+                if rng.random() >= 0.2:
+                    continue
+                st = "Booked"
+            elif due < today - timedelta(days=180) and rng.random() < 0.35:
+                st = "Missed"                         # chased, due long ago, never answered
+            else:
+                st = "Unbooked"
+            recalls.append(_build_recall(tid, pid, pat["site_id"], kind, due, today, rng, seed,
+                                         status=st))
     return recalls
 
 # ─── PATIENT RECALL DATE ENRICHMENT ─────────────────────────────────────────
