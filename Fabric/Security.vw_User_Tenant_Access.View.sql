@@ -24,9 +24,14 @@
 --        them while its sync was unknowingly running against dev. Excluded here too, so a
 --        stale row cannot quietly widen a report's row set.
 --
---  UPN is lower-cased: USERPRINCIPALNAME() casing is not guaranteed to match what the sync
---  wrote, and a case-sensitive miss fails OPEN in a DAX "IN" test if the rule is written
---  carelessly -- so normalise on this side of the boundary.
+--  Columns are named [User UPN] and [Tenant ID] -- spaces, the presentation convention -- so
+--  this is a DROP-IN for the table the model's RLS already filters, and the rule itself needs
+--  only its table name changed. The existing expression is SELECTCOLUMNS(FILTER(...)), which
+--  already returns a SET of tenant ids: it has always supported a user seeing many tenants.
+--  Only its source was one-per-user, so nothing about the DAX has to become cleverer.
+--
+--  UPN is lower-cased. DAX string comparison is case-insensitive so the rule is unaffected
+--  either way, but anything that later joins on this column is not.
 --------------------------------------------------------------------
 SET ANSI_NULLS ON
 GO
@@ -34,8 +39,8 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE OR ALTER VIEW [Security].[vw_User_Tenant_Access] AS
 SELECT DISTINCT
-       LOWER(au.User_UPN)                       AS [User_UPN],
-       cta.Tenant_ID                            AS [Tenant_ID]
+       LOWER(au.User_UPN)                       AS [User UPN],
+       cta.Tenant_ID                            AS [Tenant ID]
 FROM   [Security].[Application_Users]      au
 JOIN   [Security].[Client_Tenant_Access]   cta ON cta.Client_ID = au.Client_ID
 JOIN   [Audit].[Tenants]                   t   ON t.Tenant_ID   = cta.Tenant_ID
