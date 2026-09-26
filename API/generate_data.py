@@ -1220,6 +1220,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     # live practice's 13.7% dormant-two-years and 12.2% at-risk: those overlap, and a patient
     # who lapsed early in the window counts to both, so the draw sits above either figure.
     lapse_rate            = params.get("lapse_rate", 0.22)
+    # Hygiene books forward at the desk -- see the forward-hygiene pass below.
+    hyg_forward_rate      = params.get("hyg_forward_rate", 0.33)
 
     appointments = []
     apt_id = 0
@@ -1384,6 +1386,7 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
         # Spread exams across START..TODAY
         exam_codes_used = []
         prev_exam_date = None
+        last_hyg_date  = None          # for the forward hygiene booking below
 
         for exam_num in range(n_exams):
             # Target date — new patients use pat_start as anchor; legacy use even distribution
@@ -1427,7 +1430,10 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             dur = pp_exam_dur if is_first else max(10, pp_exam_dur - 5)
 
             if target >= TODAY:
-                # Future exam
+                # Left EVEN across the horizon on purpose. Front-loading this as well as
+                # bounding recall bookings to their due date (below) put weeks 0-3 at 93% and
+                # 89% against the live practice's 68% and 64% -- a diary with no room in it.
+                # Bounding the recalls was the fix; this did not also need changing.
                 target = TODAY + timedelta(days=rng.randint(7, 180))
                 if target > FWD_END:
                     break
@@ -1619,14 +1625,66 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "confirmed_at": None,
                                 "in_surgery_at": _iso(hd, hs_t) if hyg_state == "completed" else None,
                             })
+                            if last_hyg_date is None or hd > last_hyg_date:
+                                last_hyg_date = hd
+
+        # ==> HYGIENE BOOKS FORWARD; NOTHING HERE DID. <== Every hygiene visit was generated
+        # relative to a PAST exam, so the forward hygiene book was only whatever happened to
+        # spill past today. There is a forward-booking pass for recall exams and there was
+        # none for hygiene at all -- which is why the demo's hygienists decayed from 60% full
+        # to 30% over eight weeks while the live practice's sit at 80-91% throughout. A
+        # hygiene patient books the next one on the way out; that is the whole reason a
+        # hygienist's diary is the fullest thing in a practice.
+        if (hyg_forward_rate and last_hyg_date is not None and lapse_after is None
+                and pat.get("active", True) and rng.random() < hyg_forward_rate):
+            _hp = site_hygienists.get(site_id, [])
+            if _hp:
+                hf_pid  = rng.choice(_hp)
+                _hr_mth = (pp_by_id.get(pp_id, {}).get("hygienist_recall_interval") or 6)
+                hf_due  = last_hyg_date + timedelta(days=int(_hr_mth * 30))
+                # Already overdue: they are booked into the coming weeks, not the past.
+                if hf_due < TODAY + timedelta(days=3):
+                    hf_due = TODAY + timedelta(days=rng.randint(3, 45))
+                if hf_pid in prac_dates and hf_due <= FWD_END:
+                    hf = _book_slot(hf_pid, prac_dates[hf_pid],
+                                    after_date=max(TODAY, hf_due - timedelta(21)),
+                                    before_date=min(FWD_END, hf_due + timedelta(21)),
+                                    dur_min=30)
+                    if hf is not None and hf >= TODAY:
+                        hs2, he2 = _slot_times(hf, rng.randint(0, prac_slots.get(hf_pid, 15) - 1), 30)
+                        _bbyl = rng.random() < bbyl_rate_hyg
+                        apt_id += 1
+                        appointments.append({
+                            "id": apt_id, "patient_id": pat_id,
+                            "practitioner_id": hf_pid, "user_id": hf_pid,
+                            "payment_plan_id": pp_id,
+                            "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
+                            "start_time": _iso(hf, hs2), "finish_time": _iso(hf, he2),
+                            "duration": 30, "state": "booked", "reason": "Scale & Polish",
+                            "treatment_id": (tx_by_code.get(_HYGIENE_CODE) or {}).get("id"),
+                            "appointment_cancellation_reason_id": None,
+                            "online_booking": False, "booked_via_api": _bbyl,
+                            "pending_at": (_iso(last_hyg_date) if _bbyl
+                                           else _booked_on(hf, apt_id)),
+                            "arrived_at": None, "completed_at": None, "cancelled_at": None,
+                            "did_not_attend_at": None, "uuid": _u5("apt", tid, apt_id),
+                            "patient_name": None, "patient_image_url": None, "notes": None,
+                            "treatment_description": None, "confirmed_at": None,
+                            "in_surgery_at": None,
+                        })
 
         # recall_booking_rate of patients who have had exams get a future booked recall appointment.
         # Simulates patients who have already scheduled their next recall visit.
         if (prev_exam_date is not None and lapse_after is None
                 and rng.random() < recall_booking_rate):
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
-            after_d  = max(TODAY, due_date - timedelta(14))
-            before_d = FWD_END
+            after_d  = max(TODAY, due_date - timedelta(21))
+            # Bounded to the due date rather than the whole forward horizon. _book_slot picks
+            # uniformly inside the window, so leaving this at FWD_END scattered recall
+            # bookings across fourteen months and left the weeks a practice actually looks at
+            # nearly empty -- the dentist book fell to 18% by week six against the live
+            # practice's 37%.
+            before_d = min(FWD_END, due_date + timedelta(75))
             fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d,
                             dur_min=20)
             if fd is not None and fd >= TODAY:
