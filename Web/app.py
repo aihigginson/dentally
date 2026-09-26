@@ -353,15 +353,36 @@ def embed_token():
         dataset_id  = report_meta['datasetId']
 
         # The RLS effective identity is ALWAYS attached -- row filtering is mandatory.
-        token_body = {
-            'accessLevel': 'View',
-            'identities': [{
-                'username': upn,
-                'roles':    REPORT_ROLES,
-                'datasets': [dataset_id],
-            }],
+        identity = {
+            'username': upn,
+            'roles':    REPORT_ROLES,
+            'datasets': [dataset_id],
         }
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s", upn, REPORT_ROLES, report_name)
+        # ==> AND IT MUST NAME THE PRACTICE, NOT JUST THE PERSON. <== RLS resolves the UPN to
+        # the set of tenants that user may see. That was the whole answer while every user
+        # could see exactly one -- but a support login on the Analytically client sees every
+        # practice, and a report given the whole set ADDS THEM UP. Two practices' revenue
+        # under one practice's name is the single worst thing this product could display.
+        #
+        # Site cannot do this job. 18 of the 42 active metrics have Supports_Site = 0, so a
+        # site slicer leaves those showing the combined total no matter what is selected --
+        # which is exactly how this was found.
+        #
+        # customData carries the practice actually in scope, and the model narrows to it. Set
+        # only when the scope is UNAMBIGUOUS: one tenant means one practice. A staff login
+        # that has not picked one keeps the full permitted set, which is the deliberate
+        # "everything I can see" view rather than an accident.
+        #
+        # It is an assertion of scope, never of permission. tids is what _get_user_info
+        # already resolved from the junction, so the token cannot name a practice the caller
+        # is not entitled to -- and the RLS rule keeps the set-membership test alongside this,
+        # so the model proves it again rather than trusting the token.
+        if len(tids) == 1:
+            identity['customData'] = str(tids[0])
+        token_body = {'accessLevel': 'View', 'identities': [identity]}
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s tenant=%s",
+                        upn, REPORT_ROLES, report_name,
+                        identity.get('customData') or 'all-permitted')
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
@@ -419,12 +440,19 @@ def me():
         # knows it is staff but not yet which practices exist.
         practices = []
         if _is_staff(upn):
+            # ==> BUILT FROM ACCESS, NOT OWNERSHIP. <== This grouped Audit.Tenants by
+            # Client_ID, so it could only ever list clients that OWN a tenant. The
+            # Analytically client owns none and sees them all, so it was missing from its own
+            # picker: no way to select it, and no way back to it once another practice had
+            # been picked. The name came from Dim_Practice_Sites too, which is a practice's
+            # name rather than the client's -- fine while they were one and the same.
             cur.execute(
-                "SELECT t.Client_ID, MIN(ps.Practice_Name), COUNT(DISTINCT t.Tenant_ID) "
-                "FROM Audit.Tenants t "
-                "LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = t.Tenant_ID "
-                "WHERE ISNULL(t.Is_Active, 1) = 1 AND t.Client_ID IS NOT NULL "
-                "GROUP BY t.Client_ID ORDER BY MIN(ps.Practice_Name)")
+                "SELECT c.Client_ID, c.Client_Name, COUNT(DISTINCT a.Tenant_ID) "
+                "FROM Security.Clients c "
+                "JOIN Security.Client_Tenant_Access a ON a.Client_ID = c.Client_ID "
+                "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+                "WHERE ISNULL(t.Is_Active, 1) = 1 "
+                "GROUP BY c.Client_ID, c.Client_Name ORDER BY c.Client_Name")
             practices = [{'client_id': r[0], 'name': r[1] or r[0], 'tenants': r[2]}
                          for r in cur.fetchall()]
         conn.close()
