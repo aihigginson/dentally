@@ -2311,7 +2311,12 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
                 continue
             dep_amount = pv * rng.uniform(0.2, 0.5)
             plan_date = date.fromisoformat(plan["created_at"][:10])
-            dep_date = plan_date + timedelta(days=rng.randint(1, 14))
+            # ==> A PAYMENT CANNOT BE IN THE FUTURE. <== A deposit 1-14 days after the plan
+            # was created lands after today for any plan started in the last fortnight. That
+            # put 38 payments on future dates, and because deposit_ratio is read as the
+            # LATEST day's deposits over that day's revenue, the newest day had deposits and
+            # no revenue at all -- so the metric read in the thousands of percent.
+            dep_date = min(plan_date + timedelta(days=rng.randint(1, 14)), TODAY)
             pay_seq += 1
             dep_id = pay_seq
             pat = patients_by_id.get(plan["patient_id"])

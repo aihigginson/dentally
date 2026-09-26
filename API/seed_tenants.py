@@ -303,7 +303,9 @@ T11 = {
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
         'active_rate':             0.95,
-        'new_patient_rate':        0.223,
+        # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
+        # for a list this size, which flatters every growth and acquisition number.
+        'new_patient_rate':        0.130,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
@@ -329,8 +331,12 @@ T11 = {
         # hygiene on the live practice's pro-rata 44.9 hours a week.
         'hygiene_rate_private':    0.55,
         'hygiene_rate_nhs':        0.80,
-        'email_rate':              0.75,
-        'phone_rate':              0.85,
+        # Measured against the live practice: 93.9% of its active patients have an email and
+        # 99.4% a phone number. At 0.75/0.85 the demo looked like a practice with a contact
+        # data problem, and "No Contact Details" is one of the data-quality checks -- so the
+        # demo was failing its own scorecard on a number that was simply set too low.
+        'email_rate':              0.94,
+        'phone_rate':              0.99,
     },
 }
 
