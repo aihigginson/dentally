@@ -39,6 +39,8 @@
 
 DEPLOY   Fabric\Security.Client_Tenant_Access.Table.sql
 DEPLOY   Fabric\Security.Client_Tenant_Access.Data.sql
+DEPLOY   Fabric\Security.Clients.Data.sql
+DEPLOY   Fabric\Security.vw_User_Tenant_Access.View.sql
 
 # Every pre-existing (client, tenant) relationship must still be granted. If this throws, the
 # release has REVOKED access somewhere and must not be left in place.
@@ -47,5 +49,11 @@ EXEC     DECLARE @m INT, @s VARCHAR(4000); SELECT @m = COUNT(*) FROM [Audit].[Te
 # Every active tenant must be reachable by the Analytically client, or a support login pointed
 # at it would silently be unable to see a practice.
 EXEC     DECLARE @u INT, @t VARCHAR(4000); SELECT @u = COUNT(*) FROM [Audit].[Tenants] t WHERE ISNULL(t.Is_Active, 1) = 1 AND NOT EXISTS (SELECT 1 FROM [Security].[Client_Tenant_Access] a WHERE a.Client_ID = 999 AND a.Tenant_ID = t.Tenant_ID); IF @u > 0 BEGIN SET @t = 'V186 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' active tenant(s) not granted to the Analytically client.'; THROW 50187, @t, 1; END;
+
+# ==> THE SEMANTIC MODEL MUST BE REPOINTED AT THE VIEW BEFORE ANY USER MOVES TO CLIENT 999.
+# The model resolved a user's tenants through Audit.Tenants.Client_ID, which is one client per
+# tenant. Client 999 OWNS no tenant, so under the old rule it resolves to the empty set and a
+# support login pointed at it sees a BLANK report rather than every practice. Repoint RLS at
+# Security.vw_User_Tenant_Access first; moving the user second.
 
 TEST

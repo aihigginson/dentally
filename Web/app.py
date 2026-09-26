@@ -3456,6 +3456,13 @@ def _admin_tenant(cur, upn, body_tenant=None):
     if client_id is None or not tids:
         return None, (jsonify({'error': 'Forbidden'}), 403)
     if body_tenant is None:
+        # ==> DO NOT GUESS WHICH PRACTICE AN ADMIN WRITE LANDS ON. <== This returned tids[0],
+        # which was unambiguous only because no client had ever had more than one tenant.
+        # V186's junction makes that false -- the Analytically client sees every practice --
+        # and an arbitrary "first" tenant is the wrong thing to be arbitrary about: it is an
+        # admin action, writing, to whichever tenant the query happened to return first.
+        if len(tids) > 1:
+            return None, (jsonify({'error': 'Select a practice first.'}), 409)
         return tids[0], None
     try:
         tid = int(body_tenant)
