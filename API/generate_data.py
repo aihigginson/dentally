@@ -1946,7 +1946,20 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             first_date = date.fromisoformat(first_apt["start_time"][:10])
             last_date = date.fromisoformat(last_apt["start_time"][:10])
 
-            would_complete = last_date < TODAY - timedelta(days=7)
+            # ==> THE PRACTICE HAD BILLED NOTHING FOR EIGHT DAYS. <== A course only completed
+            # -- and only a completed course raises an invoice -- once its last appointment
+            # was more than a WEEK old, so the final week of the window carried zero revenue
+            # on every single day. That is the week the day book, the revenue cards and the
+            # traffic-light page all read: the demo opened on a practice that appeared to
+            # have stopped trading, and deposit_ratio went to four figures because its
+            # denominator (that day's invoiced revenue) was nothing at all.
+            #
+            # The buffer only ever made sense for a course that might still have another
+            # appointment to come. A single-visit course -- a check-up, a hygiene visit, which
+            # between them are most of the daily billing -- is finished and invoiced the day
+            # it happens.
+            would_complete = (last_date < TODAY if len(cluster) == 1
+                              else last_date < TODAY - timedelta(days=7))
             # Private plans have higher in-progress rate (30%) to generate open course value.
             # NHS plans nearly always complete (3%) since item price=0 produces no open courses value.
             ip_prob = 0.03 if is_nhs else 0.30
@@ -2100,7 +2113,10 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
 def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng):
     # Share of settled invoices that never got paid promptly. The live practice carries
     # roughly two days of revenue as debt, so this is deliberately small.
-    unpaid_tail_rate = tdef.get("_params", {}).get("unpaid_invoice_rate", 0.005)
+    # 0.0018, not 0.005: outstanding_invoices is a POINT-IN-TIME balance over all time, not
+    # a 12-month figure, so the rate applies to every invoice ever raised. At 0.005 that came
+    # to 27,892 against the live practice's 9,373 on a larger book.
+    unpaid_tail_rate = tdef.get("_params", {}).get("unpaid_invoice_rate", 0.0018)
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     admin_user_id = 0
