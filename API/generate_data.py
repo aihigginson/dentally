@@ -1708,7 +1708,10 @@ def _add_disruption(tdef, appointments, rng):
     dna_rate    = params.get("dna_rate", 0.042)
     # Share of patients with nothing booked who cancelled recently and were never chased.
     # The live practice carries 79 of 7,034 active on this route, ~1.1%.
-    stranded_rate = params.get("stranded_rate", 0.02)
+    # Most people who stop coming stop ON something -- a missed appointment or one they
+    # cancelled and never rebooked. At 0.02 the demo had 31 unrebooked cancellations and no
+    # unrebooked DNAs at all, against 2,203 and 454 on the live practice.
+    stranded_rate = params.get("stranded_rate", 0.9)
     cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
     tid         = tdef["tenant_id"]
     if not cr_ids:
@@ -1801,11 +1804,26 @@ def _add_disruption(tdef, appointments, rng):
     for pid_, a in latest.items():
         if pid_ in future_pats or rng.random() >= stranded_rate:
             continue
-        cd = TODAY - timedelta(days=rng.randint(3, 89))
+        # ==> PLACED AFTER THEIR LAST VISIT, NOT JUST RECENTLY. <== Pinning these to the last
+        # 90 days meant only patients who drifted away THIS quarter ever ended on one. Every
+        # DNA the generator made was followed by a later visit, so not a single one was
+        # outstanding: the Day Book's "DNAs To Rebook" -- the practice's actual work list --
+        # read zero for every practitioner, against 454 on the live practice.
+        #
+        # Somebody who stopped coming two years ago also stopped on something. Dating it from
+        # their last attended visit puts terminal events across the whole window, and still
+        # lands recent ones inside the 90 days the at-risk route looks at.
+        last_d = date.fromisoformat(a["start_time"][:10])
+        cd = last_d + timedelta(days=rng.randint(7, 60))
+        if cd >= TODAY:
+            cd = TODAY - timedelta(days=rng.randint(3, 40))
         if cd.weekday() >= 5:
             cd -= timedelta(days=cd.weekday() - 4)
-        if cd <= date.fromisoformat(a["start_time"][:10]):
-            continue                      # cannot cancel a slot before the last one attended
+        if cd <= last_d:
+            continue                      # cannot miss a slot before the last one attended
+        # A no-show and a cancellation are different work: one is chased, the other rebooked.
+        # The live practice runs roughly one DNA to every five unrebooked cancellations.
+        st_term = "did_not_attend" if rng.random() < 0.17 else "cancelled"
         next_id += 1
         c = dict(a)
         c.update({
@@ -1813,15 +1831,16 @@ def _add_disruption(tdef, appointments, rng):
             "uuid":               _u5("apt", tid, next_id),
             "start_time":         _iso(cd, a["start_time"][11:19]),
             "finish_time":        _iso(cd, a["finish_time"][11:19]),
-            "state":              "cancelled",
+            "state":              st_term,
             "appointment_cancellation_reason_id": rng.choice(cr_ids),
             "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
             "arrived_at":         None,
             "completed_at":       None,
             "in_surgery_at":      None,
             "confirmed_at":       None,
-            "cancelled_at":       _iso(_cancelled_on(cd, next_id)),
-            "did_not_attend_at":  None,
+            "cancelled_at":       (_iso(_cancelled_on(cd, next_id))
+                                   if st_term == "cancelled" else None),
+            "did_not_attend_at":  _iso(cd) if st_term == "did_not_attend" else None,
         })
         stranded.append(c)
 
@@ -2044,7 +2063,23 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 "updated_at": _iso(last_date),
             })
 
+            # ==> AN IN-PROGRESS COURSE IS PART DONE. <== Every item took the PLAN's completed
+            # flag, so an in-progress course had none of its items completed -- and Gold reads
+            # that as 'Proposed' (nothing started) rather than 'Open - No Appointment', which
+            # the loader calls "the leaky bucket": started, unfinished, nothing booked. All 453
+            # of the demo's open courses were Proposed and not one was the thing the Day Book
+            # and the open-courses measures actually look for, so those read zero while the
+            # live practice showed 454.
+            #
+            # A stalled course has visits behind it and work outstanding. The attended ones are
+            # completed and the rest stay open, which is also what gives the course a real
+            # outstanding VALUE -- open_courses_value was running at 7% of the live practice's.
+            done_upto = len(plan_items_data)
+            if in_progress and len(plan_items_data) > 1:
+                done_upto = rng.randint(1, len(plan_items_data) - 1)
+
             for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos, covered in plan_items_data:
+                item_done = completed or (in_progress and pos < done_upto)
                 # ~6% of private items have a referring practitioner (different from treating)
                 referrer_id = None
                 if not is_nhs and rng.random() < 0.06:
@@ -2063,13 +2098,13 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "invoice_id": None,  # set later
                     "price": _fmt(price),
                     "duration": 30,
-                    "completed": completed,
-                    "completed_at": completed_at,
+                    "completed": item_done,
+                    "completed_at": completed_at if item_done else None,
                     "appear_on_invoice": True,
                     "base_chart": None,
                     # Not charged when the monthly fee covers it -- this is the membership
                     # evidence the capitation half of Fact_Revenue keys on.
-                    "charged": completed and not covered,
+                    "charged": item_done and not covered,
                     "position": pos,
                     "nhs_treatment_cat": nhs_cat if is_nhs else None,
                     "uda_band": uda_b if is_nhs else 0,
