@@ -60,11 +60,11 @@
                       "Entity": "List Patients"
                     }
                   },
-                  "Property": "Lifetime Value"
+                  "Property": "Patient Value 3yr"
                 }
               },
-              "queryRef": "List Patients.Lifetime Value",
-              "nativeQueryRef": "Lifetime Value"
+              "queryRef": "List Patients.Patient Value 3yr",
+              "nativeQueryRef": "Patient Value 3yr"
             }
           ]
         },
@@ -372,7 +372,7 @@
                 "Entity": "List Patients"
               }
             },
-            "Property": "Lifetime Value"
+            "Property": "Patient Value 3yr"
           }
         },
         "type": "Advanced"

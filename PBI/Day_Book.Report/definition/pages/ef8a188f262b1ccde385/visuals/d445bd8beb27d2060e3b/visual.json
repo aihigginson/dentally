@@ -127,8 +127,8 @@
                 }
               },
               "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Lifetime Value",
-              "displayName": "Lifetime Value"
+              "nativeQueryRef": "Patient Value 3yr",
+              "displayName": "Patient Value 3yr"
             }
           ]
         }
