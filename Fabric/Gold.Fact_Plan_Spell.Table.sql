@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Fact_Plan_Spell]    Script Date: 27/09/2026 ******/
+﻿/****** Object:  Table [Gold].[Fact_Plan_Spell]    Script Date: 27/09/2026 ******/
 --------------------------------------------------------------------
 --  Table  :  Gold.Fact_Plan_Spell
 --  Author :  AIH
@@ -22,6 +22,17 @@
 --  the spell. A patient with 14 months of evidence across a 30-month spell has gaps that the
 --  spell deliberately bridges -- missing an exam does not cancel a membership. Keeping the two
 --  numbers side by side is what makes that bridging visible rather than assumed.
+--
+--  ==> HOW A SPELL ENDS DEPENDS ON WHETHER THEY ARE STILL ON THE PLAN, AND THE TWO CASES ARE
+--  NOT SYMMETRICAL. <== Still on a rated plan and active: today. The practice needs that marker
+--  in Dentally to treat them without charging, so somebody maintains it. It is NOT evidence of
+--  payment -- a direct debit can have failed yesterday with the patient still flagged active and
+--  the dentist not getting paid. This table is membership, not collection.
+--
+--  No longer on a plan: the last attended free exam, which is the last evidence the membership
+--  existed. It is a date, not a month end. Before V190 the spell ran to the end of that month,
+--  so a member last seen on 3 March carried capitation to 31 March -- four weeks of fees after
+--  the evidence ran out.
 --
 --  Is_Estimated_Plan = 1 means the plan was attributed via the Is_Default fallback because
 --  Dentally no longer records the patient's original plan -- a lapsed member. The rate is then
@@ -47,7 +58,7 @@ CREATE TABLE [Gold].[Fact_Plan_Spell](
     [fk_Practitioner]     [bigint]        NOT NULL,
     [fk_Practice_Site]    [bigint]        NOT NULL,
     [Spell_Start_Date]    [date]          NOT NULL,   -- first month with membership evidence
-    [Spell_End_Date]      [date]          NOT NULL,   -- last day of the last month of the spell
+    [Spell_End_Date]      [date]          NOT NULL,   -- a DATE: today, or the last free exam
     [Spell_Months]        [int]               NULL,
     [Evidence_Months]     [int]               NULL,   -- months with a course; <= Spell_Months
     [Is_Open]             [bit]           NOT NULL,   -- still a member this month

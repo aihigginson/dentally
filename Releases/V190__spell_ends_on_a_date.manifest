@@ -1,0 +1,66 @@
+# =====================================================================
+# Release V190 -- a membership spell ends on a date, not at the end of a month
+# =====================================================================
+# ==> THIS ONE CHANGES MONEY, DELIBERATELY. V189 changed none. <==
+#
+# A spell ended at the END of its closing month whichever way it closed. So a member whose last
+# attended free exam was 3 March carried capitation to 31 March -- four more weeks of fees after
+# the only evidence the membership existed had run out.
+#
+# There are two ending cases and they are not symmetrical:
+#
+#   STILL ON A RATED PLAN AND ACTIVE -> today.
+#       The practice needs the plan marker in Dentally to treat them without charging, so
+#       somebody maintains it and it is about as reliable as anything here gets.
+#       ==> IT IS NOT EVIDENCE OF PAYMENT. <== A direct debit can have failed yesterday with the
+#       patient still flagged active and the dentist not getting paid. Fact_Plan_Spell is
+#       membership, not collection, and must not be read as cash received.
+#
+#   NO LONGER ON A PLAN -> the last attended free exam.
+#       That visit is the last evidence of membership, so the spell stops there, to the DAY.
+#
+# The first case is unchanged in effect -- the current month was already bounded by today. Only
+# CLOSED spells move, and only in their final month, and only ever DOWNWARDS.
+#
+# "Attended" means Completed = 1 on the course, the warehouse's existing evidence rule. Sourcing
+# it from appointment attendance instead would change WHICH patients count as members, which is a
+# larger question than where a spell ends and is not settled here.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V190__spell_ends_on_a_date.manifest
+# =====================================================================
+
+# Captured only if absent, so a re-run cannot overwrite a good baseline with the post-change
+# picture and then compare the new data with itself.
+EXEC     IF OBJECT_ID('Audit.V190_Capitation_Baseline') IS NULL SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date, SUM(r.Amount) AS Amount INTO [Audit].[V190_Capitation_Baseline] FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date;
+
+DEPLOY   Fabric\Gold.Fact_Plan_Spell.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+# Input.* is owner-curated data and is never deployed. Assert the rates are here before the
+# loader runs -- emptying this table produces zero capitation rows and a successful-looking run.
+EXEC     DECLARE @r INT, @m VARCHAR(4000); SELECT @r = COUNT(*) FROM [Input].[Plan_Capitation_Rate]; IF @r = 0 BEGIN SET @m = 'V190 FAILED: Input.Plan_Capitation_Rate is empty -- run Meta.usp_Sync_Input_From_AppDB first.'; THROW 50200, @m, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ==> THE CHANGE MUST BE CONFINED, AND IT MUST ONLY EVER REDUCE. <== Any patient-month that is
+# NOT the closing month of a closed spell must be unchanged to the penny. A date-bounded ending
+# that moves an earlier month means the bound leaked into the wrong rows.
+EXEC     DECLARE @b INT, @e VARCHAR(4000); WITH nw AS (SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date AS m, SUM(r.Amount) AS amt FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date) SELECT @b = COUNT(*) FROM [Audit].[V190_Capitation_Baseline] o FULL OUTER JOIN nw ON nw.Tenant_ID = o.Tenant_ID AND nw.fk_Patient = o.fk_Patient AND nw.m = o.Month_Commencing_Date LEFT JOIN [Gold].[Fact_Plan_Spell] s ON s.Tenant_ID = COALESCE(o.Tenant_ID, nw.Tenant_ID) AND s.fk_Patient = COALESCE(o.fk_Patient, nw.fk_Patient) WHERE ABS(ISNULL(o.Amount,0) - ISNULL(nw.amt,0)) > 0.005 AND NOT (ISNULL(s.Is_Open,0) = 0 AND COALESCE(o.Month_Commencing_Date, nw.m) = DATEFROMPARTS(YEAR(s.Spell_End_Date), MONTH(s.Spell_End_Date), 1)); IF @b > 0 BEGIN SET @e = 'V190 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' patient-month(s) changed outside the closing month of a closed spell.'; THROW 50201, @e, 1; END;
+
+# Nothing may go UP. The new ending is never later than the old one, so no month can gain money.
+EXEC     DECLARE @u2 INT, @f VARCHAR(4000); WITH nw AS (SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date AS m, SUM(r.Amount) AS amt FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date) SELECT @u2 = COUNT(*) FROM nw JOIN [Audit].[V190_Capitation_Baseline] o ON o.Tenant_ID = nw.Tenant_ID AND o.fk_Patient = nw.fk_Patient AND o.Month_Commencing_Date = nw.m WHERE nw.amt - o.Amount > 0.005; IF @u2 > 0 BEGIN SET @f = 'V190 FAILED: ' + CAST(@u2 AS VARCHAR(10)) + ' patient-month(s) gained value. A tighter ending cannot increase revenue.'; THROW 50202, @f, 1; END;
+
+# An open spell ends today; a closed one never ends after today. If a spell ends in the future
+# the CASE has fallen through to the wrong branch.
+EXEC     DECLARE @g INT, @h VARCHAR(4000); SELECT @g = COUNT(*) FROM [Gold].[Fact_Plan_Spell] WHERE Spell_End_Date > CAST(SYSUTCDATETIME() AS DATE) OR Spell_End_Date < Spell_Start_Date; IF @g > 0 BEGIN SET @h = 'V190 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' spell(s) end in the future or before they start.'; THROW 50203, @h, 1; END;
+
+# No capitation may be dated after the spell it belongs to. This is the actual bug being fixed,
+# asserted directly rather than inferred from totals.
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date JOIN [Gold].[Fact_Plan_Spell] s ON s.Tenant_ID = r.Tenant_ID AND s.fk_Patient = r.fk_Patient WHERE r.Revenue_Type = 'Capitation' AND d.Full_Date > s.Spell_End_Date; IF @p > 0 BEGIN SET @q = 'V190 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' capitation row(s) fall after the end of their spell.'; THROW 50204, @q, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     DROP TABLE IF EXISTS [Audit].[V190_Capitation_Baseline];
+
+TEST

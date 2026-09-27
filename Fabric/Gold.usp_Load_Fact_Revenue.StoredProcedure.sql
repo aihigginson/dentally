@@ -20,6 +20,10 @@
 --                             monthly reporting unchanged, because a segment spans neither
 --                             boundary. Same arithmetic regrouped, so it reconciles to the penny.
 --                             Also writes Gold.Fact_Plan_Spell from the same pass.
+--    *05     2026-09-27  AIH  Spell end is now a DATE with two cases: still on a rated plan and
+--                             active -> today; otherwise -> the last attended free exam. It used
+--                             to run to the END of the closing month either way, billing weeks of
+--                             capitation after the last evidence of membership.
 --  Purpose          :  One row per revenue unit (invoice line OR capitation week-within-month
 --                      segment). Also rebuilds Gold.Fact_Plan_Spell. Revenue is
 --                      defined once here so header/line/category totals cannot diverge. Full rebuild.
@@ -139,7 +143,8 @@ BEGIN
         ;WITH plan_course AS (
             -- membership-evidence months: completed, non-NHS, non-charged Exam/Hygiene courses.
             SELECT tp.Tenant_ID, dp.pk_Patient AS fk_Patient,
-                   DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month
+                   DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month,
+                   CAST(tp.Start_Date AS DATE)                                 AS course_date
             FROM   [Silver].[Treatment_Plans] tp
             JOIN   [Gold].[Dim_Patients] dp ON dp.Patient_ID = tp.Patient_ID AND dp.Tenant_ID = tp.Tenant_ID
             WHERE  tp.Completed = 1
@@ -158,6 +163,7 @@ BEGIN
             SELECT Tenant_ID, fk_Patient,
                    MIN(course_month)            AS start_m,
                    MAX(course_month)            AS last_m,
+                   MAX(course_date)             AS last_evidence_date,
                    COUNT(DISTINCT course_month) AS course_months
             FROM   plan_course GROUP BY Tenant_ID, fk_Patient
         ),
@@ -170,11 +176,37 @@ BEGIN
         -- Materialised, not left as a CTE: the spell is written to Gold.Fact_Plan_Spell further
         -- down, and computing it twice is how a stored spell and the revenue derived from it
         -- drift apart.
+        -- ==> A SPELL ENDS ON A DATE, AND WHICH DATE DEPENDS ON WHETHER THEY ARE STILL ON
+        -- THE PLAN. <== Two cases, and they are not symmetrical:
+        --
+        --   STILL ON PLAN AND ACTIVE -> today. The practice needs the plan marker in Dentally to
+        --   treat them without charging, so somebody maintains it and it is about as reliable as
+        --   anything here gets. It is not proof of PAYMENT: a direct debit can have failed
+        --   yesterday with the patient still flagged active and the dentist not getting paid.
+        --   This is membership, not collection -- do not read it as cash.
+        --
+        --   NOT ON PLAN NOW -> the last attended free exam. That visit is the last evidence the
+        --   membership existed, so it is where the spell stops. It is a DATE, not a month:
+        --   previously this ran to the END of that month, so a member last seen on 3 March was
+        --   billed capitation to 31 March -- four weeks of fees after the only evidence ran out.
+        --
+        -- "Attended" is Completed = 1 on the course, the warehouse's existing evidence rule.
+        -- Sourcing it from appointment attendance instead would change WHICH patients qualify as
+        -- members, which is a larger question than where a spell ends.
         SELECT t.Tenant_ID, t.fk_Patient, t.start_m, t.course_months,
                COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) AS attributed_plan_id,
                CASE WHEN own.Payment_Plan_ID IS NOT NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS is_estimated,
                CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
-                    THEN @Current_Month ELSE t.last_m END AS end_m,
+                    THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS is_open,
+               CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                    THEN CAST(SYSUTCDATETIME() AS DATE)
+                    ELSE t.last_evidence_date END AS end_date,
+               DATEFROMPARTS(
+                    YEAR(CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                              THEN CAST(SYSUTCDATETIME() AS DATE) ELSE t.last_evidence_date END),
+                    MONTH(CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                               THEN CAST(SYSUTCDATETIME() AS DATE) ELSE t.last_evidence_date END),
+                    1) AS end_m,
                pat.Dentist_Practitioner_ID, pat.Site_ID
         INTO   #spell
         FROM   tenure t
@@ -186,7 +218,7 @@ BEGIN
 
         ;WITH months AS (
             SELECT r.Tenant_ID, r.fk_Patient, r.attributed_plan_id, r.is_estimated,
-                   r.Dentist_Practitioner_ID, r.Site_ID, d.Month_Commencing_Date
+                   r.Dentist_Practitioner_ID, r.Site_ID, r.end_date, d.Month_Commencing_Date
             FROM   #spell r
             JOIN   [Gold].[Dim_Date] d ON d.Day_Of_Month = 1
                                       AND d.Month_Commencing_Date BETWEEN r.start_m AND r.end_m
@@ -194,7 +226,7 @@ BEGIN
         priced AS (
             -- Latest rate effective on or before the month wins. Unchanged.
             SELECT m.Tenant_ID, m.fk_Patient, m.attributed_plan_id, m.is_estimated,
-                   m.Dentist_Practitioner_ID, m.Site_ID, m.Month_Commencing_Date, rr.Monthly_Value,
+                   m.Dentist_Practitioner_ID, m.Site_ID, m.end_date, m.Month_Commencing_Date, rr.Monthly_Value,
                    ROW_NUMBER() OVER (PARTITION BY m.Tenant_ID, m.fk_Patient, m.Month_Commencing_Date
                                       ORDER BY rr.Effective_From_Date DESC) AS rn
             FROM   months m
@@ -221,8 +253,8 @@ BEGIN
             JOIN   [Gold].[Dim_Date] d
                    ON d.Month_Commencing_Date = p.Month_Commencing_Date
                   AND d.Is_Working_Day_England = 1
-                  AND d.Full_Date <= CAST(SYSUTCDATETIME() AS DATE)
-                  AND d.Full_Date >= tn.Cutover_Date   -- from the tenant's Dentally go-live only
+                  AND d.Full_Date <= p.end_date          -- the spell's own end, never beyond today
+                  AND d.Full_Date >= tn.Cutover_Date    -- from the tenant's Dentally go-live only
             WHERE  p.rn = 1
             GROUP BY p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
                      p.Dentist_Practitioner_ID, p.Site_ID,
@@ -285,10 +317,10 @@ BEGIN
                ISNULL(dpp.pk_Payment_Plan, -1), ISNULL(dpr.pk_Practitioner, -1),
                ISNULL(dps.pk_Practice_Site, -1),
                s.start_m,
-               DATEADD(DAY, -1, DATEADD(MONTH, 1, s.end_m)),   -- last day of the closing month
+               s.end_date,                                     -- the real end, not month-end
                DATEDIFF(MONTH, s.start_m, s.end_m) + 1,
                s.course_months,
-               CASE WHEN s.end_m >= @Current_Month THEN 1 ELSE 0 END,
+               s.is_open,
                s.is_estimated,
                b.billed_from, b.billed_to, ISNULL(b.segments, 0), ISNULL(b.spell_value, 0),
                SYSUTCDATETIME(), SYSUTCDATETIME()
