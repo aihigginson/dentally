@@ -24,6 +24,29 @@
 --                             active -> today; otherwise -> the last attended free exam. It used
 --                             to run to the END of the closing month either way, billing weeks of
 --                             capitation after the last evidence of membership.
+--
+--  ==> EVERY CAPITATION FIGURE IN THIS WAREHOUSE IS AN ESTIMATE. IT IS NOT MONEY WE HAVE SEEN. <==
+--
+--  Dentally does not hold membership income. There is no invoice, no payment, no statement -- a
+--  plan patient's fee is collected by the PLAN PROVIDER (Denplan, Tabeo, or whoever the practice
+--  uses) and the authoritative figures live in the spreadsheets that provider sends the practice.
+--  The warehouse has never seen them.
+--
+--  So capitation here is RECONSTRUCTED from clinical evidence: a completed, non-charged
+--  Exam/Hygiene course implies the patient was a member that month, and the fee is looked up from
+--  the owner-curated rate in Input.Plan_Capitation_Rate. That chain contains at least four
+--  assumptions, any of which can be wrong for a given patient:
+--
+--    1. a free exam means a live membership       -- it may be a goodwill exam, or a stale plan flag
+--    2. the rate on file is the rate collected    -- providers discount, and rates change mid-term
+--    3. an active plan flag means they are paying -- a failed direct debit leaves the flag intact
+--    4. gaps between exams are still membership   -- bridged deliberately; see Fact_Plan_Spell
+--
+--  It is a good estimate and it is the right shape for trend, mix and per-patient value. It is NOT
+--  the number to reconcile to the bank, quote to an accountant, or treat as collected income. If
+--  the provider's own figures are ever loaded, they belong in an Input.* table as the actual, with
+--  this kept alongside as the estimate -- not silently replaced by it.
+--
 --  Purpose          :  One row per revenue unit (invoice line OR capitation week-within-month
 --                      segment). Also rebuilds Gold.Fact_Plan_Spell. Revenue is
 --                      defined once here so header/line/category totals cannot diverge. Full rebuild.
@@ -266,7 +289,11 @@ BEGIN
             (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
              fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
              Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
-        SELECT s.Tenant_ID, 'Capitation', 'Plan Capitation',
+        -- ==> THE CATEGORY SAYS "ESTIMATED" BECAUSE IT IS. <== This is the string that
+        -- labels every revenue-by-category breakdown, so it is the cheapest honest place to
+        -- put it. See the estimate warning in the header: not one penny of this is a payment
+        -- the warehouse has observed.
+        SELECT s.Tenant_ID, 'Capitation', 'Plan Capitation (estimated)',
                -1, s.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
                dseg.pk_Date,
@@ -281,6 +308,7 @@ BEGIN
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
         -- ===== The spell itself, stored once ==================================================
+        -- Remember what this is: an inferred membership history, not a subscription ledger.
         -- Built from the same #spell that produced the rows above, so the two cannot disagree.
         -- Billed_* is read back off Fact_Revenue because the billable window is NARROWER than the
         -- spell: Cutover_Date clips the front, today clips the back. A patient can be a member

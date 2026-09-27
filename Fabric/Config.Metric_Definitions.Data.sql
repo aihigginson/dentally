@@ -1,4 +1,4 @@
--- Seed data for Config.Metric_Definitions
+﻿-- Seed data for Config.Metric_Definitions
 -- Uses MERGE so existing rows are updated without clearing the table.
 -- Range_Type:   above = higher beats target | below = lower beats target | within = outside variance band is bad
 -- Target_Type:  cumulative    = accumulates over time; daily apportionment + SUM gives correct prorated target
@@ -11,13 +11,13 @@ MERGE [Config].[Metric_Definitions] AS tgt
 USING (VALUES
 -- Revenue
     ('total_revenue',              'Total Revenue',                      'revenue',    'currency', 'Combined NHS and private revenue',                                        1, 1, 1, 10, 'above', 'cumulative',
-        'The combined value of all NHS and private revenue recognised in the period, across every treatment type, site and practitioner. Shown net of discounts. The headline measure of practice income.'),
+        'The combined value of all NHS and private revenue recognised in the period, across every treatment type, site and practitioner. Shown net of discounts. The headline measure of practice income. NOTE: this is part-actual and part-estimate - invoiced treatment is observed, but the membership-plan (capitation) share is reconstructed rather than seen, because your plan provider collects it. See Plan Capitation Revenue.'),
     ('nhs_revenue',                'NHS Revenue',                        'revenue',    'currency', 'Revenue from NHS contracts and claims',                                   1, 1, 1, 11, 'above', 'cumulative',
         'Revenue earned from NHS activity in the period — the value of NHS claims and contracted UDA/UOA work delivered. Excludes all privately funded treatment. With Private Revenue it makes up Total Revenue.'),
     ('private_revenue',            'Private Revenue',                    'revenue',    'currency', 'Revenue from private treatment',                                          1, 1, 1, 12, 'above', 'cumulative',
         'Revenue from privately funded treatment in the period, including private, care-plan and premium-plan work. Excludes all NHS-funded activity. With NHS Revenue it makes up Total Revenue.'),
-    ('plan_capitation_revenue',     'Plan Capitation Revenue',            'revenue',    'currency', 'Monthly membership (capitation) plan fees',                               1, 1, 1, 13, 'above', 'cumulative',
-        'Recurring monthly membership-plan (capitation) fees recognised in the period - one charge per plan patient per month at the plan''s current rate. Part of Total Revenue but not invoiced, so tracked in its own fact.'),
+    ('plan_capitation_revenue',     'Plan Capitation Revenue',            'revenue',    'currency', 'ESTIMATED membership plan fees - see definition',                               1, 1, 1, 13, 'above', 'cumulative',
+        'AN ESTIMATE, NOT OBSERVED INCOME. Membership fees are collected by your plan provider (Denplan, Tabeo or similar) and the authoritative figures are in the statements they send you - Dentally holds no invoice, payment or statement for them, so this warehouse has never seen a penny of it. The figure here is reconstructed: a completed free exam or hygiene visit is taken as evidence the patient was a member that month, priced at the plan rate you have entered in settings, and spread across the working days of the month. It is reliable for trend, plan mix and comparing patients, and is deliberately included in Total Revenue because ignoring it would understate a plan practice badly. Do not reconcile it to your bank or quote it to your accountant - use your provider''s statement for that.'),
     ('revenue_per_patient',        'Revenue per Patient',                'revenue',    'currency', 'Average revenue generated per active patient',                            1, 1, 1, 13, 'above', 'rate',
         'Total revenue in the period divided by the number of active patients — the average value each patient relationship produces. Lets you compare productivity independently of how big the patient base is.'),
     ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',

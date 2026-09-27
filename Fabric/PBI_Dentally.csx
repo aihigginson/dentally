@@ -1,4 +1,4 @@
-// PBI_Dentally.csx -- ALL measures for PBI Dentally.pbix, one atomic apply.
+﻿// PBI_Dentally.csx -- ALL measures for PBI Dentally.pbix, one atomic apply.
 // Amalgamated from the former per-section TabularEditor_*.csx; each section wrapped in its own
 // scope block { } so local helpers do not collide. ONE paste, ONE Run rebuilds every folder;
 // measures keep exact names + DisplayFolder so report cards re-bind automatically.
@@ -1681,9 +1681,14 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
-// Membership (capitation) revenue is a monthly direct debit, NOT invoiced -- plan patients have no
-// clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
-// month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
+// ==> CAPITATION IS AN ESTIMATE, NOT OBSERVED INCOME. <== Membership fees are collected by the
+// plan provider (Denplan, Tabeo, whoever the practice uses) and the real figures are in the
+// spreadsheets that provider sends them. Dentally holds no invoice, no payment and no statement,
+// so the warehouse RECONSTRUCTS the fee from clinical evidence -- a completed free exam implies a
+// live membership that month -- priced from the owner-curated Input.Plan_Capitation_Rate.
+// Good for trend, mix and per-patient value; NOT a figure to reconcile to the bank. It is carried
+// in Gold.Fact_Revenue as Revenue Type = "Capitation" (week-within-month segments, V189/V190) and
+// must be ADDED to invoiced revenue rather than derived from it.
 add("Plan Capitation Revenue",
     @"CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Capitation"")",
     "£#,##0");
@@ -1691,6 +1696,15 @@ add("Plan Capitation Revenue",
 add("Total Revenue",
     @"SUM('_Revenue'[Amount])",
     "£#,##0");
+
+// Stated on the measures themselves so it reaches anyone hovering the field list, not only
+// whoever reads this file.
+{
+    var pcr = t.Measures["Plan Capitation Revenue"];
+    pcr.Description = "ESTIMATE, not observed income. Membership fees are collected by the plan provider (Denplan/Tabeo/etc) and their statements are the authoritative figures; Dentally holds no invoice or payment for them. Reconstructed here from completed free exams priced at the plan's curated rate. Good for trend, mix and patient value; do not reconcile it to the bank.";
+    var tr = t.Measures["Total Revenue"];
+    tr.Description = "Invoiced revenue PLUS estimated plan capitation. The capitation component is reconstructed, not observed -- see Plan Capitation Revenue. Treat the total as part-actual, part-estimate.";
+}
 
 // Rolling 12-MONTH (TTM) Total Revenue to smooth the spiky by-week charts. Deliberately 12-month
 // ONLY, NOT 3-month: a quarter is shorter than a seasonal cycle, so a 3-month rolling number wavers

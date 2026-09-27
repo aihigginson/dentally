@@ -1,0 +1,68 @@
+﻿# =====================================================================
+# Release V191 -- say that capitation is an estimate, where people can see it
+# =====================================================================
+# ==> NOT ONE PENNY OF CAPITATION IS MONEY THIS WAREHOUSE HAS OBSERVED. <==
+#
+# Membership fees are collected by the PLAN PROVIDER -- Denplan, Tabeo, whoever the practice
+# uses -- and the authoritative figures are in the spreadsheets that provider sends them.
+# Dentally holds no invoice, no payment and no statement for any of it.
+#
+# So the warehouse RECONSTRUCTS it: a completed, non-charged Exam or Hygiene course is taken as
+# evidence the patient was a member that month, priced from the owner-curated rate in
+# Input.Plan_Capitation_Rate and spread across the month's working days. That chain rests on at
+# least four assumptions, any of which can be wrong for a given patient:
+#
+#   1. a free exam means a live membership       -- may be goodwill, or a stale plan flag
+#   2. the rate on file is the rate collected    -- providers discount, rates change mid-term
+#   3. an active plan flag means they are paying -- a failed direct debit leaves the flag intact
+#   4. gaps between exams are still membership   -- bridged deliberately (see Fact_Plan_Spell)
+#
+# It is a good estimate, it is the right shape for trend, plan mix and per-patient value, and it
+# belongs in Total Revenue -- leaving it out would understate a plan practice badly. It is NOT a
+# figure to reconcile to the bank or hand an accountant.
+#
+# ==> NONE OF THAT WAS SAID ANYWHERE A USER COULD SEE IT. <== The glossary read "Recurring
+# monthly membership-plan fees recognised in the period", which is the language of observed
+# income, and Total Revenue called itself "the headline measure of practice income" without
+# mentioning that part of it is inferred. It sits on KPI cards with a target and a traffic light,
+# indistinguishable from invoiced money. This release changes no number -- only what they say
+# about themselves.
+#
+#   1. Revenue_Category  'Plan Capitation' -> 'Plan Capitation (estimated)', which is the string
+#      on every revenue-by-category breakdown. Safe: the measure filters Revenue Type, not
+#      category, and no report filters the category string.
+#   2. the in-product glossary (the Definitions button) for BOTH plan_capitation_revenue and
+#      total_revenue, in plain English aimed at the practice, not at us.
+#   3. measure descriptions in the model, so it reaches anyone hovering the field list.
+#   4. the loader header, for whoever next changes the logic.
+#
+# ==> MODEL STEP: run Fabric\PBI_Dentally.csx and republish. <== The measure descriptions are in
+# the script; without a run they exist only in the repo.
+#
+# THE REAL FIX, NOT DONE HERE: load the provider's own statements into an Input.* table as the
+# ACTUAL, and keep this alongside as the estimate so the two can be reconciled. That is a
+# decision about where those spreadsheets come from and how often, not a refactor.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V191__capitation_is_an_estimate.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+EXEC     DECLARE @r INT, @m VARCHAR(4000); SELECT @r = COUNT(*) FROM [Input].[Plan_Capitation_Rate]; IF @r = 0 BEGIN SET @m = 'V191 FAILED: Input.Plan_Capitation_Rate is empty -- run Meta.usp_Sync_Input_From_AppDB first.'; THROW 50210, @m, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# A relabel must move no money. If this throws, something other than the label changed.
+EXEC     DECLARE @c INT, @e VARCHAR(4000); SELECT @c = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation' AND Revenue_Category <> 'Plan Capitation (estimated)'; IF @c > 0 BEGIN SET @e = 'V191 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' capitation row(s) still carry the old category.'; THROW 50211, @e, 1; END;
+
+# The glossary must actually say it, in both metrics. A release whose entire purpose is wording
+# should fail if the wording did not land.
+# LOWER() is load-bearing: Fabric's default collation is Latin1_General_100_BIN2_UTF8, which is
+# CASE-SENSITIVE, so a bare LIKE '%estimate%' missed the text that opens 'AN ESTIMATE, NOT
+# OBSERVED INCOME' and failed this release on its first run.
+EXEC     DECLARE @g INT, @f VARCHAR(4000); SELECT @g = COUNT(*) FROM [Config].[Metric_Definitions] WHERE Metric_Key IN ('plan_capitation_revenue','total_revenue') AND LOWER(Long_Description) NOT LIKE '%estimate%'; IF @g > 0 BEGIN SET @f = 'V191 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' metric definition(s) do not mention the estimate.'; THROW 50212, @f, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
