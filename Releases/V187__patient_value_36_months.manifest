@@ -1,5 +1,11 @@
-# =====================================================================
+﻿# =====================================================================
 # Release V187 -- "Lifetime Value" was neither a lifetime nor the value
+# =====================================================================
+# ==> SUPERSEDED BY V188. DO NOT REPLAY THIS MANIFEST. <== The columns below were right;
+# the separate table holding them was not, and V188 folded them onto
+# Gold.Aggregate_Site_Patient_Current, which was already at the same grain. The files this
+# manifest deploys have been deleted, so a replay fails at the first DEPLOY line. Kept only
+# as the record of what was reasoned about the metric itself.
 # =====================================================================
 # The measure was SUM('List Patients'[Total Invoiced]), and it was wrong in two separate ways.
 #

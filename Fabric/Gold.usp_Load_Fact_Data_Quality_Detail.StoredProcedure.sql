@@ -193,9 +193,11 @@ BEGIN
             --
             -- Nor was it a lifetime: Dentally holds nothing from before a practice migrates
             -- onto it, so "lifetime" silently meant a different span for every customer.
-            -- Aggregate_Patient_Value is a rolling 36 months of BOTH revenue types.
+            -- The value columns on Aggregate_Site_Patient_Current are a rolling 36 months of
+            -- BOTH revenue types. They lived on their own aggregate for one release; it was
+            -- the same grain as this one, so it was folded in rather than kept in parallel.
             FROM Gold.Dim_Patients p
-            LEFT JOIN Gold.Aggregate_Patient_Value pv
+            LEFT JOIN Gold.Aggregate_Site_Patient_Current pv
                    ON pv.fk_Patient = p.pk_Patient AND pv.Tenant_ID = p.Tenant_ID
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
