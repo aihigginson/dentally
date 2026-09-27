@@ -2727,7 +2727,8 @@ add("DQ % of Group",
 // DisplayFolder this script owns, so a folder-scoped delete would leave it in place.
 // =====================================================================
     string g = "Patient Value";
-    var retire = new[] { "Lifetime Value", "Patient Value 3yr", "Appointments Attended 3yr" };
+    var retire = new[] { "Lifetime Value", "Patient Value 3yr", "Appointments Attended 3yr",
+                         "Patient Value 3yr (New)" };
     foreach (var tbl in Model.Tables)
         foreach (var m in tbl.Measures.Where(m => retire.Contains(m.Name)).ToList())
             m.Delete();
@@ -2764,6 +2765,42 @@ add("DQ % of Group",
         @"CALCULATE ( SUM ( 'Aggregate Site Patient Current'[Value Total] ) )");
     pvc.FormatString = "£#,##0";
     pvc.Description = "Per-patient rolling 36-month value, as a column so detail tables keep their row grain. Use this on a list; use [Patient Value 3yr] on _Measures to aggregate.";
+
+    Action<string,string> add = (name, dax) => {
+        var mm = t.AddMeasure(name, dax);
+        mm.DisplayFolder = g; mm.FormatString = "£#,##0";
+    };
+
+    // ==> A TOOLTIP MEASURE MUST GO BLANK WHERE ITS VISUAL HAS NOTHING. <==
+    // The New Patients chart is Category = week, Series = acquisition source. 'Aggregate Site
+    // Patient Current' has no relationship to either -- no date key, no acquisition source -- so
+    // the plain measure returns the WHOLE practice's value in every cell. Nothing is blank, so
+    // nothing prunes: the engine evaluates it over all 34k patient rows for every week x source
+    // combination, and the visual takes a very long time to return. The tooltip also read the same
+    // 10.7m on every bar, which told the reader nothing.
+    //
+    // Scoped to the patients actually counted in the cell, and gated on [New Patients] so it is
+    // blank where the bar is. The gate is what restores pruning -- and it is the same fix as the
+    // Day Book tables, which is the pattern: a measure that ignores the visual's grouping
+    // multiplies the work, and sometimes the rows.
+    //
+    // TREATAS rather than a relationship: the daily aggregate reaches List Patients many-to-one
+    // and single-direction, so filtering it does not propagate anywhere on its own.
+    add("Patient Value 3yr (New)",
+        @"VAR pats =
+    CALCULATETABLE (
+        VALUES ( 'Aggregate Site Patient Practitioner Daily'[fk Patient] ),
+        'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE ()
+    )
+RETURN
+    IF (
+        ISBLANK ( [New Patients] ),
+        BLANK (),
+        CALCULATE (
+            SUM ( 'Aggregate Site Patient Current'[Value Total] ),
+            TREATAS ( pats, 'Aggregate Site Patient Current'[fk Patient] )
+        )
+    )");
 
     var pa = t.AddMeasure("Appointments Attended 3yr",
         @"SUM ( 'Aggregate Site Patient Current'[Appointments Attended] )");
