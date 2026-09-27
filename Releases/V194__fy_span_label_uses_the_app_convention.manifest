@@ -1,0 +1,57 @@
+# =====================================================================
+# Release V194 -- FY26-27, the separator the app already promised
+# =====================================================================
+# V193 gave a non-calendar practice year a span label and picked a SLASH: "FY26/27". Two things
+# were wrong with that, and both are mine.
+#
+# ==> 1. THE APP HAS ALWAYS PROMISED A DASH. <== Settings -> Finance previews the label as you
+# choose a start month, and it renders 'FY' + yy + '-' + yy+1. So the product told the user to
+# expect FY26-27 and the warehouse then produced FY26/27. The warehouse follows the promise
+# already made to the user, not the other way round.
+#
+# ==> 2. IT BROKE THE TARGETS YEAR DROPDOWN, AND THE PERIOD ORDERING WITH IT. <== The app read
+# the label as:
+#
+#     [2000 + int(v[2:]) for ... if v.startswith('FY') and v[2:].isdigit()]
+#
+# 'FY26'[2:] is '26' and passes. 'FY26/27'[2:] is '26/27' and does NOT, so EVERY practice-FY was
+# silently dropped, fy_options came back empty and the Year picker fell back to a single guessed
+# year -- which is exactly what the demo practice showed after V193. The period ranker had the
+# same assumption and would have sorted every FY as if it were the year 2000.
+#
+# Fixed in the app, not just worked around: one _fy_label_yy() helper takes the digits AFTER the
+# separator (the END year, which is what the label means), tolerates the slash V193 shipped so an
+# un-upgraded warehouse cannot empty the picker again, and is used by both readers. The targets
+# API now also returns fy_start_month so the CLIENT can label a year the same way -- three places
+# that render this label, one rule. Five tests pin it; 163 pass.
+#
+# Deploying this manifest is enough to change the stored labels: the groupings are materialised,
+# so the loader has to re-run, which is why it is here rather than left to tonight's chain.
+#
+# ==> THE APP ITSELF NEEDS DEPLOYING SEPARATELY. <== The warehouse half is below; Web/app.py and
+# Web/index.html go out with the container.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V194__fy_span_label_uses_the_app_convention.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# No slashes anywhere: that separator is what the app could not parse.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM [Gold].[Dim_Date_Grouping] WHERE Date_Grouping LIKE '%/%'; IF @a > 0 BEGIN SET @e = 'V194 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' grouping(s) still use a slash.'; THROW 50250, @e, 1; END;
+
+# A non-calendar practice shows the span with a dash; a calendar one shows a single year. Both
+# directions, because a rule that only ever appends would pass by appending to everything.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM [Gold].[Dim_Date_Grouping] g JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = g.Tenant_ID WHERE g.Date_Grouping NOT LIKE 'Last%' AND ((pc.FY_Start_Month <> 1 AND g.Date_Grouping NOT LIKE 'FY__-__') OR (pc.FY_Start_Month = 1 AND g.Date_Grouping NOT LIKE 'FY__')); IF @b > 0 BEGIN SET @f = 'V194 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' grouping(s) carry the wrong label shape for their practice year.'; THROW 50251, @f, 1; END;
+
+# ==> THE CHECK THE APP ACTUALLY NEEDED. <== Every FY label must survive the app's parser, which
+# takes the digits after the separator. If this throws, the Targets dropdown will empty again.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM [Gold].[Dim_Date_Grouping] WHERE Date_Grouping LIKE 'FY%' AND TRY_CAST(RIGHT(Date_Grouping, 2) AS INT) IS NULL; IF @c > 0 BEGIN SET @g = 'V194 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' FY label(s) do not end in two digits -- the app cannot parse them.'; THROW 50252, @g, 1; END;
+
+# Groupings must still start on the practice's own FY start month (the V193 staleness check).
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT g.Tenant_ID, g.Date_Grouping, MIN(d.Full_Date) AS f FROM [Gold].[Dim_Date_Grouping] g JOIN [Gold].[Dim_Date] d ON d.pk_Date = g.fk_Date WHERE g.Date_Grouping NOT LIKE 'Last%' GROUP BY g.Tenant_ID, g.Date_Grouping) x JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = x.Tenant_ID WHERE MONTH(x.f) <> pc.FY_Start_Month AND x.f <> (SELECT MIN(Full_Date) FROM [Gold].[Dim_Date]); IF @d2 > 0 BEGIN SET @h = 'V194 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' grouping(s) do not start on the practice FY start month.'; THROW 50253, @h, 1; END;
+
+TEST

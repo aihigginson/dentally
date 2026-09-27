@@ -1704,3 +1704,44 @@ def test_admin_writes_commit(client, appmod, monkeypatch):
         seen.clear()
         client.post(url, headers={'Authorization': 'Bearer x'}, json=body)
         assert seen and all(seen), f'{url} opened a connection without autocommit: {seen}'
+
+
+# ── FY label parsing: a practice year that spans two calendar years ───────────
+# The warehouse labels the practice FY by its END year and spells the span whenever the practice
+# year is not the calendar year (Gold.vw_Dim_Date): 'FY26' for a January practice, 'FY26-27' for
+# an April one. The app used to test v[2:].isdigit(), which silently dropped every span label --
+# the Targets Year dropdown emptied out and fell back to a single guessed year the moment the
+# demo practice moved to an April year. These pin both shapes.
+
+def test_fy_label_year_single_year_january_practice():
+    import app
+    assert app._fy_label_year('FY26') == 2026
+    assert app._fy_label_yy('FY26') == 26
+
+
+def test_fy_label_year_span_takes_the_end_year():
+    import app
+    # Apr-26 to Mar-27 is the year ENDING 2027 -- the digits after the separator.
+    assert app._fy_label_year('FY26-27') == 2027
+    assert app._fy_label_yy('FY26-27') == 27
+
+
+def test_fy_label_year_tolerates_the_slash_v193_shipped():
+    import app
+    # V193 briefly emitted a slash before matching the app's existing dash convention; any
+    # warehouse still carrying those rows must not empty the dropdown again.
+    assert app._fy_label_year('FY26/27') == 2027
+
+
+def test_fy_label_year_ignores_non_fy_groupings():
+    import app
+    for v in ('Last 3 Months', 'Last 12 Months', '', None, 'FY', 'FYab'):
+        assert app._fy_label_year(v) is None
+
+
+def test_fy_label_year_survives_a_whole_grouping_set():
+    import app
+    groupings = ['Last 3 Months', 'Last 12 Months', 'FY23-24', 'FY24-25', 'FY25-26', 'FY26-27']
+    years = [y for y in (app._fy_label_year(v) for v in groupings) if y]
+    # Four financial years, not zero -- the empty list is what broke the picker.
+    assert years == [2024, 2025, 2026, 2027]

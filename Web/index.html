@@ -1970,7 +1970,16 @@
         if ((fmt || '').toLowerCase().includes('currency')) return '£' + Math.round(v).toLocaleString();
         return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
     }
-    function _fyLabel(y) { return 'FY' + String(y).slice(2); }   // stored FY is the label/end year -> FYyy
+    // The stored FY is the label/END year. A January practice's year 2026 is "FY26"; an April
+    // practice's year 2027 runs Apr-26 to Mar-27 and must read "FY26-27", or the CURRENT period
+    // is labelled with a year that has not started yet. Same rule as Gold.vw_Dim_Date and as the
+    // preview on the Finance settings tab -- three places, one convention.
+    let _fyStartMonth = 1;
+    function _fyLabel(y) {
+        const yy = String(y).slice(2);
+        if (_fyStartMonth === 1) return 'FY' + yy;
+        return 'FY' + String(y - 1).slice(2) + '-' + yy;
+    }
     function _sampleVal(m) {
         if (m.sample) return 'e.g. ' + m.sample;      // per-metric example from Config.Metric_Definitions
         const f = (m.format_type || '').toLowerCase();
@@ -2781,6 +2790,9 @@
             const data = await res.json();
             // Full practice FY range (cutover..current + next year) so historical + next-year targets
             // can be set; fall back to a 3-year window if the range is unavailable.
+            // Set before any _fyLabel call below -- otherwise the first render labels an April
+            // practice as if it were on calendar years.
+            _fyStartMonth = data.fy_start_month || 1;
             const years = new Set([...(data.fy_options && data.fy_options.length ? data.fy_options : [data.fy - 1, data.fy, data.fy + 1]), ...(data.available_fys || [])]);
             document.getElementById('targets-fy').innerHTML = [...years].sort((a, b) => a - b)
                 .map(y => '<option value="' + y + '"' + (y === data.fy ? ' selected' : '') + '>' + _fyLabel(y) + '</option>').join('');

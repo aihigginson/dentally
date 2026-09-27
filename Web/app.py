@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
+﻿from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
 from flask_cors import CORS
 import msal
 import requests
@@ -588,8 +588,11 @@ def filters():
             def _prank(v):
                 if v == 'Last 3 Months':  return (0, 0)
                 if v == 'Last 12 Months': return (1, 0)
-                yy = (v or '')[2:]                      # 'FY26' -> '26'; FYyy newest first
-                return (2, -(int(yy) if yy.isdigit() else 0))
+                # 'FY26' -> 26, 'FY26-27' -> 27. The label year is the END year, so a span
+                # label ranks on the part after the dash. Before this, a span label fell through
+                # to 0 and every practice-FY period sorted as if it were the year 2000.
+                yy = _fy_label_yy(v)
+                return (2, -(yy or 0))
             periods = sorted(_pv, key=_prank)
         except Exception:
             periods = []
@@ -600,6 +603,30 @@ def filters():
         # Preserve the 200 + empty-lists client contract; log detail server-side.
         app.logger.exception("filters failed: %s", e)
         return jsonify({'sites': [], 'practitioners': [], 'roles': []})
+
+
+def _fy_label_yy(v):
+    """The two-digit LABEL year out of a Date_Grouping string, or None if it is not an FY.
+
+    The warehouse labels a practice financial year by its END year, and spells the span whenever
+    the practice year is not the calendar year: 'FY26' for a January practice, 'FY26-27' for an
+    April one (Gold.vw_Dim_Date). Both mean the year ending in 26 and 27 respectively, so the
+    digits AFTER the separator are the ones that matter.
+
+    This exists because the app used to test `v[2:].isdigit()`, which silently dropped every
+    span label -- the targets Year dropdown emptied out and fell back to a single guessed year
+    the moment a practice moved off a January year.
+    """
+    if not v or not v.startswith('FY'):
+        return None
+    tail = v[2:].replace('/', '-').split('-')[-1]
+    return int(tail) if tail.isdigit() else None
+
+
+def _fy_label_year(v):
+    """The four-digit label year, e.g. 'FY26-27' -> 2027."""
+    yy = _fy_label_yy(v)
+    return 2000 + yy if yy is not None else None
 
 
 # ── Connect Xero (self-serve OAuth onboarding) ───────────────────────────────
@@ -3370,13 +3397,27 @@ def get_target_grid():
             _ph = ','.join(['?'] * len(tids))
             try:
                 cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
-                _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
+                _yrs = [y for y in (_fy_label_year(v) for (v,) in cur.fetchall()) if y]
                 if _yrs:
                     fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
             except Exception:
                 fy_options = []
         if fy_options and not request.args.get('fy'):
             fy = max(fy_options) - 1       # default to the practice current FY (overrides the Apr-Mar guess)
+
+        # The practice FY start month, for labelling only. Defaults to 4 (April) exactly as
+        # Gold.vw_Dim_Date does, so a tenant with no Practice_Config row labels the same way the
+        # warehouse does rather than the two disagreeing.
+        fy_start_month = 4
+        if tids:
+            try:
+                cur.execute(f"SELECT MIN(ISNULL(FY_Start_Month, 4)) FROM Input.Practice_Config "
+                            f"WHERE Tenant_ID IN ({_ph})", tids)
+                _fr = cur.fetchone()
+                if _fr and _fr[0]:
+                    fy_start_month = int(_fr[0])
+            except Exception:
+                fy_start_month = 4
 
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
@@ -3434,7 +3475,11 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
+        # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
+        # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
+        # one rule, and it still works for the next-year option that has no grouping row yet.
         return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
+                        'fy_start_month': fy_start_month,
                         'metrics': metrics, 'tenants': list(tenants.values())})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
