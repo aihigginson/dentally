@@ -3619,6 +3619,26 @@
                         o.value = s.id; o.textContent = s.name;
                         selSite.appendChild(o);
                     });
+                    // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
+                    // control can only ever be a no-op or a lie, and it is currently the
+                    // second: several facts carry no site key at all -- Fact_Practitioner_
+                    // Diaries has no site COLUMN, and treatment plans and (on the demo
+                    // tenant) appointments are all fk_Practice_Site = -1 -- so picking the
+                    // one site excludes every one of their rows and Diary Fill, Rev/Hour,
+                    // Avg Plan and the appointment ratios go blank. "All sites" includes the
+                    // -1 rows, which is why it looks right and selecting looks broken.
+                    //
+                    // Hiding it is not the fix for those missing keys, which still matter to
+                    // a genuine multi-site group. It is the fix for offering a filter that
+                    // cannot do anything useful and can do something harmful.
+                    const oneSite = (data.sites || []).length <= 1;
+                    const siteField = selSite.closest('.filter-field');
+                    if (siteField) {
+                        siteField.hidden = oneSite;
+                        const sep = siteField.nextElementSibling;
+                        if (sep && sep.classList.contains('filter-sep')) sep.hidden = oneSite;
+                    }
+                    if (oneSite) { selSite.value = 'all'; filterState.site = 'all'; }
                     // Seed the Role dropdown from the tenant's curated Custom_Role values
                     // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
                     (data.roles || []).forEach(role => {
