@@ -2780,9 +2780,10 @@ add("DQ % of Group",
     pvc.FormatString = "£#,##0";
     pvc.Description = "Per-patient rolling 36-month value, as a column so detail tables keep their row grain. Use this on a list; use [Patient Value 3yr] on _Measures to aggregate.";
 
-    Action<string,string> add = (name, dax) => {
+    Action<string,string,string> add = (name, dax, desc) => {
         var mm = t.AddMeasure(name, dax);
         mm.DisplayFolder = g; mm.FormatString = "£#,##0";
+        mm.Description = desc;
     };
 
     // ==> A TOOLTIP MEASURE MUST GO BLANK WHERE ITS VISUAL HAS NOTHING. <==
@@ -2814,7 +2815,12 @@ RETURN
             SUM ( 'Aggregate Site Patient Current'[Value Total] ),
             TREATAS ( pats, 'Aggregate Site Patient Current'[fk Patient] )
         )
-    )");
+    )",
+        "Value of the patients counted as NEW in this cell over the rolling 36 months -- not the "
+        + "whole practice. Blank where there are no new patients, which is what lets the visual "
+        + "prune: the plain [Patient Value 3yr] ignores the chart's week and acquisition-source "
+        + "grouping, so it is non-blank in every cell and the visual takes a very long time to "
+        + "return. Plan income in this figure is an ESTIMATE -- see Plan Capitation Revenue.");
 
     var pa = t.AddMeasure("Appointments Attended 3yr",
         @"SUM ( 'Aggregate Site Patient Current'[Appointments Attended] )");
