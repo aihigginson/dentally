@@ -2243,16 +2243,35 @@ Action<string,string[]> areaRag = (name, bgs) => {
     // the margin between amber and green. Blanks now score 0 and are excluded from the divisor,
     // so the header reflects the tiles that actually say something. All blank -> BLANK header,
     // which is the honest answer rather than a colour invented from nothing.
+    // The worst SCORING tile, blanks ignored (99 is a sentinel that always loses the MIN).
+    string worst = "";
+    foreach (var m in bgs) {
+        if (worst != "") worst += @",
+    ";
+        worst += @"IF(ISBLANK(" + m + @"), 99, SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 99))";
+    }
     add(name, @"VAR n = " + counted + @"
 VAR scoreAvg = DIVIDE(
     " + scores + @",
     n)
+VAR worst = MINX( { " + worst + @" }, [Value] )
+-- ==> A RAG HEADER IS PESSIMISTIC, OR IT IS DECORATION. <== The average alone let six mild
+-- positives outvote one serious failure: Private Revenue at -20% sat under a GREEN Revenue
+-- header because Outstanding, Discounts and Deposit were all mildly good. Nobody reading a
+-- board wants to be told an area is fine when a headline metric is materially failing.
+--
+-- So the average still sets the ceiling of optimism, but the WORST tile caps it: an area can
+-- never read better than one band above its weakest metric. One strong red therefore holds the
+-- area at amber no matter how much green surrounds it, two drag it to red, and an area of
+-- unbroken light green still cannot claim strong green on the strength of the average.
+-- Blanks are ignored on both sides -- they neither vote nor cap.
+VAR capped = MIN( scoreAvg, worst + 1 )
 RETURN
     -- n = 0 means every tile in this area is blank. Return BLANK, not a colour: without the
     -- guard DIVIDE yields BLANK, BLANK coerces to 0 in the comparison below, and the header
     -- would paint STRONG RED for an area that simply has no targets set.
     IF ( n = 0, BLANK(),
-        SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
+        SWITCH(TRUE(), capped < 2, ""#c0392b"", capped < 2.5, ""#f4a261"", capped <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
 };
 // ==> AN AREA HEADER MUST SCORE THE TILES UNDER IT, AND ONLY THOSE. <== Revenue was scoring
 // [Revenue Per Clinical Hour BG], which is displayed in the CLINICAL column, not this one -- so a
