@@ -2744,3 +2744,41 @@ add("DQ % of Group",
     pa.DisplayFolder = g; pa.FormatString = "#,##0";
     pa.Description = "Completed appointments over the same 36 months. Carried beside value, not folded into it: loyal-and-low-margin and infrequent-but-high-value are different retention risks.";
 }
+
+// ===================== Application Users -- parameterised source =====================
+{
+// =====================================================================
+// ==> THIS TABLE DECIDES WHICH TENANT EACH LOGIN CAN SEE. ITS SERVER MUST NOT BE A LITERAL. <==
+//
+// 'Application Users' is the source of the RLS rule on all 44 tenant-bearing tables: every one of
+// them filters [Tenant ID] against this table by USERPRINCIPALNAME(). Every other table in the
+// model reaches the warehouse through the pServer parameter, and the deployment pipeline sets
+// that parameter per stage -- so they all repoint on promotion.
+//
+// This one did not. When it was moved onto the V186 view Security.vw_User_Tenant_Access it was
+// picked up through Desktop's Get Data, which bakes the endpoint in as a literal:
+//
+//     Sql.Database("...-4i26eirspjiujnltrvplquzkem.datawarehouse...", "WH_Dentally")
+//                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the DEV warehouse
+//
+// Promoted to prod on 2026-09-27 that literal went with it, so the PRODUCTION model's access
+// table pointed at the DEVELOPMENT warehouse. It was caught before any refresh, so no dev row
+// ever reached prod -- a promotion is metadata-only, and the leak would have materialised on the
+// first refresh afterwards. A parameter rule on the pipeline would also have hidden it rather
+// than fixed it, and left the literal to be re-promoted by whoever published next.
+//
+// Normalised here rather than in Desktop because Desktop is what introduced it: Get Data writes
+// a literal every time, and this script is run against the .pbix, so the fix holds.
+// =====================================================================
+    var aup = Model.Tables["Application Users"].Partitions[0];
+
+    if (aup.Expression.Contains(".datawarehouse.fabric.microsoft.com"))
+    {
+        aup.Expression = @"let
+    Source = Sql.Database(pServer, pDatabase),
+    #""Navigation 1"" = Source{[Schema = ""Security"", Item = ""vw_User_Tenant_Access""]}[Data]
+in
+    #""Navigation 1""";
+        Info("Application Users: literal warehouse endpoint replaced with pServer/pDatabase.");
+    }
+}
