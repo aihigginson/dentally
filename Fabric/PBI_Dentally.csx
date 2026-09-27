@@ -2227,14 +2227,41 @@ Action<string,string[]> areaRag = (name, bgs) => {
     foreach (var m in bgs) {
         if (scores != "") scores += @" +
     ";
-        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 2.5)";
+        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)";
     }
-    add(name, @"VAR scoreAvg = DIVIDE(
+    // Count only the tiles that actually scored, so a metric with no band does not vote.
+    string counted = "";
+    foreach (var m in bgs) {
+        if (counted != "") counted += @" +
+    ";
+        counted += @"IF(ISBLANK(" + m + @"), 0, 1)";
+    }
+    // ==> A TILE WITH NO BAND USED TO SCORE 2.5, WHICH IS BETTER THAN AMBER. <== The default arm
+    // of the SWITCH caught BLANK as well as any unexpected colour, so a metric the practice has
+    // no target for voted "slightly better than OK" and dragged the area towards green. On the
+    // demo practice NHS Revenue has no target, and that single phantom vote was worth more than
+    // the margin between amber and green. Blanks now score 0 and are excluded from the divisor,
+    // so the header reflects the tiles that actually say something. All blank -> BLANK header,
+    // which is the honest answer rather than a colour invented from nothing.
+    add(name, @"VAR n = " + counted + @"
+VAR scoreAvg = DIVIDE(
     " + scores + @",
-    " + bgs.Length + @")
-RETURN SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"")", "");
+    n)
+RETURN
+    -- n = 0 means every tile in this area is blank. Return BLANK, not a colour: without the
+    -- guard DIVIDE yields BLANK, BLANK coerces to 0 in the comparison below, and the header
+    -- would paint STRONG RED for an area that simply has no targets set.
+    IF ( n = 0, BLANK(),
+        SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
 };
-areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Revenue Per Clinical Hour BG]", "[Private Revenue BG]", "[NHS Revenue BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
+// ==> AN AREA HEADER MUST SCORE THE TILES UNDER IT, AND ONLY THOSE. <== Revenue was scoring
+// [Revenue Per Clinical Hour BG], which is displayed in the CLINICAL column, not this one -- so a
+// reader saw strong reds under a green header and had no way to find the number holding it up.
+// Worse, it is the same measure Clinical already scores, so one metric voted twice on the board
+// while Plan Capitation Revenue -- which IS in this column -- voted not at all. Swapped for
+// Revenue Per Dentist Hour and Plan Capitation added: this list now matches the Home page column
+// exactly, in order.
+areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Private Revenue BG]", "[Plan Capitation Revenue BG]", "[NHS Revenue BG]", "[Revenue Per Dentist Hour BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
 areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
 areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
 areaRag("Clinical Area RAG",   new string[]{ "[Revenue Per Clinical Hour BG]", "[Average Plan Value BG]", "[Open Courses Value BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]" });

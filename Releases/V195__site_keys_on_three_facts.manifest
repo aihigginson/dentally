@@ -1,0 +1,71 @@
+﻿# =====================================================================
+# Release V195 -- three facts get the site key they never had
+# =====================================================================
+# Selecting the only site on a single-site practice blanked most of the board: Diary Fill,
+# Rev/Clinical Hr, Rev/Dentist Hr, Avg Plan, Exam Ratio, Book Before You Leave, Cancel %,
+# Short Notice, Rebooked %. "All sites" looked right by comparison, which made it read like a
+# report bug. It was not.
+#
+# ==> "ALL SITES" APPLIES NO FILTER, SO THE -1 ROWS SURVIVE. PICKING THE SITE DROPS THEM. <==
+# Three facts had no usable fk_Practice_Site, so every row they held was excluded the moment a
+# real site was chosen:
+#
+#     Fact_Practitioner_Diaries   no site COLUMN AT ALL          diary fill, both rev/hour
+#     Fact_Treatment_Plans        hardcoded -1, BOTH tenants     avg plan, open courses
+#     Fact_Appointments           all -1 on generated tenants    exam ratio, BBYL, cancel %,
+#                                 (Dentally fills it, so Maple    short notice, rebooked %
+#                                  was fine -- hence "worse on
+#                                  the demo than on Maple")
+#
+# ==> ONE RULE, BECAUSE IT IS THE ONE THE DATA SUPPORTS. <== A clinical event happens at the
+# site of the practitioner who delivered it. Every one of these loaders already joins
+# Gold.Dim_Practitioners, and Dim_Practitioners.Site_ID is populated on 13/13 demo and 45/45
+# live practitioners, so the key is a single join in each case.
+#
+# Appointments keep their OWN source site wherever Dentally provides one
+# (COALESCE(Practitioner_Site_ID, practitioner's site)) -- this fills a gap, it does not
+# override real data. Treatment plans had nothing to preserve: Silver.Treatment_Plans.Site_ID
+# is blank on all 44,267 demo and all 71,086 live rows, which is why it was written as -1 in
+# the first place.
+#
+# Fact_Practitioner_Diaries gains a COLUMN, so its table is recreated and the fact reloads in
+# full. The other two are hash-gated MERGEs: every row's hash changes because the key changes,
+# so expect a large update count on both, once.
+#
+# Web/index.html separately hides the site filter for single-site practices (58cf65b). That
+# addressed the symptom; this addresses the cause, and the two are independent -- a multi-site
+# group needs this release, and gets no benefit from the hiding.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V195__site_keys_on_three_facts.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Practitioner_Diaries.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Practitioner_Diaries.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Practitioner_Diaries @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ==> THE WHOLE POINT: NO TENANT MAY BE LEFT WITH AN UNSITED FACT. <== Checked per tenant, so a
+# tenant that resolves and one that does not cannot average out into a pass.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT Tenant_ID FROM [Gold].[Fact_Appointments] WHERE fk_Practice_Site = -1 GROUP BY Tenant_ID) x; IF @a > 0 BEGIN SET @e = 'V195 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' tenant(s) still have unsited appointments.'; THROW 50260, @e, 1; END;
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT Tenant_ID FROM [Gold].[Fact_Treatment_Plans] WHERE fk_Practice_Site = -1 GROUP BY Tenant_ID) x; IF @b > 0 BEGIN SET @f = 'V195 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' tenant(s) still have unsited treatment plans.'; THROW 50261, @f, 1; END;
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT Tenant_ID FROM [Gold].[Fact_Practitioner_Diaries] WHERE fk_Practice_Site = -1 GROUP BY Tenant_ID) x; IF @c > 0 BEGIN SET @g = 'V195 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' tenant(s) still have unsited diary rows.'; THROW 50262, @g, 1; END;
+
+# Every site key must resolve to a real site of the SAME tenant. A key that points at another
+# tenant's site would pass the checks above and be far worse than the -1 it replaced.
+EXEC     DECLARE @x INT, @h VARCHAR(4000); SELECT @x = (SELECT COUNT(*) FROM [Gold].[Fact_Appointments] f WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Dim_Practice_Sites] s WHERE s.pk_Practice_Site = f.fk_Practice_Site AND s.Tenant_ID = f.Tenant_ID)) + (SELECT COUNT(*) FROM [Gold].[Fact_Treatment_Plans] f WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Dim_Practice_Sites] s WHERE s.pk_Practice_Site = f.fk_Practice_Site AND s.Tenant_ID = f.Tenant_ID)) + (SELECT COUNT(*) FROM [Gold].[Fact_Practitioner_Diaries] f WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Dim_Practice_Sites] s WHERE s.pk_Practice_Site = f.fk_Practice_Site AND s.Tenant_ID = f.Tenant_ID)); IF @x > 0 BEGIN SET @h = 'V195 FAILED: ' + CAST(@x AS VARCHAR(10)) + ' fact row(s) point at a site belonging to another tenant, or to no site.'; THROW 50263, @h, 1; END;
+
+# Appointments must keep the source site where Dentally gave one -- the fallback fills gaps, it
+# does not overwrite. Any appointment whose resolved site disagrees with its own
+# Practitioner_Site_ID means the COALESCE is the wrong way round.
+EXEC     DECLARE @o INT, @i2 VARCHAR(4000); SELECT @o = COUNT(*) FROM [Gold].[Fact_Appointments] f JOIN [Silver].[Appointments] a ON CAST(a.Appointment_ID AS VARCHAR(50)) = CAST(f.bk_Appointment_ID AS VARCHAR(50)) AND a.Tenant_ID = f.Tenant_ID JOIN [Gold].[Dim_Practice_Sites] s ON s.pk_Practice_Site = f.fk_Practice_Site AND s.Tenant_ID = f.Tenant_ID WHERE NULLIF(LTRIM(RTRIM(a.Practitioner_Site_ID)),'') IS NOT NULL AND s.Site_ID <> LTRIM(RTRIM(a.Practitioner_Site_ID)); IF @o > 0 BEGIN SET @i2 = 'V195 FAILED: ' + CAST(@o AS VARCHAR(10)) + ' appointment(s) had their source site overwritten by the fallback.'; THROW 50264, @i2, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Aggregates read these facts, so rebuild them rather than leaving a half-old picture.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+TEST

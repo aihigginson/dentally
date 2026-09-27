@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Appointments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Appointments] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Appointments
 --  Author           :  AIH
@@ -260,7 +260,12 @@ BEGIN
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID      = a.Patient_ID          AND dpat.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID  = CAST(a.Practitioner_ID AS INT) AND dpr.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID  = CAST(a.Payment_Plan_ID AS INT) AND dpp.Tenant_ID = a.Tenant_ID
-        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = NULLIF(TRIM(a.Practitioner_Site_ID),'') AND dps.Tenant_ID = a.Tenant_ID
+        -- *12 Site falls back to the PRACTITIONER'S site when the appointment carries none.
+        --     Dentally fills Practitioner_Site_ID; generated tenants do not, so tenant 11 had
+        --     89,678 appointments on -1 and Exam Ratio, Book Before You Leave, Cancel %, Short
+        --     Notice and Rebooked % all went blank as soon as a site was selected. The source
+        --     value still wins wherever it exists -- this only fills the gap.
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID          = COALESCE(NULLIF(TRIM(a.Practitioner_Site_ID),''), dpr.Site_ID) AND dps.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Users du             ON du.bk_User_ID        = CAST(a.User_ID AS INT) AND du.Tenant_ID = a.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_s            ON dd_s.Full_Date       = CAST(a.Start_Time AS DATE)
         LEFT JOIN Gold.Dim_Date dd_p            ON dd_p.Full_Date       = CAST(a.Pending_At AS DATE)

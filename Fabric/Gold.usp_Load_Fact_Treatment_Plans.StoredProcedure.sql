@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Treatment_Plans] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Treatment_Plans] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Treatment_Plans
 --  Author           :  AIH
@@ -51,7 +51,10 @@ BEGIN
             ISNULL(dtp.pk_Treatment_Plan, -1)                                   AS fk_Treatment_Plan,
             ISNULL(dpat.pk_Patient, -1)                                         AS fk_Patient,
             ISNULL(dpr.pk_Practitioner, -1)                                     AS fk_Practitioner,
-            CAST(-1 AS BIGINT)                                                  AS fk_Practice_Site,  -- Dentally treatment-plan object has NO site -> always unknown (-1)
+            -- *05 Was hardcoded -1 because Silver.Treatment_Plans.Site_ID is empty at source
+            --     (blank on 44,267 demo and 71,086 live rows alike). Resolved from the
+            --     practitioner instead, so plan-grain metrics survive a site selection.
+            ISNULL(dps.pk_Practice_Site, -1)                                    AS fk_Practice_Site,  -- Dentally treatment-plan object has NO site -> always unknown (-1)
             dd_c.pk_Date                                                        AS fk_Date_Created,
             dd_s.pk_Date                                                        AS fk_Date_Start,
             dd_comp.pk_Date                                                     AS fk_Date_Completed,
@@ -91,6 +94,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(tp.Id AS INT)             AND dtp.Tenant_ID = tp.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat       ON dpat.Patient_ID       = CAST(tp.Patient_ID AS INT)     AND dpat.Tenant_ID = tp.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr   ON dpr.Practitioner_ID   = CAST(tp.Practitioner_ID AS INT) AND dpr.Tenant_ID = tp.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps  ON dps.Site_ID           = dpr.Site_ID                 AND dps.Tenant_ID = tp.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_c           ON dd_c.Full_Date        = TRY_CAST(LEFT(NULLIF(TRIM(tp.Created_At),  ''),10) AS DATE)
         LEFT JOIN Gold.Dim_Date dd_s           ON dd_s.Full_Date        = TRY_CAST(LEFT(NULLIF(TRIM(tp.Start_Date),  ''),10) AS DATE)
         LEFT JOIN Gold.Dim_Date dd_comp        ON dd_comp.Full_Date     = TRY_CAST(LEFT(NULLIF(TRIM(tp.Completed_At),''),10) AS DATE)
