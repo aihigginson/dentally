@@ -1,0 +1,50 @@
+# =====================================================================
+# Release V193 -- an April financial year is FY26/27, not FY27
+# =====================================================================
+# Gold.vw_Dim_Date labels the practice financial year with its END year: an April practice
+# sitting in September 2026 is in the year ending March 2027, so the period was called "FY27".
+#
+# ==> THAT NAMES THE CURRENT PERIOD AFTER A YEAR THAT HAS NOT STARTED. <== It is the string on
+# the period slicer and on every Data Grouping, so it is what the practice actually reads. Asked
+# "how are we doing this year", they pick FY27 in September 2026 and have to talk themselves into
+# believing it.
+#
+# The END year is right for joining -- Fact_Daily_Targets and the YoY pairing key on
+# Financial_Year, and that is untouched. Only the NAME changes, and only where the practice year
+# is not the calendar year:
+#
+#     FY_Start_Month = 1  (Maple)        FY26      unchanged -- start and end are the same year
+#     FY_Start_Month = 4  (Demo)         FY26/27   was FY27
+#
+# Safe to change: nothing hardcodes these names. The reports drive the period slicer from the
+# Date_Grouping values themselves, Fact_Daily_Targets joins the NUMBER, and the NHS year keeps
+# its own untouched NHS_Financial_Year_Name (the NHS year never moves).
+#
+# ==> THE GROUPINGS ARE MATERIALISED, SO THE LOADER MUST RE-RUN. <== Gold.vw_Dim_Date reads
+# Input.Practice_Config live, but Gold.Dim_Date_Grouping is a table. That is why changing the
+# demo practice's year to April this morning appeared to do nothing: the setting had synced all
+# the way through to the warehouse, and the groupings were simply still yesterday's. They would
+# have corrected themselves on tonight's chain run; the name would not have.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V193__financial_year_name_spans_two_years.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Daily_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# A non-calendar practice must show the span, and a calendar one must not. Both directions are
+# checked: a rule that only ever adds a suffix would also "pass" by suffixing everything.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT DISTINCT v.Tenant_ID, v.Financial_Year_Name FROM [Gold].[vw_Dim_Date] v JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = v.Tenant_ID WHERE pc.FY_Start_Month <> 1 AND v.Financial_Year_Name NOT LIKE 'FY__/__') x; IF @a > 0 BEGIN SET @e = 'V193 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' year name(s) on a non-calendar practice do not show the span.'; THROW 50240, @e, 1; END;
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT DISTINCT v.Tenant_ID, v.Financial_Year_Name FROM [Gold].[vw_Dim_Date] v JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = v.Tenant_ID WHERE pc.FY_Start_Month = 1 AND v.Financial_Year_Name LIKE '%/%') x; IF @b > 0 BEGIN SET @f = 'V193 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' year name(s) on a CALENDAR practice wrongly show a span.'; THROW 50241, @f, 1; END;
+
+# The groupings must actually carry the new names, or the slicer still says FY27.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM [Gold].[Dim_Date_Grouping] g JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = g.Tenant_ID WHERE pc.FY_Start_Month <> 1 AND g.Date_Grouping NOT LIKE 'Last%' AND g.Date_Grouping NOT LIKE 'FY__/__'; IF @c > 0 BEGIN SET @g = 'V193 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' grouping row(s) still carry a single-year name.'; THROW 50242, @g, 1; END;
+
+# A practice financial year must start on its own start month. This is the check that would have
+# caught the stale groupings this morning without anyone noticing the dates by eye.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT g.Tenant_ID, g.Date_Grouping, MIN(d.Full_Date) AS f FROM [Gold].[Dim_Date_Grouping] g JOIN [Gold].[Dim_Date] d ON d.pk_Date = g.fk_Date WHERE g.Date_Grouping NOT LIKE 'Last%' GROUP BY g.Tenant_ID, g.Date_Grouping) x JOIN [Input].[Practice_Config] pc ON pc.Tenant_ID = x.Tenant_ID WHERE MONTH(x.f) <> pc.FY_Start_Month AND x.f <> (SELECT MIN(Full_Date) FROM [Gold].[Dim_Date]); IF @d2 > 0 BEGIN SET @h = 'V193 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' grouping(s) do not start on the practice FY start month -- the groupings are stale.'; THROW 50243, @h, 1; END;
+
+TEST
