@@ -2739,6 +2739,32 @@ add("DQ % of Group",
     pv.DisplayFolder = g; pv.FormatString = "£#,##0";
     pv.Description = "Invoiced AND plan income over a rolling 36 months, per Gold. Replaces 'Lifetime Value', which omitted plan income and so ranked membership patients below private ones.";
 
+    // ==> THE DETAIL TABLES NEED A COLUMN, NOT THE MEASURE. <==
+    // A measure in a table visual does not restore the row grain -- it destroys it. The Day Book
+    // detail tables group by patient, appointment time and cancellation reason; with only columns,
+    // auto-exist keeps the combinations that actually occur. Add a measure and the query becomes
+    // SUMMARIZECOLUMNS over those columns keeping every combination where the measure is non-blank
+    // -- and this measure reads 'Aggregate Site Patient Current', which is filtered by the patient
+    // but NOT by the appointment or the reason (List Patients -> _Appointments is single-direction,
+    // so a reason filter never reaches the patient). So it is non-blank for EVERY patient x reason
+    // pair. In prod that rendered one patient against all 18 reasons and a total of 5,625,663
+    // against a real 90 cancellations.
+    //
+    // 'Total Paid' worked because it was a COLUMN on List Patients. This replaces it like for like:
+    // same table, same shape, correct number. The measure stays for genuine aggregation contexts
+    // (the New Patients tooltip), which is what a measure is for.
+    //
+    // CALCULATE with no filter argument is doing the work: on the ONE side of the relationship the
+    // row context propagates to the related rows of the aggregate. One row per patient there, so
+    // this is that patient's value, not a sum over anything.
+    foreach (var c in Model.Tables["List Patients"].Columns
+                           .Where(c => c.Name == "Patient Value 3yr").ToList())
+        c.Delete();
+    var pvc = Model.Tables["List Patients"].AddCalculatedColumn("Patient Value 3yr",
+        @"CALCULATE ( SUM ( 'Aggregate Site Patient Current'[Value Total] ) )");
+    pvc.FormatString = "£#,##0";
+    pvc.Description = "Per-patient rolling 36-month value, as a column so detail tables keep their row grain. Use this on a list; use [Patient Value 3yr] on _Measures to aggregate.";
+
     var pa = t.AddMeasure("Appointments Attended 3yr",
         @"SUM ( 'Aggregate Site Patient Current'[Appointments Attended] )");
     pa.DisplayFolder = g; pa.FormatString = "#,##0";
