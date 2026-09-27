@@ -1,0 +1,100 @@
+﻿# =====================================================================
+# Release V189 -- capitation stops being one row per member per day
+# =====================================================================
+# Capitation was exploded to ONE ROW PER MEMBER PER WORKING DAY: 2,613,357 rows for 2,732
+# members, at about 1.70 each, to express a handful of monthly fees. That is the overwhelming
+# majority of Fact_Revenue.
+#
+# It was not arbitrary. Some revenue reports are WEEKLY and some MONTHLY, and a monthly row
+# cannot answer a weekly question -- so the grain was pushed down to the day, where it can
+# answer both, at 21x the rows actually needed.
+#
+# ==> A SEGMENT IS A WEEK CLIPPED TO ITS MONTH. <== Full weeks inside a month give one row
+# each; a week crossing a month boundary gives two, one per side. A segment therefore spans
+# neither a week boundary nor a month boundary, so BOTH reporting grains still sum exactly:
+#
+#     grain                 rows        vs today    serves weekly?
+#     member-day           2,613,357        --           yes
+#     WEEK-WITHIN-MONTH      588,854       4.4x          yes
+#     month only             120,553      21.7x          NO
+#
+# Month-only is the obvious temptation and is the one option that cannot work, which is the
+# whole reason the day grain existed. April 2026 becomes 1 Apr (part week), then 6, 13, 20,
+# 27 -- MONDAY-commencing, taken from Gold.Dim_Date[Week_Commencing_Date] rather than invented,
+# or the weekly figures would silently disagree with every other weekly figure in the warehouse.
+#
+# ==> THE ARITHMETIC IS THE OLD ARITHMETIC, REGROUPED. <== Each day was
+# Monthly_Value / working_days_in_month; a segment is that same daily rate times the working
+# days in the segment. Amount is DECIMAL(18,6), so this reconciles to the penny rather than
+# approximately -- and the guard below proves it per patient per month instead of assuming it.
+#
+# The current part month needs no special case, which is why working days are counted rather
+# than weeks divided: days are filtered to <= today BEFORE being counted, so this week carries
+# only the days elapsed and a Monday does not book the whole week.
+#
+# ==> ALSO: Gold.Fact_Plan_Spell, ONE ROW PER PATIENT PER CONTINUOUS MEMBERSHIP SPELL. <==
+# There was no record of what a plan patient IS -- only exploded revenue to aggregate back up.
+# Written from the same pass and the same CTE as the capitation rows, so the two cannot
+# disagree. It is deliberately NOT its own chain node: a node of its own would sit below
+# GOLD_FACT_REVENUE, pushing revenue to level 5 and colliding with the four aggregates that
+# already depend on it there.
+#
+# Expected to change, and not a fault: the diagnostic measures 'Diag Revenue Rows' and
+# 'Diag Capitation Rows' drop by 4.4x. They are counting rows, which is their job; no monetary
+# figure moves.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V189__capitation_week_within_month.manifest
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# SNAPSHOT THE OLD TOTALS FIRST. Fact_Revenue is DROP/CREATE, so the moment the loader runs the
+# evidence is gone. Captured per patient per month -- the finest grain both shapes share.
+# ---------------------------------------------------------------------
+# NOT dropped first, and captured only if absent: a re-run must never overwrite a good baseline
+# with the post-change picture, which would make the guard below compare the new data with
+# itself and pass for the worst possible reason.
+EXEC     IF OBJECT_ID('Audit.V189_Capitation_Baseline') IS NULL SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date, SUM(r.Amount) AS Amount, COUNT(*) AS Rows_Before INTO [Audit].[V189_Capitation_Baseline] FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date;
+
+DEPLOY   Fabric\Gold.Fact_Plan_Spell.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+# ==> Fabric\Input.Plan_Capitation_Rate.Table.sql IS DELIBERATELY NOT DEPLOYED HERE. <==
+# The first run of this manifest did deploy it, to pick up a one-line comment fix. That file
+# begins DROP TABLE IF EXISTS, and Input.* is OWNER-CURATED DATA, not code -- it holds the
+# per-plan monthly fees, synced from AppDB. Dropping it emptied the rate table, so no plan
+# resolved, no member had a spell, and the loader produced ZERO capitation rows while reporting
+# success. The reconciliation guard below caught it as "all 120,553 patient-months changed".
+# Recovered with Meta.usp_Sync_Input_From_AppDB -- Input_Stage still held all 10 rows.
+# Never put an Input.* table in a release unless the intent is genuinely to rebuild it empty.
+
+# Pre-flight: the rates must be present BEFORE the loader runs. Without this the failure shows
+# up as a silent zero four steps later, which is exactly how the first run of this release went.
+EXEC     DECLARE @r INT, @m VARCHAR(4000); SELECT @r = COUNT(*) FROM [Input].[Plan_Capitation_Rate]; IF @r = 0 BEGIN SET @m = 'V189 FAILED: Input.Plan_Capitation_Rate is empty -- run Meta.usp_Sync_Input_From_AppDB first, or no capitation can be produced.'; THROW 50192, @m, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ==> THE WHOLE RELEASE STANDS OR FALLS HERE. <== Every patient's every month must carry the
+# same money as before, to the penny. A regrouping that changes a total is not a regrouping.
+EXEC     DECLARE @b INT, @e VARCHAR(4000); WITH nw AS (SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date AS m, SUM(r.Amount) AS amt FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date) SELECT @b = COUNT(*) FROM [Audit].[V189_Capitation_Baseline] o FULL OUTER JOIN nw ON nw.Tenant_ID = o.Tenant_ID AND nw.fk_Patient = o.fk_Patient AND nw.m = o.Month_Commencing_Date WHERE o.fk_Patient IS NULL OR nw.fk_Patient IS NULL OR ABS(ISNULL(o.Amount,0) - ISNULL(nw.amt,0)) > 0.005; IF @b > 0 BEGIN SET @e = 'V189 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' patient-month(s) changed value. The regrouping is not equivalent.'; THROW 50193, @e, 1; END;
+
+# A segment must never span a month boundary: its date must be the 1st of its month or a Monday.
+# If this throws, the week clipping is wrong and a monthly report would double-count the join.
+EXEC     DECLARE @x INT, @y VARCHAR(4000); SELECT @x = COUNT(*) FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' AND d.Day_Of_Month <> 1 AND d.Full_Date <> d.Week_Commencing_Date; IF @x > 0 BEGIN SET @y = 'V189 FAILED: ' + CAST(@x AS VARCHAR(10)) + ' capitation row(s) are dated neither a month start nor a Monday.'; THROW 50194, @y, 1; END;
+
+# The compression must actually have happened. If rows did not fall, the day grain is still
+# there and everything above passed for the wrong reason.
+EXEC     DECLARE @n BIGINT, @o BIGINT, @z VARCHAR(4000); SELECT @n = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation'; SELECT @o = SUM(CAST(Rows_Before AS BIGINT)) FROM [Audit].[V189_Capitation_Baseline]; IF @n >= @o BEGIN SET @z = 'V189 FAILED: capitation rows did not fall (' + CAST(@o AS VARCHAR(20)) + ' -> ' + CAST(@n AS VARCHAR(20)) + ').'; THROW 50195, @z, 1; END;
+
+# The spell must cover every member, and its value must equal the revenue it describes.
+EXEC     DECLARE @s INT, @t VARCHAR(4000); SELECT @s = COUNT(*) FROM (SELECT DISTINCT Tenant_ID, fk_Patient FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation') r WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Fact_Plan_Spell] s WHERE s.Tenant_ID = r.Tenant_ID AND s.fk_Patient = r.fk_Patient); IF @s > 0 BEGIN SET @t = 'V189 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' billed member(s) have no spell row.'; THROW 50196, @t, 1; END;
+EXEC     DECLARE @v DECIMAL(18,6), @w VARCHAR(4000); SELECT @v = ABS(ISNULL((SELECT SUM(Spell_Value) FROM [Gold].[Fact_Plan_Spell]),0) - ISNULL((SELECT SUM(Amount) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation'),0)); IF @v > 0.01 BEGIN SET @w = 'V189 FAILED: spell value and capitation revenue differ by ' + CAST(@v AS VARCHAR(40)) + '.'; THROW 50197, @w, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Aggregates read Fact_Revenue. Totals are unchanged so their output will be identical, but they
+# are rebuilt here rather than left until the next chain run so nothing reads a half-old picture.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     DROP TABLE IF EXISTS [Audit].[V189_Capitation_Baseline];
+
+TEST
