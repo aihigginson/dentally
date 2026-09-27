@@ -2689,3 +2689,58 @@ add("DQ Records", "COUNTROWS('_Data Quality Detail') + 0", "#,##0");
 add("DQ % of Group",
     "DIVIDE([DQ Records], MAX('Aggregate Data Quality'[Population]))", "0.0%");
 }
+
+// ===================== Patient Value (rolling 36 months) =====================
+{
+// =====================================================================
+// WHAT A PATIENT IS WORTH, AND HOW OFTEN THEY COME. Two measures, deliberately not one.
+//
+// ==> THIS RETIRES 'Lifetime Value', WHICH WAS WRONG TWICE OVER. <== It was
+// SUM('List Patients'[Total Invoiced]), and:
+//
+//   1. IT COUNTED NO PLAN INCOME. A membership patient's monthly fee is not an invoice. On the
+//      live practice a plan patient showed as worth 737 against a private patient's 1,390, when
+//      the true figures are 2,876 and 1,414 -- 74% of the value of the largest cohort was
+//      invisible, and it ranked the two biggest cohorts the wrong way round. That measure is the
+//      SORT ORDER of the Day Book retention lists, so the most valuable lapsed patients sat at
+//      the BOTTOM of the list somebody works down.
+//   2. IT WAS NEVER A LIFETIME. Dentally holds nothing from before a practice migrates onto it,
+//      so "lifetime" silently meant 5.7 years for one customer and six months for the next.
+//
+// The replacement is a rolling 36 months of BOTH revenue types, computed in Gold (V187/V188) on
+// 'Aggregate Site Patient Current' -- not in DAX, because the capitation half is 1.9m rows at
+// 1.70 each and summing it per visual would be slow and easy to filter wrongly.
+//
+// ==> ATTENDANCE IS A SECOND MEASURE, NOT FOLDED IN. <== A plan patient attending six-monthly
+// hygiene is loyal and low-margin; a private patient with one 2,000 crown a year is the reverse.
+// High value + low attendance is a different retention risk from high attendance + low value, and
+// one number loses exactly the distinction these lists exist to draw. 'Appointments Attended' on
+// the table cannot go on a visual by itself -- discourageImplicitMeasures is set on the model --
+// so it needs an explicit measure.
+//
+// Filter flow: 'Aggregate Site Patient Current'[fk Patient] (many) -> 'List Patients'[pk Patient]
+// (one), so a patient in context on any page narrows this to their single row. It is one row per
+// patient, so SUM over a cohort is a cohort total, not a double count.
+//
+// Deleted BY NAME across every table, the pattern the Day Book counts use, because 'Lifetime
+// Value' was created by hand in Desktop and has never been in this script -- it is not in any
+// DisplayFolder this script owns, so a folder-scoped delete would leave it in place.
+// =====================================================================
+    string g = "Patient Value";
+    var retire = new[] { "Lifetime Value", "Patient Value 3yr", "Appointments Attended 3yr" };
+    foreach (var tbl in Model.Tables)
+        foreach (var m in tbl.Measures.Where(m => retire.Contains(m.Name)).ToList())
+            m.Delete();
+
+    var t = Model.Tables["_Measures"];
+
+    var pv = t.AddMeasure("Patient Value 3yr",
+        @"SUM ( 'Aggregate Site Patient Current'[Value Total] )");
+    pv.DisplayFolder = g; pv.FormatString = "£#,##0";
+    pv.Description = "Invoiced AND plan income over a rolling 36 months, per Gold. Replaces 'Lifetime Value', which omitted plan income and so ranked membership patients below private ones.";
+
+    var pa = t.AddMeasure("Appointments Attended 3yr",
+        @"SUM ( 'Aggregate Site Patient Current'[Appointments Attended] )");
+    pa.DisplayFolder = g; pa.FormatString = "#,##0";
+    pa.Description = "Completed appointments over the same 36 months. Carried beside value, not folded into it: loyal-and-low-margin and infrequent-but-high-value are different retention risks.";
+}

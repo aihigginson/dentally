@@ -74,16 +74,16 @@
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Total Paid"
+                  "Property": "Patient Value 3yr"
                 }
               },
-              "queryRef": "List Patients.Total Paid",
+              "queryRef": "_Measures.Patient Value 3yr",
               "nativeQueryRef": "Patient Value 3yr",
               "displayName": "Patient Value 3yr"
             }
@@ -330,13 +330,13 @@
       {
         "name": "154c3af1282825390b52",
         "field": {
-          "Column": {
+          "Measure": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Patients"
+                "Entity": "_Measures"
               }
             },
-            "Property": "Total Paid"
+            "Property": "Patient Value 3yr"
           }
         },
         "type": "Advanced"

@@ -57,13 +57,13 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Patients"
+                      "Entity": "_Measures"
                     }
                   },
                   "Property": "Patient Value 3yr"
                 }
               },
-              "queryRef": "List Patients.Patient Value 3yr",
+              "queryRef": "_Measures.Patient Value 3yr",
               "nativeQueryRef": "Patient Value 3yr"
             }
           ]
@@ -369,7 +369,7 @@
           "Measure": {
             "Expression": {
               "SourceRef": {
-                "Entity": "List Patients"
+                "Entity": "_Measures"
               }
             },
             "Property": "Patient Value 3yr"
