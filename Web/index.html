@@ -164,6 +164,12 @@
         }
         .filter-bar.open { display: flex; }
         .filter-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
+        /* ==> WITHOUT THIS, el.hidden DOES NOTHING HERE. <== The UA stylesheet's
+           [hidden]{display:none} is the weakest rule there is, so ANY author rule setting
+           display beats it -- .filter-field below sets display:flex, so hiding the single-site
+           filter set the attribute and changed nothing on screen. Survived an incognito window,
+           which is what ruled out caching. */
+        [hidden] { display: none !important; }
         .filter-field { display: flex; align-items: center; gap: 6px; }
         .filter-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
         .filter-select {
@@ -526,7 +532,11 @@
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
             </button>
         </div>
-        <select class="staff-picker" id="staff-practice" title="Act as another practice" style="display:none"></select>
+        <select class="staff-picker" id="staff-practice" title="Act as another client" style="display:none"></select>
+        <!-- The PRACTICE picker. Shown to everyone, not just staff: a client may own several
+             practices and each practice is one tenant, so a group customer needs it too. Only
+             appears when there is a genuine choice to make. -->
+        <select class="staff-picker" id="practice-tenant" title="Practice" style="display:none"></select>
         <span class="header-org" id="header-org"></span>
         <span class="header-user" id="header-user">—</span>
     </div>
@@ -1130,7 +1140,12 @@
     // second tab silently wrong. The server re-checks that the caller is staff on every request
     // -- this is a statement of intent, never of permission.
     const ACTING_KEY = '_anly_acting_client';
+    const TENANT_KEY = '_anly_acting_tenant';
     function actingClient()      { try { return sessionStorage.getItem(ACTING_KEY) || ''; } catch (e) { return ''; } }
+    function actingTenant()      { try { return sessionStorage.getItem(TENANT_KEY) || ''; } catch (e) { return ''; } }
+    function setActingTenant(v)  {
+        try { v ? sessionStorage.setItem(TENANT_KEY, v) : sessionStorage.removeItem(TENANT_KEY); } catch (e) {}
+    }
     function setActingClient(v)  {
         try { v ? sessionStorage.setItem(ACTING_KEY, v) : sessionStorage.removeItem(ACTING_KEY); } catch (e) {}
     }
@@ -1138,14 +1153,20 @@
     async function authFetch(url, options) {
         const token = await getIdToken();
         const acting = actingClient();
+        const tenant = actingTenant();
         const res = await fetch(url, {
             ...options,
             headers: { ...(options?.headers || {}), 'Authorization': `Bearer ${token}`,
-                       ...(acting ? { 'X-Acting-Client': acting } : {}) },
+                       ...(acting ? { 'X-Acting-Client': acting } : {}),
+                       ...(tenant ? { 'X-Acting-Tenant': tenant } : {}) },
         });
         // A 403 while acting as a practice usually means that practice has gone (cancelled, or a
         // stale pick from an earlier session). Drop the override and reload rather than showing
         // "contact us" to our own support login, which would look like THEIR access had broken.
+        // A stale PRACTICE pick 403s the same way -- after switching client, the tenant held in
+        // session belongs to the client we just left. Clear that first and retry before giving
+        // up on the client override, or the reload loops on the same refusal.
+        if (res.status === 403 && tenant) { setActingTenant(''); location.reload(); return res; }
         if (res.status === 403 && acting) { setActingClient(''); location.reload(); return res; }
         if (res.status === 403) {
             showContactPage();
@@ -1328,6 +1349,37 @@
         // embeds holding tokens minted for the OLD practice's RLS; refreshing the data around them
         // would leave one practice's reports under another's name, which is the one mistake this
         // control must never make.
+        // ── The practice picker ──────────────────────────────────────────────
+        // Switching reloads for the same reason the client picker does: half the screen is
+        // Power BI embeds holding tokens minted for the OLD practice's RLS.
+        //
+        // ==> A GROUP SEES ITS PRACTICES MERGED UNLESS IT ASKS FOR ONE. <== This used to force
+        // the first practice, on the reasoning that unselected meant the reports ADD UP every
+        // tenant the client can see. They do -- and for a genuine group that is the whole point:
+        // a three-practice customer wants the group total first and a practice second.
+        //
+        // The fault that reasoning was written for was narrower than it looked. Two practices
+        // were being added up and shown under ONE PRACTICE'S NAME, and the name was the lie, not
+        // the addition. So the merge is now the default and it SAYS SO: the picker offers
+        // "All practices" and the header label says it too, rather than naming one of them.
+        const tsel = document.getElementById('practice-tenant');
+        const cps  = data.client_practices || [];
+        if (tsel && cps.length > 1) {
+            const current = String(actingTenant() || '');
+            tsel.innerHTML = '<option value=""' + (current === '' ? ' selected' : '') + '>All practices</option>'
+                + cps.map(pr =>
+                    '<option value="' + escHtml(pr.tenant_id) + '"'
+                    + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
+                    + escHtml(pr.name) + '</option>').join('');
+            tsel.style.display = '';
+            tsel.onchange = () => { setActingTenant(tsel.value); location.reload(); };
+            // The header must never name a single practice while the reports show several.
+            if (current === '' && o) o.textContent = cps.length + ' practices';
+        } else if (tsel) {
+            tsel.style.display = 'none';
+            if (actingTenant()) setActingTenant('');
+        }
+
         if (data.is_staff && (data.practices || []).length) {
             const sel = document.getElementById('staff-practice');
             if (sel) {
@@ -1336,7 +1388,12 @@
                     + (pr.client_id === data.client_id ? ' selected' : '') + '>'
                     + escHtml(pr.name) + '</option>').join('');
                 sel.style.display = '';
-                sel.onchange = () => { setActingClient(sel.value); location.reload(); };
+                sel.onchange = () => {
+                    // The practice in session belongs to the client being left behind.
+                    setActingTenant('');
+                    setActingClient(sel.value);
+                    location.reload();
+                };
                 if (actingClient()) document.body.classList.add('acting-as');
             }
             const ab = document.getElementById('stab-admin-btn');
@@ -1926,7 +1983,16 @@
         if ((fmt || '').toLowerCase().includes('currency')) return '£' + Math.round(v).toLocaleString();
         return (Math.abs(v) >= 1000) ? Math.round(v).toLocaleString() : (+v).toLocaleString();
     }
-    function _fyLabel(y) { return 'FY' + String(y).slice(2); }   // stored FY is the label/end year -> FYyy
+    // The stored FY is the label/END year. A January practice's year 2026 is "FY26"; an April
+    // practice's year 2027 runs Apr-26 to Mar-27 and must read "FY26-27", or the CURRENT period
+    // is labelled with a year that has not started yet. Same rule as Gold.vw_Dim_Date and as the
+    // preview on the Finance settings tab -- three places, one convention.
+    let _fyStartMonth = 1;
+    function _fyLabel(y) {
+        const yy = String(y).slice(2);
+        if (_fyStartMonth === 1) return 'FY' + yy;
+        return 'FY' + String(y - 1).slice(2) + '-' + yy;
+    }
     function _sampleVal(m) {
         if (m.sample) return 'e.g. ' + m.sample;      // per-metric example from Config.Metric_Definitions
         const f = (m.format_type || '').toLowerCase();
@@ -2737,6 +2803,9 @@
             const data = await res.json();
             // Full practice FY range (cutover..current + next year) so historical + next-year targets
             // can be set; fall back to a 3-year window if the range is unavailable.
+            // Set before any _fyLabel call below -- otherwise the first render labels an April
+            // practice as if it were on calendar years.
+            _fyStartMonth = data.fy_start_month || 1;
             const years = new Set([...(data.fy_options && data.fy_options.length ? data.fy_options : [data.fy - 1, data.fy, data.fy + 1]), ...(data.available_fys || [])]);
             document.getElementById('targets-fy').innerHTML = [...years].sort((a, b) => a - b)
                 .map(y => '<option value="' + y + '"' + (y === data.fy ? ' selected' : '') + '>' + _fyLabel(y) + '</option>').join('');
@@ -3563,6 +3632,26 @@
                         o.value = s.id; o.textContent = s.name;
                         selSite.appendChild(o);
                     });
+                    // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
+                    // control can only ever be a no-op or a lie, and it is currently the
+                    // second: several facts carry no site key at all -- Fact_Practitioner_
+                    // Diaries has no site COLUMN, and treatment plans and (on the demo
+                    // tenant) appointments are all fk_Practice_Site = -1 -- so picking the
+                    // one site excludes every one of their rows and Diary Fill, Rev/Hour,
+                    // Avg Plan and the appointment ratios go blank. "All sites" includes the
+                    // -1 rows, which is why it looks right and selecting looks broken.
+                    //
+                    // Hiding it is not the fix for those missing keys, which still matter to
+                    // a genuine multi-site group. It is the fix for offering a filter that
+                    // cannot do anything useful and can do something harmful.
+                    const oneSite = (data.sites || []).length <= 1;
+                    const siteField = selSite.closest('.filter-field');
+                    if (siteField) {
+                        siteField.hidden = oneSite;
+                        const sep = siteField.nextElementSibling;
+                        if (sep && sep.classList.contains('filter-sep')) sep.hidden = oneSite;
+                    }
+                    if (oneSite) { selSite.value = 'all'; filterState.site = 'all'; }
                     // Seed the Role dropdown from the tenant's curated Custom_Role values
                     // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
                     (data.roles || []).forEach(role => {

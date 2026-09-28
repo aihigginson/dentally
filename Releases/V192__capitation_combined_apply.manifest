@@ -1,0 +1,86 @@
+# =====================================================================
+# Release V192 -- apply the whole capitation change to an environment in one go
+# =====================================================================
+# ==> V189, V190 AND V191 CANNOT BE REPLAYED INDIVIDUALLY. USE THIS INSTEAD. <==
+#
+# All three change the SAME source file, Gold.usp_Load_Fact_Revenue. They worked in dev because
+# they were deployed as that file evolved, one at a time. Against any environment where the file
+# is already at its final state, deploying "V189" actually applies all three at once -- and
+# V189's guard, which asserts that NO money moves, then fails on V190's deliberate reduction.
+#
+# That is exactly what happened on the prod run: 241 patient-months "changed", every one of them
+# a legitimate V190 closing-month reduction. The data was right; the guard was scoped to a
+# release boundary that no longer existed.
+#
+# So this manifest carries the union of all three, with guards written for the COMBINED change:
+#
+#   V189  capitation regrained from member-day to WEEK-WITHIN-MONTH segments.
+#         Prod: 1,939,838 -> 437,602 rows (4.4x). No money moves.
+#   V190  a spell ends on a DATE -- today if still on a rated plan and active, otherwise the
+#         last attended free exam. Prod: 241 closing months reduced, -4,173.22. Money moves
+#         DOWN only, and only in the closing month of a CLOSED spell.
+#   V191  the labels say it is an estimate: category, glossary, measure descriptions.
+#         No number moves.
+#
+# ==> AND THE WHOLE FIGURE IS AN ESTIMATE. <== Membership fees are collected by the plan provider
+# (Denplan, Tabeo, whoever the practice uses); their statements are the authoritative numbers and
+# this warehouse has never seen them. Capitation here is reconstructed from completed free exams
+# priced at the curated rate. Right for trend, mix and patient value; not a figure to reconcile
+# to a bank.
+#
+# ==> MODEL STEP: run Fabric\PBI_Dentally.csx, publish, then REFRESH. <== The measure
+# descriptions come from the script; the "Plan Capitation (estimated)" label is data and needs a
+# refresh to appear on by-category charts.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V192__capitation_combined_apply.manifest
+# =====================================================================
+
+# Captured only if absent, so a re-run (or a part-applied environment, which is how prod got
+# here) keeps the genuine pre-change picture rather than comparing the new data with itself.
+EXEC     IF OBJECT_ID('Audit.V189_Capitation_Baseline') IS NULL SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date, SUM(r.Amount) AS Amount, COUNT(*) AS Rows_Before INTO [Audit].[V189_Capitation_Baseline] FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date;
+
+DEPLOY   Fabric\Gold.Fact_Plan_Spell.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+# Input.* is owner-curated data and is NEVER deployed -- those files open with DROP TABLE.
+# Emptying this one produces zero capitation rows and a successful-looking run, so assert first.
+EXEC     DECLARE @r INT, @m VARCHAR(4000); SELECT @r = COUNT(*) FROM [Input].[Plan_Capitation_Rate]; IF @r = 0 BEGIN SET @m = 'V192 FAILED: Input.Plan_Capitation_Rate is empty -- run Meta.usp_Sync_Input_From_AppDB first.'; THROW 50220, @m, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ==> MONEY MAY MOVE IN EXACTLY ONE PLACE. <== The closing month of a CLOSED spell, and nowhere
+# else. The regrain (V189) moves nothing at all; the date-bounded ending (V190) trims the final
+# month. Anything changing outside that means the bound has leaked into the wrong rows.
+EXEC     DECLARE @b INT, @e VARCHAR(4000); WITH nw AS (SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date AS m, SUM(r.Amount) AS amt FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date) SELECT @b = COUNT(*) FROM [Audit].[V189_Capitation_Baseline] o FULL OUTER JOIN nw ON nw.Tenant_ID = o.Tenant_ID AND nw.fk_Patient = o.fk_Patient AND nw.m = o.Month_Commencing_Date LEFT JOIN [Gold].[Fact_Plan_Spell] s ON s.Tenant_ID = COALESCE(o.Tenant_ID, nw.Tenant_ID) AND s.fk_Patient = COALESCE(o.fk_Patient, nw.fk_Patient) WHERE ABS(ISNULL(o.Amount,0) - ISNULL(nw.amt,0)) > 0.005 AND NOT (ISNULL(s.Is_Open,0) = 0 AND COALESCE(o.Month_Commencing_Date, nw.m) = DATEFROMPARTS(YEAR(s.Spell_End_Date), MONTH(s.Spell_End_Date), 1)); IF @b > 0 BEGIN SET @e = 'V192 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' patient-month(s) changed outside the closing month of a closed spell.'; THROW 50221, @e, 1; END;
+
+# Nothing may go UP. A tighter ending and a regrouping cannot create revenue.
+EXEC     DECLARE @u2 INT, @f VARCHAR(4000); WITH nw AS (SELECT r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date AS m, SUM(r.Amount) AS amt FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' GROUP BY r.Tenant_ID, r.fk_Patient, d.Month_Commencing_Date) SELECT @u2 = COUNT(*) FROM nw JOIN [Audit].[V189_Capitation_Baseline] o ON o.Tenant_ID = nw.Tenant_ID AND o.fk_Patient = nw.fk_Patient AND o.Month_Commencing_Date = nw.m WHERE nw.amt - o.Amount > 0.005; IF @u2 > 0 BEGIN SET @f = 'V192 FAILED: ' + CAST(@u2 AS VARCHAR(10)) + ' patient-month(s) gained value.'; THROW 50222, @f, 1; END;
+
+# The compression must have happened, or everything above passed for the wrong reason.
+EXEC     DECLARE @n BIGINT, @o BIGINT, @z VARCHAR(4000); SELECT @n = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation'; SELECT @o = SUM(CAST(Rows_Before AS BIGINT)) FROM [Audit].[V189_Capitation_Baseline]; IF @n >= @o BEGIN SET @z = 'V192 FAILED: capitation rows did not fall (' + CAST(@o AS VARCHAR(20)) + ' -> ' + CAST(@n AS VARCHAR(20)) + ').'; THROW 50223, @z, 1; END;
+
+# A segment spans neither a week nor a month boundary: its date is a month start or a Monday.
+EXEC     DECLARE @x INT, @y VARCHAR(4000); SELECT @x = COUNT(*) FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.Revenue_Type = 'Capitation' AND d.Day_Of_Month <> 1 AND d.Full_Date <> d.Week_Commencing_Date; IF @x > 0 BEGIN SET @y = 'V192 FAILED: ' + CAST(@x AS VARCHAR(10)) + ' capitation row(s) are dated neither a month start nor a Monday.'; THROW 50224, @y, 1; END;
+
+# No capitation after the end of its spell -- the V190 bug, asserted directly.
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date JOIN [Gold].[Fact_Plan_Spell] s ON s.Tenant_ID = r.Tenant_ID AND s.fk_Patient = r.fk_Patient WHERE r.Revenue_Type = 'Capitation' AND d.Full_Date > s.Spell_End_Date; IF @p > 0 BEGIN SET @q = 'V192 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' capitation row(s) fall after the end of their spell.'; THROW 50225, @q, 1; END;
+
+# Spells: every billed member has one, none ends in the future or before it starts, and the
+# stored value equals the revenue it describes.
+EXEC     DECLARE @s INT, @t VARCHAR(4000); SELECT @s = COUNT(*) FROM (SELECT DISTINCT Tenant_ID, fk_Patient FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation') r WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Fact_Plan_Spell] s WHERE s.Tenant_ID = r.Tenant_ID AND s.fk_Patient = r.fk_Patient); IF @s > 0 BEGIN SET @t = 'V192 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' billed member(s) have no spell row.'; THROW 50226, @t, 1; END;
+EXEC     DECLARE @g INT, @h VARCHAR(4000); SELECT @g = COUNT(*) FROM [Gold].[Fact_Plan_Spell] WHERE Spell_End_Date > CAST(SYSUTCDATETIME() AS DATE) OR Spell_End_Date < Spell_Start_Date; IF @g > 0 BEGIN SET @h = 'V192 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' spell(s) end in the future or before they start.'; THROW 50227, @h, 1; END;
+EXEC     DECLARE @v DECIMAL(18,6), @w VARCHAR(4000); SELECT @v = ABS(ISNULL((SELECT SUM(Spell_Value) FROM [Gold].[Fact_Plan_Spell]),0) - ISNULL((SELECT SUM(Amount) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation'),0)); IF @v > 0.01 BEGIN SET @w = 'V192 FAILED: spell value and capitation revenue differ by ' + CAST(@v AS VARCHAR(40)) + '.'; THROW 50228, @w, 1; END;
+
+# The labels must say "estimated". LOWER() is load-bearing: Fabric's default collation is
+# Latin1_General_100_BIN2_UTF8, which is CASE-SENSITIVE.
+EXEC     DECLARE @c INT, @e2 VARCHAR(4000); SELECT @c = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation' AND Revenue_Category <> 'Plan Capitation (estimated)'; IF @c > 0 BEGIN SET @e2 = 'V192 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' capitation row(s) still carry the old category.'; THROW 50229, @e2, 1; END;
+EXEC     DECLARE @g2 INT, @f2 VARCHAR(4000); SELECT @g2 = COUNT(*) FROM [Config].[Metric_Definitions] WHERE Metric_Key IN ('plan_capitation_revenue','total_revenue') AND LOWER(Long_Description) NOT LIKE '%estimate%'; IF @g2 > 0 BEGIN SET @f2 = 'V192 FAILED: ' + CAST(@g2 AS VARCHAR(10)) + ' metric definition(s) do not mention the estimate.'; THROW 50230, @f2, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     DROP TABLE IF EXISTS [Audit].[V189_Capitation_Baseline];
+EXEC     DROP TABLE IF EXISTS [Audit].[V190_Capitation_Baseline];
+
+TEST

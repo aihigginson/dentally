@@ -37,7 +37,7 @@
 #   6. COVERAGE    - reported for information only, never fails the run.
 #
 # Reports under -Reports (default: the nine embedded by the web app). The
-# Template scaffold and the Day_Book2 backup are excluded by default.
+# The Template scaffold is excluded by default.
 #
 # Exit: 0 = clean; 1 = one or more failures; 2 = config error.
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@
 param(
     [string]   $PbiRoot = (Join-Path (Split-Path $PSScriptRoot -Parent) 'PBI'),
     [string[]] $Reports,
-    [string[]] $Exclude = @('Template', 'Day_Book2'),
+    [string[]] $Exclude = @('Template'),
     [switch]   $Detailed
 )
 

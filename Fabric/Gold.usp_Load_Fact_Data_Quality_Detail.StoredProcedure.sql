@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Data_Quality_Detail] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Data_Quality_Detail] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Data_Quality_Detail
 --  Author           :  AIH
@@ -182,9 +182,23 @@ BEGIN
             SELECT 'PAT_DORMANT', p.Tenant_ID, p.pk_Patient, 'Patient',
                    p.Full_Name, CAST(p.Patient_ID AS VARCHAR(100)),
                    p.Last_Appointment_Date, 'Last seen',
-                   'Lifetime value £' + CAST(CAST(ISNULL(p.Total_Paid, 0) AS INT) AS VARCHAR(20))
+                   'Value 3yr £' + CAST(CAST(ISNULL(pv.Value_Total, 0) AS INT) AS VARCHAR(20))
                    + ISNULL(' -- ' + NULLIF(p.Email_Address, ''), '')
+            -- ==> THE WORKLIST IS ORDERED BY THIS NUMBER, SO IT HAD BETTER BE THE RIGHT
+            -- ONE. <== It read Dim_Patients.Total_Paid, which is the INVOICED total from
+            -- patient_stats and carries none of a membership patient's monthly fee. On the
+            -- live practice a plan patient is worth 2,876 against a private patient's
+            -- 1,414, but showed as 737 -- so the most valuable dormant patients in the
+            -- practice sat at the bottom of the list somebody works down.
+            --
+            -- Nor was it a lifetime: Dentally holds nothing from before a practice migrates
+            -- onto it, so "lifetime" silently meant a different span for every customer.
+            -- The value columns on Aggregate_Site_Patient_Current are a rolling 36 months of
+            -- BOTH revenue types. They lived on their own aggregate for one release; it was
+            -- the same grain as this one, so it was folded in rather than kept in parallel.
             FROM Gold.Dim_Patients p
+            LEFT JOIN Gold.Aggregate_Site_Patient_Current pv
+                   ON pv.fk_Patient = p.pk_Patient AND pv.Tenant_ID = p.Tenant_ID
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
               AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)

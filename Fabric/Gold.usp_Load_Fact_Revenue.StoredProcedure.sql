@@ -14,7 +14,41 @@
 --    *03     2026-08-10  AIH  Capitation: WORKING days only (fee/working-days-in-month) and only from
 --                             Audit.Tenants.Cutover_Date (per-tenant Dentally go-live) -- drops the pre-
 --                             go-live phantom capitation (imported historical plans back to 2010).
---  Purpose          :  One row per revenue unit (invoice line OR capitation member-day). Revenue is
+--    *04     2026-09-27  AIH  Capitation regrained from MEMBER-DAY to WEEK-WITHIN-MONTH segment:
+--                             one row per full week inside a month, split where a week crosses a
+--                             month boundary. 2,613,357 rows -> 588,854 (4.4x) with weekly AND
+--                             monthly reporting unchanged, because a segment spans neither
+--                             boundary. Same arithmetic regrouped, so it reconciles to the penny.
+--                             Also writes Gold.Fact_Plan_Spell from the same pass.
+--    *05     2026-09-27  AIH  Spell end is now a DATE with two cases: still on a rated plan and
+--                             active -> today; otherwise -> the last attended free exam. It used
+--                             to run to the END of the closing month either way, billing weeks of
+--                             capitation after the last evidence of membership.
+--
+--  ==> EVERY CAPITATION FIGURE IN THIS WAREHOUSE IS AN ESTIMATE. IT IS NOT MONEY WE HAVE SEEN. <==
+--
+--  Dentally does not hold membership income. There is no invoice, no payment, no statement -- a
+--  plan patient's fee is collected by the PLAN PROVIDER (Denplan, Tabeo, or whoever the practice
+--  uses) and the authoritative figures live in the spreadsheets that provider sends the practice.
+--  The warehouse has never seen them.
+--
+--  So capitation here is RECONSTRUCTED from clinical evidence: a completed, non-charged
+--  Exam/Hygiene course implies the patient was a member that month, and the fee is looked up from
+--  the owner-curated rate in Input.Plan_Capitation_Rate. That chain contains at least four
+--  assumptions, any of which can be wrong for a given patient:
+--
+--    1. a free exam means a live membership       -- it may be a goodwill exam, or a stale plan flag
+--    2. the rate on file is the rate collected    -- providers discount, and rates change mid-term
+--    3. an active plan flag means they are paying -- a failed direct debit leaves the flag intact
+--    4. gaps between exams are still membership   -- bridged deliberately; see Fact_Plan_Spell
+--
+--  It is a good estimate and it is the right shape for trend, mix and per-patient value. It is NOT
+--  the number to reconcile to the bank, quote to an accountant, or treat as collected income. If
+--  the provider's own figures are ever loaded, they belong in an Input.* table as the actual, with
+--  this kept alongside as the estimate -- not silently replaced by it.
+--
+--  Purpose          :  One row per revenue unit (invoice line OR capitation week-within-month
+--                      segment). Also rebuilds Gold.Fact_Plan_Spell. Revenue is
 --                      defined once here so header/line/category totals cannot diverge. Full rebuild.
 --  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue
 --                      @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
@@ -99,13 +133,41 @@ BEGIN
         WHERE ii.Id IS NOT NULL;
         SET @My_Inserts = @@ROWCOUNT;
 
-        -- ===== Capitation member-days (Silver.Treatment_Plans/Items -- V147 pro-rata) ===========
+        -- ===== Capitation: continuous plan spells, expanded to WEEK-within-MONTH segments ====
+        -- ==> THIS USED TO BE ONE ROW PER MEMBER PER WORKING DAY. IT IS NOW ONE PER SEGMENT. <==
+        --
+        -- 2,613,357 rows for 2,732 members, at about 1.70 each -- the overwhelming majority of
+        -- Fact_Revenue, to express a handful of monthly fees. The day grain existed for one
+        -- honest reason: some revenue reports are WEEKLY and some MONTHLY, and a monthly row
+        -- cannot answer a weekly question.
+        --
+        -- A segment is a week clipped to its month. Full weeks inside a month give one row each;
+        -- a week crossing a month boundary gives two, one for each side. So a segment never
+        -- spans a week boundary and never spans a month boundary, which means BOTH the weekly
+        -- and the monthly reports still sum exactly, with 4.4x fewer rows (2,613,357 -> 588,854).
+        -- Month-only storage would be 21.7x fewer and is the obvious temptation, but it cannot
+        -- serve the weekly reports, which is precisely why the day grain was there.
+        --
+        -- April 2026 is 1 Apr (part week), then 6, 13, 20, 27. Weeks are MONDAY-commencing
+        -- because that is what Gold.Dim_Date says -- Week_Commencing_Date, not an invented
+        -- boundary. Anything else and the weekly reports would silently disagree with every
+        -- other weekly figure in the warehouse.
+        --
+        -- ==> THE ARITHMETIC IS THE OLD ARITHMETIC, REGROUPED, SO IT RECONCILES TO THE PENNY. <==
+        -- Each day was Monthly_Value / working_days_in_month. A segment is that same daily rate
+        -- times the working days in the segment. Amount is DECIMAL(18,6), so the sum over
+        -- segments equals the sum over days exactly, not approximately. The release guard
+        -- asserts it rather than trusting it.
+        --
+        -- The part month needs no special case, which is the point of counting working days
+        -- rather than dividing weeks. Days are filtered to <= today before they are counted, so
+        -- the current segment carries only the days actually elapsed and the current month
+        -- accrues exactly as it did at day grain -- a Monday does not book the whole week.
         ;WITH plan_course AS (
             -- membership-evidence months: completed, non-NHS, non-charged Exam/Hygiene courses.
-            -- Re-sourced from Silver: resolve pk_Patient up front so the rest of the pipeline is
-            -- byte-identical to V147; course_month straight from Start_Date (no Dim_Date surrogate).
             SELECT tp.Tenant_ID, dp.pk_Patient AS fk_Patient,
-                   DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month
+                   DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month,
+                   CAST(tp.Start_Date AS DATE)                                 AS course_date
             FROM   [Silver].[Treatment_Plans] tp
             JOIN   [Gold].[Dim_Patients] dp ON dp.Patient_ID = tp.Patient_ID AND dp.Tenant_ID = tp.Tenant_ID
             WHERE  tp.Completed = 1
@@ -118,9 +180,13 @@ BEGIN
                              AND i.Charged = 0)
         ),
         tenure AS (
+            -- First to last evidence month. Gaps are bridged deliberately: missing an exam does
+            -- not cancel a membership, so this is ONE spell per patient, not one per unbroken
+            -- run. Evidence_Months on the spell table keeps the gaps visible rather than hidden.
             SELECT Tenant_ID, fk_Patient,
                    MIN(course_month)            AS start_m,
                    MAX(course_month)            AS last_m,
+                   MAX(course_date)             AS last_evidence_date,
                    COUNT(DISTINCT course_month) AS course_months
             FROM   plan_course GROUP BY Tenant_ID, fk_Patient
         ),
@@ -129,63 +195,178 @@ BEGIN
         ),
         default_plan AS (
             SELECT DISTINCT Tenant_ID, Payment_Plan_ID FROM [Input].[Plan_Capitation_Rate] WHERE Is_Default = 1
-        ),
-        resolved AS (
-            SELECT t.Tenant_ID, t.fk_Patient, t.start_m, t.course_months,
-                   COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) AS attributed_plan_id,
-                   CASE WHEN own.Payment_Plan_ID IS NOT NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS is_estimated,
-                   CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
-                        THEN @Current_Month ELSE t.last_m END AS end_m
-            FROM   tenure t
-            JOIN   [Gold].[Dim_Patients] pat ON pat.pk_Patient = t.fk_Patient
-            LEFT JOIN rated_plans  own ON own.Tenant_ID = t.Tenant_ID AND own.Payment_Plan_ID = pat.Payment_Plan_ID
-            LEFT JOIN default_plan def ON def.Tenant_ID = t.Tenant_ID
-            WHERE  COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) IS NOT NULL
-              AND  (own.Payment_Plan_ID IS NOT NULL OR t.course_months >= 2)
-        ),
-        months AS (
+        )
+        -- Materialised, not left as a CTE: the spell is written to Gold.Fact_Plan_Spell further
+        -- down, and computing it twice is how a stored spell and the revenue derived from it
+        -- drift apart.
+        -- ==> A SPELL ENDS ON A DATE, AND WHICH DATE DEPENDS ON WHETHER THEY ARE STILL ON
+        -- THE PLAN. <== Two cases, and they are not symmetrical:
+        --
+        --   STILL ON PLAN AND ACTIVE -> today. The practice needs the plan marker in Dentally to
+        --   treat them without charging, so somebody maintains it and it is about as reliable as
+        --   anything here gets. It is not proof of PAYMENT: a direct debit can have failed
+        --   yesterday with the patient still flagged active and the dentist not getting paid.
+        --   This is membership, not collection -- do not read it as cash.
+        --
+        --   NOT ON PLAN NOW -> the last attended free exam. That visit is the last evidence the
+        --   membership existed, so it is where the spell stops. It is a DATE, not a month:
+        --   previously this ran to the END of that month, so a member last seen on 3 March was
+        --   billed capitation to 31 March -- four weeks of fees after the only evidence ran out.
+        --
+        -- "Attended" is Completed = 1 on the course, the warehouse's existing evidence rule.
+        -- Sourcing it from appointment attendance instead would change WHICH patients qualify as
+        -- members, which is a larger question than where a spell ends.
+        SELECT t.Tenant_ID, t.fk_Patient, t.start_m, t.course_months,
+               COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) AS attributed_plan_id,
+               CASE WHEN own.Payment_Plan_ID IS NOT NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS is_estimated,
+               CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                    THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS is_open,
+               CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                    THEN CAST(SYSUTCDATETIME() AS DATE)
+                    ELSE t.last_evidence_date END AS end_date,
+               DATEFROMPARTS(
+                    YEAR(CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                              THEN CAST(SYSUTCDATETIME() AS DATE) ELSE t.last_evidence_date END),
+                    MONTH(CASE WHEN own.Payment_Plan_ID IS NOT NULL AND pat.Active = 1
+                               THEN CAST(SYSUTCDATETIME() AS DATE) ELSE t.last_evidence_date END),
+                    1) AS end_m,
+               pat.Dentist_Practitioner_ID, pat.Site_ID
+        INTO   #spell
+        FROM   tenure t
+        JOIN   [Gold].[Dim_Patients] pat ON pat.pk_Patient = t.fk_Patient
+        LEFT JOIN rated_plans  own ON own.Tenant_ID = t.Tenant_ID AND own.Payment_Plan_ID = pat.Payment_Plan_ID
+        LEFT JOIN default_plan def ON def.Tenant_ID = t.Tenant_ID
+        WHERE  COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) IS NOT NULL
+          AND  (own.Payment_Plan_ID IS NOT NULL OR t.course_months >= 2);
+
+        ;WITH months AS (
             SELECT r.Tenant_ID, r.fk_Patient, r.attributed_plan_id, r.is_estimated,
-                   d.pk_Date, d.Month_Commencing_Date
-            FROM   resolved r
-            JOIN   [Gold].[Dim_Date] d ON d.Day_Of_Month = 1 AND d.Month_Commencing_Date BETWEEN r.start_m AND r.end_m
+                   r.Dentist_Practitioner_ID, r.Site_ID, r.end_date, d.Month_Commencing_Date
+            FROM   #spell r
+            JOIN   [Gold].[Dim_Date] d ON d.Day_Of_Month = 1
+                                      AND d.Month_Commencing_Date BETWEEN r.start_m AND r.end_m
         ),
         priced AS (
-            SELECT m.Tenant_ID, m.fk_Patient, m.attributed_plan_id, m.is_estimated, m.pk_Date, m.Month_Commencing_Date,
-                   rr.Monthly_Value,
-                   ROW_NUMBER() OVER (PARTITION BY m.Tenant_ID, m.fk_Patient, m.pk_Date
+            -- Latest rate effective on or before the month wins. Unchanged.
+            SELECT m.Tenant_ID, m.fk_Patient, m.attributed_plan_id, m.is_estimated,
+                   m.Dentist_Practitioner_ID, m.Site_ID, m.end_date, m.Month_Commencing_Date, rr.Monthly_Value,
+                   ROW_NUMBER() OVER (PARTITION BY m.Tenant_ID, m.fk_Patient, m.Month_Commencing_Date
                                       ORDER BY rr.Effective_From_Date DESC) AS rn
             FROM   months m
             JOIN   [Input].[Plan_Capitation_Rate] rr
                    ON rr.Tenant_ID = m.Tenant_ID AND rr.Payment_Plan_ID = m.attributed_plan_id
                   AND rr.Effective_From_Date <= m.Month_Commencing_Date
         ),
-        wdays AS (   -- working days per calendar month (England) -- capitation spreads across these only
+        wdays AS (   -- working days per calendar month (England) -- the denominator, unbounded
             SELECT Month_Commencing_Date, COUNT(*) AS wd
             FROM   [Gold].[Dim_Date] WHERE Is_Working_Day_England = 1
             GROUP BY Month_Commencing_Date
+        ),
+        seg AS (
+            -- The numerator: working days in this week-within-month that are actually billable.
+            -- Clipping the week to the month start is what splits a boundary-crossing week in two.
+            SELECT p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
+                   p.Dentist_Practitioner_ID, p.Site_ID,
+                   p.Month_Commencing_Date, p.Monthly_Value,
+                   CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
+                        THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END AS seg_start,
+                   COUNT(*) AS wd_seg
+            FROM   priced p
+            JOIN   [Audit].[Tenants] tn ON tn.Tenant_ID = p.Tenant_ID
+            JOIN   [Gold].[Dim_Date] d
+                   ON d.Month_Commencing_Date = p.Month_Commencing_Date
+                  AND d.Is_Working_Day_England = 1
+                  AND d.Full_Date <= p.end_date          -- the spell's own end, never beyond today
+                  AND d.Full_Date >= tn.Cutover_Date    -- from the tenant's Dentally go-live only
+            WHERE  p.rn = 1
+            GROUP BY p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
+                     p.Dentist_Practitioner_ID, p.Site_ID,
+                     p.Month_Commencing_Date, p.Monthly_Value,
+                     CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
+                          THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END
         )
         INSERT INTO [Gold].[Fact_Revenue]
             (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
              fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
              Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
-        SELECT p.Tenant_ID, 'Capitation', 'Plan Capitation',
-               -1, p.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
+        -- ==> THE CATEGORY SAYS "ESTIMATED" BECAUSE IT IS. <== This is the string that
+        -- labels every revenue-by-category breakdown, so it is the cheapest honest place to
+        -- put it. See the estimate warning in the header: not one penny of this is a payment
+        -- the warehouse has observed.
+        SELECT s.Tenant_ID, 'Capitation', 'Plan Capitation (estimated)',
+               -1, s.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
-               dday.pk_Date, p.Monthly_Value / wd.wd, 0,
-               p.is_estimated, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
-        FROM   priced p
-        JOIN   [Gold].[Dim_Patients] pat ON pat.pk_Patient = p.fk_Patient
-        LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = p.Tenant_ID AND dpp.Payment_Plan_ID = p.attributed_plan_id
-        LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = p.Tenant_ID AND dpr.Practitioner_ID = pat.Dentist_Practitioner_ID
-        LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = p.Tenant_ID AND dps.Site_ID = pat.Site_ID
-        JOIN      wdays wd ON wd.Month_Commencing_Date = p.Month_Commencing_Date
-        JOIN      [Audit].[Tenants] tn ON tn.Tenant_ID = p.Tenant_ID
-        JOIN      [Gold].[Dim_Date] dday ON dday.Month_Commencing_Date = p.Month_Commencing_Date
-                                        AND dday.Is_Working_Day_England = 1
-        WHERE  p.rn = 1
-          AND  dday.Full_Date <= CAST(SYSUTCDATETIME() AS DATE)
-          AND  dday.Full_Date >= tn.Cutover_Date;   -- from the tenant's Dentally go-live only
+               dseg.pk_Date,
+               s.Monthly_Value / wd.wd * s.wd_seg,
+               0, s.is_estimated, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
+        FROM   seg s
+        LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = s.Tenant_ID AND dpp.Payment_Plan_ID = s.attributed_plan_id
+        LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = s.Tenant_ID AND dpr.Practitioner_ID = s.Dentist_Practitioner_ID
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = s.Tenant_ID AND dps.Site_ID = s.Site_ID
+        JOIN      wdays wd  ON wd.Month_Commencing_Date = s.Month_Commencing_Date
+        JOIN      [Gold].[Dim_Date] dseg ON dseg.Full_Date = s.seg_start;
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
+
+        -- ===== The spell itself, stored once ==================================================
+        -- Remember what this is: an inferred membership history, not a subscription ledger.
+        -- Built from the same #spell that produced the rows above, so the two cannot disagree.
+        -- Billed_* is read back off Fact_Revenue because the billable window is NARROWER than the
+        -- spell: Cutover_Date clips the front, today clips the back. A patient can be a member
+        -- for years before the first penny is attributable, and both facts matter.
+        DROP TABLE IF EXISTS [Gold].[Fact_Plan_Spell];
+        CREATE TABLE [Gold].[Fact_Plan_Spell] (
+              [pk_Plan_Spell]       BIGINT          NOT NULL,
+              [Tenant_ID]           INT             NOT NULL,
+              [fk_Patient]          BIGINT          NOT NULL,
+              [fk_Payment_Plan]     BIGINT          NOT NULL,
+              [fk_Practitioner]     BIGINT          NOT NULL,
+              [fk_Practice_Site]    BIGINT          NOT NULL,
+              [Spell_Start_Date]    DATE            NOT NULL,
+              [Spell_End_Date]      DATE            NOT NULL,
+              [Spell_Months]        INT                 NULL,
+              [Evidence_Months]     INT                 NULL,
+              [Is_Open]             BIT             NOT NULL,
+              [Is_Estimated_Plan]   BIT             NOT NULL,
+              [Billed_From_Date]    DATE                NULL,
+              [Billed_To_Date]      DATE                NULL,
+              [Billed_Segments]     INT                 NULL,
+              [Spell_Value]         DECIMAL(18,6)       NULL,
+              [DW_Created_At]       DATETIME2(6)    NOT NULL,
+              [DW_Updated_At]       DATETIME2(6)    NOT NULL
+        );
+
+        INSERT INTO [Gold].[Fact_Plan_Spell]
+            (pk_Plan_Spell, Tenant_ID, fk_Patient, fk_Payment_Plan, fk_Practitioner,
+             fk_Practice_Site, Spell_Start_Date, Spell_End_Date, Spell_Months, Evidence_Months,
+             Is_Open, Is_Estimated_Plan, Billed_From_Date, Billed_To_Date, Billed_Segments,
+             Spell_Value, DW_Created_At, DW_Updated_At)
+        SELECT ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.fk_Patient, s.start_m),
+               s.Tenant_ID, s.fk_Patient,
+               ISNULL(dpp.pk_Payment_Plan, -1), ISNULL(dpr.pk_Practitioner, -1),
+               ISNULL(dps.pk_Practice_Site, -1),
+               s.start_m,
+               s.end_date,                                     -- the real end, not month-end
+               DATEDIFF(MONTH, s.start_m, s.end_m) + 1,
+               s.course_months,
+               s.is_open,
+               s.is_estimated,
+               b.billed_from, b.billed_to, ISNULL(b.segments, 0), ISNULL(b.spell_value, 0),
+               SYSUTCDATETIME(), SYSUTCDATETIME()
+        FROM   #spell s
+        LEFT JOIN (
+            SELECT r.Tenant_ID, r.fk_Patient,
+                   MIN(d.Full_Date) AS billed_from, MAX(d.Full_Date) AS billed_to,
+                   COUNT(*) AS segments, SUM(r.Amount) AS spell_value
+            FROM   [Gold].[Fact_Revenue] r
+            JOIN   [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date
+            WHERE  r.Revenue_Type = 'Capitation'
+            GROUP BY r.Tenant_ID, r.fk_Patient
+        ) b ON b.Tenant_ID = s.Tenant_ID AND b.fk_Patient = s.fk_Patient
+        LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = s.Tenant_ID AND dpp.Payment_Plan_ID = s.attributed_plan_id
+        LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = s.Tenant_ID AND dpr.Practitioner_ID = s.Dentist_Practitioner_ID
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = s.Tenant_ID AND dps.Site_ID = s.Site_ID;
+
+        DROP TABLE #spell;
 
     END TRY
     BEGIN CATCH

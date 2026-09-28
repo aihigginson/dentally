@@ -1,9 +1,11 @@
 ﻿/****** Object:  Table [Bronze].[Patients]    Script Date: 20/04/2026 10:15:06 ******/
 -- Data-minimised patient table (V011, 2026-06-17). Special-category and excess-
--- identifier fields are no longer landed in the warehouse (Title/Middle name, DOB,
+-- identifier fields are no longer landed in the warehouse (Title/Middle name,
 -- Gender, Ethnicity, NHS/NI numbers, phone country codes, Work phone, Address,
 -- Custom/Legacy fields, Occupation, Image URL, Medical Alert, Archived reason,
--- Emergency Contact x3, Work phone). Retained: identity-for-contact (names +
+-- Emergency Contact x3, Work phone). DOB was on that list and was REINSTATED by V171
+-- (2026-09-19), active patients only -- see DPIA.md sec 7.3 for the necessity assessment.
+-- Retained: identity-for-contact (names +
 -- preferred name, mobile/home phone, email), the contact-preference fields
 -- (Use_Email / Use_SMS / Preferred_Phone, re-added V015), marketing flag +
 -- operational analytics. See DPIA.md sec 7.

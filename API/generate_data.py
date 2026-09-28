@@ -3,13 +3,19 @@ generate_data.py  —  rebuilt 2026-05-15; as-of date driven by GENERATE_AS_OF e
 Run:  python API/generate_data.py
       GENERATE_AS_OF=2026-07-01 python API/generate_data.py
 """
-import json, os, random, uuid as _uuid
+import bisect, json, os, random, uuid as _uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 random.seed(42)
 TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
-START   = TODAY.replace(year=TODAY.year - 6)
+# Three years of history, not six. Nothing before 2024 is wanted: it halves the data, the seed
+# time and the weekly rebuild's load on the capacity, and three years is still two full prior
+# years for a year-on-year comparison and enough for the 24-month dormancy checks to mean
+# anything. Relative rather than a fixed 2024 floor so it does not silently grow back to six
+# years by 2030.
+YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '3'))
+START   = TODAY.replace(year=TODAY.year - YEARS_BACK)
 FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
 
@@ -135,6 +141,45 @@ def _contract(tid, site_id, site_code, year, target, uda_val, uoa_target=0, uoa_
         "created_at": _iso(date(y0, 4, 1)),
         "updated_at": _iso(date(y0, 4, 1)),
     }
+
+# Custom roles that take referred, high-value work. Matches the taxonomy the live practice
+# curates in Input.Practitioner_Role (Principal / Associate / Associate Specialist /
+# Implantologist / Hygienist / Locum).
+_SPECIALIST_ROLES = {"Implantologist", "Associate Specialist", "Orthodontist",
+                     "Periodontist", "Endodontist"}
+
+
+def _prac_capacity(p):
+    """Rough weekly clinical hours a practitioner definition implies.
+
+    Used to share patients out in proportion to how much chair time somebody actually has.
+    Mirrors how the diary is generated: working days x (end - start) less an hour for lunch,
+    plus any late evenings.
+    """
+    def _mins(t):
+        return int(t[:2]) * 60 + int(t[3:5])
+    st, et = p.get("start_time") or "09:00", p.get("end_time") or "17:00"
+    day_h = max(0.5, (_mins(et) - _mins(st)) / 60.0 - 1.0)      # less lunch
+    hours = day_h * len(p.get("work_days") or [])
+    late_days, late_end = p.get("late_days") or [], p.get("late_end")
+    if late_days and late_end:
+        hours += max(0.0, (_mins(late_end) - _mins(et)) / 60.0) * len(late_days)
+    return hours
+
+
+def _weighted_prac(rng, items):
+    """Pick a practitioner in proportion to their weekly capacity (one rng draw)."""
+    weights = [_prac_capacity(p) for p in items]
+    total = sum(weights)
+    if total <= 0:
+        return rng.choice(items)
+    r = rng.random() * total
+    for p, w in zip(items, weights):
+        r -= w
+        if r <= 0:
+            return p
+    return items[-1]
+
 
 def _pp(id_, name, nhs=False, monthly="0.00", dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20,
         exam_sp_dur=None, patient_friendly=None, site_id=None, colour=None):
@@ -950,6 +995,7 @@ def gen_patients(tdef, rng):
 
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
+    pp_weights = tdef.get("_pp_weights", {})
 
     patients = []
     for i in range(1, n+1):
@@ -967,7 +1013,12 @@ def gen_patients(tdef, rng):
         dentists = site_dentists.get(site_id, [])
         if not dentists:
             dentists = [p for p in prac_defs if p["role"]=="dentist"]
-        dentist = rng.choice(dentists)
+        # ==> BY CAPACITY, NOT UNIFORMLY. <== With every dentist full-time this made no
+        # difference, so it was never wrong before. With an FTE ladder it is the difference
+        # between a 0.1-FTE implantologist being handed a sixth of the list and then having
+        # nowhere to see them -- _book_slot would simply fail and the appointments would
+        # vanish, quietly emptying the diary again.
+        dentist = _weighted_prac(rng, dentists)
 
         # Assign hygienist (~75% of adults)
         hyg_list = site_hygienists.get(site_id, [])
@@ -977,8 +1028,23 @@ def gen_patients(tdef, rng):
         if use_nhs:
             pp_id = nhs_pp_id
         else:
+            # ==> WEIGHTED, NOT UNIFORM. <== rng.choice spreads patients evenly across whatever
+            # private plans the dentist offers, so simply making the Care Plan reachable would
+            # have put two thirds of the list on a monthly membership. The live practice runs
+            # 56.9% Private against 20.1% on capitation plans (eight Denplan tiers), and that
+            # ratio is the recurring-revenue story the plan reporting exists to tell.
             private_pps = [pid for pid in dentist["pp_ids"] if pid != nhs_pp_id]
-            pp_id = rng.choice(private_pps) if private_pps else dentist["pp_ids"][0]
+            if private_pps:
+                _w = [pp_weights.get(pid, 1.0) for pid in private_pps]
+                _r = rng.random() * sum(_w)
+                pp_id = private_pps[-1]
+                for _pid, _wi in zip(private_pps, _w):
+                    _r -= _wi
+                    if _r <= 0:
+                        pp_id = _pid
+                        break
+            else:
+                pp_id = dentist["pp_ids"][0]
 
         # Demographics
         is_female = rng.random() < 0.52
@@ -1088,6 +1154,18 @@ def gen_patients(tdef, rng):
         # logic still derives from them.
         patients.append({
             "id": i,
+            # ==> ACTIVE PATIENTS ONLY. <== Date of birth was removed by V011's data
+            # minimisation and REINSTATED by V171 (2026-09-19) with a necessity assessment:
+            # without it the platform cannot tell an adult from a child, which NHS banding,
+            # age-appropriate recall intervals, and "is this uncontactable patient a child
+            # reachable through a parent?" all depend on. It inherits the V013 rule -- an
+            # inactive patient retains no date of birth, as they retain no name or contact
+            # detail either. See DPIA.md sec 7.3.
+            #
+            # dob was computed above (for the age-dependent choices) but never emitted, so
+            # every generated patient failed the "No Date of Birth" check: 100% of the demo
+            # practice against 0% of the live one.
+            "date_of_birth": str(dob) if is_active else None,
             "first_name": first,
             "preferred_name": preferred_name,
             "last_name": last,
@@ -1126,8 +1204,8 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     cr_ids = [c["id"] for c in tdef["cancellation_reasons"]]
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     params = tdef.get("_params", {})
-    dna_rate              = params.get("dna_rate", 0.05)
-    cancel_rate           = params.get("cancel_rate", 0.03)
+    # dna_rate / cancel_rate are read by _add_disruption, not here -- see the note on the
+    # exam state roll below.
     treatment_followup_rate = params.get("treatment_followup_rate", 0.35)
     max_tx_followups      = params.get("max_tx_followups", 1)
     bbyl_rate_tx          = params.get("bbyl_rate_tx", 0.35)
@@ -1135,6 +1213,15 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     hygiene_rate_private  = params.get("hygiene_rate_private", 0.4)
     bbyl_rate_hyg         = params.get("bbyl_rate_hyg", 0.40)
     recall_booking_rate   = params.get("recall_booking_rate", 0.35)
+    # Exams booked at the previous visit. Defaults to the treatment rate -- the same
+    # behaviour, on the appointment type where it is most common.
+    bbyl_rate_exam        = params.get("bbyl_rate_exam", params.get("bbyl_rate_tx", 0.78))
+    # Share of the list who stop attending at some point and never return. Solved against the
+    # live practice's 13.7% dormant-two-years and 12.2% at-risk: those overlap, and a patient
+    # who lapsed early in the window counts to both, so the draw sits above either figure.
+    lapse_rate            = params.get("lapse_rate", 0.22)
+    # Hygiene books forward at the desk -- see the forward-hygiene pass below.
+    hyg_forward_rate      = params.get("hyg_forward_rate", 0.33)
 
     appointments = []
     apt_id = 0
@@ -1146,32 +1233,75 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
     for pid in prac_dates:
         prac_dates[pid].sort()
 
+    # ==> THE PRACTICE'S SPECIALISTS. <== A share of private treatment is REFERRED to them
+    # rather than done by the patient's own dentist, which is how a real practice works and
+    # the reason a 0.1-FTE implantologist can out-earn a full associate per hour. Implant
+    # placement is 1800 for 90 minutes and an implant crown 1200 for 60 -- around 1200/hour
+    # against an associate's ~210 -- which is the single contrast the whole practitioner
+    # contribution report exists to show. Keyed on custom_role, so role stays 'dentist' and
+    # they remain bookable and countable as one everywhere else.
+    spec_pids = [p["id"] for p in tdef["_prac_defs"]
+                 if (p.get("custom_role") or "") in _SPECIALIST_ROLES]
+    spec_referral_rate = params.get("spec_referral_rate", 0.05)
+
     # Hygienist IDs by site
     site_hygienists = {}
     for p in tdef["_prac_defs"]:
         if p["role"] == "hygienist":
             site_hygienists.setdefault(p["site_id"], []).append(p["id"])
 
+    # ==> A DAY'S SLOTS ARE THAT PRACTITIONER'S OWN DAY. <== _book_slot capped every
+    # practitioner at a flat 20 appointments per day and _slot_times drew a start anywhere in
+    # the first seven hours, both of which assume everybody works a full one. With an FTE
+    # ladder that breaks immediately: the half-day associate specialist and the one-day
+    # hygienist were booked to 151% and 167% of their own diary, and given start times hours
+    # after they had gone home.
+    def _day_mins(p):
+        def _m(t):
+            return int(t[:2]) * 60 + int(t[3:5])
+        hrs = (_m(p.get("end_time") or "17:00") - _m(p.get("start_time") or "09:00")) / 60.0 - 1.0
+        return max(30, int(round(max(0.5, hrs) * 60)))
+
+    # ==> CAP THE DAY IN MINUTES, NOT IN APPOINTMENTS. <== The cap used to be a count of
+    # 30-minute slots, which silently assumes every appointment fills one. They do not: an
+    # exam is 15-25 minutes and the practice average came out at 19-20. Every dentist was
+    # therefore pinned at exactly 100% of their slot count while their diary was only 62%
+    # full -- 15 appointments averaging 20 minutes is five hours of a seven-and-a-half hour
+    # day. Chair utilisation could not exceed about two thirds no matter how the roster was
+    # sized, which is the wall this kept hitting.
+    prac_day_mins = {p["id"]: _day_mins(p) for p in tdef["_prac_defs"]}
+    # Retained only to spread start times across the day.
+    prac_slots = {k: max(1, v // 30) for k, v in prac_day_mins.items()}
+
     # Slot tracker: prac_id → {date_str: count} (O(1) per lookup)
     used_slots = {}
 
-    def _book_slot(pid, dates_list, after_date=None, before_date=None):
-        """Find an unused date for practitioner pid."""
-        for _ in range(50):
-            if not dates_list:
-                return None
-            dstr = rng.choice(dates_list)
-            d = date.fromisoformat(dstr)
-            if after_date and d < after_date:
-                continue
-            if before_date and d > before_date:
-                continue
-            key = (pid, dstr)
-            used = used_slots.setdefault(pid, {})
-            count = used.get(dstr, 0)
-            if count < 20:
-                used[dstr] = count + 1
-                return d
+    def _book_slot(pid, dates_list, after_date=None, before_date=None, dur_min=30):
+        """Find an unused date for practitioner pid, searching the window directly.
+
+        ==> THIS WAS SILENTLY DROPPING APPOINTMENTS. <== It drew 50 random dates from the
+        practitioner's ENTIRE working life and discarded any falling outside the requested
+        window. A 60-day window against a ~1,500-day range is a 4% hit rate per draw, so a
+        meaningful share of bookings ran out of attempts and returned None -- and every
+        caller treats None as "no appointment", so the visit just vanished. Exams were coming
+        out at 0.52 per patient per year against the ~1.2 the recall intervals imply.
+
+        The dates are already sorted, so bisect the window and draw inside it: the miss rate
+        goes to zero and it is faster besides.
+        """
+        if not dates_list:
+            return None
+        lo = bisect.bisect_left(dates_list, str(after_date)) if after_date else 0
+        hi = bisect.bisect_right(dates_list, str(before_date)) if before_date else len(dates_list)
+        if lo >= hi:
+            return None
+        used = used_slots.setdefault(pid, {})
+        cap = prac_day_mins.get(pid, 450)
+        for _ in range(min(50, hi - lo)):
+            dstr = dates_list[rng.randrange(lo, hi)]
+            if used.get(dstr, 0) + dur_min <= cap:
+                used[dstr] = used.get(dstr, 0) + dur_min
+                return date.fromisoformat(dstr)
         return None
 
     def _slot_times(d, slot_n, dur_min):
@@ -1209,33 +1339,88 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             pat_start = max(START, date.fromisoformat(pat_created_str))
         except ValueError:
             pat_start = START
-        recall_months = 6 if is_nhs else 12
+        # ==> READ THE PLAN, DO NOT ASSUME IT. <== This was hardcoded, so the exam cadence
+        # ignored dentist_recall_interval entirely and every private patient was put on a
+        # 12-month recall no matter what their plan said. Changing a plan's interval had no
+        # effect on anything -- which is exactly the kind of setting that looks configured
+        # and is not.
+        recall_months = (pp_by_id.get(pp_id, {}).get("dentist_recall_interval")
+                         or (6 if is_nhs else 12))
         months_in_practice = max(recall_months, (TODAY - pat_start).days // 30)
         n_exams = (months_in_practice // recall_months) + rng.randint(0, 1)
         n_exams = min(n_exams, (72 // recall_months) + 2)  # cap at ~6.5 years
 
+        # Drawn ONCE per patient: where in their own recall cycle they happen to sit today.
+        # This is the thing that levels the practice's load -- see the comment on the legacy
+        # branch below for what its absence did to the diary.
+        recall_interval = max(30, recall_months * 30)
+        recall_phase = rng.randint(0, recall_interval - 1)
+
+        # ==> A REAL LIST HAS A LONG TAIL WHO SIMPLY STOPPED COMING. <== Every generated
+        # patient used to run an unbroken recall cycle right up to today, so essentially
+        # nobody had lapsed. Against the live practice that left the demo's recovery reports
+        # -- the ones the product is actually sold on -- almost empty:
+        #
+        #                       Valley       Maple        proportionate
+        #     at risk           76 (2.0%)    857 (12.2%)  ~460
+        #     dormant 2 years   5 (0.13%)    964 (13.7%)  ~515
+        #
+        # A prospect opening the demo would watch the headline capability find nothing. So a
+        # share of patients stop attending at some point in the window and are never seen
+        # again: no later exams, and no forward recall booking either, or they would not be
+        # lapsed at all. Not before 15% of the window, so a lapsed patient still has enough
+        # history behind them to be recognisable as a patient rather than a stub.
+        lapse_after = None
+        if rng.random() < lapse_rate:
+            lapse_after = START + timedelta(
+                days=rng.randint(int((TODAY - START).days * 0.15), (TODAY - START).days))
+
+        # A practice marks someone inactive BECAUSE they stopped coming, so an inactive
+        # patient is always a lapsed one. Drawing the two independently left 309 patients
+        # (6.1%) holding a future booking against an inactive record -- the "Booked but
+        # Marked Inactive" check -- where the live practice has 4 (0.06%).
+        if not pat.get("active", True) and lapse_after is None:
+            lapse_after = START + timedelta(
+                days=rng.randint(int((TODAY - START).days * 0.15), (TODAY - START).days))
+
         # Spread exams across START..TODAY
         exam_codes_used = []
         prev_exam_date = None
+        last_hyg_date  = None          # for the forward hygiene booking below
 
         for exam_num in range(n_exams):
             # Target date — new patients use pat_start as anchor; legacy use even distribution
             if pat_start > START:
                 target = pat_start + timedelta(days=int(exam_num * recall_months * 30))
             else:
-                target = START + timedelta(days=int(exam_num * (36 / n_exams) * 30.5))
-            if target >= TODAY:
-                # Future exam
-                target = TODAY + timedelta(days=rng.randint(7, 180))
-                if target > FWD_END:
-                    break
-                d = _book_slot(pid, pdates, after_date=TODAY)
-            else:
-                d = _book_slot(pid, pdates, after_date=target - timedelta(30),
-                               before_date=target + timedelta(30))
-            if d is None:
-                continue
-
+                # ==> LEGACY PATIENTS EACH NEED THEIR OWN PHASE, NOT A SHARED ONE. <== Two
+                # separate bugs have lived on this line, and the second was the dangerous one.
+                #
+                # It first read (36 / n_exams) -- a hardcoded 36 months divided across whatever
+                # window was configured -- so every legacy patient's exam history was crammed
+                # into the first THREE years of a SIX-year window: 13,357 appointments in 2022
+                # against 1,420 in 2026.
+                #
+                # Spreading evenly across the REAL span fixed the years and not the diary. It
+                # still started every legacy patient at exactly START and stepped them in
+                # lockstep, so each one's last exam landed at (n-1)/n of the window and not a
+                # single one fell in the final recall interval. The five months up to today
+                # emptied out -- 624 appointments in April against 100 in September -- which is
+                # precisely the period a demo opens on and the period the traffic-light home
+                # page reads.
+                #
+                # A real practice is phase-random: its patients sit at every point of their own
+                # recall cycle, and that is what makes the load level instead of a wave. So step
+                # from the patient's own phase by their own recall interval.
+                target = START + timedelta(days=recall_phase + exam_num * recall_interval)
+            # exam_num > 0: a lapse point drawn before the patient's first exam would leave
+            # them with no appointments at all, which is a different thing entirely -- it
+            # registers as "Never Attended", and pushed that check from 1.1% to 5.2% against
+            # the live practice's 1.5%. Someone who stopped coming has to have come once.
+            if exam_num > 0 and lapse_after is not None and target > lapse_after:
+                break
+            # Worked out BEFORE booking: the day is now budgeted in minutes, so the slot
+            # has to know how long the appointment is before it can be reserved.
             # First ever appointment = extensive exam (0111), subsequent = routine (0101)
             is_first = (prev_exam_date is None and exam_num == 0)
             exam_code = 111 if is_first else 101
@@ -1244,18 +1429,32 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
             pp_exam_dur = pp_by_id.get(pp_id, {}).get("exam_dur", 20)
             dur = pp_exam_dur if is_first else max(10, pp_exam_dur - 5)
 
-            is_past = d < TODAY
-            if is_past:
-                r = rng.random()
-                if r < dna_rate:                    state = "did_not_attend"
-                elif r < dna_rate + cancel_rate:    state = "cancelled"
-                else:                               state = "completed"
+            if target >= TODAY:
+                # Left EVEN across the horizon on purpose. Front-loading this as well as
+                # bounding recall bookings to their due date (below) put weeks 0-3 at 93% and
+                # 89% against the live practice's 68% and 64% -- a diary with no room in it.
+                # Bounding the recalls was the fix; this did not also need changing.
+                target = TODAY + timedelta(days=rng.randint(7, 180))
+                if target > FWD_END:
+                    break
+                d = _book_slot(pid, pdates, after_date=TODAY, dur_min=dur)
             else:
-                state = "booked"
+                d = _book_slot(pid, pdates, after_date=target - timedelta(30),
+                               before_date=target + timedelta(30), dur_min=dur)
+            if d is None:
+                continue
+
+            is_past = d < TODAY
+            # Disruption is NOT decided here any more. It used to be rolled only on exams,
+            # so treatment and hygiene appointments could never be cancelled or missed and
+            # the practice-wide rates came out at a quarter of what was configured. One pass
+            # at the end of generate_tenant now owns it for every appointment type --
+            # see _add_disruption.
+            state = "completed" if is_past else "booked"
 
             cancel_id = rng.choice(cr_ids) if state in ("cancelled","did_not_attend") else None
             slot_n = used_slots.get(pid, {})
-            start_t, end_t = _slot_times(d, rng.randint(0,14), dur)
+            start_t, end_t = _slot_times(d, rng.randint(0, prac_slots.get(pid, 15) - 1), dur)
             apt_id += 1
             appointments.append({
                 "id": apt_id,
@@ -1273,7 +1472,16 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 "appointment_cancellation_reason_id": cancel_id,
                 "online_booking": False,
                 "booked_via_api": False,
-                "pending_at": _booked_on(d, apt_id),
+                # ==> THE CHECK-UP IS THE CLASSIC BOOK-BEFORE-YOU-LEAVE. <== BBYL is measured
+                # as pending_at == the patient's previous appointment date, over ALL
+                # appointments. It was set on treatment, hygiene and recall bookings but never
+                # on exams, which took a generic 7-41 day lead instead -- so the metric read
+                # 37.6% against the live practice's 67.9%, on a practice whose own parameters
+                # say 0.78. Booking the next check-up on the way out is exactly what the
+                # metric is asking about, so it has to be modelled where it actually happens.
+                "pending_at": (_iso(prev_exam_date) if (prev_exam_date is not None
+                                                        and rng.random() < bbyl_rate_exam)
+                               else _booked_on(d, apt_id)),
                 "arrived_at": _iso(d, start_t) if state == "completed" else None,
                 "completed_at": _iso(d, end_t) if state == "completed" else None,
                 "cancelled_at": _iso(d) if state == "cancelled" else None,
@@ -1293,18 +1501,31 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                 tx_last_date = d
                 for _tx_i in range(max_tx_followups):
                     if rng.random() < treatment_followup_rate and is_past:
-                        # ~12% chance is a Review-type appointment
-                        if rng.random() < 0.12:
-                            tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                        # Referred to a specialist, or kept in-house? NHS work is not
+                        # referred out -- implant treatment is private by definition.
+                        _ref = (spec_pids and not is_nhs
+                                and rng.random() < spec_referral_rate)
+                        if _ref:
+                            tx_code = rng.choice([2101, 2102, 2103])   # consult / place / crown
+                            tdur    = 90 if tx_code == 2102 else (45 if tx_code == 2101 else 60)
+                            tpid    = rng.choice(spec_pids)
                         else:
-                            tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
+                            # ~12% chance is a Review-type appointment
+                            if rng.random() < 0.12:
+                                tx_code = rng.choice([2001, 2002, 2011, 2101, 9101, 9102])
+                            else:
+                                tx_code = rng.choice([1401, 1421, 1201, 201, 801, 1301])
+                            tdur = 30
+                            tpid = pid
                         ttx = tx_by_code.get(tx_code)
-                        tdur = 30
-                        td = _book_slot(pid, pdates,
+                        if tpid not in prac_dates:
+                            tpid = pid
+                        td = _book_slot(tpid, prac_dates[tpid],
                                         after_date=tx_last_date + timedelta(3),
-                                        before_date=tx_last_date + timedelta(42))
+                                        before_date=tx_last_date + timedelta(42),
+                                        dur_min=tdur)
                         if td:
-                            ts_t, te_t = _slot_times(td, rng.randint(0,14), tdur)
+                            ts_t, te_t = _slot_times(td, rng.randint(0, prac_slots.get(tpid, 15) - 1), tdur)
                             tx_state  = "completed" if td < TODAY else "booked"
                             tx_bbyl   = rng.random() < bbyl_rate_tx
                             tx_online = (not tx_bbyl) and rng.random() < 0.20
@@ -1312,8 +1533,11 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                             appointments.append({
                                 "id": apt_id,
                                 "patient_id": pat_id,
-                                "practitioner_id": pid,
-                                "user_id": pid,
+                                # tpid, not pid -- a referred case belongs to the specialist
+                                # who did it, or the contribution report credits the wrong
+                                # practitioner and the whole point of the referral is lost.
+                                "practitioner_id": tpid,
+                                "user_id": tpid,
                                 "payment_plan_id": pp_id,
                                 "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
                                 "start_time": _iso(td, ts_t),
@@ -1340,17 +1564,33 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                             })
                             tx_last_date = td
 
-                # Hygiene appointment (every 6 months for care plan / NHS, annually for private)
+                # ==> HYGIENE HAS ITS OWN CADENCE. <== This booked at most ONE hygiene visit
+                # per exam, so a private patient on annual exams got 0.4 scale-and-polishes a
+                # year where their plan says six-monthly -- and a Premium patient on a
+                # three-month hygiene interval got the same 0.4 instead of four. Measured
+                # against the live practice the hygienists were running 17.3 appointment hours
+                # a week against a pro-rata 50.1, on a diary that was already the right size:
+                # 30% chair utilisation purely because the work was never generated.
+                #
+                # Visits per exam cycle is the ratio of the two intervals the payment plan
+                # actually carries, each staggered a hygiene-interval apart, each still
+                # subject to the compliance rate -- not everybody attends.
                 hyg_pids = site_hygienists.get(site_id, [])
                 hyg_chance = hygiene_rate_nhs if (is_nhs or is_care) else hygiene_rate_private
-                if hyg_pids and rng.random() < hyg_chance:
+                _ppd  = pp_by_id.get(pp_id, {})
+                _dr_m = _ppd.get("dentist_recall_interval") or recall_months
+                _hr_m = _ppd.get("hygienist_recall_interval") or _dr_m
+                for _h_i in range(max(1, int(round(_dr_m / max(1, _hr_m))))):
+                    if not (hyg_pids and rng.random() < hyg_chance):
+                        continue
                     hpid = rng.choice(hyg_pids)
                     if hpid in prac_dates:
+                        _h_lo = 14 + int(_h_i * _hr_m * 30)
                         hd = _book_slot(hpid, prac_dates[hpid],
-                                        after_date=d + timedelta(14),
-                                        before_date=d + timedelta(90))
+                                        after_date=d + timedelta(_h_lo),
+                                        before_date=d + timedelta(_h_lo + 76), dur_min=30)
                         if hd:
-                            hs_t, he_t = _slot_times(hd, rng.randint(0,14), 30)
+                            hs_t, he_t = _slot_times(hd, rng.randint(0, prac_slots.get(hpid, 15) - 1), 30)
                             htx = tx_by_code.get(1001)
                             hyg_state  = "completed" if hd < TODAY else "booked"
                             hyg_bbyl   = rng.random() < bbyl_rate_hyg
@@ -1385,16 +1625,70 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
                                 "confirmed_at": None,
                                 "in_surgery_at": _iso(hd, hs_t) if hyg_state == "completed" else None,
                             })
+                            if last_hyg_date is None or hd > last_hyg_date:
+                                last_hyg_date = hd
+
+        # ==> HYGIENE BOOKS FORWARD; NOTHING HERE DID. <== Every hygiene visit was generated
+        # relative to a PAST exam, so the forward hygiene book was only whatever happened to
+        # spill past today. There is a forward-booking pass for recall exams and there was
+        # none for hygiene at all -- which is why the demo's hygienists decayed from 60% full
+        # to 30% over eight weeks while the live practice's sit at 80-91% throughout. A
+        # hygiene patient books the next one on the way out; that is the whole reason a
+        # hygienist's diary is the fullest thing in a practice.
+        if (hyg_forward_rate and last_hyg_date is not None and lapse_after is None
+                and pat.get("active", True) and rng.random() < hyg_forward_rate):
+            _hp = site_hygienists.get(site_id, [])
+            if _hp:
+                hf_pid  = rng.choice(_hp)
+                _hr_mth = (pp_by_id.get(pp_id, {}).get("hygienist_recall_interval") or 6)
+                hf_due  = last_hyg_date + timedelta(days=int(_hr_mth * 30))
+                # Already overdue: they are booked into the coming weeks, not the past.
+                if hf_due < TODAY + timedelta(days=3):
+                    hf_due = TODAY + timedelta(days=rng.randint(3, 45))
+                if hf_pid in prac_dates and hf_due <= FWD_END:
+                    hf = _book_slot(hf_pid, prac_dates[hf_pid],
+                                    after_date=max(TODAY, hf_due - timedelta(21)),
+                                    before_date=min(FWD_END, hf_due + timedelta(21)),
+                                    dur_min=30)
+                    if hf is not None and hf >= TODAY:
+                        hs2, he2 = _slot_times(hf, rng.randint(0, prac_slots.get(hf_pid, 15) - 1), 30)
+                        _bbyl = rng.random() < bbyl_rate_hyg
+                        apt_id += 1
+                        appointments.append({
+                            "id": apt_id, "patient_id": pat_id,
+                            "practitioner_id": hf_pid, "user_id": hf_pid,
+                            "payment_plan_id": pp_id,
+                            "room_id": rng.choice(rooms_by_site.get(site_id, [None])),
+                            "start_time": _iso(hf, hs2), "finish_time": _iso(hf, he2),
+                            "duration": 30, "state": "booked", "reason": "Scale & Polish",
+                            "treatment_id": (tx_by_code.get(_HYGIENE_CODE) or {}).get("id"),
+                            "appointment_cancellation_reason_id": None,
+                            "online_booking": False, "booked_via_api": _bbyl,
+                            "pending_at": (_iso(last_hyg_date) if _bbyl
+                                           else _booked_on(hf, apt_id)),
+                            "arrived_at": None, "completed_at": None, "cancelled_at": None,
+                            "did_not_attend_at": None, "uuid": _u5("apt", tid, apt_id),
+                            "patient_name": None, "patient_image_url": None, "notes": None,
+                            "treatment_description": None, "confirmed_at": None,
+                            "in_surgery_at": None,
+                        })
 
         # recall_booking_rate of patients who have had exams get a future booked recall appointment.
         # Simulates patients who have already scheduled their next recall visit.
-        if prev_exam_date is not None and rng.random() < recall_booking_rate:
+        if (prev_exam_date is not None and lapse_after is None
+                and rng.random() < recall_booking_rate):
             due_date = prev_exam_date + timedelta(days=recall_months * 30)
-            after_d  = max(TODAY, due_date - timedelta(14))
-            before_d = FWD_END
-            fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d)
+            after_d  = max(TODAY, due_date - timedelta(21))
+            # Bounded to the due date rather than the whole forward horizon. _book_slot picks
+            # uniformly inside the window, so leaving this at FWD_END scattered recall
+            # bookings across fourteen months and left the weeks a practice actually looks at
+            # nearly empty -- the dentist book fell to 18% by week six against the live
+            # practice's 37%.
+            before_d = min(FWD_END, due_date + timedelta(75))
+            fd = _book_slot(pid, pdates, after_date=after_d, before_date=before_d,
+                            dur_min=20)
             if fd is not None and fd >= TODAY:
-                fs_t, fe_t = _slot_times(fd, rng.randint(0, 14), 20)
+                fs_t, fe_t = _slot_times(fd, rng.randint(0, prac_slots.get(pid, 15) - 1), 20)
                 booked_on   = tx_last_date
                 rc_online   = rng.random() < 0.35
                 rc_bbyl     = (not rc_online) and rng.random() < bbyl_rate_tx
@@ -1433,12 +1727,257 @@ def gen_appointments(tdef, patients, diary_set, prac_defs_by_id, tx_by_code, roo
 
 # ─── TREATMENT PLANS & ITEMS ──────────────────────────────────────────────────
 
+def _add_disruption(tdef, appointments, rng):
+    """Cancellations and DNAs, as ADDITIONAL rows against the visits that replaced them.
+
+    ==> A REAL DIARY IS A QUARTER CANCELLATIONS. <== Measured on the live practice --
+    tenant 100, patient appointments only (fk_Patient > 0, so the lunchtime blocking-out
+    rows are excluded), last 90 days:
+
+        102 appointments per working day   7,034 active patients
+        26.1% cancelled                    1.93% did not attend
+
+    This generator was producing 0.7% and 0.8%: a practice where almost nothing ever goes
+    wrong. That is the tell a dentist spots before they read a single number, and it is the
+    one thing a demo cannot afford, because every recovery feature in the product exists to
+    deal with exactly this churn -- an empty cancellation list makes the product look
+    pointless rather than making the practice look good.
+
+    ==> THEY ARE EXTRA ROWS, NOT RE-ROLLED STATES. <== The obvious implementation is to take
+    an appointment and call it cancelled instead of completed. That is wrong twice over: it
+    deletes a clinical episode that the invoices, treatment plans and NHS claims were all
+    built from, and it makes the practice quieter still when it was already too quiet. What
+    actually happens is that a patient cancels and rebooks, so the SAME visit occupies two
+    slots in the diary and only the second one completes. Cloning to an earlier date models
+    that exactly, leaves every completed visit intact, and is also what closes the density
+    gap -- 33.6 appointments per working day against a pro-rata target of ~58 for a
+    4,000-patient list.
+
+    Rates are solved backwards from the live figures. Cloning at probability c against N
+    completed visits gives c/(1+c+d) cancelled, so 26% needs c~=0.36, not 0.26.
+
+    Runs LAST, after every other generator has consumed the appointment list. Each of them
+    filters on completed-and-past, so an earlier insertion would be harmless today -- but
+    they would silently start linking treatment plans and invoices to cancelled slots the
+    moment one of those filters was relaxed.
+    """
+    params      = tdef.get("_params", {})
+    cancel_rate = params.get("cancel_rate", 0.36)
+    dna_rate    = params.get("dna_rate", 0.042)
+    # Share of patients with nothing booked who cancelled recently and were never chased.
+    # The live practice carries 79 of 7,034 active on this route, ~1.1%.
+    # Most people who stop coming stop ON something -- a missed appointment or one they
+    # cancelled and never rebooked. At 0.02 the demo had 31 unrebooked cancellations and no
+    # unrebooked DNAs at all, against 2,203 and 454 on the live practice.
+    stranded_rate = params.get("stranded_rate", 0.9)
+    cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
+    tid         = tdef["tenant_id"]
+    if not cr_ids:
+        return
+
+    next_id = max((a["id"] for a in appointments), default=0)
+    extra   = []
+    today_s = str(TODAY)
+
+    def _cancelled_on(slot_d, seq):
+        """When the patient rang, not when the slot was.
+
+        Gold.Fact_Appointments flags a cancellation as short notice when it was made 0 or 1
+        days before the slot. Recording every one of them ON the slot date made all of them
+        short notice and pinned that metric at 100%, against the live practice's 17% -- a
+        practice where nobody ever gives any warning. Most people cancel days or weeks out.
+        Never earlier than the booking itself, which _booked_on puts 7-41 days ahead.
+        """
+        lead = rng.randint(0, 1) if rng.random() < 0.17 else rng.randint(2, 30)
+        booked = slot_d - timedelta(days=7 + (seq % 35))
+        return max(slot_d - timedelta(days=lead), booked)
+
+    for a in appointments:
+        # Future bookings get a cancelled predecessor too -- a patient who cancels and
+        # rebooks into next month is the single commonest event in a diary. Restricting
+        # this to past visits left the last six weeks with no incoming clones at all
+        # (nothing after today is "completed"), which is exactly the stretch the day book
+        # and the traffic-light page are read on. A DNA, though, can only be recorded
+        # against a date that has actually passed.
+        if a["state"] not in ("completed", "booked"):
+            continue
+        is_future = a["start_time"][:10] >= today_s
+        if is_future and a["state"] != "booked":
+            continue
+        if not is_future and a["state"] != "completed":
+            continue
+        rolls = ((cancel_rate, "cancelled"),) if is_future else                 ((cancel_rate, "cancelled"), (dna_rate, "did_not_attend"))
+        for prob, st in rolls:
+            if rng.random() >= prob:
+                continue
+            orig = date.fromisoformat(a["start_time"][:10])
+            # The abandoned slot sat 3-45 days before the visit that replaced it.
+            cd = orig - timedelta(days=rng.randint(3, 45))
+            if cd < START:
+                continue
+            if cd.weekday() >= 5:               # practices are shut at the weekend
+                cd -= timedelta(days=cd.weekday() - 4)
+            next_id += 1
+            c = dict(a)
+            c.update({
+                "id":                 next_id,
+                "uuid":               _u5("apt", tid, next_id),
+                "start_time":         _iso(cd, a["start_time"][11:19]),
+                "finish_time":        _iso(cd, a["finish_time"][11:19]),
+                "state":              st,
+                "appointment_cancellation_reason_id": rng.choice(cr_ids),
+                # Booked 7-41 days ahead of the slot it was booked into, exactly as
+                # _booked_on does for the appointment this one was cloned from.
+                "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
+                "arrived_at":         None,
+                "completed_at":       None,
+                "in_surgery_at":      None,
+                "confirmed_at":       None,
+                "cancelled_at":       _iso(_cancelled_on(cd, next_id)) if st == "cancelled" else None,
+                # A DNA is recorded on the day itself -- there is nothing to record earlier.
+                "did_not_attend_at":  _iso(cd) if st == "did_not_attend" else None,
+            })
+            extra.append(c)
+
+    appointments.extend(extra)
+
+    # ==> AND SOME CANCELLATIONS ARE NEVER REBOOKED. <== Everything above clones a cancelled
+    # slot in FRONT of a visit that went ahead, so by construction every one of them was
+    # rebooked. That left the "Cancelled Not Rebooked" retention route at zero against the
+    # live practice's 79 -- and that route is not incidental, it is the single clearest thing
+    # the product exists to surface: somebody rang up, cancelled, and nobody ever chased them.
+    #
+    # These are the patients Gold.Fact_Patient_At_Risk looks for -- cancelled within 90 days,
+    # no future appointment, still inside the 730-day active window -- so the cancellation is
+    # placed in the recent past and only against patients who have nothing booked ahead.
+    future_pats = {a["patient_id"] for a in appointments
+                   if a["state"] == "booked" and a["start_time"][:10] >= today_s}
+    latest = {}
+    for a in appointments:
+        if a["state"] == "completed" and a["start_time"][:10] < today_s:
+            k = a["patient_id"]
+            if k not in latest or a["start_time"] > latest[k]["start_time"]:
+                latest[k] = a
+    stranded = []
+    for pid_, a in latest.items():
+        if pid_ in future_pats or rng.random() >= stranded_rate:
+            continue
+        # ==> PLACED AFTER THEIR LAST VISIT, NOT JUST RECENTLY. <== Pinning these to the last
+        # 90 days meant only patients who drifted away THIS quarter ever ended on one. Every
+        # DNA the generator made was followed by a later visit, so not a single one was
+        # outstanding: the Day Book's "DNAs To Rebook" -- the practice's actual work list --
+        # read zero for every practitioner, against 454 on the live practice.
+        #
+        # Somebody who stopped coming two years ago also stopped on something. Dating it from
+        # their last attended visit puts terminal events across the whole window, and still
+        # lands recent ones inside the 90 days the at-risk route looks at.
+        last_d = date.fromisoformat(a["start_time"][:10])
+        # ==> ONLY PATIENTS WHO HAVE ACTUALLY DRIFTED. <== "No future appointment" describes
+        # most of an active list on any given day -- someone seen last month who has not
+        # rebooked yet is not a leaver. Applying a terminal no-show to all of them invented
+        # 1,600 recent ones and took the diary from 50 appointments per working day to 85.
+        # Four months without a visit is the point at which not rebooking means something.
+        if last_d > TODAY - timedelta(days=120):
+            continue
+        cd = last_d + timedelta(days=rng.randint(7, 60))
+        if cd >= TODAY:
+            # They were seen recently and simply have nothing booked yet -- which is most of
+            # the list on any given day, not a leaver. Relocating these into the last 40 days
+            # instead of skipping them piled 1,600 invented no-shows into the recent window:
+            # appointments per working day went from 50 to 87, and the at-risk "Cancelled Not
+            # Rebooked" route from 82 to 287 against the live practice's 79.
+            continue
+        if cd.weekday() >= 5:
+            cd -= timedelta(days=cd.weekday() - 4)
+        if cd <= last_d:
+            continue                      # cannot miss a slot before the last one attended
+        # A no-show and a cancellation are different work: one is chased, the other rebooked.
+        # The live practice runs roughly one DNA to every five unrebooked cancellations.
+        st_term = "did_not_attend" if rng.random() < 0.17 else "cancelled"
+        next_id += 1
+        c = dict(a)
+        c.update({
+            "id":                 next_id,
+            "uuid":               _u5("apt", tid, next_id),
+            "start_time":         _iso(cd, a["start_time"][11:19]),
+            "finish_time":        _iso(cd, a["finish_time"][11:19]),
+            "state":              st_term,
+            "appointment_cancellation_reason_id": rng.choice(cr_ids),
+            "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
+            "arrived_at":         None,
+            "completed_at":       None,
+            "in_surgery_at":      None,
+            "confirmed_at":       None,
+            "cancelled_at":       (_iso(_cancelled_on(cd, next_id))
+                                   if st_term == "cancelled" else None),
+            "did_not_attend_at":  _iso(cd) if st_term == "did_not_attend" else None,
+        })
+        stranded.append(c)
+
+    appointments.extend(stranded)
+
+
+# Dentally's own vocabulary, taken from the live practice's appointments. The generator works
+# internally in lowercase snake_case, which is NOT what the source system emits:
+#
+#     generated        live (tenant 100)        rows
+#     completed        Completed             107,171
+#     cancelled        Cancelled              32,182
+#     booked           Pending                 6,966
+#     did_not_attend   Did not attend          3,080
+#
+# Nothing computes on this column -- Gold derives Is_Completed / Is_Cancelled / Is_DNA from the
+# Completed_At / Cancelled_At / Did_Not_Attend_At timestamps -- so it is purely the label a user
+# reads. Which is exactly why it matters on a demo: a day book showing "did_not_attend" beside a
+# patient's name reads as somebody's database, not as their practice management system.
+#
+# Applied as a LAST pass so every generator above it can keep comparing on the internal names.
+# Live also carries Confirmed, Arrived and In surgery, but at 3, 3 and 14 rows against 149,000 --
+# transient same-day states. Synthesising them would be inventing noise, not fidelity.
+_STATE_LABELS = {
+    "completed":      "Completed",
+    "cancelled":      "Cancelled",
+    "booked":         "Pending",
+    "did_not_attend": "Did not attend",
+}
+
+
+def _relabel_states(appointments):
+    for a in appointments:
+        a["state"] = _STATE_LABELS.get(a["state"], a["state"])
+
+
 def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_map, rng):
     """fee_map: {(pp_id, tx_id): price_float}"""
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pat_pp = {p["id"]: p["payment_plan_id"] for p in patients}
     plan_acceptance_rate = tdef.get("_params", {}).get("plan_acceptance_rate", 1.0)
+    # ==> AN OPEN COURSE USUALLY HAS THE NEXT VISIT BOOKED. <== Gold splits open courses into
+    # 'In Progress' (a future appointment is attached) and 'Open - No Appointment' -- the
+    # status its own loader calls "the leaky bucket" -- and open_courses counts BOTH while
+    # open_courses_without_appt counts only the second. The generator attached a future
+    # appointment to no course at all, so 'In Progress' was empty and the two metrics were
+    # identical by construction: 396 and 396, which reads as every single open course having
+    # been abandoned.
+    #
+    # 0.7 rather than a half: the ratio is (In Progress + No Appt) / No Appt, so booking half
+    # of them gives 2.0x, not the 3-4x a practice that chases its treatment plans would show.
+    inprogress_booked_rate = tdef.get("_params", {}).get("inprogress_booked_rate", 0.7)
+    _prac_days = {pr["id"]: pr.get("work_days") or [0, 1, 2, 3, 4]
+                  for pr in tdef.get("_prac_defs", [])}
+    _next_apt_id = max((a["id"] for a in appointments), default=0)
+
+    # ==> A MEMBERSHIP PATIENT DOES NOT PAY FOR THEIR CHECK-UP. <== That is what the monthly
+    # fee buys, and it is also the ONLY evidence the warehouse has that they are on a plan:
+    # Gold.usp_Load_Fact_Revenue derives capitation member-days from completed, non-NHS,
+    # NON-CHARGED Exam/Hygiene courses. Every exam and hygiene here was charged, so no such
+    # course existed, so the demo produced no capitation revenue at all -- against 3.3m and
+    # 1.9m member-day rows on the live practice, where it is the single largest revenue line.
+    # Plan patients were also being billed per visit AND would have been billed monthly, so
+    # charging them was double-counting as well as hiding the stream.
+    cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
+                  if str(pp.get("monthly_charge") or "0").replace(".", "").strip("0")}
 
     # Practitioners available as referrers (dentists/orthodontists/specialists only)
     all_prac_ids = [p["id"] for p in tdef["_prac_defs"]
@@ -1510,7 +2049,20 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
             first_date = date.fromisoformat(first_apt["start_time"][:10])
             last_date = date.fromisoformat(last_apt["start_time"][:10])
 
-            would_complete = last_date < TODAY - timedelta(days=7)
+            # ==> THE PRACTICE HAD BILLED NOTHING FOR EIGHT DAYS. <== A course only completed
+            # -- and only a completed course raises an invoice -- once its last appointment
+            # was more than a WEEK old, so the final week of the window carried zero revenue
+            # on every single day. That is the week the day book, the revenue cards and the
+            # traffic-light page all read: the demo opened on a practice that appeared to
+            # have stopped trading, and deposit_ratio went to four figures because its
+            # denominator (that day's invoiced revenue) was nothing at all.
+            #
+            # The buffer only ever made sense for a course that might still have another
+            # appointment to come. A single-visit course -- a check-up, a hygiene visit, which
+            # between them are most of the daily billing -- is finished and invoiced the day
+            # it happens.
+            would_complete = (last_date < TODAY if len(cluster) == 1
+                              else last_date < TODAY - timedelta(days=7))
             # Private plans have higher in-progress rate (30%) to generate open course value.
             # NHS plans nearly always complete (3%) since item price=0 produces no open courses value.
             ip_prob = 0.03 if is_nhs else 0.30
@@ -1538,7 +2090,9 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nhs_cat = tx.get("nhs_treatment_cat") or 0
                 uda_b = tx.get("uda_band") or 0
 
-                if is_nhs:
+                covered = (pp_id in cap_pp_ids
+                           and (code in _EXAM_CODES or code == _HYGIENE_CODE))
+                if is_nhs or covered:
                     price = 0.0
                 else:
                     price = fee_map.get((pp_id, tx_id), 0.0)
@@ -1550,7 +2104,8 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
 
                 item_id += 1
                 item_uuid = _u5("tpi", tid, plan_id, pos)
-                plan_items_data.append((item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos))
+                plan_items_data.append((item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos,
+                                        covered))
 
             uda_val = max_uda if is_nhs else 0
             uda_str = str(uda_val) if uda_val > 0 else "0"
@@ -1592,7 +2147,23 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 "updated_at": _iso(last_date),
             })
 
-            for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos in plan_items_data:
+            # ==> AN IN-PROGRESS COURSE IS PART DONE. <== Every item took the PLAN's completed
+            # flag, so an in-progress course had none of its items completed -- and Gold reads
+            # that as 'Proposed' (nothing started) rather than 'Open - No Appointment', which
+            # the loader calls "the leaky bucket": started, unfinished, nothing booked. All 453
+            # of the demo's open courses were Proposed and not one was the thing the Day Book
+            # and the open-courses measures actually look for, so those read zero while the
+            # live practice showed 454.
+            #
+            # A stalled course has visits behind it and work outstanding. The attended ones are
+            # completed and the rest stay open, which is also what gives the course a real
+            # outstanding VALUE -- open_courses_value was running at 7% of the live practice's.
+            done_upto = len(plan_items_data)
+            if in_progress and len(plan_items_data) > 1:
+                done_upto = rng.randint(1, len(plan_items_data) - 1)
+
+            for item_uuid, tx_id, tx, price, nhs_cat, uda_b, apt, pos, covered in plan_items_data:
+                item_done = completed or (in_progress and pos < done_upto)
                 # ~6% of private items have a referring practitioner (different from treating)
                 referrer_id = None
                 if not is_nhs and rng.random() < 0.06:
@@ -1611,15 +2182,21 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "invoice_id": None,  # set later
                     "price": _fmt(price),
                     "duration": 30,
-                    "completed": completed,
-                    "completed_at": completed_at,
+                    "completed": item_done,
+                    "completed_at": completed_at if item_done else None,
                     "appear_on_invoice": True,
                     "base_chart": None,
-                    "charged": completed,
+                    # Not charged when the monthly fee covers it -- this is the membership
+                    # evidence the capitation half of Fact_Revenue keys on.
+                    "charged": item_done and not covered,
                     "position": pos,
                     "nhs_treatment_cat": nhs_cat if is_nhs else None,
                     "uda_band": uda_b if is_nhs else 0,
-                    "nomenclature": tx.get("nomenclature", tx.get("description","")),
+                    # Dentally's own wording, which the capitation query matches literally:
+                    # Nomenclature IN ('Exam','Hygiene 20','Hygiene 30','Routine Hygiene').
+                    "nomenclature": (('Routine Hygiene' if int(tx["code"]) == _HYGIENE_CODE
+                                      else 'Exam') if covered
+                                     else tx.get("nomenclature", tx.get("description",""))),
                     "patient_nomenclature": tx.get("patient_nomenclature", tx.get("description","")),
                     "notes": None,
                     "region": tx.get("region",""),
@@ -1628,6 +2205,60 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                     "created_at": _iso(first_date),
                     "updated_at": _iso(date.fromisoformat(apt["start_time"][:10])),
                 })
+
+            # The next visit in a course that is still running. Placed on a day the
+            # practitioner actually works, or it lands outside the diary and quietly damages
+            # the fill figures it has nothing to do with.
+            if in_progress and rng.random() < inprogress_booked_rate:
+                _pr = first_apt["practitioner_id"]
+                _days = _prac_days.get(_pr, [0, 1, 2, 3, 4])
+                if _days:
+                    _d = TODAY + timedelta(days=rng.randint(3, 56))
+                    for _ in range(7):
+                        if _d.weekday() in _days:
+                            break
+                        _d += timedelta(days=1)
+                    if _d.weekday() in _days:
+                        _next_apt_id += 1
+                        _open_tx = next((x[2] for x in plan_items_data
+                                         if not (completed or (in_progress and x[7] < done_upto))),
+                                        None)
+                        _st = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
+                        _en = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
+                        appointments.append({
+                            "id": _next_apt_id, "patient_id": pat_id,
+                            "practitioner_id": _pr, "user_id": _pr,
+                            "payment_plan_id": pp_id, "room_id": None,
+                            "start_time": _iso(_d, _st), "finish_time": _iso(_d, _en),
+                            "duration": 30, "state": "booked",
+                            "reason": "Continuing Treatment",
+                            "treatment_id": (_open_tx or {}).get("id"),
+                            "appointment_cancellation_reason_id": None,
+                            "online_booking": False, "booked_via_api": False,
+                            "pending_at": _iso(last_date),
+                            "arrived_at": None, "completed_at": None, "cancelled_at": None,
+                            "did_not_attend_at": None,
+                            "uuid": _u5("apt", tid, _next_apt_id),
+                            "patient_name": None, "patient_image_url": None, "notes": None,
+                            "treatment_description": None, "confirmed_at": None,
+                            "in_surgery_at": None,
+                        })
+                        # The LINK is what Gold reads -- an appointment on its own does not
+                        # make a course 'In Progress'; the Treatment_Appointments row does.
+                        ta_seq += 1
+                        t_appts.append({
+                            "id": _u5("ta", tid, _next_apt_id, plan_id),
+                            "appointment_id": _next_apt_id,
+                            "treatment_plan_id": plan_id,
+                            "patient_id": pat_id,
+                            "position": len(cluster),
+                            "bookable": True,
+                            "completed": False,
+                            "completed_at": None,
+                            "notes": None,
+                            "created_at": _iso(last_date),
+                            "updated_at": _iso(last_date),
+                        })
 
             # Treatment appointment join records
             for pos, apt in enumerate(cluster):
@@ -1653,6 +2284,12 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
 # ─── INVOICES & ITEMS ─────────────────────────────────────────────────────────
 
 def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng):
+    # Share of settled invoices that never got paid promptly. The live practice carries
+    # roughly two days of revenue as debt, so this is deliberately small.
+    # 0.0018, not 0.005: outstanding_invoices is a POINT-IN-TIME balance over all time, not
+    # a 12-month figure, so the rate applies to every invoice ever raised. At 0.005 that came
+    # to 27,892 against the live practice's 9,373 on a larger book.
+    unpaid_tail_rate = tdef.get("_params", {}).get("unpaid_invoice_rate", 0.0018)
     tid = tdef["tenant_id"]
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     admin_user_id = 0
@@ -1694,7 +2331,17 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             patient_charge = total_amount * (1 - disc_rate)
             band_num = None
 
-        is_paid = completed_date < TODAY - timedelta(days=30)
+        # ==> A DENTAL PRACTICE TAKES THE MONEY AT THE DESK. <== This marked EVERY invoice
+        # raised in the last 30 days as unpaid and everything older as paid, so outstanding
+        # debt was, by construction, exactly one month of revenue: 69,580 against the live
+        # practice's 8,604, which is about two days' worth. Patients pay at the visit, on the
+        # card, before they leave. What stays outstanding is a small tail of stragglers plus
+        # the day or two still settling -- not a month's billing.
+        _age = (TODAY - completed_date).days
+        if _age <= 2:
+            is_paid = rng.random() < 0.55
+        else:
+            is_paid = rng.random() > unpaid_tail_rate
         outstanding = 0.0 if is_paid else patient_charge
 
         invoices.append({
@@ -1853,7 +2500,12 @@ def gen_payments(tdef, invoices, rng, plans=None, patients_by_id=None):
                 continue
             dep_amount = pv * rng.uniform(0.2, 0.5)
             plan_date = date.fromisoformat(plan["created_at"][:10])
-            dep_date = plan_date + timedelta(days=rng.randint(1, 14))
+            # ==> A PAYMENT CANNOT BE IN THE FUTURE. <== A deposit 1-14 days after the plan
+            # was created lands after today for any plan started in the last fortnight. That
+            # put 38 payments on future dates, and because deposit_ratio is read as the
+            # LATEST day's deposits over that day's revenue, the newest day had deposits and
+            # no revenue at all -- so the metric read in the thousands of percent.
+            dep_date = min(plan_date + timedelta(days=rng.randint(1, 14)), TODAY)
             pay_seq += 1
             dep_id = pay_seq
             pat = patients_by_id.get(plan["patient_id"])
@@ -2037,16 +2689,36 @@ def gen_patient_stats(patients, apts_by_pat, inv_by_pat, pay_by_pat):
 
 # ─── RECALLS ──────────────────────────────────────────────────────────────────
 
-def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.01, ramp_days=30):
+def _suppress_rate(days_since_due, rate_recent=0.15, rate_old=0.03, ramp_days=30):
     """Linear ramp: rate_recent at day 0, rate_old at ramp_days+, flat thereafter."""
     t = min(1.0, days_since_due / ramp_days)
     return rate_recent + (rate_old - rate_recent) * t
 
-def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed):
-    """One recall record (dental or hygiene) with realistic reminder/suppression state."""
+def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed,
+                  status=None):
+    """One recall record (dental or hygiene) with realistic reminder/suppression state.
+
+    ==> DENTALLY'S OWN STATUSES, NOT INVENTED ONES. <== This produced "Pending" and
+    "Overdue", with a comment claiming they were TitleCased to match the real API. They are
+    not in it. The live practice carries Completed, Unbooked, Booked and Missed, and every
+    recall metric keys on those literally:
+
+        dentist/hygiene_recall_conversion   Status IN ('Completed','Missed') AND reminded
+        overdue_recalls                     Status = 'Unbooked' AND NOT reminded AND due
+        Fact_Patient_At_Risk "Recall Active" Status IN ('Unbooked','Booked')
+
+    So all three read nothing for the demo, and the at-risk detail said "No Recall" for every
+    patient -- not because the data disagreed but because the words did.
+    """
     reminder_lead = timedelta(days=42)   # first reminder 6 weeks before due
     second_lead   = timedelta(days=14)   # second reminder 2 weeks before due
-    status = "Overdue" if due_date < today else "Pending"   # TitleCase to match real API
+    if status is None:
+        status = "Unbooked"
+    # ==> A MISSED CYCLE IS MOSTLY ONE NOBODY CHASED. <== On the live practice 390 of the 440
+    # missed recalls had no reminder against them and only 50 did -- which is largely why they
+    # were missed. It also decides recall conversion, whose denominator is concluded cycles
+    # WITH a reminder: reminding every missed cycle put conversion at 71.8% against 98.5%.
+    silent = (status == "Missed" and rng.random() < 0.88)
     # Reminders are sent once within the window; a ramping proportion are suppressed
     # to simulate unactioned / partially-actioned recalls.
     first_sent  = due_date - reminder_lead
@@ -2057,7 +2729,7 @@ def _build_recall(tid, pid, site_id, recall_type, due_date, today, rng, id_seed)
         suppress_first = rng.random() < _suppress_rate(max(0, (today - first_sent).days))
     else:
         suppress_first = False
-    has_first = has_first_window and not suppress_first
+    has_first = has_first_window and not suppress_first and not silent
     if has_second_window and has_first:
         suppress_second = rng.random() < _suppress_rate(max(0, (today - second_sent).days))
     else:
@@ -2116,6 +2788,21 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
     today = TODAY
     exam_tx_ids    = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
     hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
+    # 'Booked' means an appointment for THAT discipline is already in the diary, so the
+    # practice has nothing to chase. Worked out once rather than per patient.
+    booked_ahead = {"Dentist": set(), "Hygiene": set()}
+    for plist in apts_by_pat.values():
+        for a in plist:
+            if a["state"] != "booked" or a["start_time"][:10] < str(TODAY):
+                continue
+            t = a.get("treatment_id")
+            if t in exam_tx_ids:
+                booked_ahead["Dentist"].add(a["patient_id"])
+            elif t in hygiene_tx_ids:
+                booked_ahead["Hygiene"].add(a["patient_id"])
+    # Share of patients whose previous cycle is still on file as concluded.
+    concluded_rate = tdef.get("_params", {}).get("recall_concluded_rate", 0.9)
+
     recalls = []
     for pat in patients:
         pid = pat["id"]
@@ -2127,19 +2814,46 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
         exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
         hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
 
-        # ── Dental recall (only if the patient attends for exams) ──
-        if exams:
-            last_exam = date.fromisoformat(exams[-1]["start_time"][:10])
-            d_due = _add_months(last_exam, rng.choices([6, 9, 12, 15, 18], weights=[38, 8, 38, 8, 8])[0])
-            if not any(date.fromisoformat(a["start_time"][:10]) >= d_due for a in exams):
-                recalls.append(_build_recall(tid, pid, pat["site_id"], "Dentist", d_due, today, rng, "recall"))
+        # ==> A FULFILLED CYCLE IS 'Completed', NOT DELETED. <== The note here said "as in
+        # Dentally, a recall is deleted once the patient reattends, so those are skipped" --
+        # and on that assumption the demo had not one concluded cycle, against 4,727 on the
+        # live practice. Dentally MARKS them. Concluded cycles are the entire denominator of
+        # recall conversion, so skipping them left the metric with nothing to divide.
+        for kind, visits, seed in (("Dentist", exams, "recall"),
+                                   ("Hygiene", hygiene_apts, "recall_hyg")):
+            if not visits:
+                continue
+            months = ([6, 9, 12, 15, 18], [38, 8, 38, 8, 8]) if kind == "Dentist"                 else ([3, 6, 12], [30, 55, 15])
 
-        # ── Hygiene recall (only if the patient attends for hygiene) ──
-        if hygiene_apts:
-            last_hyg = date.fromisoformat(hygiene_apts[-1]["start_time"][:10])
-            h_due = _add_months(last_hyg, rng.choices([3, 6, 12], weights=[30, 55, 15])[0])
-            if not any(date.fromisoformat(a["start_time"][:10]) >= h_due for a in hygiene_apts):
-                recalls.append(_build_recall(tid, pid, pat["site_id"], "Hygiene", h_due, today, rng, "recall_hyg"))
+            # The cycle the patient answered: due after one visit, closed by the next.
+            for back in (2, 3):
+                if len(visits) < back or rng.random() >= concluded_rate:
+                    continue
+                prev_d = date.fromisoformat(visits[-back]["start_time"][:10])
+                c_due  = _add_months(prev_d, rng.choices(months[0], weights=months[1])[0])
+                if c_due < date.fromisoformat(visits[-back + 1]["start_time"][:10]):
+                    recalls.append(_build_recall(tid, pid, pat["site_id"], kind, c_due, today,
+                                                 rng, seed + "_done%d" % back,
+                                                 status="Completed"))
+
+            # The one they are on now.
+            last_d = date.fromisoformat(visits[-1]["start_time"][:10])
+            due    = _add_months(last_d, rng.choices(months[0], weights=months[1])[0])
+            if any(date.fromisoformat(a["start_time"][:10]) >= due for a in visits):
+                continue                              # already answered by a later visit
+            if pid in booked_ahead.get(kind, ()):
+                # Booked AND still open as a recall is the minority case: most are closed at
+                # the desk when the appointment is made. The live practice carries 509 of
+                # these against 3,589 unbooked.
+                if rng.random() >= 0.2:
+                    continue
+                st = "Booked"
+            elif due < today - timedelta(days=180) and rng.random() < 0.35:
+                st = "Missed"                         # chased, due long ago, never answered
+            else:
+                st = "Unbooked"
+            recalls.append(_build_recall(tid, pid, pat["site_id"], kind, due, today, rng, seed,
+                                         status=st))
     return recalls
 
 # ─── PATIENT RECALL DATE ENRICHMENT ─────────────────────────────────────────
@@ -2301,6 +3015,17 @@ def generate_tenant(tdef):
                          and float(c.get("target","0")) > 0}
     nhs_claims = gen_nhs_claims(tdef, plans, patients_by_id, contracts_by_site, rng)
 
+    # ==> AFTER THE MONEY, BEFORE THE HISTORY. <== Treatment plans, invoices and payments are
+    # all built from completed-and-past appointments above, and must not see a cancelled slot.
+    # Everything BELOW reads a patient's appointment history and legitimately should: patient
+    # stats carry Last_Cancelled_Appointment_Date, which is the column
+    # Gold.Fact_Patient_At_Risk drives its "Cancelled Not Rebooked" route off.
+    #
+    # Running this last -- safe from the linking side -- meant gen_patient_stats never saw a
+    # single cancellation, so that date was null for every patient and the route stayed empty
+    # no matter how many cancellations were generated.
+    _add_disruption(tdef, appointments, rng)
+
     apts_by_pat = {}
     for a in appointments:
         apts_by_pat.setdefault(a["patient_id"], []).append(a)
@@ -2325,6 +3050,8 @@ def generate_tenant(tdef):
         booked_apt = _recall_apt_by_patient.get(r["patient_id"])
         if booked_apt and r["recall_type"] == "Dentist":   # Recall Examination is a dental booking
             r["appointment_id"] = booked_apt
+
+    _relabel_states(appointments)
 
     return {
         "practice":            tdef["practice"],

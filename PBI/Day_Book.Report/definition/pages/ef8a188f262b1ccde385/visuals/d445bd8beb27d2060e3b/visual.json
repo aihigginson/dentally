@@ -123,12 +123,12 @@
                       "Entity": "List Patients"
                     }
                   },
-                  "Property": "Total Paid"
+                  "Property": "Patient Value 3yr"
                 }
               },
-              "queryRef": "List Patients.Total Paid",
-              "nativeQueryRef": "Lifetime Value",
-              "displayName": "Lifetime Value"
+              "queryRef": "List Patients.Patient Value 3yr",
+              "nativeQueryRef": "Patient Value 3yr",
+              "displayName": "Patient Value 3yr"
             }
           ]
         }
@@ -407,7 +407,7 @@
                 "Entity": "List Patients"
               }
             },
-            "Property": "Total Paid"
+            "Property": "Patient Value 3yr"
           }
         },
         "type": "Advanced"

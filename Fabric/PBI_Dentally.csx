@@ -1,4 +1,4 @@
-// PBI_Dentally.csx -- ALL measures for PBI Dentally.pbix, one atomic apply.
+﻿// PBI_Dentally.csx -- ALL measures for PBI Dentally.pbix, one atomic apply.
 // Amalgamated from the former per-section TabularEditor_*.csx; each section wrapped in its own
 // scope block { } so local helpers do not collide. ONE paste, ONE Run rebuilds every folder;
 // measures keep exact names + DisplayFolder so report cards re-bind automatically.
@@ -79,20 +79,37 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // FTE-scaled metrics multiply the per-FTE role target by SUM(FTE) of practitioners in context.
 Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
 
+// ==> THE TARGET LOOKUP NO LONGER RE-IMPLEMENTS A RELATIONSHIP THAT ALREADY EXISTS. <==
+// Every target and variance builder used to pass
+//     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date])
+// into its CALCULATE. '_Daily Targets'[fk Date] -> 'List Date'[pk Date] is an ACTIVE
+// relationship, so the period filter already propagates; the TREATAS materialised the same
+// filter by hand -- every date in the period, as a table -- against 243k rows, once per target
+// measure, ~84 times per page render.
+//
+// It was measurable, not theoretical: the same report with the target measures removed renders
+// instantly on the same capacity, while the full page takes ~45s AFTER the model is loaded and
+// with RLS bypassed. Desktop was always instant because a laptop has more query compute than an
+// F4, which is what hid this.
+//
+// Safe because nothing wraps these builders: kpi() registers the DAX as given, and the
+// REMOVEFILTERS('List Date') uses elsewhere are in value measures, not around the target. The
+// _Metric Actuals TREATAS calls are NOT removed -- that table relates to 'List Date
+// Unconstrained', so for it the TREATAS is the only thing applying the period at all.
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -137,7 +154,7 @@ RETURN IF(
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -149,7 +166,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -162,7 +179,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -174,7 +191,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -187,7 +204,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -200,7 +217,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgWithinPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR dev      = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -731,10 +748,10 @@ add("NHS UDA Completion Rate FY YTD",
 
 add("NHS UDAs Target",
     @"VAR full_target = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric]       = ""nhs_udas"",
-    '_Daily Targets'[Target Level] = ""Practice"")
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric]       = ""nhs_udas"",
+    'Aggregate Period Targets'[Target Level] = ""Practice"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
@@ -751,10 +768,10 @@ RETURN IF(
 
 add("NHS UOAs Target",
     @"VAR full_target = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric]       = ""nhs_uoas"",
-    '_Daily Targets'[Target Level] = ""Practice"")
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric]       = ""nhs_uoas"",
+    'Aggregate Period Targets'[Target Level] = ""Practice"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
@@ -778,12 +795,13 @@ RETURN IF(
 add("NHS UDA Completion Rate Target",
     @"DIVIDE(
     CALCULATE(
-        MAX('_Daily Targets'[Annual Target Value]),
+        MAX('Aggregate Period Targets'[Target Value]),
+        'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
         REMOVEFILTERS('List Date'),
         REMOVEFILTERS('List Practice Sites'),
         REMOVEFILTERS('List Practitioners'),
-        '_Daily Targets'[Metric]           = ""nhs_uda_completion_rate"",
-        '_Daily Targets'[Target Level] = ""Practice""),
+        'Aggregate Period Targets'[Metric]           = ""nhs_uda_completion_rate"",
+        'Aggregate Period Targets'[Target Level] = ""Practice""),
     100)",
     "#,##0.0%");
 
@@ -958,10 +976,10 @@ add("NHS UDAs BG",
     @"VAR actual     = [NHS UDAs]
 VAR target     = [NHS UDAs Target]
 VAR band       = CALCULATE(
-    MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric]       = ""nhs_udas"",
-    '_Daily Targets'[Target Level] = ""Practice"")
+    MAX('Aggregate Period Targets'[Variance]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric]       = ""nhs_udas"",
+    'Aggregate Period Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -975,10 +993,10 @@ add("NHS UOAs BG",
     @"VAR actual     = [NHS UOAs]
 VAR target     = [NHS UOAs Target]
 VAR band       = CALCULATE(
-    MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric]       = ""nhs_uoas"",
-    '_Daily Targets'[Target Level] = ""Practice"")
+    MAX('Aggregate Period Targets'[Variance]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric]       = ""nhs_uoas"",
+    'Aggregate Period Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -996,12 +1014,13 @@ add("NHS UDA Completion Rate BG",
     @"VAR actual = [NHS UDA Completion Rate]
 VAR target = [NHS UDA Completion Rate Target]
 VAR band   = CALCULATE(
-    MAX('_Daily Targets'[Variance]),
+    MAX('Aggregate Period Targets'[Variance]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     REMOVEFILTERS('List Date'),
     REMOVEFILTERS('List Practice Sites'),
     REMOVEFILTERS('List Practitioners'),
-    '_Daily Targets'[Metric]           = ""nhs_uda_completion_rate"",
-    '_Daily Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Metric]           = ""nhs_uda_completion_rate"",
+    'Aggregate Period Targets'[Target Level] = ""Practice"")
 VAR dev    = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1120,39 +1139,39 @@ Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||k
 
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -1218,7 +1237,7 @@ RETURN IF(
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1230,7 +1249,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1243,7 +1262,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1256,7 +1275,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1268,7 +1287,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPpGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1281,7 +1300,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1552,36 +1571,36 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // The *FTE builders scale the per-FTE role target by SUM(FTE) of the practitioners in context;
 // at Practice level the entered whole-practice number is used as-is (fte = 1).
 Func<string,string> band = key => (@"CALCULATE(
-    MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)").Replace("{key}", key);
+    MAX('Aggregate Period Targets'[Variance]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)").Replace("{key}", key);
 
 Func<string,string> tCum = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t)").Replace("{key}", key);
 
 Func<string,string> tCumFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    SUM('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
 
 Func<string,string> tRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 RETURN CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)").Replace("{key}", key);
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)").Replace("{key}", key);
 
 Func<string,string> tRateFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
 
@@ -1681,9 +1700,14 @@ Action<string,string,string,string,string> kpi = (baseName, fmt, targetDax, vsDa
 
 // ── Value measures (bespoke) ─────────────────────────────────────────────────
 
-// Membership (capitation) revenue is a monthly direct debit, NOT invoiced -- plan patients have no
-// clinical invoices -- so it lives in its own fact (Gold.Fact_Plan_Capitation, one row per member x
-// month) and must be ADDED to the invoice-based Total Revenue rather than derived from it.
+// ==> CAPITATION IS AN ESTIMATE, NOT OBSERVED INCOME. <== Membership fees are collected by the
+// plan provider (Denplan, Tabeo, whoever the practice uses) and the real figures are in the
+// spreadsheets that provider sends them. Dentally holds no invoice, no payment and no statement,
+// so the warehouse RECONSTRUCTS the fee from clinical evidence -- a completed free exam implies a
+// live membership that month -- priced from the owner-curated Input.Plan_Capitation_Rate.
+// Good for trend, mix and per-patient value; NOT a figure to reconcile to the bank. It is carried
+// in Gold.Fact_Revenue as Revenue Type = "Capitation" (week-within-month segments, V189/V190) and
+// must be ADDED to invoiced revenue rather than derived from it.
 add("Plan Capitation Revenue",
     @"CALCULATE(SUM('_Revenue'[Amount]), '_Revenue'[Revenue Type] = ""Capitation"")",
     "£#,##0");
@@ -1691,6 +1715,15 @@ add("Plan Capitation Revenue",
 add("Total Revenue",
     @"SUM('_Revenue'[Amount])",
     "£#,##0");
+
+// Stated on the measures themselves so it reaches anyone hovering the field list, not only
+// whoever reads this file.
+{
+    var pcr = t.Measures["Plan Capitation Revenue"];
+    pcr.Description = "ESTIMATE, not observed income. Membership fees are collected by the plan provider (Denplan/Tabeo/etc) and their statements are the authoritative figures; Dentally holds no invoice or payment for them. Reconstructed here from completed free exams priced at the plan's curated rate. Good for trend, mix and patient value; do not reconcile it to the bank.";
+    var tr = t.Measures["Total Revenue"];
+    tr.Description = "Invoiced revenue PLUS estimated plan capitation. The capitation component is reconstructed, not observed -- see Plan Capitation Revenue. Treat the total as part-actual, part-estimate.";
+}
 
 // Rolling 12-MONTH (TTM) Total Revenue to smooth the spiky by-week charts. Deliberately 12-month
 // ONLY, NOT 3-month: a quarter is shorter than a seasonal cycle, so a 3-month rolling number wavers
@@ -1918,18 +1951,18 @@ Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||k
 
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
-    '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+    MAX('Aggregate Period Targets'[Target Value]),
+    'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -1955,7 +1988,7 @@ RETURN IF(
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1967,7 +2000,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1979,7 +2012,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -2209,18 +2242,45 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 //    header colour recomputes live in the Period/Site/Role/Practitioner context. Built as a sum of
 //    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
 Action<string,string[]> areaRag = (name, bgs) => {
-    string scores = "";
-    foreach (var m in bgs) {
-        if (scores != "") scores += @" +
-    ";
-        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 2.5)";
+    // ==> EVALUATE EACH CHILD MEASURE EXACTLY ONCE. <== The first version referenced every BG
+    // twice (score + ISBLANK) and the worst-tile cap took it to three. A BG measure is not
+    // cheap -- each resolves its target out of '_Daily Targets' (~243k rows) with a TREATAS
+    // join from List Date -- and the Home page carries five of these headers over ~35 child
+    // measures. At three references that is ~105 evaluations of the most expensive measures on
+    // the page, on top of the ~112 the tiles themselves already cost. Hoisted into VARs, which
+    // the engine computes once: same result, a third of the work.
+    string vars = "", scores = "", counted = "", worst = "";
+    for (int k = 0; k < bgs.Length; k++) {
+        string v = "v" + k.ToString();
+        vars    += "VAR " + v + " = " + bgs[k] + "\n";
+        if (scores  != "") { scores  += " + "; }
+        if (counted != "") { counted += " + "; }
+        if (worst   != "") { worst   += ", "; }
+        scores  += @"SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)";
+        counted += "IF(ISBLANK(" + v + "), 0, 1)";
+        worst   += @"IF(ISBLANK(" + v + @"), 99, SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 99))";
     }
-    add(name, @"VAR scoreAvg = DIVIDE(
-    " + scores + @",
-    " + bgs.Length + @")
-RETURN SWITCH(TRUE(), scoreAvg < 2, ""#c0392b"", scoreAvg < 2.5, ""#f4a261"", scoreAvg <= 3, ""#6abf7b"", ""#1a7f3c"")", "");
+    add(name, vars + @"VAR n = " + counted + @"
+VAR scoreAvg = DIVIDE(" + scores + @", n)
+VAR worst = MINX( { " + worst + @" }, [Value] )
+-- ==> A RAG HEADER IS PESSIMISTIC, OR IT IS DECORATION. <== The average alone let six mild
+-- positives outvote one serious failure: Private Revenue at -20% sat under a GREEN Revenue
+-- header. The average still sets the ceiling of optimism, but the WORST tile caps it -- an area
+-- can never read better than one band above its weakest metric. One strong red therefore holds
+-- the area at amber however much green surrounds it.
+--
+-- A tile with no band scores nothing and leaves the divisor: it neither votes nor caps, so a
+-- metric the practice has no target for cannot prop an area up (it used to score 2.5, better
+-- than amber) nor drag it down.
+VAR capped = MIN( scoreAvg, worst + 1 )
+RETURN
+    -- n = 0 means every tile here is blank. Return BLANK, not a colour: DIVIDE would yield
+    -- BLANK, BLANK coerces to 0, and the header would paint STRONG RED for an area that simply
+    -- has no targets set.
+    IF ( n = 0, BLANK(),
+        SWITCH(TRUE(), capped < 2, ""#c0392b"", capped < 2.5, ""#f4a261"", capped <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
 };
-areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Revenue Per Clinical Hour BG]", "[Private Revenue BG]", "[NHS Revenue BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
+areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Private Revenue BG]", "[Plan Capitation Revenue BG]", "[NHS Revenue BG]", "[Revenue Per Dentist Hour BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
 areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
 areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
 areaRag("Clinical Area RAG",   new string[]{ "[Revenue Per Clinical Hour BG]", "[Average Plan Value BG]", "[Open Courses Value BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]" });
@@ -2688,4 +2748,227 @@ add("DQ Records", "COUNTROWS('_Data Quality Detail') + 0", "#,##0");
 // recounted. MAX over a single aggregate row is just "the value on this row".
 add("DQ % of Group",
     "DIVIDE([DQ Records], MAX('Aggregate Data Quality'[Population]))", "0.0%");
+}
+
+// ===================== Patient Value (rolling 36 months) =====================
+{
+// =====================================================================
+// WHAT A PATIENT IS WORTH, AND HOW OFTEN THEY COME. Two measures, deliberately not one.
+//
+// ==> THIS RETIRES 'Lifetime Value', WHICH WAS WRONG TWICE OVER. <== It was
+// SUM('List Patients'[Total Invoiced]), and:
+//
+//   1. IT COUNTED NO PLAN INCOME. A membership patient's monthly fee is not an invoice. On the
+//      live practice a plan patient showed as worth 737 against a private patient's 1,390, when
+//      the true figures are 2,876 and 1,414 -- 74% of the value of the largest cohort was
+//      invisible, and it ranked the two biggest cohorts the wrong way round. That measure is the
+//      SORT ORDER of the Day Book retention lists, so the most valuable lapsed patients sat at
+//      the BOTTOM of the list somebody works down.
+//   2. IT WAS NEVER A LIFETIME. Dentally holds nothing from before a practice migrates onto it,
+//      so "lifetime" silently meant 5.7 years for one customer and six months for the next.
+//
+// The replacement is a rolling 36 months of BOTH revenue types, computed in Gold (V187/V188) on
+// 'Aggregate Site Patient Current' -- not in DAX, because the capitation half is 1.9m rows at
+// 1.70 each and summing it per visual would be slow and easy to filter wrongly.
+//
+// ==> ATTENDANCE IS A SECOND MEASURE, NOT FOLDED IN. <== A plan patient attending six-monthly
+// hygiene is loyal and low-margin; a private patient with one 2,000 crown a year is the reverse.
+// High value + low attendance is a different retention risk from high attendance + low value, and
+// one number loses exactly the distinction these lists exist to draw. 'Appointments Attended' on
+// the table cannot go on a visual by itself -- discourageImplicitMeasures is set on the model --
+// so it needs an explicit measure.
+//
+// Filter flow: 'Aggregate Site Patient Current'[fk Patient] (many) -> 'List Patients'[pk Patient]
+// (one), so a patient in context on any page narrows this to their single row. It is one row per
+// patient, so SUM over a cohort is a cohort total, not a double count.
+//
+// Deleted BY NAME across every table, the pattern the Day Book counts use, because 'Lifetime
+// Value' was created by hand in Desktop and has never been in this script -- it is not in any
+// DisplayFolder this script owns, so a folder-scoped delete would leave it in place.
+// =====================================================================
+    string g = "Patient Value";
+    var retire = new[] { "Lifetime Value", "Patient Value 3yr", "Appointments Attended 3yr",
+                         "Patient Value 3yr (New)" };
+    foreach (var tbl in Model.Tables)
+        foreach (var m in tbl.Measures.Where(m => retire.Contains(m.Name)).ToList())
+            m.Delete();
+
+    var t = Model.Tables["_Measures"];
+
+    var pv = t.AddMeasure("Patient Value 3yr",
+        @"SUM ( 'Aggregate Site Patient Current'[Value Total] )");
+    pv.DisplayFolder = g; pv.FormatString = "£#,##0";
+    pv.Description = "Invoiced AND plan income over a rolling 36 months, per Gold. Replaces 'Lifetime Value', which omitted plan income and so ranked membership patients below private ones.";
+
+    // ==> THE DETAIL TABLES NEED A COLUMN, NOT THE MEASURE. <==
+    // A measure in a table visual does not restore the row grain -- it destroys it. The Day Book
+    // detail tables group by patient, appointment time and cancellation reason; with only columns,
+    // auto-exist keeps the combinations that actually occur. Add a measure and the query becomes
+    // SUMMARIZECOLUMNS over those columns keeping every combination where the measure is non-blank
+    // -- and this measure reads 'Aggregate Site Patient Current', which is filtered by the patient
+    // but NOT by the appointment or the reason (List Patients -> _Appointments is single-direction,
+    // so a reason filter never reaches the patient). So it is non-blank for EVERY patient x reason
+    // pair. In prod that rendered one patient against all 18 reasons and a total of 5,625,663
+    // against a real 90 cancellations.
+    //
+    // 'Total Paid' worked because it was a COLUMN on List Patients. This replaces it like for like:
+    // same table, same shape, correct number. The measure stays for genuine aggregation contexts
+    // (the New Patients tooltip), which is what a measure is for.
+    //
+    // CALCULATE with no filter argument is doing the work: on the ONE side of the relationship the
+    // row context propagates to the related rows of the aggregate. One row per patient there, so
+    // this is that patient's value, not a sum over anything.
+    foreach (var c in Model.Tables["List Patients"].Columns
+                           .Where(c => c.Name == "Patient Value 3yr").ToList())
+        c.Delete();
+    var pvc = Model.Tables["List Patients"].AddCalculatedColumn("Patient Value 3yr",
+        @"CALCULATE ( SUM ( 'Aggregate Site Patient Current'[Value Total] ) )");
+    pvc.FormatString = "£#,##0";
+    pvc.Description = "Per-patient rolling 36-month value, as a column so detail tables keep their row grain. Use this on a list; use [Patient Value 3yr] on _Measures to aggregate.";
+
+    Action<string,string,string> add = (name, dax, desc) => {
+        var mm = t.AddMeasure(name, dax);
+        mm.DisplayFolder = g; mm.FormatString = "£#,##0";
+        mm.Description = desc;
+    };
+
+    // ==> A TOOLTIP MEASURE MUST GO BLANK WHERE ITS VISUAL HAS NOTHING. <==
+    // The New Patients chart is Category = week, Series = acquisition source. 'Aggregate Site
+    // Patient Current' has no relationship to either -- no date key, no acquisition source -- so
+    // the plain measure returns the WHOLE practice's value in every cell. Nothing is blank, so
+    // nothing prunes: the engine evaluates it over all 34k patient rows for every week x source
+    // combination, and the visual takes a very long time to return. The tooltip also read the same
+    // 10.7m on every bar, which told the reader nothing.
+    //
+    // Scoped to the patients actually counted in the cell, and gated on [New Patients] so it is
+    // blank where the bar is. The gate is what restores pruning -- and it is the same fix as the
+    // Day Book tables, which is the pattern: a measure that ignores the visual's grouping
+    // multiplies the work, and sometimes the rows.
+    //
+    // TREATAS rather than a relationship: the daily aggregate reaches List Patients many-to-one
+    // and single-direction, so filtering it does not propagate anywhere on its own.
+    add("Patient Value 3yr (New)",
+        @"VAR pats =
+    CALCULATETABLE (
+        VALUES ( 'Aggregate Site Patient Practitioner Daily'[fk Patient] ),
+        'Aggregate Site Patient Practitioner Daily'[New Patient] = TRUE ()
+    )
+RETURN
+    IF (
+        ISBLANK ( [New Patients] ),
+        BLANK (),
+        CALCULATE (
+            SUM ( 'Aggregate Site Patient Current'[Value Total] ),
+            TREATAS ( pats, 'Aggregate Site Patient Current'[fk Patient] )
+        )
+    )",
+        "Value of the patients counted as NEW in this cell over the rolling 36 months -- not the "
+        + "whole practice. Blank where there are no new patients, which is what lets the visual "
+        + "prune: the plain [Patient Value 3yr] ignores the chart's week and acquisition-source "
+        + "grouping, so it is non-blank in every cell and the visual takes a very long time to "
+        + "return. Plan income in this figure is an ESTIMATE -- see Plan Capitation Revenue.");
+
+    var pa = t.AddMeasure("Appointments Attended 3yr",
+        @"SUM ( 'Aggregate Site Patient Current'[Appointments Attended] )");
+    pa.DisplayFolder = g; pa.FormatString = "#,##0";
+    pa.Description = "Completed appointments over the same 36 months. Carried beside value, not folded into it: loyal-and-low-margin and infrequent-but-high-value are different retention risks.";
+}
+
+// ===================== Application Users -- parameterised source =====================
+{
+// =====================================================================
+// ==> THIS TABLE DECIDES WHICH TENANT EACH LOGIN CAN SEE. ITS SERVER MUST NOT BE A LITERAL. <==
+//
+// 'Application Users' is the source of the RLS rule on all 44 tenant-bearing tables: every one of
+// them filters [Tenant ID] against this table by USERPRINCIPALNAME(). Every other table in the
+// model reaches the warehouse through the pServer parameter, and the deployment pipeline sets
+// that parameter per stage -- so they all repoint on promotion.
+//
+// This one did not. When it was moved onto the V186 view Security.vw_User_Tenant_Access it was
+// picked up through Desktop's Get Data, which bakes the endpoint in as a literal:
+//
+//     Sql.Database("...-4i26eirspjiujnltrvplquzkem.datawarehouse...", "WH_Dentally")
+//                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the DEV warehouse
+//
+// Promoted to prod on 2026-09-27 that literal went with it, so the PRODUCTION model's access
+// table pointed at the DEVELOPMENT warehouse. It was caught before any refresh, so no dev row
+// ever reached prod -- a promotion is metadata-only, and the leak would have materialised on the
+// first refresh afterwards. A parameter rule on the pipeline would also have hidden it rather
+// than fixed it, and left the literal to be re-promoted by whoever published next.
+//
+// Normalised here rather than in Desktop because Desktop is what introduced it: Get Data writes
+// a literal every time, and this script is run against the .pbix, so the fix holds.
+// =====================================================================
+    var aup = Model.Tables["Application Users"].Partitions[0];
+
+    if (aup.Expression.Contains(".datawarehouse.fabric.microsoft.com"))
+    {
+        aup.Expression = @"let
+    Source = Sql.Database(pServer, pDatabase),
+    #""Navigation 1"" = Source{[Schema = ""Security"", Item = ""vw_User_Tenant_Access""]}[Data]
+in
+    #""Navigation 1""";
+        Info("Application Users: literal warehouse endpoint replaced with pServer/pDatabase.");
+    }
+}
+
+// ===================== Aggregate Period Targets -- RLS =====================
+{
+// =====================================================================
+// ==> A TENANT-BEARING TABLE ADDED IN DESKTOP CARRIES NO RLS RULE UNTIL SOMEONE WRITES ONE. <==
+//
+// V196 added this table through Get Data. Every other tenant-bearing table filters [Tenant ID]
+// against 'Application Users' by USERPRINCIPALNAME(); a table imported later inherits nothing,
+// so unless a rule is added here it is readable in full by every login.
+//
+// That became load-bearing when the cumulative builders went back to SUM([Target Value]): the
+// measures now ADD the rows a login can see, so an unfiltered table would add every tenant's
+// target in the warehouse rather than the one practice the login is entitled to. Under the MAX
+// this replaced the same gap showed up as another practice's larger target displacing your own.
+//
+// The filter is copied from whichever table already has one rather than written out here, so it
+// tracks the real rule -- including the CUSTOMDATA() scoping -- instead of drifting from a
+// hand-typed duplicate. Re-running is a no-op once the rule is present.
+// =====================================================================
+    var aptName = "Aggregate Period Targets";
+    var apt = Model.Tables.FirstOrDefault(t => t.Name == aptName);
+
+    if (apt == null)
+    {
+        Info("WARNING " + aptName + ": table not in the model -- RLS not applied. Import it before publishing.");
+    }
+    else
+    {
+        foreach (var role in Model.Roles)
+        {
+            // Already filtered is the normal case and is not worth logging: only a rule this
+            // script had to add, or could not add, is news.
+            if (!string.IsNullOrWhiteSpace(role.RowLevelSecurity[apt])) continue;
+
+            // A table that is already filtered on tenant, chosen by name so the pick is stable.
+            var donorName = "";
+            var donorExpr = "";
+            foreach (var t in Model.Tables.OrderBy(x => x.Name))
+            {
+                if (t.Name == aptName) continue;
+                var f = role.RowLevelSecurity[t];
+                if (!string.IsNullOrWhiteSpace(f) && f.Contains("[Tenant ID]"))
+                {
+                    donorName = t.Name; donorExpr = f; break;
+                }
+            }
+
+            if (donorName == "")
+            {
+                Info("WARNING RLS " + role.Name + ": no tenant filter anywhere to copy -- " + aptName
+                     + " LEFT UNFILTERED. Do not publish until this is resolved.");
+                continue;
+            }
+
+            var expr = donorExpr.Replace("'" + donorName + "'", "'" + aptName + "'");
+            role.RowLevelSecurity[apt] = expr;
+            Info("RLS " + role.Name + ": " + aptName + " filter ADDED, copied from '" + donorName
+                 + "' -> " + expr);
+        }
+    }
 }

@@ -1,0 +1,81 @@
+﻿# =====================================================================
+# Release V188 -- one aggregate per grain, not two
+# =====================================================================
+# V187 put the patient-value columns on a brand new Gold.Aggregate_Patient_Value. That was the
+# wrong call and the reviewer was right to ask why. The new table was:
+#
+#     one row per patient, carrying fk_Practice_Site and Tenant_ID,
+#     category GOLD_AGG, dependency level 5, driven off the Dim_Patients spine
+#
+# which is, line for line, a description of Gold.Aggregate_Site_Patient_Current -- a table that
+# already existed, with exactly those keys and exactly that load pattern. In dev the two agreed
+# row for row: 27,837 rows / 27,837 patients on the live tenant, 6,000 / 6,000 on the demo one.
+# I went from "I need a per-patient aggregate" straight to "write a per-patient aggregate"
+# without checking whether the place already existed.
+#
+# ==> TWO AGGREGATES OVER THE SAME GRAIN IS A DRIFT MACHINE. <== A filter gets added to one
+# loader, or one of them fails in a run while the other succeeds, and now there are two
+# patient-level answers with nothing to say which is right. That is the same class of fault as
+# the "Lifetime Value" bug V187 existed to fix: a plausible number nobody can trace.
+#
+# ==> AND IT REMOVES THE RISK V187'S OWN MANIFEST FLAGGED. <== The value columns now live on a
+# table that is ALREADY in the model with the RLS rule already applied. There is no new
+# tenant-bearing table to import and no new rule to remember, so the cross-tenant leak V187
+# warned about cannot be left half-done. This is the cheapest possible moment to do it: the
+# model change was still outstanding, so nothing consumes the V187 table yet.
+#
+# ==> THE MODEL CHANGE IS NOW SMALLER, NOT GONE. <==
+#   1. do NOT import PBI.[Aggregate Patient Value] -- it no longer exists.
+#   2. REFRESH 'Aggregate Site Patient Current', which is already in the model and already
+#      carries the RLS rule. The new columns arrive with the refresh.
+#   3. replace the measure:
+#          Patient Value 3yr = SUM('Aggregate Site Patient Current'[Value Total])
+#      and RETIRE 'Lifetime Value' rather than leaving both -- two figures both called value,
+#      differing by the plan half, is how this gets believed again.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V188__fold_patient_value_into_site_patient.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Aggregate_Site_Patient_Current.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Patient_Current.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ---------------------------------------------------------------------
+# PROVE THE VALUE COLUMNS AGAINST THE FACTS THEY COME FROM.
+# Recomputed here from Fact_Revenue and Fact_Appointments directly, rather than compared against
+# V187's aggregate. The first draft of this guard DID compare the two tables and failed on 1,485
+# patients in dev -- every one of them explained by the window: V187's table was built the day
+# before, so its 36 months began a day earlier, and 1,445 patients had revenue on the day that
+# dropped out plus 113 an attended visit. The loader was equivalent; the guard was comparing two
+# different windows. Checking against source instead is window-consistent, keeps working after
+# V187's table is gone, and is the stronger test: it re-derives the number instead of agreeing
+# with another copy of it.
+#
+# SUM(Amount) with NO Revenue_Type filter is deliberate -- Value_Total must equal all revenue, so
+# this fails if a type filter is ever reintroduced, which is the original "Lifetime Value" bug.
+# ---------------------------------------------------------------------
+EXEC     DECLARE @b INT, @e VARCHAR(4000), @f DATE = DATEADD(MONTH, -36, CAST(SYSUTCDATETIME() AS DATE)), @n DATE = CAST(SYSUTCDATETIME() AS DATE); WITH rev AS (SELECT r.Tenant_ID, r.fk_Patient, SUM(r.Amount) AS tot FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date WHERE r.fk_Patient > 0 AND d.Full_Date >= @f AND d.Full_Date <= @n GROUP BY r.Tenant_ID, r.fk_Patient), att AS (SELECT a.Tenant_ID, a.fk_Patient, COUNT(*) AS n FROM [Gold].[Fact_Appointments] a WHERE a.fk_Patient > 0 AND a.Is_Completed = 1 AND CAST(a.Start_Time AS DATE) >= @f AND CAST(a.Start_Time AS DATE) <= @n GROUP BY a.Tenant_ID, a.fk_Patient) SELECT @b = COUNT(*) FROM [Gold].[Aggregate_Site_Patient_Current] s LEFT JOIN rev ON rev.Tenant_ID = s.Tenant_ID AND rev.fk_Patient = s.fk_Patient LEFT JOIN att ON att.Tenant_ID = s.Tenant_ID AND att.fk_Patient = s.fk_Patient WHERE ABS(ISNULL(s.Value_Total,0) - ISNULL(rev.tot,0)) > 0.01 OR ISNULL(s.Appointments_Attended,-1) <> ISNULL(att.n,0); IF @b > 0 BEGIN SET @e = 'V188 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' patient(s) whose value or attendance does not match the facts it is derived from.'; THROW 50188, @e, 1; END;
+
+DEPLOY   Fabric\Audit.Process_Config.Site_Patient_Value.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Every patient must still have a row, or they silently drop off a worklist ordered by value.
+EXEC     DECLARE @m INT, @s VARCHAR(4000); SELECT @m = COUNT(*) FROM [Gold].[Dim_Patients] p WHERE p.pk_Patient > 0 AND NOT EXISTS (SELECT 1 FROM [Gold].[Aggregate_Site_Patient_Current] a WHERE a.fk_Patient = p.pk_Patient AND a.Tenant_ID = p.Tenant_ID); IF @m > 0 BEGIN SET @s = 'V188 FAILED: ' + CAST(@m AS VARCHAR(10)) + ' patient(s) have no row on the aggregate.'; THROW 50189, @s, 1; END;
+
+# The capitation half must be present. If this throws, the value columns have been filtered to
+# Revenue_Type = 'Invoice' somewhere and the original bug is back, silently.
+EXEC     DECLARE @c INT, @t VARCHAR(4000); SELECT @c = COUNT(*) FROM [Gold].[Aggregate_Site_Patient_Current] WHERE Value_Capitation > 0; IF @c = 0 AND EXISTS (SELECT 1 FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Capitation') BEGIN SET @t = 'V188 FAILED: capitation revenue exists but no patient carries any -- the value columns are invoiced-only again.'; THROW 50190, @t, 1; END;
+
+# The duplicate must be gone from BOTH the warehouse and the orchestration. A dropped table with
+# a live Process_Config row fails the next chain run with a missing-object error instead.
+EXEC     DECLARE @l INT, @o VARCHAR(4000); SELECT @l = CASE WHEN OBJECT_ID('Gold.Aggregate_Patient_Value') IS NULL THEN 0 ELSE 1 END + (SELECT COUNT(*) FROM [Audit].[Process_Config] WHERE Process_Code = 'GOLD_AGG_PATIENT_VALUE') + (SELECT COUNT(*) FROM [Audit].[Process_Dependency] WHERE Next_Process_Code = 'GOLD_AGG_PATIENT_VALUE' OR Prev_Process_Code = 'GOLD_AGG_PATIENT_VALUE'); IF @l > 0 BEGIN SET @o = 'V188 FAILED: ' + CAST(@l AS VARCHAR(10)) + ' remnant(s) of the retired patient-value aggregate.'; THROW 50191, @o, 1; END;
+
+# The aggregate must still be ordered after the facts it now reads, or the capitation half is
+# read from the previous run's data -- a figure that is wrong and looks completely normal.
+EXEC     DECLARE @g INT, @f VARCHAR(4000); SELECT @g = COUNT(*) FROM (VALUES ('GOLD_FACT_REVENUE'),('GOLD_FACT_APPOINTMENTS')) AS v(prev) WHERE NOT EXISTS (SELECT 1 FROM [Audit].[Process_Dependency] d WHERE d.Prev_Process_Code = v.prev AND d.Next_Process_Code = 'GOLD_AGG_SITE_PATIENT' AND d.Is_Active = 1); IF @g > 0 BEGIN SET @f = 'V188 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' fact dependency missing -- the aggregate may run before the revenue it reads.'; THROW 50192, @f, 1; END;
+
+TEST

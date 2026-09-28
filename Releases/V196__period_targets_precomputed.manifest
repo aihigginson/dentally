@@ -1,0 +1,104 @@
+﻿# =====================================================================
+# Release V196 -- move the target arithmetic out of DAX and into Fabric
+# =====================================================================
+# ==> THE MODEL WAS RE-AGGREGATING 243,252 DAILY ROWS PER TILE, ON EVERY RENDER. <==
+#
+# Every target and variance measure resolved its number by scanning Gold.Fact_Daily_Targets
+# across the selected period. The Home page has 28 tiles, each with a value, a target, a
+# vs-target and a colour -- ~84 of those scans per render, and again on every bookmark switch.
+#
+# This was isolated by experiment, not inference. In order, each ruling out one explanation:
+#
+#   45s on a BOOKMARK SWITCH, model already resident   -> not eviction, not cold start
+#   Desktop renders the same report instantly          -> not the DAX being impossible
+#   run direct in Fabric, RLS bypassed either way      -> not RLS
+#   a full 407MB model rebuild takes 30s               -> not data volume
+#   the SAME report with targets removed is INSTANT    -> it is the target measures, alone
+#
+# Desktop was always fast, which is what hid it for so long: a laptop has more query compute
+# than an F4 and simply absorbed the waste.
+#
+# ==> THE PERIOD IS ALWAYS A NAMED GROUPING. <== The app filters 'List Date Grouping'[Date
+# Grouping] to exactly one value -- never an arbitrary date range. That is what makes this
+# possible: the target can be computed once per grouping instead of derived from days per query.
+#
+#     Gold.Fact_Daily_Targets        243,252 rows, scanned ~84x per render
+#     Gold.Aggregate_Period_Targets    1,296 rows, looked up
+#
+# ==> THE Target_Type SPLIT IS THE ENTIRE CORRECTNESS RISK. <== A cumulative target accumulates
+# over the period (so a part-period gets its prorated share); a rate or a snapshot does not --
+# summing a ratio across 366 days is nonsense. The loader follows
+# Config.Metric_Definitions.Target_Type, which is the same thing the DAX builders keyed off.
+# The guards below check the shape of that rather than trusting it.
+#
+# ==> WAREHOUSE HALF ONLY. <== The measures still read Fact_Daily_Targets until the model is
+# changed, so nothing moves on screen from this release alone -- it is safe to deploy ahead of
+# the model work.
+#
+# ==> THE NEW TABLE IS DISCONNECTED. DO NOT TRY TO RELATE IT. <== The first draft of this note
+# said to relate [Date Grouping] -> 'List Date Grouping'[Date Grouping]. That cannot work:
+# 'List Date Grouping' is a BRIDGE, one row per (tenant, grouping, DATE) -- about 90 rows for
+# 'Last 3 Months' -- so Date Grouping is unique on neither side.
+#
+# It does not need a relationship. The grouping is read straight off the slicer:
+#
+#     VAR grp = SELECTEDVALUE('List Date Grouping'[Date Grouping])
+#     VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), "Practice")
+#     RETURN CALCULATE( MAX('Aggregate Period Targets'[Target Value]),
+#                       'Aggregate Period Targets'[Date Grouping]  = grp,
+#                       'Aggregate Period Targets'[Metric]         = "key",
+#                       'Aggregate Period Targets'[Target Level]   = lvl )
+#
+# Three equality filters on 1,296 rows, no bridge traversal and no date scan. The app always
+# sends exactly one period, so SELECTEDVALUE resolves; it returns BLANK for multiple, which
+# yields a blank target rather than a wrong one.
+#
+# Model steps, in order: import PBI.[Aggregate Period Targets]; APPLY THE RLS RULE (it carries
+# a Tenant ID, so without it a disconnected table is a straight cross-tenant leak and
+# Scripts\Check_RLS_Expression.ps1 will fail the build); then repoint the target builders.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V196__period_targets_precomputed.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Aggregate_Period_Targets.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Period_Targets.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Period_Targets.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Period_Targets @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# One row per (tenant, grouping, metric, level) -- no fan-out. A duplicate here would double
+# every target on the board the moment the model reads this table.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT Tenant_ID, Date_Grouping, Metric, Target_Level FROM [Gold].[Aggregate_Period_Targets] GROUP BY Tenant_ID, Date_Grouping, Metric, Target_Level HAVING COUNT(*) > 1) x; IF @a > 0 BEGIN SET @e = 'V196 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' duplicated (tenant, grouping, metric, level) combination(s).'; THROW 50270, @e, 1; END;
+
+# ==> NOTHING MAY BE LOST. <== Every (tenant, grouping, metric, level) the daily fact can answer
+# for must be present. A metric that silently vanishes here shows on the board as a blank tile,
+# which reads as "no target set" rather than as a fault.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT DISTINCT g.Tenant_ID, g.Date_Grouping, t.Metric, t.Target_Level FROM [Gold].[Dim_Date_Grouping] g JOIN [Gold].[Fact_Daily_Targets] t ON t.Tenant_ID = g.Tenant_ID AND t.fk_Date = g.fk_Date) src WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Aggregate_Period_Targets] a WHERE a.Tenant_ID = src.Tenant_ID AND a.Date_Grouping = src.Date_Grouping AND a.Metric = src.Metric AND a.Target_Level = src.Target_Level); IF @b > 0 BEGIN SET @f = 'V196 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' (tenant, grouping, metric, level) combination(s) present in the daily fact but missing here.'; THROW 50271, @f, 1; END;
+
+# A cumulative target must equal the sum of its days, and only its days. Recomputed by a
+# different join path than the loader used, so this is a check rather than an echo.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); WITH chk AS (SELECT a.Tenant_ID, a.Date_Grouping, a.Metric, a.Target_Level, a.Target_Value, (SELECT SUM(t.Daily_Target_Value) FROM [Gold].[Fact_Daily_Targets] t WHERE t.Tenant_ID = a.Tenant_ID AND t.Metric = a.Metric AND t.Target_Level = a.Target_Level AND EXISTS (SELECT 1 FROM [Gold].[Dim_Date_Grouping] g WHERE g.Tenant_ID = a.Tenant_ID AND g.Date_Grouping = a.Date_Grouping AND g.fk_Date = t.fk_Date)) AS recomputed FROM [Gold].[Aggregate_Period_Targets] a WHERE a.Target_Type = 'cumulative') SELECT @c = COUNT(*) FROM chk WHERE ABS(ISNULL(Target_Value,0) - ISNULL(recomputed,0)) > 0.01; IF @c > 0 BEGIN SET @g = 'V196 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' cumulative target(s) do not equal the sum of their days.'; THROW 50272, @g, 1; END;
+
+# ==> A NON-CUMULATIVE TARGET MUST EQUAL WHAT THE DAX RESOLVED. <== Stored as
+# MAX(Annual_Target_Value), because a threshold does not accumulate.
+#
+# The first version of this guard asserted something stronger -- that the annual value never
+# VARIES across a period -- and it failed immediately on a real case: Maple's
+# recalls_overdue_not_sent is 5 in one financial year and 6 in the other, and 'Last 12 Months'
+# straddles the boundary. That is not a fault introduced here. The existing DAX takes MAX in
+# exactly that situation and has always resolved it to 6, so this aggregate reproduces today's
+# answer precisely. The guard now proves THAT equivalence instead of asserting a guarantee the
+# product never made.
+#
+# Worth knowing rather than fixing silently: for a period spanning two financial years with
+# different targets, "the target" is genuinely ambiguous, and MAX is a choice rather than an
+# answer. Taking the CURRENT year's would be defensible too. Left as-is deliberately -- changing
+# it would move a number on a live customer's board, which is a decision, not a refactor.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); WITH src AS (SELECT g.Tenant_ID, g.Date_Grouping, t.Metric, t.Target_Level, MAX(t.Annual_Target_Value) AS dax_value FROM [Gold].[Dim_Date_Grouping] g JOIN [Gold].[Fact_Daily_Targets] t ON t.Tenant_ID = g.Tenant_ID AND t.fk_Date = g.fk_Date GROUP BY g.Tenant_ID, g.Date_Grouping, t.Metric, t.Target_Level) SELECT @d2 = COUNT(*) FROM [Gold].[Aggregate_Period_Targets] a JOIN src ON src.Tenant_ID = a.Tenant_ID AND src.Date_Grouping = a.Date_Grouping AND src.Metric = a.Metric AND src.Target_Level = a.Target_Level WHERE a.Target_Type <> 'cumulative' AND ABS(ISNULL(a.Target_Value,0) - ISNULL(src.dax_value,0)) > 0.01; IF @d2 > 0 BEGIN SET @h = 'V196 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' non-cumulative target(s) differ from what the DAX resolves (MAX of the annual value over the period).'; THROW 50273, @h, 1; END;
+
+# The table must actually be smaller than what it replaces, or the exercise achieved nothing.
+EXEC     DECLARE @n INT, @o INT, @i2 VARCHAR(4000); SELECT @n = COUNT(*) FROM [Gold].[Aggregate_Period_Targets]; SELECT @o = COUNT(*) FROM [Gold].[Fact_Daily_Targets]; IF @n = 0 OR @n >= @o BEGIN SET @i2 = 'V196 FAILED: period targets ' + CAST(@n AS VARCHAR(10)) + ' vs daily ' + CAST(@o AS VARCHAR(10)) + ' -- empty, or no smaller than the table it replaces.'; THROW 50274, @i2, 1; END;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST

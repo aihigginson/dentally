@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
+﻿from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
 from flask_cors import CORS
 import msal
 import requests
@@ -353,15 +353,36 @@ def embed_token():
         dataset_id  = report_meta['datasetId']
 
         # The RLS effective identity is ALWAYS attached -- row filtering is mandatory.
-        token_body = {
-            'accessLevel': 'View',
-            'identities': [{
-                'username': upn,
-                'roles':    REPORT_ROLES,
-                'datasets': [dataset_id],
-            }],
+        identity = {
+            'username': upn,
+            'roles':    REPORT_ROLES,
+            'datasets': [dataset_id],
         }
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s", upn, REPORT_ROLES, report_name)
+        # ==> AND IT MUST NAME THE PRACTICE, NOT JUST THE PERSON. <== RLS resolves the UPN to
+        # the set of tenants that user may see. That was the whole answer while every user
+        # could see exactly one -- but a support login on the Analytically client sees every
+        # practice, and a report given the whole set ADDS THEM UP. Two practices' revenue
+        # under one practice's name is the single worst thing this product could display.
+        #
+        # Site cannot do this job. 18 of the 42 active metrics have Supports_Site = 0, so a
+        # site slicer leaves those showing the combined total no matter what is selected --
+        # which is exactly how this was found.
+        #
+        # customData carries the practice actually in scope, and the model narrows to it. Set
+        # only when the scope is UNAMBIGUOUS: one tenant means one practice. A staff login
+        # that has not picked one keeps the full permitted set, which is the deliberate
+        # "everything I can see" view rather than an accident.
+        #
+        # It is an assertion of scope, never of permission. tids is what _get_user_info
+        # already resolved from the junction, so the token cannot name a practice the caller
+        # is not entitled to -- and the RLS rule keeps the set-membership test alongside this,
+        # so the model proves it again rather than trusting the token.
+        if len(tids) == 1:
+            identity['customData'] = str(tids[0])
+        token_body = {'accessLevel': 'View', 'identities': [identity]}
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s tenant=%s",
+                        upn, REPORT_ROLES, report_name,
+                        identity.get('customData') or 'all-permitted')
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
@@ -419,14 +440,34 @@ def me():
         # knows it is staff but not yet which practices exist.
         practices = []
         if _is_staff(upn):
+            # ==> BUILT FROM ACCESS, NOT OWNERSHIP. <== This grouped Audit.Tenants by
+            # Client_ID, so it could only ever list clients that OWN a tenant. The
+            # Analytically client owns none and sees them all, so it was missing from its own
+            # picker: no way to select it, and no way back to it once another practice had
+            # been picked. The name came from Dim_Practice_Sites too, which is a practice's
+            # name rather than the client's -- fine while they were one and the same.
             cur.execute(
-                "SELECT t.Client_ID, MIN(ps.Practice_Name), COUNT(DISTINCT t.Tenant_ID) "
-                "FROM Audit.Tenants t "
-                "LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = t.Tenant_ID "
-                "WHERE ISNULL(t.Is_Active, 1) = 1 AND t.Client_ID IS NOT NULL "
-                "GROUP BY t.Client_ID ORDER BY MIN(ps.Practice_Name)")
+                "SELECT c.Client_ID, c.Client_Name, COUNT(DISTINCT a.Tenant_ID) "
+                "FROM Security.Clients c "
+                "JOIN Security.Client_Tenant_Access a ON a.Client_ID = c.Client_ID "
+                "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+                "WHERE ISNULL(t.Is_Active, 1) = 1 "
+                "GROUP BY c.Client_ID, c.Client_Name ORDER BY c.Client_Name")
             practices = [{'client_id': r[0], 'name': r[1] or r[0], 'tenants': r[2]}
                          for r in cur.fetchall()]
+
+        # The PRACTICE picker: the tenants inside the client currently in scope. Returned for
+        # everyone, not just staff -- a group customer needs to choose between their own
+        # practices. Sent with /api/me so the picker is populated in the same round trip that
+        # establishes who you are, exactly as the client picker is.
+        cur.execute(
+            "SELECT t.Tenant_ID, COALESCE(MIN(ps.Practice_Name), MIN(t.Tenant_Name)) "
+            "FROM Security.Client_Tenant_Access a "
+            "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+            "LEFT JOIN Gold.Dim_Practice_Sites ps ON ps.Tenant_ID = t.Tenant_ID "
+            "WHERE a.Client_ID = ? AND ISNULL(t.Is_Active, 1) = 1 "
+            "GROUP BY t.Tenant_ID ORDER BY 2", client_id)
+        client_practices = [{'tenant_id': r[0], 'name': r[1]} for r in cur.fetchall()]
         conn.close()
         return jsonify({
             'display_name':         display_name or upn,
@@ -440,6 +481,7 @@ def me():
             'trial':                trial,
             'is_staff':             _is_staff(upn),
             'practices':            practices,
+            'client_practices':     client_practices,
         })
     except Exception as e:
         return _server_error(e, 'me')
@@ -546,8 +588,11 @@ def filters():
             def _prank(v):
                 if v == 'Last 3 Months':  return (0, 0)
                 if v == 'Last 12 Months': return (1, 0)
-                yy = (v or '')[2:]                      # 'FY26' -> '26'; FYyy newest first
-                return (2, -(int(yy) if yy.isdigit() else 0))
+                # 'FY26' -> 26, 'FY26-27' -> 27. The label year is the END year, so a span
+                # label ranks on the part after the dash. Before this, a span label fell through
+                # to 0 and every practice-FY period sorted as if it were the year 2000.
+                yy = _fy_label_yy(v)
+                return (2, -(yy or 0))
             periods = sorted(_pv, key=_prank)
         except Exception:
             periods = []
@@ -558,6 +603,30 @@ def filters():
         # Preserve the 200 + empty-lists client contract; log detail server-side.
         app.logger.exception("filters failed: %s", e)
         return jsonify({'sites': [], 'practitioners': [], 'roles': []})
+
+
+def _fy_label_yy(v):
+    """The two-digit LABEL year out of a Date_Grouping string, or None if it is not an FY.
+
+    The warehouse labels a practice financial year by its END year, and spells the span whenever
+    the practice year is not the calendar year: 'FY26' for a January practice, 'FY26-27' for an
+    April one (Gold.vw_Dim_Date). Both mean the year ending in 26 and 27 respectively, so the
+    digits AFTER the separator are the ones that matter.
+
+    This exists because the app used to test `v[2:].isdigit()`, which silently dropped every
+    span label -- the targets Year dropdown emptied out and fell back to a single guessed year
+    the moment a practice moved off a January year.
+    """
+    if not v or not v.startswith('FY'):
+        return None
+    tail = v[2:].replace('/', '-').split('-')[-1]
+    return int(tail) if tail.isdigit() else None
+
+
+def _fy_label_year(v):
+    """The four-digit label year, e.g. 'FY26-27' -> 2027."""
+    yy = _fy_label_yy(v)
+    return 2000 + yy if yy is not None else None
 
 
 # ── Connect Xero (self-serve OAuth onboarding) ───────────────────────────────
@@ -1599,6 +1668,20 @@ def _acting_client_id(upn):
     return (request.headers.get('X-Acting-Client') or '').strip() or None
 
 
+def _acting_tenant_id(upn):
+    """The practice selected WITHIN the current client, or None.
+
+    ==> NOT STAFF-ONLY, unlike the client picker. <== A client may own several tenants and
+    each tenant is exactly one practice, so a group customer running three practices needs
+    this every bit as much as a support login does. It is validated against the caller's own
+    permitted set in _get_user_info, so it asserts WHICH practice, never WHETHER they may see
+    it -- a header naming one they are not entitled to buys them nothing.
+    """
+    if not has_request_context():
+        return None
+    return (request.headers.get('X-Acting-Tenant') or '').strip() or None
+
+
 def _get_user_info(cur, upn):
     """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
 
@@ -1641,8 +1724,13 @@ def _get_user_info(cur, upn):
         # driver exception, not the clean refusal this was supposed to be. Casting also keeps the
         # check working if the column type ever changes. The canonical value comes back from the
         # row, so client_id stays the type the rest of the app expects.
-        cur.execute("SELECT TOP 1 Client_ID FROM Audit.Tenants "
-                    "WHERE CAST(Client_ID AS VARCHAR(64)) = ? AND ISNULL(Is_Active, 1) = 1", str(acting))
+        # Resolved against the ACCESS table, not Audit.Tenants. A client is valid to act as if
+        # it has at least one active tenant GRANTED to it -- which is not the same as owning
+        # one. The Analytically client owns no tenant at all and can see every one of them.
+        cur.execute("SELECT TOP 1 a.Client_ID FROM Security.Client_Tenant_Access a "
+                    "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+                    "WHERE CAST(a.Client_ID AS VARCHAR(64)) = ? "
+                    "AND ISNULL(t.Is_Active, 1) = 1", str(acting))
         row = cur.fetchone()
         if not row:
             app.logger.warning('staff %s asked for unknown/inactive client %r', upn, acting)
@@ -1650,8 +1738,19 @@ def _get_user_info(cur, upn):
         app.logger.info('staff %s acting as client %s', upn, row[0])
         client_id = row[0]
 
+    # ==> OWNERSHIP AND VISIBILITY ARE DIFFERENT THINGS. <== This read Audit.Tenants.Client_ID,
+    # which is a COLUMN on the tenant -- so a tenant belonged to exactly one client and could
+    # therefore be seen by exactly one client. One client owning several tenants worked; one
+    # tenant being visible to several clients did not, and that is what our own people need in
+    # order to see every practice.
+    #
+    # Audit.Tenants.Client_ID still says who OWNS a tenant, which is what billing, subscriptions
+    # and invoicing care about. Security.Client_Tenant_Access says who may SEE it. Seeded so that
+    # every client keeps access to what it owns, so this change grants nobody anything new.
     cur.execute(
-        "SELECT Tenant_ID FROM Audit.Tenants WHERE Client_ID = ? AND ISNULL(Is_Active, 1) = 1",
+        "SELECT t.Tenant_ID FROM Security.Client_Tenant_Access a "
+        "JOIN Audit.Tenants t ON t.Tenant_ID = a.Tenant_ID "
+        "WHERE a.Client_ID = ? AND ISNULL(t.Is_Active, 1) = 1",
         client_id,
     )
     tids = [r[0] for r in cur.fetchall()]
@@ -1661,6 +1760,32 @@ def _get_user_info(cur, upn):
         # bad override yields 403 rather than quietly falling back to the support login's own
         # practice and showing one practice's figures under another's name.
         return None, None, [], False
+
+    # ==> ONE PRACTICE AT A TIME. <== The model is Client 1..* Tenant 1..1 Practice 1..* Site,
+    # and the app could only ever select the ends of it: a client, then a site. Nothing chose
+    # the PRACTICE in between. While every client owned exactly one tenant that gap was
+    # invisible, because picking the client picked the practice by implication.
+    #
+    # It stopped being invisible the moment a client could see several. A report handed more
+    # than one tenant does not pick one, it ADDS THEM UP -- and the site filter cannot stand
+    # in, because it sits a level below and 18 of the 42 active metrics do not support site at
+    # all. Two practices' figures under one practice's name is the result.
+    #
+    # Narrowed HERE, in the one function every route resolves identity through, so the whole
+    # app scopes together -- reports, Day Book, Admin, billing -- rather than each endpoint
+    # being trusted to remember.
+    acting_t = _acting_tenant_id(upn)
+    if acting_t is not None:
+        chosen = [t for t in tids if str(t) == str(acting_t)]
+        if chosen:
+            tids = chosen
+        else:
+            # Names a practice this caller cannot see: a stale tab after switching client, or
+            # a hand-set header. Refused rather than widened -- falling back to the full set
+            # would answer a question about one practice with the total of several.
+            app.logger.warning('%s asked for tenant %r outside their set %r', upn, acting_t, tids)
+            return None, None, [], False
+
     return display_name, client_id, tids, maintain_targets
 
 
@@ -3272,13 +3397,27 @@ def get_target_grid():
             _ph = ','.join(['?'] * len(tids))
             try:
                 cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({_ph})", tids)
-                _yrs = [2000 + int(v[2:]) for (v,) in cur.fetchall() if v and v.startswith('FY') and v[2:].isdigit()]
+                _yrs = [y for y in (_fy_label_year(v) for (v,) in cur.fetchall()) if y]
                 if _yrs:
                     fy_options = list(range(min(_yrs), max(_yrs) + 2))   # cutover .. current + 1 (next year)
             except Exception:
                 fy_options = []
         if fy_options and not request.args.get('fy'):
             fy = max(fy_options) - 1       # default to the practice current FY (overrides the Apr-Mar guess)
+
+        # The practice FY start month, for labelling only. Defaults to 4 (April) exactly as
+        # Gold.vw_Dim_Date does, so a tenant with no Practice_Config row labels the same way the
+        # warehouse does rather than the two disagreeing.
+        fy_start_month = 4
+        if tids:
+            try:
+                cur.execute(f"SELECT MIN(ISNULL(FY_Start_Month, 4)) FROM Input.Practice_Config "
+                            f"WHERE Tenant_ID IN ({_ph})", tids)
+                _fr = cur.fetchone()
+                if _fr and _fr[0]:
+                    fy_start_month = int(_fr[0])
+            except Exception:
+                fy_start_month = 4
 
         cur.execute(
             "SELECT Metric_Key, Display_Name, Section, Format_Type, Range_Type, Target_Type, "
@@ -3336,7 +3475,11 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
+        # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
+        # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
+        # one rule, and it still works for the next-year option that has no grouping row yet.
         return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
+                        'fy_start_month': fy_start_month,
                         'metrics': metrics, 'tenants': list(tenants.values())})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
@@ -3440,6 +3583,13 @@ def _admin_tenant(cur, upn, body_tenant=None):
     if client_id is None or not tids:
         return None, (jsonify({'error': 'Forbidden'}), 403)
     if body_tenant is None:
+        # ==> DO NOT GUESS WHICH PRACTICE AN ADMIN WRITE LANDS ON. <== This returned tids[0],
+        # which was unambiguous only because no client had ever had more than one tenant.
+        # V186's junction makes that false -- the Analytically client sees every practice --
+        # and an arbitrary "first" tenant is the wrong thing to be arbitrary about: it is an
+        # admin action, writing, to whichever tenant the query happened to return first.
+        if len(tids) > 1:
+            return None, (jsonify({'error': 'Select a practice first.'}), 409)
         return tids[0], None
     try:
         tid = int(body_tenant)

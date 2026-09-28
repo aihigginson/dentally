@@ -1493,10 +1493,16 @@ class _SwitchCursor:
         self.asked_client = None
 
     def execute(self, sql, *args):
-        if 'CAST(Client_ID AS VARCHAR' in sql:                      # the override lookup
+        # Matched on 'Client_ID AS VARCHAR' rather than the whole cast, because the query gained
+        # a table alias (CAST(a.Client_ID AS ...)) when access moved to the junction and the
+        # stricter match silently stopped recognising it -- so the override lookup fell through
+        # to the user row and the fail-closed tests reported a PASS for a login that had just
+        # been handed someone else's practice. A double keyed on SQL text has to be matched on
+        # the part that carries the meaning, not the spelling.
+        if 'Client_ID AS VARCHAR' in sql:                           # the override lookup
             asked = str(args[0]) if args else ''
             self._next_one = (asked,) if asked in self._known else None
-        elif 'Audit.Tenants' in sql and 'Client_ID = ?' in sql:     # the tenant list
+        elif 'Client_ID = ?' in sql:                                # the tenant list
             self.asked_client = args[0] if args else None
         else:
             self._next_one = self._user
@@ -1557,6 +1563,48 @@ def test_a_non_numeric_practice_is_refused_not_passed_to_sql(appmod):
     cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,)])
     with _ctx(appmod, {'X-Acting-Client': "'; DROP TABLE x --"}):
         assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+
+
+def test_a_practice_can_be_chosen_within_the_client(appmod):
+    # Client 1..* Tenant 1..1 Practice. A client owning several practices could pick the client
+    # and the site but nothing in between, so a report was handed every tenant the client could
+    # see -- and a report given more than one does not choose, it adds them up.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,), (100,)])
+    with _ctx(appmod, {'X-Acting-Tenant': '100'}):
+        _, _, tids, _ = appmod._get_user_info(cur, 'support@analytically.info')
+    assert tids == [100], 'the chosen practice alone, not the set it came from'
+
+
+def test_choosing_no_practice_leaves_the_whole_permitted_set(appmod):
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,), (100,)])
+    with _ctx(appmod, {}):
+        _, _, tids, _ = appmod._get_user_info(cur, 'support@analytically.info')
+    assert tids == [11, 100]
+
+
+def test_a_practice_outside_the_set_fails_closed(appmod):
+    # Falling back to the full set would be the quiet failure: a question about ONE practice
+    # answered with the total of several, under that practice's name.
+    cur = _SwitchCursor(_user_row(appmod, 'Support', 'CLIENT-A', 1, 1), [(11,), (100,)])
+    with _ctx(appmod, {'X-Acting-Tenant': '4242'}):
+        assert appmod._get_user_info(cur, 'support@analytically.info') == (None, None, [], False)
+
+
+def test_the_practice_header_is_not_staff_only(appmod):
+    # Unlike the client override. A group customer running several practices needs to choose
+    # between their own, and it is checked against their permitted set either way.
+    cur = _SwitchCursor(_user_row(appmod, 'Alice', 'CLIENT-A', 1, 1), [(11,), (100,)])
+    with _ctx(appmod, {'X-Acting-Tenant': '11'}):
+        _, _, tids, _ = appmod._get_user_info(cur, 'alice@practice.co.uk')
+    assert tids == [11]
+
+
+def test_a_practice_header_cannot_reach_another_clients_tenant(appmod):
+    # The header is client-supplied, so this is the breach it must not permit: name a tenant
+    # belonging to someone else and be given it.
+    cur = _SwitchCursor(_user_row(appmod, 'Alice', 'CLIENT-A', 1, 1), [(11,)])
+    with _ctx(appmod, {'X-Acting-Tenant': '100'}):
+        assert appmod._get_user_info(cur, 'alice@practice.co.uk') == (None, None, [], False)
 
 
 def test_is_staff_is_the_mailbox_domain_only(appmod):
@@ -1656,3 +1704,44 @@ def test_admin_writes_commit(client, appmod, monkeypatch):
         seen.clear()
         client.post(url, headers={'Authorization': 'Bearer x'}, json=body)
         assert seen and all(seen), f'{url} opened a connection without autocommit: {seen}'
+
+
+# ── FY label parsing: a practice year that spans two calendar years ───────────
+# The warehouse labels the practice FY by its END year and spells the span whenever the practice
+# year is not the calendar year (Gold.vw_Dim_Date): 'FY26' for a January practice, 'FY26-27' for
+# an April one. The app used to test v[2:].isdigit(), which silently dropped every span label --
+# the Targets Year dropdown emptied out and fell back to a single guessed year the moment the
+# demo practice moved to an April year. These pin both shapes.
+
+def test_fy_label_year_single_year_january_practice():
+    import app
+    assert app._fy_label_year('FY26') == 2026
+    assert app._fy_label_yy('FY26') == 26
+
+
+def test_fy_label_year_span_takes_the_end_year():
+    import app
+    # Apr-26 to Mar-27 is the year ENDING 2027 -- the digits after the separator.
+    assert app._fy_label_year('FY26-27') == 2027
+    assert app._fy_label_yy('FY26-27') == 27
+
+
+def test_fy_label_year_tolerates_the_slash_v193_shipped():
+    import app
+    # V193 briefly emitted a slash before matching the app's existing dash convention; any
+    # warehouse still carrying those rows must not empty the dropdown again.
+    assert app._fy_label_year('FY26/27') == 2027
+
+
+def test_fy_label_year_ignores_non_fy_groupings():
+    import app
+    for v in ('Last 3 Months', 'Last 12 Months', '', None, 'FY', 'FYab'):
+        assert app._fy_label_year(v) is None
+
+
+def test_fy_label_year_survives_a_whole_grouping_set():
+    import app
+    groupings = ['Last 3 Months', 'Last 12 Months', 'FY23-24', 'FY24-25', 'FY25-26', 'FY26-27']
+    years = [y for y in (app._fy_label_year(v) for v in groupings) if y]
+    # Four financial years, not zero -- the empty list is what broke the picker.
+    assert years == [2024, 2025, 2026, 2027]
