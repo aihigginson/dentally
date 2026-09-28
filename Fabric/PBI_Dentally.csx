@@ -1792,10 +1792,17 @@ add("Contribution",
     @"[Total Revenue] - [Earnings]",
     "£#,##0");
 
+// ==> NHS INCOME IS THE UDA VALUE, NOT THE PATIENT'S BAND CHARGE. <== This used to sum the
+// invoice amount wherever [NHS Charge] > 0, which is the slice the patient paid at the desk --
+// for Maple, GBP 3,641 against GBP 118,894 of contract work. The band charge and the NHS's
+// contribution are two halves of the same UDA value, and which half arrives from whom is a
+// cash-flow matter between the patient and the NHS, not a measure of what the practice earned.
+// Gold.usp_Load_Fact_Revenue now writes one 'NHS' row per claim at the contract rate, and the
+// NHS invoice lines are no longer loaded, so this is a straight sum with nothing double counted.
 add("NHS Revenue",
     @"CALCULATE(
     SUM('_Revenue'[Amount]),
-    '_Revenue'[NHS Charge] > 0)",
+    '_Revenue'[Revenue Type] = ""NHS"")",
     "£#,##0");
 
 add("Private Revenue",

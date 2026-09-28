@@ -47,8 +47,9 @@
 --  the provider's own figures are ever loaded, they belong in an Input.* table as the actual, with
 --  this kept alongside as the estimate -- not silently replaced by it.
 --
---  Purpose          :  One row per revenue unit (invoice line OR capitation week-within-month
---                      segment). Also rebuilds Gold.Fact_Plan_Spell. Revenue is
+--  Purpose          :  One row per revenue unit -- a private invoice line, a capitation
+--                      week-within-month segment, or an NHS claim at its contract UDA rate.
+--                      Also rebuilds Gold.Fact_Plan_Spell. Revenue is
 --                      defined once here so header/line/category totals cannot diverge. Full rebuild.
 --  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue
 --                      @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
@@ -130,8 +131,58 @@ BEGIN
         LEFT JOIN [Gold].[Dim_Treatments] dt     ON dt.Treatment_ID = tpi.Treatment_ID AND dt.Tenant_ID = ii.Tenant_ID
         LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Site_ID = NULLIF(LTRIM(RTRIM(inv.Site_ID)),'') AND dps.Tenant_ID = ii.Tenant_ID
         LEFT JOIN [Gold].[Dim_Date] dd_inv       ON dd_inv.Full_Date = TRY_CAST(inv.Dated_On AS DATE)
-        WHERE ii.Id IS NOT NULL;
+        -- ==> AN NHS PATIENT CHARGE IS NOT INCOME ON TOP OF THE UDA VALUE, IT IS PART OF IT. <==
+        -- The band charge is the practice collecting a slice of the UDA value at the chair and
+        -- the NHS supplying the rest. Loading the invoice line AND the UDA value would count
+        -- that slice twice, so NHS lines are left to the UDA block below to value in full.
+        WHERE ii.Id IS NOT NULL
+          AND ISNULL(ii.NHS_Charge, 0) = 0;
         SET @My_Inserts = @@ROWCOUNT;
+
+        -- ===== NHS: the contract value of the UDAs delivered ===================================
+        -- ==> NHS INCOME IS THE UDA VALUE, NOT WHAT THE PATIENT PAID AT THE DESK. <== What the
+        -- practice earns for a course is the band's UDAs at the contract rate, however that sum
+        -- is split between the patient and the NHS. The split is a cash-flow matter between the
+        -- two of them and tells you nothing about what the practice earned.
+        --
+        -- Awarded UDA is what the NHS has agreed to pay for; Expected UDA is the claim's own
+        -- figure before a decision. COALESCE prefers the agreed number -- the same basis
+        -- [NHS UDA Delivered] uses, so revenue and the UDA count on the NHS page cannot drift
+        -- apart. Invalid and withdrawn claims are dropped because they will never be paid.
+        --
+        -- ==> THE STATUS COMPARISON IS CASE-SENSITIVE. <== The collation is BIN2 and these
+        -- statuses are lower case in the source; 'Invalid' would match nothing and silently
+        -- bank revenue the practice is never going to see.
+        INSERT INTO [Gold].[Fact_Revenue]
+            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
+             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
+             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
+        SELECT
+              cl.Tenant_ID, 'NHS',
+              CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN 'NHS Orthodontic (UOA)'
+                   ELSE 'NHS Contract (UDA)' END,
+              -1, ISNULL(cl.fk_Patient, -1), ISNULL(cl.fk_Practitioner, -1),
+              ISNULL(cl.fk_Practice_Site, -1), -1, -1,
+              cl.fk_Date_Submitted,
+              CAST(COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0)
+                   * CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN ISNULL(ct.UOA_Value, 0)
+                          ELSE ISNULL(ct.UDA_Value, 0) END AS DECIMAL(18,6)),
+              0, 0,
+              'NHSCLAIM:' + cl.bk_NHS_Claim_ID,
+              CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN 'NHS UOA claim'
+                   ELSE 'NHS UDA claim'
+                        + ISNULL(' band ' + NULLIF(LTRIM(RTRIM(cl.UDA_Band)), ''), '') END,
+              CAST(CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN ISNULL(ct.UOA_Value, 0)
+                        ELSE ISNULL(ct.UDA_Value, 0) END AS DECIMAL(18,4)),
+              CAST(COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0) AS DECIMAL(18,4)),
+              SYSUTCDATETIME()
+        FROM [Gold].[Fact_NHS_Claims] cl
+        LEFT JOIN [Gold].[Dim_NHS_Contracts] ct
+               ON ct.pk_NHS_Contract = cl.fk_NHS_Contract AND ct.Tenant_ID = cl.Tenant_ID
+        WHERE cl.fk_Date_Submitted IS NOT NULL
+          AND ISNULL(cl.Claim_Status, '') NOT IN ('invalid', 'withdrawn')
+          AND COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0) <> 0;
+        SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
         -- ===== Capitation: continuous plan spells, expanded to WEEK-within-MONTH segments ====
         -- ==> THIS USED TO BE ONE ROW PER MEMBER PER WORKING DAY. IT IS NOW ONE PER SEGMENT. <==
