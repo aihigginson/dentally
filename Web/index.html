@@ -164,6 +164,12 @@
         }
         .filter-bar.open { display: flex; }
         .filter-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
+        /* ==> WITHOUT THIS, el.hidden DOES NOTHING HERE. <== The UA stylesheet's
+           [hidden]{display:none} is the weakest rule there is, so ANY author rule setting
+           display beats it -- .filter-field below sets display:flex, so hiding the single-site
+           filter set the attribute and changed nothing on screen. Survived an incognito window,
+           which is what ruled out caching. */
+        [hidden] { display: none !important; }
         .filter-field { display: flex; align-items: center; gap: 6px; }
         .filter-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
         .filter-select {
@@ -1347,21 +1353,28 @@
         // Switching reloads for the same reason the client picker does: half the screen is
         // Power BI embeds holding tokens minted for the OLD practice's RLS.
         //
-        // DEFAULTS TO THE FIRST rather than leaving nothing selected. With no practice chosen
-        // the reports receive every tenant the client can see and ADD THEM UP, which is how
-        // two practices ended up under one name -- so there is always exactly one in scope.
+        // ==> A GROUP SEES ITS PRACTICES MERGED UNLESS IT ASKS FOR ONE. <== This used to force
+        // the first practice, on the reasoning that unselected meant the reports ADD UP every
+        // tenant the client can see. They do -- and for a genuine group that is the whole point:
+        // a three-practice customer wants the group total first and a practice second.
+        //
+        // The fault that reasoning was written for was narrower than it looked. Two practices
+        // were being added up and shown under ONE PRACTICE'S NAME, and the name was the lie, not
+        // the addition. So the merge is now the default and it SAYS SO: the picker offers
+        // "All practices" and the header label says it too, rather than naming one of them.
         const tsel = document.getElementById('practice-tenant');
         const cps  = data.client_practices || [];
         if (tsel && cps.length > 1) {
-            const current = String(data.tenant_ids && data.tenant_ids.length === 1
-                                   ? data.tenant_ids[0] : (actingTenant() || cps[0].tenant_id));
-            tsel.innerHTML = cps.map(pr =>
-                '<option value="' + escHtml(pr.tenant_id) + '"'
-                + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
-                + escHtml(pr.name) + '</option>').join('');
+            const current = String(actingTenant() || '');
+            tsel.innerHTML = '<option value=""' + (current === '' ? ' selected' : '') + '>All practices</option>'
+                + cps.map(pr =>
+                    '<option value="' + escHtml(pr.tenant_id) + '"'
+                    + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
+                    + escHtml(pr.name) + '</option>').join('');
             tsel.style.display = '';
             tsel.onchange = () => { setActingTenant(tsel.value); location.reload(); };
-            if (!actingTenant()) { setActingTenant(current); location.reload(); return; }
+            // The header must never name a single practice while the reports show several.
+            if (current === '' && o) o.textContent = cps.length + ' practices';
         } else if (tsel) {
             tsel.style.display = 'none';
             if (actingTenant()) setActingTenant('');
