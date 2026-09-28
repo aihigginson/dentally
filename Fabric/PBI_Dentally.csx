@@ -2223,63 +2223,45 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 //    header colour recomputes live in the Period/Site/Role/Practitioner context. Built as a sum of
 //    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
 Action<string,string[]> areaRag = (name, bgs) => {
-    string scores = "";
-    foreach (var m in bgs) {
-        if (scores != "") scores += @" +
-    ";
-        scores += @"SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)";
+    // ==> EVALUATE EACH CHILD MEASURE EXACTLY ONCE. <== The first version referenced every BG
+    // twice (score + ISBLANK) and the worst-tile cap took it to three. A BG measure is not
+    // cheap -- each resolves its target out of '_Daily Targets' (~243k rows) with a TREATAS
+    // join from List Date -- and the Home page carries five of these headers over ~35 child
+    // measures. At three references that is ~105 evaluations of the most expensive measures on
+    // the page, on top of the ~112 the tiles themselves already cost. Hoisted into VARs, which
+    // the engine computes once: same result, a third of the work.
+    string vars = "", scores = "", counted = "", worst = "";
+    for (int k = 0; k < bgs.Length; k++) {
+        string v = "v" + k.ToString();
+        vars    += "VAR " + v + " = " + bgs[k] + "
+";
+        if (scores  != "") { scores  += " + "; }
+        if (counted != "") { counted += " + "; }
+        if (worst   != "") { worst   += ", "; }
+        scores  += @"SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)";
+        counted += "IF(ISBLANK(" + v + "), 0, 1)";
+        worst   += @"IF(ISBLANK(" + v + @"), 99, SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 99))";
     }
-    // Count only the tiles that actually scored, so a metric with no band does not vote.
-    string counted = "";
-    foreach (var m in bgs) {
-        if (counted != "") counted += @" +
-    ";
-        counted += @"IF(ISBLANK(" + m + @"), 0, 1)";
-    }
-    // ==> A TILE WITH NO BAND USED TO SCORE 2.5, WHICH IS BETTER THAN AMBER. <== The default arm
-    // of the SWITCH caught BLANK as well as any unexpected colour, so a metric the practice has
-    // no target for voted "slightly better than OK" and dragged the area towards green. On the
-    // demo practice NHS Revenue has no target, and that single phantom vote was worth more than
-    // the margin between amber and green. Blanks now score 0 and are excluded from the divisor,
-    // so the header reflects the tiles that actually say something. All blank -> BLANK header,
-    // which is the honest answer rather than a colour invented from nothing.
-    // The worst SCORING tile, blanks ignored (99 is a sentinel that always loses the MIN).
-    string worst = "";
-    foreach (var m in bgs) {
-        if (worst != "") worst += @",
-    ";
-        worst += @"IF(ISBLANK(" + m + @"), 99, SWITCH(" + m + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 99))";
-    }
-    add(name, @"VAR n = " + counted + @"
-VAR scoreAvg = DIVIDE(
-    " + scores + @",
-    n)
+    add(name, vars + @"VAR n = " + counted + @"
+VAR scoreAvg = DIVIDE(" + scores + @", n)
 VAR worst = MINX( { " + worst + @" }, [Value] )
 -- ==> A RAG HEADER IS PESSIMISTIC, OR IT IS DECORATION. <== The average alone let six mild
 -- positives outvote one serious failure: Private Revenue at -20% sat under a GREEN Revenue
--- header because Outstanding, Discounts and Deposit were all mildly good. Nobody reading a
--- board wants to be told an area is fine when a headline metric is materially failing.
+-- header. The average still sets the ceiling of optimism, but the WORST tile caps it -- an area
+-- can never read better than one band above its weakest metric. One strong red therefore holds
+-- the area at amber however much green surrounds it.
 --
--- So the average still sets the ceiling of optimism, but the WORST tile caps it: an area can
--- never read better than one band above its weakest metric. One strong red therefore holds the
--- area at amber no matter how much green surrounds it, two drag it to red, and an area of
--- unbroken light green still cannot claim strong green on the strength of the average.
--- Blanks are ignored on both sides -- they neither vote nor cap.
+-- A tile with no band scores nothing and leaves the divisor: it neither votes nor caps, so a
+-- metric the practice has no target for cannot prop an area up (it used to score 2.5, better
+-- than amber) nor drag it down.
 VAR capped = MIN( scoreAvg, worst + 1 )
 RETURN
-    -- n = 0 means every tile in this area is blank. Return BLANK, not a colour: without the
-    -- guard DIVIDE yields BLANK, BLANK coerces to 0 in the comparison below, and the header
-    -- would paint STRONG RED for an area that simply has no targets set.
+    -- n = 0 means every tile here is blank. Return BLANK, not a colour: DIVIDE would yield
+    -- BLANK, BLANK coerces to 0, and the header would paint STRONG RED for an area that simply
+    -- has no targets set.
     IF ( n = 0, BLANK(),
         SWITCH(TRUE(), capped < 2, ""#c0392b"", capped < 2.5, ""#f4a261"", capped <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
 };
-// ==> AN AREA HEADER MUST SCORE THE TILES UNDER IT, AND ONLY THOSE. <== Revenue was scoring
-// [Revenue Per Clinical Hour BG], which is displayed in the CLINICAL column, not this one -- so a
-// reader saw strong reds under a green header and had no way to find the number holding it up.
-// Worse, it is the same measure Clinical already scores, so one metric voted twice on the board
-// while Plan Capitation Revenue -- which IS in this column -- voted not at all. Swapped for
-// Revenue Per Dentist Hour and Plan Capitation added: this list now matches the Home page column
-// exactly, in order.
 areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Private Revenue BG]", "[Plan Capitation Revenue BG]", "[NHS Revenue BG]", "[Revenue Per Dentist Hour BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
 areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
 areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
