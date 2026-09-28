@@ -33,9 +33,29 @@
 #
 # ==> WAREHOUSE HALF ONLY. <== The measures still read Fact_Daily_Targets until the model is
 # changed, so nothing moves on screen from this release alone -- it is safe to deploy ahead of
-# the model work. Next step, separately: import PBI.[Aggregate Period Targets], relate
-# [Date Grouping] -> 'List Date Grouping'[Date Grouping], APPLY THE RLS RULE (it carries a
-# Tenant ID), and point the target builders at it.
+# the model work.
+#
+# ==> THE NEW TABLE IS DISCONNECTED. DO NOT TRY TO RELATE IT. <== The first draft of this note
+# said to relate [Date Grouping] -> 'List Date Grouping'[Date Grouping]. That cannot work:
+# 'List Date Grouping' is a BRIDGE, one row per (tenant, grouping, DATE) -- about 90 rows for
+# 'Last 3 Months' -- so Date Grouping is unique on neither side.
+#
+# It does not need a relationship. The grouping is read straight off the slicer:
+#
+#     VAR grp = SELECTEDVALUE('List Date Grouping'[Date Grouping])
+#     VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), "Practice")
+#     RETURN CALCULATE( MAX('Aggregate Period Targets'[Target Value]),
+#                       'Aggregate Period Targets'[Date Grouping]  = grp,
+#                       'Aggregate Period Targets'[Metric]         = "key",
+#                       'Aggregate Period Targets'[Target Level]   = lvl )
+#
+# Three equality filters on 1,296 rows, no bridge traversal and no date scan. The app always
+# sends exactly one period, so SELECTEDVALUE resolves; it returns BLANK for multiple, which
+# yields a blank target rather than a wrong one.
+#
+# Model steps, in order: import PBI.[Aggregate Period Targets]; APPLY THE RLS RULE (it carries
+# a Tenant ID, so without it a disconnected table is a straight cross-tenant leak and
+# Scripts\Check_RLS_Expression.ps1 will fail the build); then repoint the target builders.
 #
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V196__period_targets_precomputed.manifest
 # =====================================================================
