@@ -79,10 +79,26 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // FTE-scaled metrics multiply the per-FTE role target by SUM(FTE) of practitioners in context.
 Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
 
+// ==> THE TARGET LOOKUP NO LONGER RE-IMPLEMENTS A RELATIONSHIP THAT ALREADY EXISTS. <==
+// Every target and variance builder used to pass
+//     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date])
+// into its CALCULATE. '_Daily Targets'[fk Date] -> 'List Date'[pk Date] is an ACTIVE
+// relationship, so the period filter already propagates; the TREATAS materialised the same
+// filter by hand -- every date in the period, as a table -- against 243k rows, once per target
+// measure, ~84 times per page render.
+//
+// It was measurable, not theoretical: the same report with the target measures removed renders
+// instantly on the same capacity, while the full page takes ~45s AFTER the model is loaded and
+// with RLS bypassed. Desktop was always instant because a laptop has more query compute than an
+// F4, which is what hid this.
+//
+// Safe because nothing wraps these builders: kpi() registers the DAX as given, and the
+// REMOVEFILTERS('List Date') uses elsewhere are in value measures, not around the target. The
+// _Metric Actuals TREATAS calls are NOT removed -- that table relates to 'List Date
+// Unconstrained', so for it the TREATAS is the only thing applying the period at all.
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -91,7 +107,6 @@ Func<string,string> tEff100 = key => tEff(key) + " / 100";
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -137,7 +152,7 @@ RETURN IF(
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -149,7 +164,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -162,7 +177,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -174,7 +189,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -187,7 +202,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -200,7 +215,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgWithinPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR dev      = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -732,7 +747,6 @@ add("NHS UDA Completion Rate FY YTD",
 add("NHS UDAs Target",
     @"VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]       = ""nhs_udas"",
     '_Daily Targets'[Target Level] = ""Practice"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
@@ -752,7 +766,6 @@ RETURN IF(
 add("NHS UOAs Target",
     @"VAR full_target = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]       = ""nhs_uoas"",
     '_Daily Targets'[Target Level] = ""Practice"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
@@ -959,7 +972,6 @@ add("NHS UDAs BG",
 VAR target     = [NHS UDAs Target]
 VAR band       = CALCULATE(
     MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]       = ""nhs_udas"",
     '_Daily Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
@@ -976,7 +988,6 @@ add("NHS UOAs BG",
 VAR target     = [NHS UOAs Target]
 VAR band       = CALCULATE(
     MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric]       = ""nhs_uoas"",
     '_Daily Targets'[Target Level] = ""Practice"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
@@ -1121,14 +1132,12 @@ Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||k
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -1137,21 +1146,18 @@ Func<string,string> tEff100 = key => tEff(key) + " / 100";
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -1218,7 +1224,7 @@ RETURN IF(
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1230,7 +1236,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1243,7 +1249,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1256,7 +1262,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1268,7 +1274,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgHigherPpGrey = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1281,7 +1287,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1553,20 +1559,17 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // at Practice level the entered whole-practice number is used as-is (fte = 1).
 Func<string,string> band = key => (@"CALCULATE(
     MAX('_Daily Targets'[Variance]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)").Replace("{key}", key);
 
 Func<string,string> tCum = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t)").Replace("{key}", key);
 
 Func<string,string> tCumFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     SUM('_Daily Targets'[Daily Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
@@ -1574,13 +1577,11 @@ RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
 Func<string,string> tRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 RETURN CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)").Replace("{key}", key);
 
 Func<string,string> tRateFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
@@ -1933,7 +1934,6 @@ Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||k
 Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -1942,7 +1942,6 @@ Func<string,string> tEff100 = key => tEff(key) + " / 100";
 Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
     MAX('_Daily Targets'[Annual Target Value]),
-    TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]),
     '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
@@ -1969,7 +1968,7 @@ RETURN IF(
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1981,7 +1980,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1993,7 +1992,7 @@ RETURN SWITCH(TRUE(),
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('_Daily Targets'[Variance]), '_Daily Targets'[Metric] = ""{key}"", '_Daily Targets'[Target Level] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
