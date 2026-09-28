@@ -2232,8 +2232,7 @@ Action<string,string[]> areaRag = (name, bgs) => {
     string vars = "", scores = "", counted = "", worst = "";
     for (int k = 0; k < bgs.Length; k++) {
         string v = "v" + k.ToString();
-        vars    += "VAR " + v + " = " + bgs[k] + "
-";
+        vars    += "VAR " + v + " = " + bgs[k] + "\n";
         if (scores  != "") { scores  += " + "; }
         if (counted != "") { counted += " + "; }
         if (worst   != "") { worst   += ", "; }
