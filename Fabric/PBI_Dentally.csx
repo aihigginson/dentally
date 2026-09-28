@@ -2941,12 +2941,9 @@ in
     {
         foreach (var role in Model.Roles)
         {
-            var current = role.RowLevelSecurity[apt];
-            if (!string.IsNullOrWhiteSpace(current))
-            {
-                Info("RLS " + role.Name + ": " + aptName + " already filtered -- left alone.");
-                continue;
-            }
+            // Already filtered is the normal case and is not worth logging: only a rule this
+            // script had to add, or could not add, is news.
+            if (!string.IsNullOrWhiteSpace(role.RowLevelSecurity[apt])) continue;
 
             // A table that is already filtered on tenant, chosen by name so the pick is stable.
             var donorName = "";
