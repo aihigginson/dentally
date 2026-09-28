@@ -748,7 +748,7 @@ add("NHS UDA Completion Rate FY YTD",
 
 add("NHS UDAs Target",
     @"VAR full_target = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_udas"",
     'Aggregate Period Targets'[Target Level] = ""Practice"")
@@ -768,7 +768,7 @@ RETURN IF(
 
 add("NHS UOAs Target",
     @"VAR full_target = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_uoas"",
     'Aggregate Period Targets'[Target Level] = ""Practice"")
@@ -1146,7 +1146,7 @@ RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key))
 
 Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
@@ -1162,14 +1162,14 @@ RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key))
 
 Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
@@ -1577,14 +1577,14 @@ Func<string,string> band = key => (@"CALCULATE(
 
 Func<string,string> tCum = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t)").Replace("{key}", key);
 
 Func<string,string> tCumFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR base_t = CALCULATE(
-    MAX('Aggregate Period Targets'[Target Value]),
+    SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
 VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
@@ -2909,5 +2909,69 @@ RETURN
 in
     #""Navigation 1""";
         Info("Application Users: literal warehouse endpoint replaced with pServer/pDatabase.");
+    }
+}
+
+// ===================== Aggregate Period Targets -- RLS =====================
+{
+// =====================================================================
+// ==> A TENANT-BEARING TABLE ADDED IN DESKTOP CARRIES NO RLS RULE UNTIL SOMEONE WRITES ONE. <==
+//
+// V196 added this table through Get Data. Every other tenant-bearing table filters [Tenant ID]
+// against 'Application Users' by USERPRINCIPALNAME(); a table imported later inherits nothing,
+// so unless a rule is added here it is readable in full by every login.
+//
+// That became load-bearing when the cumulative builders went back to SUM([Target Value]): the
+// measures now ADD the rows a login can see, so an unfiltered table would add every tenant's
+// target in the warehouse rather than the one practice the login is entitled to. Under the MAX
+// this replaced the same gap showed up as another practice's larger target displacing your own.
+//
+// The filter is copied from whichever table already has one rather than written out here, so it
+// tracks the real rule -- including the CUSTOMDATA() scoping -- instead of drifting from a
+// hand-typed duplicate. Re-running is a no-op once the rule is present.
+// =====================================================================
+    var aptName = "Aggregate Period Targets";
+    var apt = Model.Tables.FirstOrDefault(t => t.Name == aptName);
+
+    if (apt == null)
+    {
+        Info("WARNING " + aptName + ": table not in the model -- RLS not applied. Import it before publishing.");
+    }
+    else
+    {
+        foreach (var role in Model.Roles)
+        {
+            var current = role.RowLevelSecurity[apt];
+            if (!string.IsNullOrWhiteSpace(current))
+            {
+                Info("RLS " + role.Name + ": " + aptName + " already filtered -- left alone.");
+                continue;
+            }
+
+            // A table that is already filtered on tenant, chosen by name so the pick is stable.
+            var donorName = "";
+            var donorExpr = "";
+            foreach (var t in Model.Tables.OrderBy(x => x.Name))
+            {
+                if (t.Name == aptName) continue;
+                var f = role.RowLevelSecurity[t];
+                if (!string.IsNullOrWhiteSpace(f) && f.Contains("[Tenant ID]"))
+                {
+                    donorName = t.Name; donorExpr = f; break;
+                }
+            }
+
+            if (donorName == "")
+            {
+                Info("WARNING RLS " + role.Name + ": no tenant filter anywhere to copy -- " + aptName
+                     + " LEFT UNFILTERED. Do not publish until this is resolved.");
+                continue;
+            }
+
+            var expr = donorExpr.Replace("'" + donorName + "'", "'" + aptName + "'");
+            role.RowLevelSecurity[apt] = expr;
+            Info("RLS " + role.Name + ": " + aptName + " filter ADDED, copied from '" + donorName
+                 + "' -> " + expr);
+        }
     }
 }
