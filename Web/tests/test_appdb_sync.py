@@ -216,3 +216,42 @@ def test_the_history_connection_is_closed(monkeypatch):
     monkeypatch.setattr(js, '_connect', lambda *a, **k: _C(_runs('SUCCEEDED')))
     js._alert(None, 'access', NOW, 'FAILED', error=RuntimeError('x'))
     assert closed, 'a connection opened here must not leak -- this runs every ten minutes'
+
+
+# ---------------------------------------------------------------------------
+#  The fingerprint -- it decides whether the ten-minute job writes anything at
+#  all, so a false "unchanged" would silently freeze staging against a source
+#  that had moved on. Cheap to test, and the only pure logic in the copy path.
+# ---------------------------------------------------------------------------
+
+def test_row_order_is_not_a_content_change():
+    # The source SELECT carries no ORDER BY, so the same contents can arrive in a different
+    # order on the next run. Treating that as a change would restage all eight tables every
+    # ten minutes -- exactly the cost this was written to remove.
+    a = [('alice', 1), ('bob', 2), ('carol', 3)]
+    assert js._fingerprint(a) == js._fingerprint(list(reversed(a)))
+
+
+def test_a_changed_value_changes_the_fingerprint():
+    assert js._fingerprint([('alice', 1)]) != js._fingerprint([('alice', 2)])
+
+
+def test_a_new_row_changes_the_fingerprint():
+    assert js._fingerprint([('alice', 1)]) != js._fingerprint([('alice', 1), ('bob', 2)])
+
+
+def test_field_boundaries_cannot_be_forged():
+    # Concatenating without a separator would make ('a', 'b') and ('ab',) identical, and an
+    # access row could then be edited into a shape that looks unchanged.
+    assert js._fingerprint([('a', 'b')]) != js._fingerprint([('ab',)])
+
+
+def test_none_is_distinct_from_empty_string():
+    # NULL and '' mean different things in Application_Users; collapsing them would hide a real
+    # edit to a UPN or a display name.
+    assert js._fingerprint([(None,)]) != js._fingerprint([('',)])
+
+
+def test_identical_content_is_stable_across_calls():
+    rows = [('alice', 1, None), ('bob', 2, 'x')]
+    assert js._fingerprint(rows) == js._fingerprint(list(rows))

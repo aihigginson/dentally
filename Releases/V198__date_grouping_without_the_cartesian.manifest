@@ -1,0 +1,58 @@
+﻿# =====================================================================
+# Release V198 -- the period bridge stops pairing forty-one years against forty-one years
+# =====================================================================
+# ==> ONE STATEMENT WAS ~43% OF THE WAREHOUSE'S CPU, EVERY NIGHT. <==
+#
+# Gold.usp_Load_Dim_Date_Grouping built every period from a single CTE over Gold.vw_Dim_Date and
+# then self-joined it. Dim_Date runs 2000-01-01 to 2040-12-31, so the pairing considered
+# 14,976 x 14,976 = 224,280,576 combinations to keep 2,553 rows -- and the CTE was referenced
+# five times, so the view was re-evaluated at each reference, with computed financial-year
+# columns the optimiser had no statistics for.
+#
+# Measured in PROD from queryinsights.exec_requests_history, using allocated_cpu_time_ms rather
+# than total_elapsed_time_ms -- elapsed includes queue time, and on a throttled capacity that
+# measures the symptom instead of the cause:
+#
+#     1,047 CPU-seconds per run, 64.7s elapsed, 0.057 MB scanned, 2,553 rows produced
+#
+# None of that was proportional to the data. It was proportional to the shape.
+#
+# ==> NARROW BEFORE PAIRING; MATERIALISE BEFORE JOINING. <== The output can only ever hold the
+# rolling 365-day window and the financial years from cutover to current -- three or four years,
+# not forty-one. The span is computed first and the spine cut to it, which takes the pairing
+# space down by more than two orders of magnitude; every step lands in a temp table, so the view
+# is read once and every join is planned against real statistics.
+#
+# ==> THE GUARD BELOW DELIBERATELY USES THE OLD CTE QUERY. <== That is the one place in this
+# codebase a CTE is now correct: it is the reference implementation, and it has to be character
+# for character what production ran, or it proves nothing. It runs the old query and the new
+# table side by side on the SAME @Today and requires them to be identical in both directions.
+#
+# Same-day matters. Dim_Date_Grouping holds ROLLING windows, so comparing today's rebuild against
+# a copy taken yesterday would fail on 'Last 3 Months' and 'Last 12 Months' purely because the
+# window moved -- the trap that produced 1,485 false failures in V188.
+#
+# The guard pays the old query's 1,047 CPU-seconds once, at deploy. That is the price of proving
+# equivalence rather than asserting it.
+#
+# NOTE: the procedure was already in source control as a UTF-16LE file. Nothing else in this
+# release changes; no measure, no view, no downstream table.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V198__date_grouping_without_the_cartesian.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Date_Grouping.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Date_Grouping @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# It must not be empty, and every tenant that had periods must still have them.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM [Gold].[Dim_Date_Grouping]; IF @n = 0 BEGIN SET @e = 'V198 FAILED: Dim_Date_Grouping is empty.'; THROW 50290, @e, 1; END;
+
+# ==> THE EQUIVALENCE PROOF. <== The old query, verbatim, on the same @Today, compared both ways.
+EXEC     DECLARE @miss INT, @extra INT, @e2 VARCHAR(4000); DECLARE @Today DATE = CAST(SYSDATETIME() AS DATE); DROP TABLE IF EXISTS #old; WITH v AS (SELECT Tenant_ID, pk_Date, Full_Date, Financial_Year, Financial_Year_Name, Financial_Day_Of_Year, Relative_Day FROM Gold.vw_Dim_Date), fy_counts AS (SELECT v.Tenant_ID, v.Financial_Year AS FY, COUNT(*) AS n FROM v JOIN Gold.Fact_Appointments a ON a.fk_Date_Start = v.pk_Date AND a.Tenant_ID = v.Tenant_ID GROUP BY v.Tenant_ID, v.Financial_Year), cutover AS (SELECT Tenant_ID, MIN(FY) AS cutover_fy FROM fy_counts WHERE n >= 100 GROUP BY Tenant_ID), cur AS (SELECT Tenant_ID, MAX(Financial_Year) AS cur_fy FROM v WHERE Full_Date = @Today GROUP BY Tenant_ID), paired AS (SELECT v.Tenant_ID, v.pk_Date, v.Full_Date, v.Financial_Year, v.Financial_Year_Name, v.Relative_Day, p.pk_Date AS fk_Date_Previous_Year FROM v JOIN v p ON p.Tenant_ID = v.Tenant_ID AND p.Financial_Year = v.Financial_Year - 1 AND p.Financial_Day_Of_Year = v.Financial_Day_Of_Year) SELECT x.Tenant_ID, x.Date_Grouping, x.fk_Date, x.fk_Date_Previous_Year INTO #old FROM (SELECT pr.Tenant_ID, 'Last 3 Months' AS Date_Grouping, pr.pk_Date AS fk_Date, pr.fk_Date_Previous_Year FROM paired pr WHERE pr.Relative_Day BETWEEN -90 AND 0 UNION ALL SELECT pr.Tenant_ID, 'Last 12 Months', pr.pk_Date, pr.fk_Date_Previous_Year FROM paired pr WHERE pr.Relative_Day BETWEEN -365 AND 0 UNION ALL SELECT pr.Tenant_ID, pr.Financial_Year_Name, pr.pk_Date, pr.fk_Date_Previous_Year FROM paired pr JOIN cutover co ON co.Tenant_ID = pr.Tenant_ID JOIN cur cu ON cu.Tenant_ID = pr.Tenant_ID WHERE pr.Financial_Year BETWEEN co.cutover_fy AND cu.cur_fy AND (pr.Financial_Year < cu.cur_fy OR pr.Full_Date <= @Today)) x; SELECT @miss = COUNT(*) FROM (SELECT Tenant_ID, Date_Grouping, fk_Date, fk_Date_Previous_Year FROM #old EXCEPT SELECT Tenant_ID, Date_Grouping, fk_Date, fk_Date_Previous_Year FROM [Gold].[Dim_Date_Grouping]) a; SELECT @extra = COUNT(*) FROM (SELECT Tenant_ID, Date_Grouping, fk_Date, fk_Date_Previous_Year FROM [Gold].[Dim_Date_Grouping] EXCEPT SELECT Tenant_ID, Date_Grouping, fk_Date, fk_Date_Previous_Year FROM #old) b; DROP TABLE IF EXISTS #old; IF @miss > 0 OR @extra > 0 BEGIN SET @e2 = 'V198 FAILED: ' + CAST(@miss AS VARCHAR(10)) + ' row(s) the old query produced are missing, ' + CAST(@extra AS VARCHAR(10)) + ' row(s) are new. The rewrite is not equivalent.'; THROW 50291, @e2, 1; END;
+
+# Duplicates would double-count every period on every board. The old shape could not produce
+# them; a temp-table join with a wrong predicate could.
+EXEC     DECLARE @dup INT, @e3 VARCHAR(4000); SELECT @dup = COUNT(*) FROM (SELECT Tenant_ID, Date_Grouping, fk_Date FROM [Gold].[Dim_Date_Grouping] GROUP BY Tenant_ID, Date_Grouping, fk_Date HAVING COUNT(*) > 1) d; IF @dup > 0 BEGIN SET @e3 = 'V198 FAILED: ' + CAST(@dup AS VARCHAR(10)) + ' duplicated (tenant, grouping, date) row(s).'; THROW 50292, @e3, 1; END;
+
+TEST

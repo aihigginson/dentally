@@ -1,0 +1,82 @@
+﻿# =====================================================================
+# Release V197 -- NHS revenue is the contract value of the UDAs delivered
+# =====================================================================
+# ==> THE WAREHOUSE WAS BOOKING THE PATIENT BAND CHARGE AS THE PRACTICE'S NHS INCOME. <==
+#
+# [NHS Revenue] summed invoice lines where NHS_Charge > 0 -- the slice the patient hands over at
+# the desk. For Maple over twelve months that is GBP 3,641 against GBP 118,894 of contract work.
+# The measure was reporting three percent of NHS income.
+#
+# A band 2 course worth GBP 90 with a GBP 20 patient charge earns the practice GBP 90: the
+# patient funds 20 of it and the NHS supplies the other 70. Which half arrives from whom is a
+# cash-flow matter between the patient and the NHS and says nothing about what was earned.
+#
+# ==> SO THE PATIENT CHARGE COMES OUT OF THE INVOICE BLOCK, IT DOES NOT SIT BESIDE THE UDAS. <==
+# It is already inside the UDA value; loading both would count the patient slice twice. Two
+# changes to one procedure, correct only together:
+#
+#     invoice lines   WHERE ISNULL(ii.NHS_Charge,0) = 0     NHS lines no longer loaded
+#     a third insert  Revenue_Type = 'NHS'                  UDAs at the contract rate
+#
+# ==> HEADLINE REVENUE MOVES, AND THAT IS THE POINT. <== Maple, last 12 months:
+#
+#     Private      1,406,349   unchanged
+#     Capitation     599,147   unchanged
+#     NHS            118,894   was 3,641
+#     Total        2,124,390   was 2,009,137
+#
+# Two independent cross-checks that this is the right number rather than merely a bigger one:
+# 3,634 UDAs against a 4,204 contract target is 86%, which is the 85.3% completion the NHS page
+# already showed from a different measure; and FY-to-date reads 1.8K, half a year of 3.6K.
+#
+# Awarded UDA is what the NHS has agreed to pay for, Expected UDA the claim's own figure before
+# a decision. COALESCE prefers the agreed one -- the same basis [NHS UDA Delivered] uses, so the
+# money and the UDA count on the NHS page cannot drift apart.
+#
+# ==> THE STATUS FILTER IS CASE-SENSITIVE. <== The collation is BIN2 and these statuses are
+# lower case in the source. 'Invalid' would match nothing and bank revenue never to be paid.
+#
+# ==> THE DEPENDENT AGGREGATES MUST BE REBUILT IN THE SAME RELEASE. <== Three of them carry
+# revenue forward. Leaving them gives a board whose Revenue tiles and whose patient and
+# practitioner pages disagree about the same practice.
+#
+# Model step after this: re-run Fabric\PBI_Dentally.csx and republish, which moves [NHS Revenue]
+# from the NHS_Charge filter to Revenue_Type = "NHS". Note the ordering: Total Revenue is a
+# plain sum of the fact, so it moves the moment this release lands, while the NHS tile keeps
+# showing the old GBP 3,641 until the model is republished.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V197__nhs_revenue_is_the_uda_value.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# The patient slice must be gone from the invoice side, or it is counted twice.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'Invoice' AND ISNULL(NHS_Charge,0) <> 0; IF @a > 0 BEGIN SET @e = 'V197 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' invoice row(s) still carry an NHS charge -- the patient slice is being counted twice.'; THROW 50280, @e, 1; END;
+
+# One revenue row per claim. A duplicate means the contract join fanned out, which would inflate
+# NHS income by a whole multiple without looking obviously wrong.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT Tenant_ID, bk_Invoice_Item_ID FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'NHS' GROUP BY Tenant_ID, bk_Invoice_Item_ID HAVING COUNT(*) > 1) x; IF @b > 0 BEGIN SET @f = 'V197 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' NHS claim(s) produced more than one revenue row.'; THROW 50281, @f, 1; END;
+
+# Transcription check, NOT an independent derivation: it recomputes the same expression over the
+# same source, so it catches a lost WHERE clause or a fan-out but not a wrong rate. The rate is
+# checked by the UDA cross-check recorded in the header.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); WITH src AS (SELECT cl.Tenant_ID, SUM(COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0) * CASE WHEN ISNULL(cl.Ortho,0) = 1 THEN ISNULL(ct.UOA_Value,0) ELSE ISNULL(ct.UDA_Value,0) END) AS expected FROM [Gold].[Fact_NHS_Claims] cl LEFT JOIN [Gold].[Dim_NHS_Contracts] ct ON ct.pk_NHS_Contract = cl.fk_NHS_Contract AND ct.Tenant_ID = cl.Tenant_ID WHERE cl.fk_Date_Submitted IS NOT NULL AND ISNULL(cl.Claim_Status,'') NOT IN ('invalid','withdrawn') AND COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0) <> 0 GROUP BY cl.Tenant_ID), got AS (SELECT Tenant_ID, SUM(Amount) AS actual FROM [Gold].[Fact_Revenue] WHERE Revenue_Type = 'NHS' GROUP BY Tenant_ID) SELECT @c = COUNT(*) FROM src FULL OUTER JOIN got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 0.01; IF @c > 0 BEGIN SET @g = 'V197 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' tenant(s) where NHS revenue does not equal the claims at their contract rate.'; THROW 50282, @g, 1; END;
+
+# ==> A ZERO RATE EARNS ZERO SILENTLY. <== Any tenant holding claims against a contract that has
+# a UDA value must end up with NHS revenue. Nothing else in the chain would notice a rate going
+# missing; the tile would simply read a plausible GBP 0.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT cl.Tenant_ID FROM [Gold].[Fact_NHS_Claims] cl JOIN [Gold].[Dim_NHS_Contracts] ct ON ct.pk_NHS_Contract = cl.fk_NHS_Contract AND ct.Tenant_ID = cl.Tenant_ID WHERE ISNULL(ct.UDA_Value,0) > 0 AND cl.fk_Date_Submitted IS NOT NULL GROUP BY cl.Tenant_ID) t WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Fact_Revenue] r WHERE r.Tenant_ID = t.Tenant_ID AND r.Revenue_Type = 'NHS' AND r.Amount > 0); IF @d2 > 0 BEGIN SET @h = 'V197 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' tenant(s) have rated NHS claims but no NHS revenue.'; THROW 50283, @h, 1; END;
+
+# Only the three known revenue types may exist -- a stray fourth would be counted in Total
+# Revenue by every measure in the model without appearing in any breakdown.
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM [Gold].[Fact_Revenue] WHERE Revenue_Type NOT IN ('Invoice','Capitation','NHS'); IF @p > 0 BEGIN SET @q = 'V197 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' row(s) carry an unexpected Revenue_Type.'; THROW 50284, @q, 1; END;
+
+EXEC     DECLARE @i2 BIGINT,@u2 BIGINT,@d3 BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Mode='PROD',@Run_Inserts=@i2 OUT,@Run_Updates=@u2 OUT,@Run_Deletes=@d3 OUT;
+EXEC     DECLARE @i3 BIGINT,@u3 BIGINT,@d4 BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode='PROD',@Run_Inserts=@i3 OUT,@Run_Updates=@u3 OUT,@Run_Deletes=@d4 OUT;
+EXEC     DECLARE @i4 BIGINT,@u4 BIGINT,@d5 BIGINT; EXEC Gold.usp_Load_Aggregate_Practitioner_Contribution @Mode='PROD',@Run_Inserts=@i4 OUT,@Run_Updates=@u4 OUT,@Run_Deletes=@d5 OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+TEST
