@@ -1,0 +1,50 @@
+﻿# =====================================================================
+# Release V199 -- the ten-minute access sync stops rewriting data that has not changed
+# =====================================================================
+# ==> 32% OF THE PRODUCTION WAREHOUSE'S COMPUTE WAS RESTAGING ~750 IDENTICAL ROWS. <==
+#
+# appdb_sync in 'access' mode ran 1,000 times in seven days -- once every ten minutes -- and each
+# run issued about 84 statements: DELETE then re-INSERT of all eight Input_Stage tables, whether
+# or not a single value had changed. Access records almost never change.
+#
+# Measured in PROD from queryinsights.exec_requests_history, by allocated_cpu_time_ms:
+#
+#     appdb_sync.access                  83,720 statements   1,000 runs   6,421.9 CPU-s   32.2%
+#     Gold.usp_Load_Dim_Date_Grouping        337 statements       7 runs   6,099.7 CPU-s   30.6%
+#
+# Two jobs were 63% of the warehouse. The second was V198.
+#
+# ==> THE SOURCE READ IS FREE; ONLY THE WRITE COSTS. <== AppDB is Azure SQL, billed on
+# provisioned capacity rather than per statement, so the rows can be fetched and fingerprinted at
+# no cost to the capacity. Only a table whose fingerprint has moved is rewritten.
+#
+# ==> ALL EIGHT TABLES ARE STILL STAGED EVERY RUN. <== The invariant that made that necessary --
+# the nightly META_SYNC_INPUT must never read a stale copy, and correctness must not depend on
+# job ordering -- is untouched. Skipping a write when the content is provably identical leaves
+# "staged equals source" exactly as true as rewriting it did. The nightly full sync additionally
+# forces an unconditional rewrite, so truth is re-established once a day even if something edited
+# Input_Stage directly.
+#
+# ==> THIS RELEASE ONLY ADDS THE FINGERPRINT TABLE. <== The behaviour change is in
+# Web/appdb_sync.py and ships with the app. Deploy this FIRST: until the table exists the job
+# logs that it cannot skip anything and copies everything, which is the old behaviour and safe.
+#
+# The DDL is guarded with IF OBJECT_ID(...) IS NULL rather than DROP TABLE IF EXISTS. Every other
+# Input_Stage table is emptied and refilled on every run so dropping them is harmless; this one
+# is state, and dropping it would cost a needless full restage of all eight.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V199__access_sync_writes_only_on_change.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Input_Stage.Sync_Fingerprint.Table.sql
+
+# The table must exist and be readable by the job, or every run silently falls back to copying
+# everything -- which is safe, but is also the bug this release exists to fix, so it should fail
+# loudly here rather than quietly at 3am.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'Input_Stage' AND TABLE_NAME = 'Sync_Fingerprint'; IF @n <> 1 BEGIN SET @e = 'V199 FAILED: Input_Stage.Sync_Fingerprint was not created.'; THROW 50300, @e, 1; END;
+
+# Shape check: the job writes these four columns by name and will fail at runtime, every ten
+# minutes, if any of them is missing.
+EXEC     DECLARE @c INT, @e2 VARCHAR(4000); SELECT @c = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Input_Stage' AND TABLE_NAME = 'Sync_Fingerprint' AND COLUMN_NAME IN ('Table_Name','Row_Count','Fingerprint','Updated_At'); IF @c <> 4 BEGIN SET @e2 = 'V199 FAILED: Sync_Fingerprint has ' + CAST(@c AS VARCHAR(10)) + ' of the 4 expected columns.'; THROW 50301, @e2, 1; END;
+
+TEST

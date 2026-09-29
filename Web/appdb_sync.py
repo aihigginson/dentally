@@ -25,6 +25,7 @@ ON FAILURE IT EMAILS, ITSELF -- see the GRAPH_SEND block below. Azure Monitor's 
 here but never deliver mail, and this carries the actual error rather than just "an execution
 failed". Transitions only, plus a reminder every ALERT_REPEAT_HOURS while it stays broken.
 """
+import hashlib
 import os
 import struct
 import sys
@@ -110,16 +111,73 @@ def _columns(cur, schema, table):
     return [r[0] for r in cur.fetchall()]
 
 
-def copy_tables(src, tgt, tables):
-    """Copy each table, then verify counts. Returns {table: (source, staged)}.
+def _columns_bulk(tgt, schema, tables):
+    """Every table's column list in ONE round trip, ordered as the table declares them.
 
-    Rows are batched into multi-row INSERTs: the Fabric Warehouse is columnstore and a per-row
-    INSERT costs roughly as much as a 100-row one, so single-row inserts would turn 750 rows into
-    minutes of work.
+    Eight INFORMATION_SCHEMA queries used to be eight distributed statements on the warehouse,
+    every ten minutes, before a single row had been looked at. The whole point of this job is to
+    be free when nothing has changed, and eight statements is not free.
+    """
+    marks = ', '.join(['?'] * len(tables))
+    tgt.execute(
+        'SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS '
+        f'WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ({marks}) '
+        'ORDER BY TABLE_NAME, ORDINAL_POSITION', [schema] + list(tables))
+    out = {}
+    for tname, cname in tgt.fetchall():
+        out.setdefault(tname, []).append(cname)
+    return out
+
+
+def _fingerprint(rows):
+    """A stable digest of a table's contents.
+
+    Sorted before hashing because the source SELECT carries no ORDER BY, so row order is not
+    guaranteed between runs and an order change is not a content change.
+
+    Each field is tagged 'N' for NULL or 'V' before its value, then NUL joins fields and RS joins
+    rows. Both parts are load-bearing: without the separators ('a','b') and ('ab',) hash alike,
+    and without the tag NULL and '' do -- which the test suite caught in the first version of
+    this, where a UPN edited from NULL to empty would have read as unchanged and never restaged.
+    """
+    parts = sorted('\x00'.join('N' if v is None else 'V' + str(v) for v in r) for r in rows)
+    return hashlib.sha256('\x1e'.join(parts).encode('utf-8')).hexdigest()
+
+
+def _stored_fingerprints(tgt):
+    """What each staged table held when it was last written. One round trip, empty on first run."""
+    try:
+        tgt.execute('SELECT Table_Name, Row_Count, Fingerprint FROM [Input_Stage].[Sync_Fingerprint]')
+        return {r[0]: (r[1], r[2]) for r in tgt.fetchall()}
+    except Exception as e:
+        # Missing table on first deploy must not break the sync -- it just means nothing can be
+        # skipped yet, which is the safe direction.
+        print(f'  (no fingerprint table yet: {str(e)[:60]} -- copying everything)')
+        return {}
+
+
+def copy_tables(src, tgt, tables, force=False):
+    """Copy each table that has CHANGED, then verify counts. Returns {table: (source, staged)}.
+
+    ==> ACCESS RECORDS ALMOST NEVER CHANGE, SO THIS JOB SHOULD ALMOST NEVER WRITE. <==
+    It used to DELETE and re-INSERT all eight tables on every run. At one run per ten minutes that
+    was 1,000 runs and ~84 statements each in a week -- 6,422 CPU-seconds, 32% of the production
+    warehouse's entire compute, to restage roughly 750 rows that were already identical.
+
+    The source read is free: AppDB is Azure SQL, billed on provisioned capacity rather than per
+    statement. So the rows are fetched, fingerprinted in Python, and compared with what was staged
+    last time. Unchanged tables are not touched at all.
+
+    ==> STAGING STILL MATCHES SOURCE AFTER EVERY RUN. <== That invariant is what lets main() stage
+    all eight tables regardless of mode; skipping a write when the content is provably identical
+    does not weaken it. `force` restores unconditional rewriting for the nightly full sync, which
+    is the anchor that re-establishes truth even if something edited Input_Stage directly.
     """
     result = {}
+    colmap = _columns_bulk(tgt, 'Input_Stage', tables)
+    stored = {} if force else _stored_fingerprints(tgt)
     for t in tables:
-        cols = _columns(tgt, 'Input_Stage', t)
+        cols = colmap.get(t)
         if not cols:
             raise RuntimeError(f'Input_Stage.{t} does not exist in {FABRIC_DB} -- deploy the DDL first')
         collist = ', '.join(f'[{c}]' for c in cols)
@@ -133,6 +191,15 @@ def copy_tables(src, tgt, tables):
                 f'{NONEMPTY[t]}. An empty source here would wipe downstream state, so this is '
                 f'treated as a fault rather than a legitimate empty table.')
 
+        fp = _fingerprint(rows)
+        was = stored.get(t)
+        if was and was[0] == n_src and was[1] == fp:
+            # Nothing written, and deliberately not re-counted: the count would be another
+            # statement to confirm something the fingerprint already establishes.
+            result[t] = (n_src, n_src)
+            print(f'  {t:24} {n_src:>6}    unchanged')
+            continue
+
         tgt.execute(f'DELETE FROM [Input_Stage].[{t}]')
         marks = '(' + ', '.join(['?'] * len(cols)) + ')'
         BATCH = 100
@@ -145,6 +212,14 @@ def copy_tables(src, tgt, tables):
         staged = _count(tgt, 'Input_Stage', t)
         result[t] = (n_src, staged)
         print(f'  {t:24} {n_src:>6} -> {staged:>6} {"OK" if n_src == staged else "MISMATCH"}')
+
+        # Recorded only after a verified write, so a mismatch cannot be skipped next time round.
+        if n_src == staged:
+            tgt.execute('DELETE FROM [Input_Stage].[Sync_Fingerprint] WHERE Table_Name = ?', t)
+            tgt.execute(
+                'INSERT INTO [Input_Stage].[Sync_Fingerprint] '
+                '(Table_Name, Row_Count, Fingerprint, Updated_At) VALUES (?, ?, ?, SYSUTCDATETIME())',
+                t, n_src, fp)
     return result
 
 
@@ -387,7 +462,10 @@ def main():
 
 
 def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
-    counts = copy_tables(src, tgt, tables)
+    # The ten-minute access job skips tables whose contents are provably identical; the nightly
+    # full sync and the copy-for-comparison mode always rewrite, so truth is re-established once a
+    # day no matter what happened to Input_Stage in between.
+    counts = copy_tables(src, tgt, tables, force=(mode != 'access'))
     bad = [t for t, (a, b) in counts.items() if a != b]
     if bad:
         # Do NOT run the procs on a partial copy. They MERGE from staging, so a half-filled
