@@ -47,6 +47,12 @@ param(
     [Parameter(Mandatory = $true)][string] $Manifest,
     [switch] $WhatIf,
     [switch] $Log,
+    [switch] $SkipIntegrityCheck,   # SKIP the referential-integrity check that now runs after
+                                    # every deployment. It moved here from the nightly build on
+                                    # 2026-09-29, because the one cause of an orphan that is
+                                    # actually ours arrives through a release. It is a few seconds
+                                    # and you should want it; skip only when deploying into a
+                                    # warehouse you already know is mid-repair.
     [switch] $RunTests,    # RUN the TEST regression gate. OFF BY DEFAULT since 18/09/2026: the
                            # gate deploys the 11-file test framework, captures and compares on every
                            # invocation, which is a real slice of a shared F4 -- four deploys in one
@@ -270,7 +276,41 @@ catch {
     exit 1
 }
 
+# --- referential integrity, on every release ---------------------------------
+# ==> THIS MOVED HERE FROM THE NIGHTLY BUILD ON 2026-09-29. <== The gate used to run every night
+# at 1,565 statements a time, because it checks each foreign key in its own round trip. Four
+# things produce an orphan and only one is ours:
+#
+#   1. our own bugs          -- the real case, and it arrives through a RELEASE. Here.
+#   2. Dentally's own data   -- not ours to fix
+#   3. asynchronous loading  -- a key and the row it references can legitimately be out of step
+#                               mid-load, so a nightly gate partly measured its own timing
+#   4. customer data quality -- not ours to fix
+#
+# So the nightly build now runs it weekly (Orchestrate_Build, CELL 9b) and every deployment runs
+# it here. Cause 1 is caught EARLIER than before, against the change that introduced it.
+#
+# Runs AFTER the manifest is applied and logged SUCCESS, because that is the truth: the objects
+# are deployed. A failure here is a loud signal to look, not a rollback -- there is nothing to
+# roll back to. Exit 3 distinguishes it from a manifest failure (exit 1).
 Exec1 "UPDATE Migrate.Deploy_Log SET Status='SUCCESS' WHERE Deploy_Id='$deployId'"
-$conn.Close()
 Write-Host "Manifest applied successfully.  (deploy $deployId, commit $shaLabel)" -ForegroundColor Green
+
+if (-not $SkipIntegrityCheck) {
+    Write-Host ""
+    Write-Host "Referential integrity check ..." -ForegroundColor Cyan
+    try {
+        Exec1 "DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Audit.usp_Check_Referential_Integrity @Mode='LIVE', @Logging=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;"
+        Write-Host "  OK -- no orphaned keys or missing sentinels" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  INTEGRITY CHECK FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  The manifest IS deployed and logged SUCCESS -- this is a signal to look," -ForegroundColor Red
+        Write-Host "  not a rollback. See Audit.RI_Check_Result for which keys are orphaned." -ForegroundColor Red
+        try { $conn.Close() } catch {}
+        exit 3
+    }
+}
+
+$conn.Close()
 exit 0
