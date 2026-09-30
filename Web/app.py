@@ -303,6 +303,69 @@ def health():
     import (the app would have failed to boot otherwise)."""
     return jsonify({'status': 'ok'}), 200
 
+# ── Embed-token caches ────────────────────────────────────────────────────────
+# ==> A SESSION MINTED TEN EMBED TOKENS AND ASKED THE WAREHOUSE THE SAME QUESTION TEN TIMES. <==
+# The app preloads every accessible report, so /api/embed-token is called once per report. Each
+# call opened a Fabric warehouse connection and ran _get_user_info + _get_user_access -- the same
+# two answers about the same user, ten times over. That is where the
+# ConnectWarehouseAndSqlAnalyticsEndpointLakehouseFromExternalApp events come from: 1,027 in a
+# week. It also sits on the critical path of the FIRST render, and on a throttled capacity a
+# warehouse connection is a queued query, which is why the first page degraded to minutes while
+# the already-embedded ones stayed instant.
+#
+# ==> THE AUTHZ CACHE IS SHORT ON PURPOSE, BUT IT IS STILL A CACHE OF AN ACCESS DECISION. <==
+# A user whose access is revoked keeps it until the entry expires. That is bounded by
+# _AUTHZ_TTL and is small against the delay already in the system: access edits reach this
+# warehouse through appdb_sync, which runs every ten minutes. Sixty seconds on top of a
+# ten-minute pipeline changes nothing materially -- but raise it and that stops being true.
+#
+# The token itself is NOT cached: every call still mints a fresh one carrying the caller's own
+# identity, and RLS still resolves in the model. What is cached is only the lookup that decides
+# whether to mint at all.
+_AUTHZ_TTL       = 60.0      # seconds
+_REPORT_META_TTL = 3600.0    # embedUrl/datasetId change only when a report is republished
+_authz_cache       = {}      # upn -> (ts, client_id, tids, access)
+_report_meta_cache = {}      # report_id -> (ts, embed_url, dataset_id)
+
+
+def _authz_for(upn):
+    """(client_id, tids, access) for this user, from cache when fresh.
+
+    Raises on a warehouse failure exactly as the inline lookup did -- a cache miss must not
+    become a silent grant.
+    """
+    hit = _authz_cache.get(upn)
+    if hit and time.time() - hit[0] < _AUTHZ_TTL:
+        return hit[1], hit[2], hit[3]
+
+    conn = _fabric_conn()
+    try:
+        cur = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        access, _ = _get_user_access(cur, upn)
+    finally:
+        conn.close()
+
+    _authz_cache[upn] = (time.time(), client_id, tids, access)
+    return client_id, tids, access
+
+
+def _report_meta(report_id, headers):
+    """(embedUrl, datasetId) for a report, from cache when fresh."""
+    hit = _report_meta_cache.get(report_id)
+    if hit and time.time() - hit[0] < _REPORT_META_TTL:
+        return hit[1], hit[2]
+
+    r = requests.get(
+        f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}',
+        headers=headers, timeout=10,
+    )
+    r.raise_for_status()
+    meta = r.json()
+    _report_meta_cache[report_id] = (time.time(), meta['embedUrl'], meta['datasetId'])
+    return meta['embedUrl'], meta['datasetId']
+
+
 # ── Protected routes ──────────────────────────────────────────────────────────
 
 @app.route('/api/embed-token')
@@ -324,11 +387,7 @@ def embed_token():
         return jsonify({'error': 'Server RLS misconfiguration'}), 500
     # 2. The caller must be a provisioned application user mapped to >= 1 tenant.
     try:
-        conn = _fabric_conn()
-        cur  = conn.cursor()
-        _, client_id, tids, _ = _get_user_info(cur, upn)
-        access, _ = _get_user_access(cur, upn)
-        conn.close()
+        client_id, tids, access = _authz_for(upn)
     except Exception:
         return jsonify({'error': 'Authorization check failed'}), 500
     if client_id is None or not tids:
@@ -343,14 +402,7 @@ def embed_token():
         token   = _pbi_token()
         headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
 
-        r = requests.get(
-            f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}',
-            headers=headers, timeout=10,
-        )
-        r.raise_for_status()
-        report_meta = r.json()
-        embed_url   = report_meta['embedUrl']
-        dataset_id  = report_meta['datasetId']
+        embed_url, dataset_id = _report_meta(report_id, headers)
 
         # The RLS effective identity is ALWAYS attached -- row filtering is mandatory.
         identity = {

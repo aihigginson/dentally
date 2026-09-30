@@ -1745,3 +1745,101 @@ def test_fy_label_year_survives_a_whole_grouping_set():
     years = [y for y in (app._fy_label_year(v) for v in groupings) if y]
     # Four financial years, not zero -- the empty list is what broke the picker.
     assert years == [2024, 2025, 2026, 2027]
+
+
+# ---------------------------------------------------------------------------
+#  Embed-token caches. The app preloads every accessible report, so a single
+#  session calls /api/embed-token ten times. Before these caches that was ten
+#  Fabric warehouse connections asking the same two questions about the same
+#  user, on the critical path of the first render.
+# ---------------------------------------------------------------------------
+
+def _embed_stubs(appmod, monkeypatch, conn_counter, get_counter):
+    monkeypatch.setattr(appmod, '_auth', lambda: ('u@x.com', None))
+
+    def _conn(*a, **k):
+        conn_counter.append(1)
+        return FakeConn()
+
+    monkeypatch.setattr(appmod, '_fabric_conn', _conn)
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: ('Alice', 7, [11], False))
+    monkeypatch.setattr(appmod, '_get_user_access', lambda cur, upn: ({'revenue': True}, None))
+    monkeypatch.setattr(appmod, '_pbi_token', lambda: 'pbi-token')
+
+    class FakeResp:
+        def __init__(self, payload):
+            self._p = payload
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self._p
+
+    def _get(*a, **k):
+        get_counter.append(1)
+        return FakeResp({'embedUrl': 'https://embed', 'datasetId': 'ds1'})
+
+    monkeypatch.setattr(appmod.requests, 'get', _get)
+    monkeypatch.setattr(appmod.requests, 'post',
+                        lambda *a, **k: FakeResp({'token': 'embed-token'}))
+
+
+def test_the_warehouse_is_asked_once_per_user_not_once_per_report(client, appmod, monkeypatch):
+    conns, gets = [], []
+    _embed_stubs(appmod, monkeypatch, conns, gets)
+
+    for _ in range(4):
+        assert client.get('/api/embed-token?report=revenue').status_code == 200
+
+    assert len(conns) == 1, f'opened {len(conns)} warehouse connections for one user'
+
+
+def test_report_metadata_is_fetched_once(client, appmod, monkeypatch):
+    conns, gets = [], []
+    _embed_stubs(appmod, monkeypatch, conns, gets)
+
+    for _ in range(4):
+        assert client.get('/api/embed-token?report=revenue').status_code == 200
+
+    assert len(gets) == 1, f'fetched report metadata {len(gets)} times'
+
+
+def test_the_authz_cache_expires(client, appmod, monkeypatch):
+    # A revoked user must not keep access indefinitely. The TTL is the bound, and it is only
+    # defensible while it stays small against the ten-minute appdb_sync pipeline behind it.
+    conns, gets = [], []
+    _embed_stubs(appmod, monkeypatch, conns, gets)
+
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    assert len(conns) == 1
+
+    # Age the entry past its TTL rather than sleeping.
+    ts, cid, tids, access = appmod._authz_cache['u@x.com']
+    appmod._authz_cache['u@x.com'] = (ts - appmod._AUTHZ_TTL - 1, cid, tids, access)
+
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    assert len(conns) == 2, 'the cache did not expire -- access changes would never take effect'
+
+
+def test_a_token_is_still_minted_per_request(client, appmod, monkeypatch):
+    # The authorization LOOKUP is cached; the token is not. Every call must still mint one
+    # carrying the caller's own identity, or two users could share a scope.
+    conns, gets, posts = [], [], []
+    _embed_stubs(appmod, monkeypatch, conns, gets)
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {'token': 'embed-token'}
+
+    def _post(*a, **k):
+        posts.append(k.get('json'))
+        return FakeResp()
+
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+
+    for _ in range(3):
+        assert client.get('/api/embed-token?report=revenue').status_code == 200
+
+    assert len(posts) == 3, 'GenerateToken must be called for every request'
+    assert all(p['identities'][0]['username'] == 'u@x.com' for p in posts)
