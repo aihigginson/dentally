@@ -69,6 +69,13 @@ ALERT_REPEAT_HOURS = float(os.environ.get('ALERT_REPEAT_HOURS', '6'))
 FULL_TABLES = ['Application_Users', 'Access_Log', 'Metric_Variance', 'Plan_Capitation_Rate',
                'Practice_Config', 'Practitioner_Pay', 'Practitioner_Role', 'Targets']
 
+# Sentinel row in Input_Stage.Sync_Fingerprint recording when the access proc last actually ran.
+# Not a table name, so it can never collide with one of FULL_TABLES.
+PROC_SENTINEL = '(access proc)'
+# Run the access proc at least this often even when nothing has changed, so that no mistake in the
+# skip logic can stop the merge for longer than this.
+PROC_MAX_SKIP_MINUTES = float(os.environ.get('PROC_MAX_SKIP_MINUTES', '60'))
+
 # A source table that has gone unexpectedly empty is the one input that could do real harm, so
 # refuse to proceed below these floors rather than sync an empty roster. Application_Users empty
 # would mean nobody has access; Targets empty would blank every target fact.
@@ -174,6 +181,7 @@ def copy_tables(src, tgt, tables, force=False):
     is the anchor that re-establishes truth even if something edited Input_Stage directly.
     """
     result = {}
+    changed = set()
     colmap = _columns_bulk(tgt, 'Input_Stage', tables)
     stored = {} if force else _stored_fingerprints(tgt)
     for t in tables:
@@ -211,6 +219,7 @@ def copy_tables(src, tgt, tables, force=False):
 
         staged = _count(tgt, 'Input_Stage', t)
         result[t] = (n_src, staged)
+        changed.add(t)
         print(f'  {t:24} {n_src:>6} -> {staged:>6} {"OK" if n_src == staged else "MISMATCH"}')
 
         # Recorded only after a verified write, so a mismatch cannot be skipped next time round.
@@ -220,7 +229,57 @@ def copy_tables(src, tgt, tables, force=False):
                 'INSERT INTO [Input_Stage].[Sync_Fingerprint] '
                 '(Table_Name, Row_Count, Fingerprint, Updated_At) VALUES (?, ?, ?, SYSUTCDATETIME())',
                 t, n_src, fp)
-    return result
+    return result, changed
+
+
+def _note_proc_ran(tgt):
+    """Record that the access proc actually ran, in the fingerprint table's sentinel row.
+
+    Kept here rather than in its own table because _stored_fingerprints already reads this table
+    in one round trip, and the whole point of the exercise is to stop spending statements.
+    """
+    tgt.execute('DELETE FROM [Input_Stage].[Sync_Fingerprint] WHERE Table_Name = ?', PROC_SENTINEL)
+    tgt.execute(
+        'INSERT INTO [Input_Stage].[Sync_Fingerprint] '
+        '(Table_Name, Row_Count, Fingerprint, Updated_At) VALUES (?, 0, ?, SYSUTCDATETIME())',
+        PROC_SENTINEL, '0' * 64)
+
+
+def _why_run_proc(tgt, changed, started):
+    """Reason to run Meta.usp_Sync_Access_From_AppDB, or None to skip it.
+
+    ==> STAGING NOT CHANGING IS NOT QUITE ENOUGH TO SKIP THE MERGE. <== It would be if the only
+    way Security.Application_Users could drift were through staging, but a failed proc run leaves
+    staging correct and the target half-written, and skipping on "nothing changed" would then
+    preserve that state indefinitely. So two other things also force a run.
+
+    This is what was left after V199: the copy stopped writing, and the consumer kept merging
+    every ten minutes regardless -- about 49 statements and 1.15 CPU-seconds a run, ~165 a day.
+    """
+    if changed:
+        return 'staging changed: ' + ', '.join(sorted(changed))
+
+    # A previous failure must not be made permanent by a run that decides there is nothing to do.
+    tgt.execute(
+        "SELECT TOP 1 Status FROM Audit.Process_Execution_Log "
+        "WHERE Process_Name = 'appdb_sync.access' AND Start_Time < ? ORDER BY Start_Time DESC",
+        started)
+    row = tgt.fetchone()
+    if row and (row[0] or '').upper() != 'SUCCEEDED':
+        return f'previous run was {row[0]}'
+
+    # Self-heal: run it occasionally whatever the fingerprints say, so no reasoning error here can
+    # stop the merge for longer than this window.
+    tgt.execute(
+        'SELECT Updated_At FROM [Input_Stage].[Sync_Fingerprint] WHERE Table_Name = ?',
+        PROC_SENTINEL)
+    row = tgt.fetchone()
+    if not row:
+        return 'no record of the proc having run'
+    age_min = (datetime.now(timezone.utc).replace(tzinfo=None) - row[0]).total_seconds() / 60.0
+    if age_min >= PROC_MAX_SKIP_MINUTES:
+        return f'last ran {age_min:.0f} min ago (self-heal at {PROC_MAX_SKIP_MINUTES:.0f})'
+    return None
 
 
 def _graph_token():
@@ -465,7 +524,7 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
     # The ten-minute access job skips tables whose contents are provably identical; the nightly
     # full sync and the copy-for-comparison mode always rewrite, so truth is re-established once a
     # day no matter what happened to Input_Stage in between.
-    counts = copy_tables(src, tgt, tables, force=(mode != 'access'))
+    counts, changed = copy_tables(src, tgt, tables, force=(mode != 'access'))
     bad = [t for t, (a, b) in counts.items() if a != b]
     if bad:
         # Do NOT run the procs on a partial copy. They MERGE from staging, so a half-filled
@@ -483,12 +542,33 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
 
     proc = ('Meta.usp_Sync_Access_From_AppDB' if mode == 'access'
             else 'Meta.usp_Sync_Input_From_AppDB')
+
+    # ==> A MERGE FROM STAGING THAT DID NOT MOVE HAS NOTHING TO MERGE. <== V199 stopped the copy
+    # rewriting identical rows; the proc went on merging them every ten minutes anyway, which was
+    # the ~49 statements and 1.15 CPU-seconds per run still left. _why_run_proc decides, and
+    # errs towards running: it only stays quiet when staging is unchanged, the previous run
+    # succeeded, and the proc has run recently enough.
+    if mode == 'access':
+        why = _why_run_proc(tgt, changed, started)
+        if why is None:
+            print(f'{proc}: skipped -- staging unchanged, last merge within '
+                  f'{PROC_MAX_SKIP_MINUTES:.0f} min')
+            _log_run(tgt_cn, mode, started, 'SUCCEEDED', rows=sum(a for a, _ in counts.values()))
+            _alert(tgt_cn, mode, started, 'SUCCEEDED')
+            src_cn.close()
+            tgt_cn.close()
+            return 0
+        print(f'{proc}: running -- {why}')
+
     before = _count(tgt, 'Security', 'Application_Users') if mode == 'access' else None
     tgt.execute('DECLARE @i BIGINT, @u BIGINT, @d BIGINT; '
                 f'EXEC {proc} @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;')
     if mode == 'access':
         after = _count(tgt, 'Security', 'Application_Users')
         print(f'{proc}: Security.Application_Users {before} -> {after}')
+        # Written only after the proc returned, so a throw leaves the sentinel stale and the next
+        # run is forced rather than skipped.
+        _note_proc_ran(tgt)
     else:
         print(f'{proc}: done')
 
