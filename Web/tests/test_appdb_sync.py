@@ -6,7 +6,7 @@ an outage passes unnoticed, which is the exact failure it exists to prevent. Eve
 job is I/O against two databases and is proved by running it.
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault('TENANT_ID', 'test-tenant')
 os.environ.setdefault('CLIENT_ID', 'test-client')
@@ -255,3 +255,63 @@ def test_none_is_distinct_from_empty_string():
 def test_identical_content_is_stable_across_calls():
     rows = [('alice', 1, None), ('bob', 2, 'x')]
     assert js._fingerprint(rows) == js._fingerprint(list(rows))
+
+
+# ---------------------------------------------------------------------------
+#  _why_run_proc -- whether the ten-minute merge runs at all. A wrong "skip"
+#  freezes Security.Application_Users against a source that has moved on, so
+#  every path that forces a run is tested, not just the happy one.
+# ---------------------------------------------------------------------------
+
+class _ProcCur:
+    """Answers the two questions _why_run_proc asks, by looking at the SQL."""
+    def __init__(self, last_status='SUCCEEDED', sentinel_age_min=5, sentinel=True):
+        self.last_status = last_status
+        self.sentinel_age_min = sentinel_age_min
+        self.sentinel = sentinel
+        self._next = None
+
+    def execute(self, sql, *a):
+        if 'Process_Execution_Log' in sql:
+            self._next = (self.last_status,) if self.last_status else None
+        else:
+            if self.sentinel:
+                when = (datetime.now(timezone.utc).replace(tzinfo=None)
+                        - timedelta(minutes=self.sentinel_age_min))
+                self._next = (when,)
+            else:
+                self._next = None
+        return self
+
+    def fetchone(self):
+        return self._next
+
+
+def test_a_changed_table_always_runs_the_merge():
+    why = js._why_run_proc(_ProcCur(), {'Application_Users'}, NOW)
+    assert why and 'Application_Users' in why
+
+
+def test_a_failed_previous_run_forces_the_merge():
+    # Staging is correct but the target may be half-written; skipping would make that permanent.
+    why = js._why_run_proc(_ProcCur(last_status='FAILED'), set(), NOW)
+    assert why and 'FAILED' in why
+
+
+def test_never_having_run_forces_the_merge():
+    why = js._why_run_proc(_ProcCur(sentinel=False), set(), NOW)
+    assert why and 'no record' in why
+
+
+def test_a_stale_merge_self_heals():
+    # Whatever the fingerprints say, the merge runs at least this often.
+    why = js._why_run_proc(_ProcCur(sentinel_age_min=js.PROC_MAX_SKIP_MINUTES + 1), set(), NOW)
+    assert why and 'self-heal' in why
+
+
+def test_nothing_changed_and_recently_merged_skips():
+    assert js._why_run_proc(_ProcCur(sentinel_age_min=5), set(), NOW) is None
+
+
+def test_the_sentinel_cannot_collide_with_a_real_table():
+    assert js.PROC_SENTINEL not in js.FULL_TABLES
