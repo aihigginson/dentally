@@ -61,3 +61,26 @@ class FakeConn:
 
     def close(self):
         pass
+
+
+# ---------------------------------------------------------------------------
+#  app.py caches the per-user authorization lookup and the report metadata at
+#  MODULE scope, deliberately: a session mints ten embed tokens and would
+#  otherwise open ten warehouse connections to ask the same two questions.
+#
+#  Module state outlives a test. The suite proved it the moment the cache went
+#  in -- test_embed_success_for_provisioned_user passed alone and failed in the
+#  suite, because an earlier test had already populated the entry for that UPN.
+#  Clearing between tests keeps each one honest about what it actually sets up.
+# ---------------------------------------------------------------------------
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _clear_app_caches():
+    import app
+    app._authz_cache.clear()
+    app._report_meta_cache.clear()
+    yield
+    app._authz_cache.clear()
+    app._report_meta_cache.clear()
