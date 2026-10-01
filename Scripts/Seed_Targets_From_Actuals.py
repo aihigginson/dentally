@@ -147,7 +147,13 @@ def read_actuals(cur, tenant, fy):
         FROM   base
         GROUP  BY Metric
     """, tenant, fy)
-    return {r[0]: (r[1], float(r[2])) for r in cur.fetchall() if r[2] is not None}
+    # ==> A ZERO TARGET IS WORSE THAN A BLANK ONE. <== Blank reads as "no target set"; zero reads
+    # as a target that is met forever, and every tile scored against it sits at 100%+ looking
+    # healthy. Dev's tenant 100 produced nhs_revenue = 0 from a year with real NHS income, which
+    # is exactly the shape of a wrong number that looks authoritative. Same rule as the
+    # no-complete-year one: say nothing rather than something false.
+    return {r[0]: (r[1], float(r[2]))
+            for r in cur.fetchall() if r[2] is not None and float(r[2]) != 0.0}
 
 
 def main():
@@ -192,8 +198,10 @@ def main():
     wh.close()
 
     missing = [m for m in wanted if m not in actuals]
-    print('\nCoverage    : %d of %d metrics have actuals; %d tile(s) will stay blank'
+    print('\nCoverage    : %d of %d metrics have a usable actual; %d tile(s) will stay blank'
           % (len(actuals), len(wanted), len(missing)))
+    print('              (metrics whose actual was zero or null are skipped deliberately -- a '
+          'zero target reads as met forever)')
 
     print('\n%-34s %-14s %s' % ('metric', 'type', 'target'))
     for m in sorted(actuals):
