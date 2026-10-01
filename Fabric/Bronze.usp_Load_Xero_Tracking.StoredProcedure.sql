@@ -26,7 +26,14 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
 
-        DELETE FROM Bronze.Xero_Tracking WHERE Tenant_ID = @Tenant_ID;
+        -- ==> WITH @Tenant_ID NULL THIS DELETES ONLY THE TENANTS PRESENT IN STAGE. <== Never
+        -- "every tenant in Bronze": the demo tenant is seeded straight into Bronze and never
+        -- appears in Stage, so an unscoped delete here would wipe data this run never loaded.
+        DELETE FROM Bronze.Xero_Tracking
+        WHERE (@Tenant_ID IS NOT NULL AND Tenant_ID = @Tenant_ID)
+           OR (@Tenant_ID IS NULL
+               AND Tenant_ID IN (SELECT DISTINCT TRY_CAST(Tenant_ID AS INT) FROM Stage.Xero_Tracking
+                                 WHERE TRY_CAST(Tenant_ID AS INT) IN (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO Bronze.Xero_Tracking (Tenant_ID, Xero_Tenant_ID, Tracking_Category_ID, Category_Name, Category_Status, Tracking_Option_ID, Option_Name, Option_Status, DW_Loaded_At)
@@ -41,7 +48,13 @@ BEGIN
             , LEFT(Option_Status,         50)
             , SYSUTCDATETIME()
         FROM Stage.Xero_Tracking
-        WHERE TRY_CAST(Tenant_ID AS INT) = @Tenant_ID;
+        -- @Tenant_ID NULL = every ACTIVE REGISTERED tenant present in Stage. Stage is an
+        -- inbound landing area and can hold tenants the product knows nothing about, so
+        -- the set is intersected with Audit.Tenants rather than taken on trust. An
+        -- explicit value is NOT constrained -- that is the operator escape hatch.
+        WHERE (   (@Tenant_ID IS NOT NULL AND TRY_CAST(Tenant_ID AS INT) = @Tenant_ID)
+           OR (@Tenant_ID IS NULL AND TRY_CAST(Tenant_ID AS INT) IN
+                 (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
         SET @My_Inserts = @@ROWCOUNT;
 
     END TRY

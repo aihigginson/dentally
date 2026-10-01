@@ -41,7 +41,13 @@ BEGIN
             , TRY_CAST(target_treatment_days        AS DECIMAL(18,4))                  AS Target_Treatment_Days
         INTO #src
         FROM Stage.Waiting_Lists
-        WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
+        -- @Tenant_ID NULL = every ACTIVE REGISTERED tenant present in Stage. Stage is an
+        -- inbound landing area and can hold tenants the product knows nothing about, so
+        -- the set is intersected with Audit.Tenants rather than taken on trust. An
+        -- explicit value is NOT constrained -- that is the operator escape hatch.
+        WHERE (   (@Tenant_ID IS NOT NULL AND TRY_CAST(tenant_id AS INT) = @Tenant_ID)
+           OR (@Tenant_ID IS NULL AND TRY_CAST(tenant_id AS INT) IN
+                 (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
 
         UPDATE tgt SET
               tgt.Active                       = src.Active
