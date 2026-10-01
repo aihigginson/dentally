@@ -1,0 +1,82 @@
+﻿# =====================================================================
+# Release V201 -- the metric actuals fact catches up with V197
+# =====================================================================
+# ==> V197 LEFT THIS PROCEDURE BEHIND, AND nhs_revenue HAS BEEN ZERO EVER SINCE. <==
+#
+# V197 took the patient band charge out of the invoice rows and gave NHS its own Revenue Type at
+# the contract value of the UDAs. Gold.usp_Load_Fact_Metric_Actuals was not part of that release,
+# so it still carried the pre-V197 split:
+#
+#     nhs   = CASE WHEN NHS_Charge > 0 THEN Amount END   over Revenue_Type = 'Invoice'
+#     priv  = CASE WHEN NHS_Charge = 0 THEN Amount END   over Revenue_Type = 'Invoice'
+#     tot   =                          Amount            over Revenue_Type = 'Invoice'
+#
+# V197's whole point was that an Invoice row can no longer carry an NHS charge -- the loader
+# filters ISNULL(ii.NHS_Charge,0) = 0. So NHS_Charge > 0 became unreachable. The consequence is
+# not an error, it is three quietly wrong numbers:
+#
+#     nhs_revenue      0.00            structurally, for every tenant, forever
+#     private_revenue  all of it       it absorbed what nhs lost
+#     total_revenue    invoice only    no NHS, no capitation
+#
+# Maple's 2025 (dev), measured before the fix:
+#
+#     total_revenue     1,392,769.72  ->  1,994,420.00
+#     nhs_revenue               0.00  ->    113,436.31
+#     private_revenue   1,392,769.72       unchanged
+#     capitation          488,213.97       unchanged
+#
+# ==> THE BOARD WAS NEVER AFFECTED, AND IT IS WORTH SAYING WHY. <== Every revenue measure is
+# redefined later in PBI_Dentally.csx against '_Revenue', which overwrites the fact-reading
+# expression the MODE="apply" block had assigned:
+#
+#     [Total Revenue]    = SUM('_Revenue'[Amount])
+#     [NHS Revenue]      = Revenue Type = "NHS"
+#     [Private Revenue]  = Revenue Type = "Invoice" AND NHS Charge = 0
+#
+# and Revenue Per Clinical Hour, Revenue Per Dentist Hour, Discounts and Deposit Value all divide
+# [Total Revenue] rather than reading the fact. So NO MODEL REPUBLISH IS NEEDED for this release.
+# What the fault did reach is anything reading ACTUALS for those three keys: the targets template
+# and Scripts\Seed_Targets_From_Actuals.py. It surfaced there -- a practice with real NHS income
+# seeding an NHS target of zero.
+#
+# The header of the procedure calls its sources a reconciliation oracle that MIRRORS the live DAX.
+# That is exactly what had stopped being true, and it is the standard the fix is written to.
+#
+# ==> THE GUARDS SCOPE TO fk_Date <> -1 DELIBERATELY. <== #inv excludes unknown-date revenue and
+# the capitation insert above it does not, so the total = parts identity is only true on dated
+# rows. Dev holds three such rows (tenant 100, GBP 224.00, Invoice); capitation has none, which
+# is why the existing capitation insert is left alone.
+#
+# No downstream rebuild: Fact_Metric_Actuals is a leaf -- nothing in Gold loads from it, only
+# Audit.RI_Check_Config and the Test.* definitions refer to it. The procedure is a full
+# DELETE + rebuild of every metric and every year, so this one run corrects all history; the
+# nightly chain (GOLD_AGG_METRIC_ACTUALS) would have picked it up anyway.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V201__metric_actuals_revenue_follows_v197.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ==> THE BUG ITSELF. <== A tenant with NHS revenue in the fact must end up with a non-zero
+# nhs_revenue metric. This is the assertion that was false for three months, and the only one
+# here that would have caught it: everything else about the old split was internally consistent.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT r.Tenant_ID FROM [Gold].[Fact_Revenue] r WHERE r.Revenue_Type = 'NHS' AND r.fk_Date <> -1 GROUP BY r.Tenant_ID HAVING SUM(r.Amount) > 0) t WHERE NOT EXISTS (SELECT 1 FROM [Gold].[Fact_Metric_Actuals] m WHERE m.Tenant_ID = t.Tenant_ID AND m.Metric = 'nhs_revenue' AND m.fk_Practice_Site = -1 AND m.fk_Practitioner = -1 AND m.Numerator > 0); IF @a > 0 BEGIN SET @e = 'V201 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' tenant(s) have NHS revenue but a zero or missing nhs_revenue actual.'; THROW 50290, @e, 1; END;
+
+# total_revenue must be the sum of its three parts at the global grain. Catches a Revenue Type
+# dropping out of 'tot' or being double counted into it -- the failure mode that produced the
+# wrong number in the first place, where total silently equalled private.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT Tenant_ID, SUM(CASE WHEN Metric = 'total_revenue' THEN Numerator ELSE 0 END) - SUM(CASE WHEN Metric IN ('nhs_revenue','private_revenue','plan_capitation_revenue') THEN Numerator ELSE 0 END) AS diff FROM [Gold].[Fact_Metric_Actuals] WHERE fk_Practice_Site = -1 AND fk_Practitioner = -1 AND Metric IN ('total_revenue','nhs_revenue','private_revenue','plan_capitation_revenue') GROUP BY Tenant_ID) x WHERE ABS(diff) > 0.01; IF @b > 0 BEGIN SET @f = 'V201 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' tenant(s) where total_revenue <> nhs + private + capitation.'; THROW 50291, @f, 1; END;
+
+# Transcription check against the source, NOT an independent derivation: global-grain
+# total_revenue must equal every dated row of Fact_Revenue. Catches a lost Revenue Type or a
+# fan-out; it cannot catch Fact_Revenue itself being wrong (V197's guards cover that).
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT Tenant_ID, SUM(Amount) AS expected FROM [Gold].[Fact_Revenue] WHERE fk_Date <> -1 GROUP BY Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Numerator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'total_revenue' AND fk_Practice_Site = -1 AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 0.01; IF @c > 0 BEGIN SET @g = 'V201 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' tenant(s) where global total_revenue does not equal dated Fact_Revenue.'; THROW 50292, @g, 1; END;
+
+# private_revenue must still be exactly the non-NHS invoice rows. It is the one figure the old
+# code got right, so it is the control: if it moves, the rewrite changed more than intended.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT Tenant_ID, SUM(Amount) AS expected FROM [Gold].[Fact_Revenue] WHERE fk_Date <> -1 AND Revenue_Type = 'Invoice' AND ISNULL(NHS_Charge,0) = 0 GROUP BY Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Numerator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'private_revenue' AND fk_Practice_Site = -1 AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 0.01; IF @d2 > 0 BEGIN SET @h = 'V201 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' tenant(s) where private_revenue is no longer the non-NHS invoice rows.'; THROW 50293, @h, 1; END;
+
+TEST
