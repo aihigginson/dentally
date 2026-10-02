@@ -68,5 +68,15 @@
       "PowerShell(& \"C:\\\\Users\\\\aihig\\\\onedrive\\\\dentally\\\\code\\\\Scripts\\\\Generate_Process_Dependencies.ps1\")",
       "Bash(az provider *)"
     ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Any operation whose target is the DEV environment is allowed without further confirmation. DEV means: the `dev` git branch (including `git push origin dev`); the dev Fabric warehouse SQL endpoint, whose host contains \"4i26eirspjiujnltrvplquzkem\"; the AppDB database \"AppDB-dev\"; the Power BI workspace \"DEV - DM Dentally\"; and the dev lakehouse. This covers writes, deploys, rebuilds and deletes against those targets -- dev data is synthetic or reproducible and the owner has said explicitly that anything may be done to dev."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Writing to PRODUCTION is blocked unless the user has explicitly asked for that specific prod action in the conversation. PRODUCTION means: the prod Fabric warehouse SQL endpoint, whose host contains \"eljzajgm5cpe5i64szgon7sej4\"; the AppDB database \"AppDB-prod\"; the `main` git branch; and the Power BI workspace \"DM Dentally\". There is one live paying practice behind these and a bad write is visible on their board. READING from production is NOT restricted -- queries, refresh history and capacity probes write nothing and are how prod problems get diagnosed."
+    ]
   }
 }
