@@ -8,37 +8,57 @@
 -- Security.Client_Tenant_Access (V186). Audit.Tenants.Client_ID still records who OWNS a
 -- tenant -- billing, subscription, invoicing -- while that junction records who may SEE one.
 --
--- This file previously carried four dev API tenants and three point-in-time test practices
--- that no longer exist, and because it is DEPLOYED TO BOTH ENVIRONMENTS prod carried all
--- eight of them too: clients with no tenant, no user and no subscription. A client that
--- resolves to nothing fails closed in _get_user_info, so they were inert rather than
--- dangerous -- but they show up in any list of clients, which is no way to read a
--- production table.
---
 -- CLIENT 1 IS OURS. It owns no tenant and is granted access to every active one, which is
 -- what lets a support login move between practices -- in the reports as well as the app,
 -- since RLS resolves through the same junction.
 --
 -- REAL CLIENTS START AT 100. Everything below that is internal, which is why this is 1 and
 -- not some number off the end -- a high id would read as a customer to anyone scanning the
--- table, and the range is the thing that carries the meaning. Client 1 held this role once
--- before: the note this file used to carry said "both dev tenants are grouped under Client 1
--- so dev accounts can see all data".
+-- table, and the range is the thing that carries the meaning.
 --
--- DELETE-then-INSERT, so anything edited directly in a warehouse is replaced on the next
--- deploy. Client_Name is therefore the same in both environments by design; dev's tenant
--- display names are overridden in Audit.Tenants, not here.
+-- ==> NO BLANKET DELETE ANY MORE. <== This file used to open with DELETE FROM Security.Clients,
+-- which was safe while the table held nothing but these three rows. It is not safe now:
+--   * V151 added Client_Email, Email_Domain and First_Contact_At, written by the APP at signup,
+--   * Web/app.py creates PROSPECT clients from id 1000 upwards the moment someone asks for a
+--     verification email -- before there is any tenant, user or subscription.
+-- A deploy would have deleted every prospect the sales monitor exists to track, and no guard
+-- would have noticed because the seed re-inserts the three rows and the row count still looks
+-- plausible. Each owned row is asserted on its own instead; rows this file does not own are
+-- left alone.
+--
+-- ==> AND THE DEMONSTRATION PRACTICE IS DEV-ONLY, BUT THIS FILE DEPLOYS TO BOTH. <== Client 11
+-- was inserted unconditionally, so PROD carried a client with no tenant (prod has no tenant 11
+-- and never has), no user, no subscription and no billing -- a single orphan row, inert in the
+-- app because _get_user_info fails closed, but perfectly visible to anything reading the table.
+-- Gold.Dim_Client duly derived "no tenant => prospect" and the sales board reported our own
+-- demo fixture as the one and only sales lead. It is now tied to the demo TENANT existing, so
+-- it appears exactly where the demo data does and nowhere else, with no environment flag to set
+-- and nothing to remember -- the same reason Client_Tenant_Access derives its grants rather
+-- than listing them.
 -- =============================================================================
 
-DELETE FROM Security.Clients;
+-- Us. Owns no tenant; sees every active one via Security.Client_Tenant_Access.
+IF NOT EXISTS (SELECT 1 FROM [Security].[Clients] WHERE Client_ID = 1)
+    INSERT INTO [Security].[Clients] (Client_ID, Client_Name) VALUES (1, 'Analytically');
 GO
 
-INSERT INTO Security.Clients (Client_ID, Client_Name)
-VALUES
--- Us. Owns no tenant; sees every active one via Security.Client_Tenant_Access.
-  (1,   'Analytically'),
--- Demonstration data (dev only; deliberately not a convincing practice name)
-  (11,  'Demonstration Practice'),
--- Real practices (loaded via Ingest_Dentally)
-  (100, 'Maple Dental');
+-- Demonstration data. Deliberately not a convincing practice name, and deliberately present
+-- only where tenant 11 is.
+IF EXISTS (SELECT 1 FROM [Audit].[Tenants] WHERE Tenant_ID = 11)
+   AND NOT EXISTS (SELECT 1 FROM [Security].[Clients] WHERE Client_ID = 11)
+    INSERT INTO [Security].[Clients] (Client_ID, Client_Name) VALUES (11, 'Demonstration Practice');
+GO
+
+-- ...and withdrawn again where it is not, which is what makes the rule re-runnable rather than
+-- a one-off cleanup. Guarded on the junction and the user roster so it can never remove a row
+-- something else depends on: if either is populated, that is not the dev fixture.
+IF NOT EXISTS (SELECT 1 FROM [Audit].[Tenants] WHERE Tenant_ID = 11)
+   AND NOT EXISTS (SELECT 1 FROM [Security].[Client_Tenant_Access] WHERE Client_ID = 11)
+   AND NOT EXISTS (SELECT 1 FROM [Security].[Application_Users] WHERE Client_ID = 11)
+    DELETE FROM [Security].[Clients] WHERE Client_ID = 11;
+GO
+
+-- Real practices (loaded via Ingest_Dentally).
+IF NOT EXISTS (SELECT 1 FROM [Security].[Clients] WHERE Client_ID = 100)
+    INSERT INTO [Security].[Clients] (Client_ID, Client_Name) VALUES (100, 'Maple Dental');
 GO

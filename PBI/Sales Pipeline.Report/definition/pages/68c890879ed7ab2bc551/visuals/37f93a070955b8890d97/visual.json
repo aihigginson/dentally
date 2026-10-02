@@ -27,7 +27,7 @@
                     }
                   },
                   {
-                    "value": "   acquisition funnel and product usage, one row per client",
+                    "value": "   customers and prospects only, one row per client",
                     "textStyle": {
                       "fontSize": "10pt",
                       "color": "#5ec4c0"

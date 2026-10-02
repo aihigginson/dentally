@@ -1,0 +1,54 @@
+﻿# =====================================================================
+# Release V206 -- the demonstration practice stops existing in prod
+# =====================================================================
+# V205 stopped the demo fixture being counted as a sales PROSPECT. This stops it being in prod
+# at all, which is the actual defect: the demo is dev data and prod should never have had a
+# client row for it.
+#
+# Security.Clients.Data.sql is deployed to BOTH warehouses and inserted client 11
+# unconditionally, so prod carried one orphan row -- no tenant (prod has no tenant 11), no
+# Client_Tenant_Access grant, no Application_Users row, no billing. Verified before writing this:
+#
+#     Clients               1      <-- the orphan
+#     Client_Tenant_Access  0
+#     Application_Users     0
+#     Audit.Tenants         0      (neither as Tenant_ID 11 nor as Client_ID 11)
+#     Sales.Funnel_Event    0
+#
+# The row is now tied to the demo TENANT existing, so it is present in dev and absent in prod
+# with no environment switch.
+#
+# ==> THE SEED'S BLANKET DELETE IS GONE TOO, AND THAT MATTERS MORE THAN THE DEMO ROW. <== The
+# file opened with DELETE FROM Security.Clients. Harmless when the table held three seeded rows;
+# not harmless since Web/app.py started creating PROSPECT clients from id 1000 at the moment
+# someone requests a verification email, carrying Client_Email and First_Contact_At that exist
+# nowhere else. The next deploy of that file would have deleted every prospect the sales monitor
+# was built to track, re-inserted the three known rows, and left a row count that looked right.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V206__the_demo_practice_is_dev_only.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Security.Clients.Data.sql
+
+# Rebuild the client dimension and the summary fact so Gold stops carrying the orphan too.
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Dim_Client @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Client_Status @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# The demo client exists if and only if the demo tenant does. One assertion, both environments:
+# it must PASS in dev (where both are present) and in prod (where neither is).
+EXEC     DECLARE @a INT, @b INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM Security.Clients WHERE Client_ID = 11; SELECT @b = COUNT(*) FROM Audit.Tenants WHERE Tenant_ID = 11; IF @a <> @b BEGIN SET @e = 'V206 FAILED: demo client rows = ' + CAST(@a AS VARCHAR(10)) + ' but demo tenant rows = ' + CAST(@b AS VARCHAR(10)) + '; they must match.'; THROW 50340, @e, 1; END;
+
+# Us and the live practice must both survive a seed that no longer deletes first.
+EXEC     DECLARE @c INT, @f VARCHAR(4000); SELECT @c = COUNT(*) FROM Security.Clients WHERE Client_ID IN (1, 100); IF @c <> 2 BEGIN SET @f = 'V206 FAILED: expected clients 1 and 100, found ' + CAST(@c AS VARCHAR(10)) + '.'; THROW 50341, @f, 1; END;
+
+# No client may be left without a tenant, a grant, a user and a subscription -- which is what an
+# orphan IS. Prospects (id >= 1000) are exempt: having none of those yet is the whole point of
+# a prospect.
+EXEC     DECLARE @d2 INT, @g VARCHAR(4000); SELECT @d2 = COUNT(*) FROM Security.Clients c WHERE c.Client_ID >= 2 AND c.Client_ID < 1000 AND NOT EXISTS (SELECT 1 FROM Audit.Tenants t WHERE t.Client_ID = c.Client_ID) AND NOT EXISTS (SELECT 1 FROM Security.Client_Tenant_Access a WHERE a.Client_ID = c.Client_ID) AND NOT EXISTS (SELECT 1 FROM Security.Application_Users u WHERE u.Client_ID = c.Client_ID); IF @d2 <> 0 BEGIN SET @g = 'V206 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' orphan client(s) below the prospect range.'; THROW 50342, @g, 1; END;
+
+# And Gold must agree with Security -- the dimension is a full rebuild, so a mismatch here means
+# the rebuild did not run.
+EXEC     DECLARE @h INT, @k VARCHAR(4000); SELECT @h = COUNT(*) FROM Gold.Dim_Client WHERE bk_Client_ID = 11; IF @h <> (SELECT COUNT(*) FROM Security.Clients WHERE Client_ID = 11) BEGIN SET @k = 'V206 FAILED: Gold.Dim_Client and Security.Clients disagree about the demo client.'; THROW 50343, @k, 1; END;
+
+TEST
