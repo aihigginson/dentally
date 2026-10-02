@@ -25,6 +25,23 @@
 // The fact holds two foreign keys to the same status dimension and only one relationship can be
 // active, which is why there are two copies rather than USERELATIONSHIP in every measure.
 
+// ===================== Model behaviour =====================
+{
+// ==> DISCOURAGE IMPLICIT MEASURES. <== This is the setting that makes a measures table the single
+// source of numbers: with it on, dragging a numeric COLUMN onto a visual no longer auto-aggregates,
+// so every figure has to come from an explicit measure. PBI Dentally is already configured this
+// way. It is also the prerequisite Tabular Editor enforces before a Calculation Group can be added.
+//
+// ==> IT IS A MODEL-WIDE BEHAVIOUR CHANGE, SO MIND THE AFFILIATES REPORT. <== Any existing visual
+// that relies on an implicit aggregation -- a numeric column dropped straight onto a card or chart
+// -- stops working once this is true and must be replaced with an explicit measure. The affiliate
+// measures are NOT yet in this model, so if that report aggregates columns directly, expect it to
+// break until they are added. Delete this block if that is not wanted yet; nothing else here
+// depends on it.
+Model.DiscourageImplicitMeasures = true;
+Info("DiscourageImplicitMeasures = true. Visuals using implicit column aggregation will need explicit measures.");
+}
+
 // ===================== Measures table =====================
 {
 // PBI Analytically has no _Measures table of its own, and measures parked on a data table make
