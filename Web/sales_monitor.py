@@ -34,7 +34,7 @@ import os
 import struct
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pyodbc
 import requests
@@ -229,14 +229,24 @@ def funnel_billing_rows(env, cn):
 
 
 # ── load ──────────────────────────────────────────────────────────────────────
-def load(cn, env, usage, funnel, dry):
+def load(cn, env, usage, funnel, dry, days):
     if dry:
         print('  DRY RUN -- nothing written')
         return
     cur = cn.cursor()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    # ==> DELETE ONLY THE WINDOW BEING RELOADED. <== It used to delete every row for the
+    # environment, which meant a 30-day run DESTROYED older history: the live practice's six days
+    # of use collapsed to three, and once it passed 30 days dormant it would have vanished
+    # entirely -- leaving Days_Since_Last_Access NULL and the client reading "never accessed"
+    # rather than "dormant", a worse lie than the one this monitor exists to catch. Scoped to the
+    # window, the reload stays idempotent AND the warehouse keeps history past Log Analytics'
+    # 365-day retention.
+    window_start = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    print('  window starts %s -- rows older than that are KEPT' % window_start)
 
-    cur.execute('DELETE FROM Sales.Usage_Daily WHERE App_Env = ?', env)
+    cur.execute('DELETE FROM Sales.Usage_Daily WHERE App_Env = ? AND Access_Date >= ?',
+                env, window_start)
     print('  Usage_Daily    deleted %d, inserting %d' % (cur.rowcount, len(usage)))
     if usage:
         cur.executemany(
@@ -244,7 +254,8 @@ def load(cn, env, usage, funnel, dry):
             ' Report_Opens, Reports_Distinct, First_Access_At, Last_Access_At, DW_Loaded_At)'
             ' VALUES (?,?,?,?,?,?,?,?,?,?)', [tuple(r) + (now,) for r in usage])
 
-    cur.execute('DELETE FROM Sales.Funnel_Event WHERE App_Env = ?', env)
+    cur.execute('DELETE FROM Sales.Funnel_Event WHERE App_Env = ? AND Event_At >= ?',
+                env, window_start)
     print('  Funnel_Event   deleted %d, inserting %d' % (cur.rowcount, len(funnel)))
     if funnel:
         cur.executemany(
@@ -254,13 +265,20 @@ def load(cn, env, usage, funnel, dry):
 
     # ==> READ BACK, DO NOT TRUST THE INSERT. <== A silent rollback is the failure mode this file
     # warns about, and rowcount on a Fabric executemany is not confirmation.
-    cur.execute('SELECT COUNT(*) FROM Sales.Usage_Daily WHERE App_Env = ?', env)
+    # Read back the WINDOW, not the table: rows older than the window are meant to survive, so a
+    # bare count would now fail on a correct load.
+    cur.execute('SELECT COUNT(*) FROM Sales.Usage_Daily WHERE App_Env = ? AND Access_Date >= ?',
+                env, window_start)
     u = cur.fetchone()[0]
-    cur.execute('SELECT COUNT(*) FROM Sales.Funnel_Event WHERE App_Env = ?', env)
+    cur.execute('SELECT COUNT(*) FROM Sales.Funnel_Event WHERE App_Env = ? AND Event_At >= ?',
+                env, window_start)
     f = cur.fetchone()[0]
-    print('  read back      Usage_Daily=%d  Funnel_Event=%d' % (u, f))
+    cur.execute('SELECT COUNT(*) FROM Sales.Usage_Daily WHERE App_Env = ?', env)
+    total = cur.fetchone()[0]
+    print('  read back      in-window Usage=%d Funnel=%d   (table holds %d usage row(s))'
+          % (u, f, total))
     if u != len(usage) or f != len(funnel):
-        raise SystemExit('LOAD MISMATCH: expected %d/%d, found %d/%d'
+        raise SystemExit('LOAD MISMATCH: expected %d/%d in window, found %d/%d'
                          % (len(usage), len(funnel), u, f))
 
 
@@ -281,7 +299,7 @@ def main():
     print('  extracted      usage=%d rows  funnel=%d rows' % (len(usage), len(funnel)))
     practice = [r for r in usage if r[3] == 0]
     print('  usage by PRACTICE users (not us): %d of %d row(s)' % (len(practice), len(usage)))
-    load(cn, a.env, usage, funnel, a.dry_run)
+    load(cn, a.env, usage, funnel, a.dry_run, a.days)
     cn.close()
     return 0
 
