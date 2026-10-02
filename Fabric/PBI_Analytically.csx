@@ -36,19 +36,34 @@
 // give one setting two owners. Note it is model-wide, so any visual relying on implicit column
 // aggregation needs an explicit measure before it is switched on.
 
-// ===================== Measures table =====================
+// ===================== Measures table (REQUIRED, not created) =====================
 {
-// PBI Analytically has no _Measures table of its own, and measures parked on a data table make
-// the field list confusing once there are twenty of them. A one-row disconnected calculated table
-// is the same shape PBI Dentally uses.
+// ==> THIS SCRIPT NO LONGER CREATES _Measures. <== The owner creates it by hand, so the script
+// must not invent one in a shape that was not chosen -- an earlier version made a calculated table
+// with a hidden placeholder column, which is not what PBI Dentally has.
+//
+// For reference, PBI Dentally's _Measures has NO COLUMNS AT ALL. That is what makes Power BI draw
+// a table with the calculator icon and sort it to the top of the Data pane.
 var mt = Model.Tables.FirstOrDefault(x => x.Name == "_Measures");
 if (mt == null)
-{
-    mt = Model.AddCalculatedTable("_Measures", "ROW(\"_\", 1)");
-    Info("_Measures created (one-row disconnected table to hold measures).");
-}
-mt.IsHidden = false;                 // the folder tree is the navigation; hiding it hides them all
-foreach (var c in mt.Columns) c.IsHidden = true;   // the placeholder column is noise
+    throw new Exception(
+        "_Measures does not exist. Create it first, then re-run. It must be a table that holds " +
+        "measures -- in PBI Dentally it has no columns at all.");
+
+// ==> A CALCULATION GROUP IS NOT A MEASURES TABLE. <== They are different objects: a calculation
+// group holds calculation ITEMS (an attribute column plus Ordinal), whereas a measure group is a
+// columnless table holding ordinary measures. Analysis Services does not accept measures on a
+// calculation group table, so this stops here with something readable rather than letting the
+// model fail on save with an error that does not name the cause.
+if (mt.GetType().Name.Contains("CalculationGroup")
+    || mt.Columns.Any(c => c.Name.Contains("Calculation group")))
+    throw new Exception(
+        "_Measures is a CALCULATION GROUP, not a measures table. Creating a calculation group is " +
+        "what sets DiscourageImplicitMeasures, but it cannot hold these 28 measures. Keep it if " +
+        "you want that flag, and add a separate columnless table for the measures -- or convert " +
+        "this one by removing its calculation item and columns.");
+
+Info("_Measures found with " + mt.Measures.Count + " existing measure(s); folders below are rebuilt.");
 }
 
 // ===================== Client Health =====================
