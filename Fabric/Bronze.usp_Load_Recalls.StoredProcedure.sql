@@ -63,7 +63,13 @@ BEGIN
             , LEFT(updated_at,                255)            AS Updated_At
         INTO #src
         FROM Stage.Recalls
-        WHERE TRY_CAST(tenant_id AS INT) = @Tenant_ID;
+        -- @Tenant_ID NULL = every ACTIVE REGISTERED tenant present in Stage. Stage is an
+        -- inbound landing area and can hold tenants the product knows nothing about, so
+        -- the set is intersected with Audit.Tenants rather than taken on trust. An
+        -- explicit value is NOT constrained -- that is the operator escape hatch.
+        WHERE (   (@Tenant_ID IS NOT NULL AND TRY_CAST(tenant_id AS INT) = @Tenant_ID)
+           OR (@Tenant_ID IS NULL AND TRY_CAST(tenant_id AS INT) IN
+                 (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
 
         UPDATE tgt SET
               tgt.Patient_ID              = src.Patient_ID
@@ -122,19 +128,33 @@ BEGIN
         -- downstream Fact_Recalls row) at ~2 rows/patient. Type split matches Fact_Recalls: anything
         -- mentioning 'hygien' is the hygiene recall, everything else (incl. plain 'Dentist') is the
         -- dentist recall. "Latest" = furthest-out Due_Date (the active cycle); ID is a stable tiebreak.
-        ;WITH ranked AS (
-            SELECT ID,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY Tenant_ID, Patient_ID,
-                                    CASE WHEN Recall_Type LIKE '%ygien%' THEN 'H' ELSE 'D' END
-                       ORDER BY TRY_CAST(Due_Date AS date) DESC, ID DESC) AS rn
-            FROM Bronze.Recalls
-            WHERE Tenant_ID = @Tenant_ID
-        )
+        -- ==> SCOPED TO THE TENANTS THIS RUN ACTUALLY STAGED, NOT TO EVERY TENANT IN BRONZE. <==
+        -- The PARTITION BY already separates practices, so deduping across all of them would be
+        -- arithmetically safe -- but it would silently delete rows for a practice this run never
+        -- loaded, including the demo tenant, which is seeded straight into Bronze and never
+        -- appears in Stage. A value still scopes to one practice.
+        DROP TABLE IF EXISTS #ranked;
+        SELECT ID,
+               ROW_NUMBER() OVER (
+                   PARTITION BY Tenant_ID, Patient_ID,
+                                CASE WHEN Recall_Type LIKE '%ygien%' THEN 'H' ELSE 'D' END
+                   ORDER BY TRY_CAST(Due_Date AS date) DESC, ID DESC) AS rn
+        INTO   #ranked
+        FROM   Bronze.Recalls
+        WHERE  (@Tenant_ID IS NOT NULL AND Tenant_ID = @Tenant_ID)
+            OR (@Tenant_ID IS NULL
+                AND Tenant_ID IN (SELECT DISTINCT TRY_CAST(tenant_id AS INT) FROM Stage.Recalls
+                                   WHERE TRY_CAST(tenant_id AS INT) IN (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
+
         DELETE FROM Bronze.Recalls
-        WHERE Tenant_ID = @Tenant_ID
-          AND ID IN (SELECT ID FROM ranked WHERE rn > 1);
+        WHERE (   (@Tenant_ID IS NOT NULL AND Tenant_ID = @Tenant_ID)
+               OR (@Tenant_ID IS NULL
+                   AND Tenant_ID IN (SELECT DISTINCT TRY_CAST(tenant_id AS INT) FROM Stage.Recalls
+                                   WHERE TRY_CAST(tenant_id AS INT) IN (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1))))
+          AND ID IN (SELECT ID FROM #ranked WHERE rn > 1);
         SET @My_Deletes = @@ROWCOUNT;
+
+        DROP TABLE IF EXISTS #ranked;
 
         DROP TABLE IF EXISTS #src;
 

@@ -32,10 +32,17 @@ BEGIN
         -- on an INCREMENTAL run (Ingest_Xero fetched with If-Modified-Since) Stage holds only the
         -- CHANGED documents, so unchanged docs are preserved. (Xero voids rather than hard-deletes,
         -- so a doc never silently vanishes.)
+        -- ==> THE EXISTS CORRELATES ON b.Tenant_ID, NOT ON @Tenant_ID. <== That is what makes
+        -- this safe for every tenant at once: each Bronze row is matched only against Stage rows
+        -- for ITS OWN practice, so a document number shared between two practices cannot make
+        -- one practice's load delete the other's rows. With a value supplied it behaves exactly
+        -- as before; with NULL it replaces documents only for ACTIVE REGISTERED tenants that
+        -- Stage holds, and a tenant absent from either side is untouched.
         DELETE b FROM Bronze.Xero_Lines b
-        WHERE b.Tenant_ID = @Tenant_ID
+        WHERE (@Tenant_ID IS NULL OR b.Tenant_ID = @Tenant_ID)
           AND EXISTS (SELECT 1 FROM Stage.Xero_Lines s
-                      WHERE TRY_CAST(s.Tenant_ID AS INT) = @Tenant_ID
+                      WHERE TRY_CAST(s.Tenant_ID AS INT) = b.Tenant_ID
+                        AND b.Tenant_ID IN (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)
                         AND s.Source = b.Source AND s.Doc_ID = b.Doc_ID);
         SET @My_Deletes = @@ROWCOUNT;
 
@@ -64,7 +71,13 @@ BEGIN
             , LEFT(Tracking_Opt_2,     255)
             , SYSUTCDATETIME()
         FROM Stage.Xero_Lines
-        WHERE TRY_CAST(Tenant_ID AS INT) = @Tenant_ID;
+        -- @Tenant_ID NULL = every ACTIVE REGISTERED tenant present in Stage. Stage is an
+        -- inbound landing area and can hold tenants the product knows nothing about, so
+        -- the set is intersected with Audit.Tenants rather than taken on trust. An
+        -- explicit value is NOT constrained -- that is the operator escape hatch.
+        WHERE (   (@Tenant_ID IS NOT NULL AND TRY_CAST(Tenant_ID AS INT) = @Tenant_ID)
+           OR (@Tenant_ID IS NULL AND TRY_CAST(Tenant_ID AS INT) IN
+                 (SELECT Tenant_ID FROM Audit.Tenants WHERE Is_Active = 1)));
         SET @My_Inserts = @@ROWCOUNT;
 
     END TRY

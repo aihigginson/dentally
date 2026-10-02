@@ -1,0 +1,110 @@
+﻿# =====================================================================
+# Release V200 -- Bronze loads every staged tenant in one pass
+# =====================================================================
+# ==> THE LOADERS WERE ALREADY SET-BASED ACROSS TENANTS. ONE FILTER LINE HELD THEM TO ONE. <==
+# Each Bronze loader populates #src from Stage filtered to @Tenant_ID, and every statement after
+# that already joins and compares on src.Tenant_ID. The per-tenant looping came from
+# Process_Config carrying a {TID} token, not from the SQL.
+#
+# At the target of 100 practices that loop is 34 jobs x 100 tenants = 3,400 orchestrated job runs
+# per build. Passing NULL makes it 34. This removes statements rather than running them
+# concurrently, which matters because statement count -- not data volume -- is what Fabric bills.
+#
+# ==> @Tenant_ID = NULL MEANS "EVERY TENANT IN STAGE", NEVER "EVERY TENANT IN BRONZE". <== The
+# demo tenant is seeded straight into Bronze by API/seed_bronze.py and never appears in Stage, so
+# it must never be caught by a build it was not part of. Every tenant-scoped DELETE is written
+# that way deliberately -- see the four below.
+#
+# Supplying a value still scopes to one practice. That is the escape hatch for re-running after a
+# failure, and the agreed trade for losing per-tenant failure isolation: a bad row now fails the
+# entity for everyone, and the fix is to correct it and re-run that practice. Automating the
+# isolation was considered and rejected as complexity that buys a debugging session.
+#
+# ==> FOUR PROCS NEEDED MORE THAN THE FILTER, BECAUSE THEY DELETE. <==
+#
+#   Xero_Lines   the EXISTS correlated on @Tenant_ID; it now correlates on b.Tenant_ID, so each
+#                Bronze row is matched only against Stage rows for ITS OWN practice. Without
+#                that, a document number shared by two practices would let one practice's load
+#                delete the other's rows. This was a latent bug, not just a scaling limit.
+#   Xero_Orgs    full per-tenant wipe -> scoped to the tenants present in Stage.Xero_Orgs.
+#   Xero_Tracking  same.
+#   Recalls      the dedupe was scoped by tenant; now scoped to the tenants present in
+#                Stage.Recalls. Its CTE became a temp table while the block was being rewritten.
+#
+# ==> THE CONFIG IS CHANGED BY UPDATE, NOT BY REDEPLOYING THE SEED. <==
+# Fabric\Audit.Process_Config.Data.sql opens with DELETE FROM Audit.Process_Config, and it does
+# NOT contain the rows added by Audit.Process_Config.Period_Targets.Data.sql or
+# Audit.Process_Config.Site_Patient_Value.Data.sql. Deploying it would silently delete V196's
+# period-targets job (GOLD_AGG_PERIOD_TARGETS). The seed file is updated so a fresh build is
+# correct; this release changes the live rows in place.
+#
+# Do NOT reintroduce {TID} without changing the loaders back too: ETL_Run_Process does
+# REPLACE(options, '{TID}', CAST(@Tenant_ID AS VARCHAR(10))), and REPLACE with a NULL replacement
+# returns NULL -- the options string disappears entirely and the EXEC fails for want of a
+# parameter.
+#
+# VERIFY AFTER DEPLOYING: run the build, then compare per-tenant Bronze row counts against a
+# snapshot taken beforehand. A tenant absent from Stage must come out byte-identical. That is the
+# check that catches cross-tenant deletion directly, rather than trusting a reading of 35 files.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V200__bronze_loads_every_tenant_in_one_pass.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Bronze.usp_Load_Acquisition_Sources.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Cancellation_Reasons.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Contracts.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Fees.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Invoice_Items.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Invoices.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_NHS_Claims.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Patient_Referral_Reasons.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Patient_Referrals.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Patient_Stats.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Payment_Allocations.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Payment_Explanations.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Payment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Payments.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Practice.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Practitioner_Diary_Breaks.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Practitioner_Diary_Entries.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Practitioners.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Recalls.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Rooms.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Sites.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Sundries.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Appointments.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Categories.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Plan_Items.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Treatments.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Users.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Waiting_Lists.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Accounts.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Orgs.StoredProcedure.sql
+DEPLOY   Fabric\Bronze.usp_Load_Xero_Tracking.StoredProcedure.sql
+
+# In place, because redeploying the seed would delete the supplementary rows (see the header).
+EXEC     UPDATE Audit.Process_Config SET Process_Parameters = '@Tenant_ID = NULL' WHERE Process_Category_Code = 'BRONZE' AND Process_Parameters LIKE '%{TID}%';
+
+# No Bronze job may still carry the token, or it resolves to NULL and the EXEC loses every parameter.
+EXEC     DECLARE @t INT, @e VARCHAR(4000); SELECT @t = COUNT(*) FROM Audit.Process_Config WHERE Process_Category_Code = 'BRONZE' AND Process_Parameters LIKE '%{TID}%'; IF @t > 0 BEGIN SET @e = 'V200 FAILED: ' + CAST(@t AS VARCHAR(10)) + ' Bronze job(s) still carry the {TID} token.'; THROW 50310, @e, 1; END;
+
+# Every Bronze job must now ask for all tenants. A row left on some other parameter string would
+# run with whatever that says and go unnoticed until its table quietly stopped loading.
+EXEC     DECLARE @n INT, @e2 VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Category_Code = 'BRONZE' AND Process_Parameters <> '@Tenant_ID = NULL'; IF @n > 0 BEGIN SET @e2 = 'V200 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' Bronze job(s) are not set to @Tenant_ID = NULL.'; THROW 50311, @e2, 1; END;
+
+# ==> THE CANARY FOR AN ACCIDENTAL RESEED. <== GOLD_AGG_PERIOD_TARGETS was added by V196 and is
+# NOT in Fabric\Audit.Process_Config.Data.sql, so it exists only while nothing has replayed that
+# seed -- which opens with DELETE FROM Audit.Process_Config and would take this row with it.
+EXEC     DECLARE @m INT, @e3 VARCHAR(4000); SELECT @m = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_PERIOD_TARGETS'; IF @m <> 1 BEGIN SET @e3 = 'V200 FAILED: GOLD_AGG_PERIOD_TARGETS is missing -- the config was reseeded and V196''s job is gone.'; THROW 50312, @e3, 1; END;
+
+# ==> NO BRONZE ROW MAY BELONG TO A TENANT THE PRODUCT DOES NOT KNOW. <== The first dev build of
+# this release loaded tenant 99 -- "Demo Company (UK)", Xero's sample org -- because Stage held it
+# and the loaders trusted Stage. Stage is an inbound landing area; Audit.Tenants is the register.
+# The loaders now intersect the two, and this proves it on every deployment.
+EXEC     DECLARE @u INT, @e4 VARCHAR(4000); SELECT @u = COUNT(*) FROM (SELECT DISTINCT Tenant_ID FROM Bronze.Xero_Orgs UNION SELECT DISTINCT Tenant_ID FROM Bronze.Xero_Lines UNION SELECT DISTINCT Tenant_ID FROM Bronze.Appointments UNION SELECT DISTINCT Tenant_ID FROM Bronze.Patients) b WHERE Tenant_ID NOT IN (SELECT Tenant_ID FROM Audit.Tenants); IF @u > 0 BEGIN SET @e4 = 'V200 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' unregistered tenant(s) present in Bronze.'; THROW 50313, @e4, 1; END;
+
+TEST
