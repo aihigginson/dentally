@@ -1445,7 +1445,9 @@
         loadFilters(false);
         // Preload the other accessible report sections in the background (desktop only).
         // New modules have no SECTION_REPORT entry, so they're skipped here.
-        if (!isMobile()) {
+        // ==> GATED ON PRELOAD_SECTIONS, WHICH IS CURRENTLY false. <== See its definition for the
+        // measurement that turned it off and the condition for turning it back on.
+        if (PRELOAD_SECTIONS && !isMobile()) {
             NAV_ORDER
                 .filter(k => access[k] && k !== firstKey && SECTION_REPORT[k])
                 .forEach((key, i) => {
@@ -1457,6 +1459,38 @@
     // Menu order, used to pick the first accessible section and to preload the rest.
     const NAV_ORDER = ['home', 'day_book', 'finance', 'revenue', 'marketing',
                        'patient', 'scheduling', 'clinical', 'nhs', 'my_data'];
+
+    // ==> PRELOADING TEN REPORTS IS WHAT BREAKS THE CAPACITY. TURN IT BACK ON AT A LARGER SKU. <==
+    //
+    // When true, startApp embeds the first section and then preloads every other accessible one at
+    // 1.5s intervals -- ten report renders per page load, each firing dozens of DAX queries.
+    //
+    // MEASURED 2026-10-02 on the shared F4, as a SINGLE user:
+    //
+    //     baseline            dev 0.34s   prod 0.27s      (trivial-query admission delay)
+    //     after 4-5 switches  dev 20.36s  prod 20.42s     THROTTLED
+    //
+    // Both workspaces, in lockstep: one capacity, so a staff member switching practice in DEV took
+    // the LIVE CUSTOMER to a 20-second delay. Every practice switch is a location.reload() -- which
+    // is correct, because RLS scope is baked into the embed token as customData and the existing
+    // embeds hold tokens minted for the previous practice -- so each switch paid for ten renders,
+    // and 4-5 of them exhausted the five-minute interactive budget.
+    //
+    // Off costs: moving to a section you have not visited yet is a ~3s first render instead of
+    // instant. That is the whole price, and it is paid per section per session.
+    //
+    // WHEN TO TURN IT BACK ON: when the capacity is large enough that one session's burst is small
+    // against the average, i.e. a bigger SKU. The argument for preloading is statistical -- with
+    // many users, simultaneous logins are rare and bursts smooth out. On an F4 one session's burst
+    // IS the entire budget, so the statistics never get a chance to help. Re-measure with this
+    // probe before trusting it again; do not restore it on the assumption that a bigger number
+    // fixed it.
+    //
+    // NOT narrowed to the staff/act-as path on purpose. That would leave a customer login at ten
+    // renders, keeping the ceiling at roughly four concurrent logins -- fine for one practice,
+    // useless against the 100-practice target, and it would hide the cost where it is hardest to
+    // observe.
+    const PRELOAD_SECTIONS = false;
 
     async function startApp() {
         try {
