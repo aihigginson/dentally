@@ -78,13 +78,39 @@ def _clean(v):
 
 
 # ── auth ──────────────────────────────────────────────────────────────────────
-def _az_token(resource):
-    """Delegated token via the az CLI.
+# ==> TWO PATHS, BECAUSE THIS RUNS IN TWO PLACES. <== Scheduled as caj-sales-monitor-<env> there
+# is no az CLI and no signed-in user, so it must use the app's own service principal exactly as
+# appdb_sync.py does. Run by hand from a workstation there is no client secret, so it falls back to
+# the delegated az token. The SP path is tried first so the scheduled behaviour is the one that
+# gets exercised, rather than only ever being proven in a place it will never run.
+_msal_app = None
 
-    Fine for the manual runs this starts life as. A SCHEDULED run needs the service principal to
-    hold 'Log Analytics Reader' on the workspace and 'Key Vault Secrets User' on kv-analytically;
-    swap this for the MSAL client-credentials flow appdb_sync.py uses at that point.
-    """
+
+def _sp_token(resource):
+    """Entra token as the app's service principal. None when not configured for it."""
+    global _msal_app
+    tenant = os.environ.get('TENANT_ID')
+    client = os.environ.get('AZURE_CLIENT_ID') or os.environ.get('CLIENT_ID')
+    secret = os.environ.get('AZURE_CLIENT_SECRET') or os.environ.get('CLIENT_SECRET')
+    if not (tenant and client and secret):
+        return None
+    import msal
+    if _msal_app is None:
+        _msal_app = msal.ConfidentialClientApplication(
+            client, authority='https://login.microsoftonline.com/%s' % tenant,
+            client_credential=secret)
+    r = _msal_app.acquire_token_for_client(scopes=[resource.rstrip('/') + '//.default'])
+    if 'access_token' not in r:
+        raise RuntimeError('token for %s failed: %s'
+                           % (resource, r.get('error_description', 'unknown')))
+    return r['access_token']
+
+
+def _az_token(resource):
+    """Service principal when configured, else the delegated az CLI token."""
+    tok = _sp_token(resource)
+    if tok:
+        return tok
     return subprocess.check_output(
         ['az', 'account', 'get-access-token', '--resource', resource,
          '--query', 'accessToken', '-o', 'tsv'], shell=True).decode().strip()
@@ -171,8 +197,8 @@ def funnel_log_rows(env, days):
     out = []
     for r in rows:
         stage = (_clean(r.get('stage')) or '').rstrip(':')
-        if stage not in ('challenge_sent', 'verified'):
-            continue       # only these two come from the app log; the rest have other sources
+        if stage not in ('challenge_sent', 'verified', 'token_accepted'):
+            continue   # these three come from the app log; invoice_paid comes from Billing
         out.append((env, _ts(r['event_at']), stage, STAGE_ORDER[stage],
                     _clean(r.get('email_h')), _clean(r.get('domain')),
                     _clean(r.get('practice')), None, None))
@@ -180,32 +206,16 @@ def funnel_log_rows(env, days):
 
 
 def funnel_kv_rows(env):
-    """token_accepted, from the Key Vault pending-trial store the onboarding flow writes."""
-    try:
-        raw = subprocess.check_output(
-            ['az', 'keyvault', 'secret', 'show', '--vault-name', 'kv-analytically',
-             '--name', 'onboarding-pending-%s' % env, '--query', 'value', '-o', 'tsv'],
-            shell=True, stderr=subprocess.DEVNULL).decode().strip()
-    except subprocess.CalledProcessError:
-        return []                  # no secret yet = no trial has ever reached the token step
-    try:
-        store = json.loads(raw) if raw else {}
-    except ValueError:
-        return []
-    out = []
-    for key, e in (store or {}).items():
-        if not isinstance(e, dict):
-            continue
-        email = (e.get('email') or '').lower()
-        # Email_Hash is NULL here on purpose: this process cannot reproduce the app's HMAC (it does
-        # not hold the app's secret), so the join back to challenge_sent/verified is on DOMAIN. An
-        # invented hash would silently never match.
-        out.append((env, _ts(e.get('created_at')) or datetime.now(timezone.utc).replace(tzinfo=None),
-                    'token_accepted', STAGE_ORDER['token_accepted'], None,
-                    email.rsplit('@', 1)[-1] if '@' in email else None,
-                    e.get('practice_name') or e.get('practice'),
-                    e.get('tenant_id'), str(key)[:400]))
-    return out
+    """Retired: token_accepted now arrives via the app log, like the other early stages.
+
+    ==> IT USED TO READ THE KEY VAULT PENDING-TRIAL SECRET, AND THAT WAS THE WRONG DOOR. <== Key
+    Vault access policies cannot be scoped to one secret, so giving this job's service principal
+    `get` would have handed it every secret in the vault -- the Xero and Dentally tokens included --
+    to capture a single funnel stage. The app logs the stage instead, at the moment it records the
+    pending trial, which costs one line and no new permission. Kept as a no-op so the call site and
+    the stage list still read as a complete funnel.
+    """
+    return []
 
 
 def funnel_billing_rows(env, cn):

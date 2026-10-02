@@ -1140,6 +1140,21 @@ def _notify_owner_pending(key, entry):
     except Exception as e:
         app.logger.warning("owner notify failed (non-fatal): %s", e)
 
+    # ==> THE FUNNEL STAGE GOES THROUGH THE LOG, NOT KEY VAULT. <== The pending trial is stored as
+    # a Key Vault secret, and the sales loader could read it there -- but access policies cannot be
+    # scoped to a single secret, so letting the loader's service principal read this vault would
+    # hand it the Xero and Dentally tokens too. One log line puts token_accepted through the same
+    # path as challenge_sent and verified, needs no vault access, and makes the funnel
+    # single-sourced. Separate try/except: a telemetry failure must never affect a captured trial.
+    try:
+        em = (entry.get('principal_email') or '').lower()
+        app.logger.info("funnel token_accepted: email_h=%s domain=%s practice=%r client_id=%s",
+                        _sales_email_hash(em) if em else '-',
+                        em.rsplit('@', 1)[-1] if '@' in em else '-',
+                        entry.get('practice_name'), entry.get('client_id'))
+    except Exception as e:                                      # noqa: BLE001
+        app.logger.warning("funnel token_accepted not logged (non-fatal): %s", e)
+
 
 @app.route('/onboarding')
 def onboarding_page():

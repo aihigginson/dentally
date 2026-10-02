@@ -1,0 +1,45 @@
+﻿# =====================================================================
+# Release V204 -- the sales monitor joins the nightly chain, and gets PBI views
+# =====================================================================
+# V203 created the detail tables and the Gold model was added by hand. This registers the two load
+# procedures in the DAG so they run every night, and regenerates the PBI views.
+#
+# ==> IDEMPOTENT INSERTS, NOT A Data.sql DEPLOY. <== Audit.Process_Config.Data.sql and
+# Process_Dependency.Data.sql both open with DELETE FROM, so deploying either would wipe every
+# registered job -- the same hazard as deploying an Input.* table. The rows are added to those
+# files for a FRESH environment and inserted conditionally here for existing ones.
+#
+# Order in the DAG:
+#     GOLD_DIM_DATE  ->  GOLD_DIM_CLIENT  ->  GOLD_FACT_CLIENT_STATUS
+# The fact is an agg-style full rebuild reading Dim_Client's keys, so it must follow it; Dim_Client
+# needs Dim_Date for fn_Get_Date_Key.
+#
+# Meta.usp_Create_Gold_Views is automatic over every Gold table, so it picks up List Client,
+# List Sales Status and _Client Status with no registration. Note what that means: the views exist
+# in the PBI schema, exactly as the affiliate views do. ABSENCE FROM THE CUSTOMER MODEL remains the
+# control -- PBI Dentally must never include them.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V204__sales_monitor_joins_the_nightly_chain.manifest
+# =====================================================================
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM Audit.Process_Config WHERE Process_Code = 'GOLD_DIM_CLIENT') INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('GOLD_DIM_CLIENT', 'Gold.usp_Load_Dim_Client', 'Commercial client dimension for the sales monitor.', '@Mode = ''LIVE'', @Logging = 1', 'GOLD_DIM', 'PROCEDURE');
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM Audit.Process_Config WHERE Process_Code = 'GOLD_FACT_CLIENT_STATUS') INSERT INTO Audit.Process_Config (Process_Code, Process_Name, Process_Desc, Process_Parameters, Process_Category_Code, Process_Type_Code) VALUES ('GOLD_FACT_CLIENT_STATUS', 'Gold.usp_Load_Fact_Client_Status', 'Sales monitor summary fact: one row per client.', '@Mode = ''LIVE'', @Logging = 1', 'GOLD_AGG', 'PROCEDURE');
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM Audit.Process_Dependency WHERE Prev_Process_Code = 'GOLD_DIM_DATE' AND Next_Process_Code = 'GOLD_DIM_CLIENT') INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_DIM_CLIENT', 'DATA', 5, 1);
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM Audit.Process_Dependency WHERE Prev_Process_Code = 'GOLD_DIM_CLIENT' AND Next_Process_Code = 'GOLD_FACT_CLIENT_STATUS') INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_CLIENT', 'GOLD_FACT_CLIENT_STATUS', 'DATA', 6, 1);
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# Both jobs must be registered and both edges active, or the model silently stops refreshing and
+# the monitor quietly goes stale -- which is worse than it being absent, because it still shows a
+# number.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM Audit.Process_Config WHERE Process_Code IN ('GOLD_DIM_CLIENT','GOLD_FACT_CLIENT_STATUS'); IF @a <> 2 BEGIN SET @e = 'V204 FAILED: expected 2 registered sales jobs, found ' + CAST(@a AS VARCHAR(10)) + '.'; THROW 50320, @e, 1; END;
+
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM Audit.Process_Dependency WHERE Next_Process_Code IN ('GOLD_DIM_CLIENT','GOLD_FACT_CLIENT_STATUS') AND Is_Active = 1; IF @b <> 2 BEGIN SET @f = 'V204 FAILED: expected 2 active dependency edges, found ' + CAST(@b AS VARCHAR(10)) + '.'; THROW 50321, @f, 1; END;
+
+# The three PBI views must exist, or the model has nothing to read.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME IN ('List Client','List Sales Status','_Client Status'); IF @c <> 3 BEGIN SET @g = 'V204 FAILED: expected 3 sales PBI views, found ' + CAST(@c AS VARCHAR(10)) + '.'; THROW 50322, @g, 1; END;
+
+TEST
