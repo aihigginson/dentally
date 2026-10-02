@@ -199,14 +199,21 @@ add("Avg Days Accessed per Customer",
 
 // Reads as a sentence on a card, and avoids a blank tile for a client that has never signed in --
 // blank there looks like a broken measure rather than the fact it is reporting.
+// ==> BLANK WHEN THERE IS NO FACT ROW, OR THE -1 SENTINEL BECOMES A CLIENT. <== Dim_Client holds
+// an "(unknown client)" member so every fact fk resolves and the integrity gate passes. It has no
+// row in the fact, but a measure that answers unconditionally still returns something for it -- so
+// it appeared in every visual as a real client, labelled "never accessed" and coloured red. The
+// ISEMPTY check keeps it out without needing a report-level filter that someone must remember.
 add("Last Access Label",
-    @"VAR d = MAX('_Client Status'[Days Since Last Access])
+    @"VAR hasRow = NOT ISEMPTY('_Client Status')
+VAR d    = MAX('_Client Status'[Days Since Last Access])
 VAR ever = MAX('_Client Status'[fk Date Last Access])
-RETURN SWITCH(TRUE(),
-    ISBLANK(ever) || ever = -1, ""never accessed"",
-    d = 0,  ""today"",
-    d = 1,  ""yesterday"",
-    FORMAT(d, ""#,##0"") & "" days ago"")",
+RETURN IF(NOT hasRow, BLANK(),
+    SWITCH(TRUE(),
+        ISBLANK(ever) || ever = -1, ""never accessed"",
+        d = 0,  ""today"",
+        d = 1,  ""yesterday"",
+        FORMAT(d, ""#,##0"") & "" days ago""))",
     "");
 }
 
@@ -330,16 +337,19 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // Colour from the DIMENSION's own Is Gap flag plus the day count, not from a threshold retyped
 // here. The thresholds that define the states live in Gold.Dim_Sales_Status; this only renders
 // them, so changing "dormant" in one place changes it everywhere.
+// Same guard: no fact row means no colour, so the -1 sentinel is not painted red.
 add("Access State BG",
-    @"VAR d    = MAX('_Client Status'[Days Since Last Access])
+    @"VAR hasRow = NOT ISEMPTY('_Client Status')
+VAR d    = MAX('_Client Status'[Days Since Last Access])
 VAR ever = MAX('_Client Status'[fk Date Last Access])
 VAR vend = SELECTEDVALUE('List Client'[Is Vendor])
-RETURN SWITCH(TRUE(),
-    vend = TRUE(),               ""#FFFFFF"",
-    ISBLANK(ever) || ever = -1,  ""#c0392b"",
-    d >= 30,                     ""#c0392b"",
-    d >= 8,                      ""#f4a261"",
-                                 ""#1a7f3c"")",
+RETURN IF(NOT hasRow, BLANK(),
+    SWITCH(TRUE(),
+        vend = TRUE(),               ""#FFFFFF"",
+        ISBLANK(ever) || ever = -1,  ""#c0392b"",
+        d >= 30,                     ""#c0392b"",
+        d >= 8,                      ""#f4a261"",
+                                     ""#1a7f3c""))",
     "");
 
 // Nobody signed in at all is worse than a low rate, so it is red rather than a pale shade of it.
