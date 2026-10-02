@@ -1178,6 +1178,55 @@ def api_pricing():
         return _server_error(e, 'pricing')
 
 
+def _upsert_prospect_client(email, practice):
+    """Record the enquiring COMPANY in Security.Clients, returning its Client_ID (or None).
+
+    Idempotent on email: a prospect who asks for a second code reuses their row and keeps the
+    original First_Contact_At, because when they FIRST appeared is the figure the funnel needs.
+
+    ==> THIS GRANTS NO ACCESS. <== Security.vw_User_Tenant_Access, which every RLS rule reads,
+    does not reference Security.Clients -- it joins Application_Users -> Client_Tenant_Access ->
+    Audit.Tenants. A prospect has no row in any of the three, so this row is inert until someone
+    deliberately provisions a user and a grant.
+    """
+    email = (email or '').strip().lower()
+    if '@' not in email:
+        return None
+    conn = None
+    try:
+        conn = _fabric_conn(autocommit=True)   # without autocommit the insert silently rolls back
+        cur = conn.cursor()
+        cur.execute("SELECT TOP 1 Client_ID FROM Security.Clients WHERE LOWER(Client_Email) = ?",
+                    email)
+        row = cur.fetchone()
+        if row:
+            return int(row[0])
+        # MAX+1 within the prospect band. Not an IDENTITY because the three seeded rows carry
+        # chosen ids (1, 11, 100) and an identity column cannot be retro-fitted over them.
+        cur.execute("SELECT ISNULL(MAX(Client_ID), 0) FROM Security.Clients WHERE Client_ID >= 1000")
+        new_id = max(int(cur.fetchone()[0]) + 1, 1000)
+        cur.execute(
+            "INSERT INTO Security.Clients (Client_ID, Client_Name, Client_Email, Email_Domain,"
+            " First_Contact_At, Created_At, Created_By)"
+            " VALUES (?, ?, ?, ?, SYSUTCDATETIME(), SYSUTCDATETIME(), 'onboarding:challenge')",
+            new_id, (practice or email.split('@')[0])[:255], email[:256],
+            email.rsplit('@', 1)[-1][:255])
+        app.logger.info("prospect client created: client_id=%s domain=%s", new_id,
+                        email.rsplit('@', 1)[-1])
+        return new_id
+    except Exception as e:                                  # noqa: BLE001
+        # ==> A FAILURE HERE MUST NOT COST THE LEAD. <== The code still goes out; the CRM row can
+        # be reconciled later from the funnel log, which records the same enquiry.
+        app.logger.warning("prospect client NOT recorded (signup unaffected): %s", str(e)[:300])
+        return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:                               # noqa: BLE001
+                pass
+
+
 def _sales_email_hash(email):
     """Stable, irreversible handle for a prospect's email, for the sales funnel log.
 
@@ -1208,9 +1257,12 @@ def onboarding_challenge():
                 f'Your Analytically verification code is {code}. It expires in 15 minutes.')
     challenge = _sign_state({'t': 'chal', 'email': email, 'practice': practice,
                              'code_h': _code_hmac(code, email), 'ts': time.time()})
+    # The COMPANY is recorded here, at the top of the funnel, so every later stage hangs off one
+    # stable Client_ID that survives conversion to a tenant.
+    client_id = _upsert_prospect_client(email, practice)
     # Top of the sales funnel. Hash, never the address -- see _sales_email_hash.
-    app.logger.info("funnel challenge_sent: email_h=%s domain=%s practice=%r",
-                    _sales_email_hash(email), email.rsplit('@', 1)[-1], practice)
+    app.logger.info("funnel challenge_sent: email_h=%s domain=%s practice=%r client_id=%s",
+                    _sales_email_hash(email), email.rsplit('@', 1)[-1], practice, client_id)
     return jsonify({'challenge': challenge, 'sent': True})
 
 
