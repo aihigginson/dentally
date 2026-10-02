@@ -29,8 +29,9 @@ THE THREE RULES, all decided deliberately:
 WHICH YEAR:
   The tenant's OWN financial year, from Gold.vw_Dim_Date -- NOT Gold.Dim_Date, whose
   Financial_Year_Name is a fixed April-March year. Practice financial years became tenant-specific
-  in V193/V194, and Scripts/Generate_Targets_Template.py still reads the generic one, so for any
-  practice not on an April year it attributes actuals to the wrong year. Do not copy that query.
+  in V193/V194. The retired Generate_Targets_Template.py read the generic one and so attributed
+  actuals to the wrong year for any practice not on an April year -- the reason this reads
+  vw_Dim_Date and joins on Tenant_ID.
 
   The year chosen is the most recent COMPLETE one (its last day is in the past) at or after the
   practice cutover. Cutover = the first financial year holding >= 100 appointments, the same test
