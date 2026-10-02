@@ -419,8 +419,16 @@ def _alert(tgt_cn, mode, started, status, error=None):
                     f'  failed at   : {started:%Y-%m-%d %H:%M} UTC\n'
                     f'  context     : {detail}\n\n'
                     f'  error       : {str(error)[:3000]}\n')
-        _send_alert_email(subject, body)
-        print(f'alert sent ({kind}) to {", ".join(ALERT_TO)}')
+        # ==> REPORT WHAT HAPPENED, NOT WHAT WAS ATTEMPTED. <== _send_alert_email returns False
+        # when GRAPH_SEND is off, which is the normal case for a manual run from a workstation.
+        # Printing "alert sent" regardless made a local run look like it had emailed the support
+        # mailbox -- it misled a reader into reporting two spurious alerts on 2026-10-02. The
+        # deployed container apps both set GRAPH_SEND=1, so this only ever affected manual runs,
+        # but a log line that claims an alert was sent is the last thing that should be guessed at.
+        if _send_alert_email(subject, body):
+            print(f'alert sent ({kind}) to {", ".join(ALERT_TO)}')
+        else:
+            print(f'alert NOT sent ({kind}) -- GRAPH_SEND is off in this environment')
     except Exception as e:                                  # noqa: BLE001 -- see docstring
         print('WARNING: could not send the alert email: ' + str(e)[:300])
     finally:
