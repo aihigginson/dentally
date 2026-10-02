@@ -1,0 +1,57 @@
+﻿# =====================================================================
+# Release V203 -- the sales monitor's tables
+# =====================================================================
+# One place for the commercial picture: verification emails sent, keys set up, card supplied, card
+# used, and product usage. Surfaced through PBI Affiliates.
+#
+# ==> THESE TABLES MUST NEVER BE ADDED TO PBI Dentally. <== They hold prospect email hashes and
+# which practice has gone quiet. PBI Affiliates is the vendor model -- no RLS, no practice login
+# can open it -- so ABSENCE from the customer model is the control, exactly as it is for affiliate
+# commission. A tenant-bearing table added to PBI Dentally inherits NO RLS rule (see the Aggregate
+# Period Targets note in PBI_Dentally.csx), so relying on a rule here would be the wrong way round.
+#
+# Sales.Usage_Daily    grain: (App_Env, Tenant, login, day) + embeds that day.
+# Sales.Funnel_Event   grain: one row per funnel stage reached.
+#
+# THE THREE USAGE METRICS ARE MEASURES, NOT COLUMNS -- days accessed = DISTINCTCOUNT(Access_Date),
+# days since last = TODAY() - MAX(Access_Date), reports accessed = SUM(Report_Opens). Storing the
+# grain keeps any window askable after the fact and makes a definition change a measure edit.
+#
+# ==> Is_Vendor IS THE MOST IMPORTANT COLUMN IN HERE. <== Measured on prod over 365 days:
+#
+#     us (admin@analytically.info)    46 days    2,309 report opens
+#     the live practice                6 days      216 report opens
+#
+# So 91% of all logged usage is ours. Without that flag the monitor reports healthy engagement for
+# a customer who has opened the product on six days in eleven weeks and not at all since
+# 10 September. Every measure must filter Is_Vendor = 0 unless it is deliberately showing ours.
+#
+# App_Env matters for the same reason: cae-analytically ships BOTH container apps to one Log
+# Analytics workspace, so without it dev testing is indistinguishable from customer use.
+#
+# Loaded by Web/sales_monitor.py (dev|prod), DELETE+INSERT per App_Env, idempotent. Three of the
+# five sources are not SQL -- Log Analytics for usage and the first two funnel stages, Key Vault
+# for keys set up, Billing.Stripe_Invoice for money taken. The two CARD stages are deliberately
+# unimplemented: no Stripe customer exists yet, and code written against zero rows cannot be
+# tested.
+#
+# Report_Opens before 2026-10-02 is inflated up to 10x -- the preload embedded ten reports per page
+# load until it was disabled that morning. Do not trend across that cutover without saying so.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V203__sales_monitor_tables.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Sales.Schema.sql
+DEPLOY   Fabric\Sales.Usage_Daily.Table.sql
+DEPLOY   Fabric\Sales.Funnel_Event.Table.sql
+
+# Both tables must exist and be empty-or-loadable. A missing one means the DDL guard
+# (IF OBJECT_ID ... IS NULL) found a name clash rather than creating it.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'Sales' AND TABLE_NAME IN ('Usage_Daily','Funnel_Event'); IF @a <> 2 BEGIN SET @e = 'V203 FAILED: expected 2 Sales tables, found ' + CAST(@a AS VARCHAR(10)) + '.'; THROW 50310, @e, 1; END;
+
+# Is_Vendor must be NOT NULL. A nullable flag would let a row escape the Is_Vendor = 0 filter that
+# every measure depends on, and that is precisely how vendor traffic would get counted as customer
+# engagement again.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Sales' AND TABLE_NAME = 'Usage_Daily' AND COLUMN_NAME = 'Is_Vendor' AND IS_NULLABLE = 'NO'; IF @b <> 1 BEGIN SET @f = 'V203 FAILED: Sales.Usage_Daily.Is_Vendor must exist and be NOT NULL.'; THROW 50311, @f, 1; END;
+
+TEST

@@ -1178,6 +1178,22 @@ def api_pricing():
         return _server_error(e, 'pricing')
 
 
+def _sales_email_hash(email):
+    """Stable, irreversible handle for a prospect's email, for the sales funnel log.
+
+    ==> NEVER LOG THE ADDRESS ITSELF. <== These lines land in Log Analytics, which has 365-day
+    retention and is not where personal data should accumulate. A hash still joins the stages of
+    one prospect together, which is all the funnel needs.
+
+    Keyed on the existing _state_key() rather than a new secret, but with a DOMAIN SEPARATOR so a
+    hash from here can never be replayed as, or used to probe, a signed state token. Stability
+    matters more than rotation here: change the key and previously logged stages stop joining to
+    new ones, so treat it as fixed once trials are running.
+    """
+    return hmac.new(_state_key(), b'sales-email-v1:' + email.encode('utf-8'),
+                    hashlib.sha256).hexdigest()
+
+
 @app.route('/api/onboarding/challenge', methods=['POST'])
 def onboarding_challenge():
     """Step 1: email a 6-digit code to the principal's address. Returns a signed challenge token that
@@ -1192,6 +1208,9 @@ def onboarding_challenge():
                 f'Your Analytically verification code is {code}. It expires in 15 minutes.')
     challenge = _sign_state({'t': 'chal', 'email': email, 'practice': practice,
                              'code_h': _code_hmac(code, email), 'ts': time.time()})
+    # Top of the sales funnel. Hash, never the address -- see _sales_email_hash.
+    app.logger.info("funnel challenge_sent: email_h=%s domain=%s practice=%r",
+                    _sales_email_hash(email), email.rsplit('@', 1)[-1], practice)
     return jsonify({'challenge': challenge, 'sent': True})
 
 
@@ -1208,6 +1227,11 @@ def onboarding_verify():
         return jsonify({'error': 'That code is not right.'}), 400
     verified = _sign_state({'t': 'verified', 'email': payload['email'],
                             'practice': payload['practice'], 'ts': time.time()})
+    # Second funnel stage. The gap between this and challenge_sent is the people who never got
+    # the email or gave up on it -- invisible before this line existed.
+    app.logger.info("funnel verified: email_h=%s domain=%s practice=%r",
+                    _sales_email_hash(payload['email']),
+                    payload['email'].rsplit('@', 1)[-1], payload.get('practice'))
     return jsonify({'verified': verified, 'email': payload['email']})
 
 
