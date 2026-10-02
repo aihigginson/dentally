@@ -1,0 +1,72 @@
+﻿# =====================================================================
+# Release V202 -- the rest of the V197 revenue sweep
+# =====================================================================
+# ==> V201 FIXED THREE METRICS AND LEFT FOUR. <== Same fault, same cause, found the next morning
+# while asking why an onboarding target for deposit_ratio looked wrong.
+#
+# V197 repartitioned Revenue_Type: NHS moved out of the invoice rows into its own type at the UDA
+# value. Gold.usp_Load_Fact_Metric_Actuals has seven revenue derivations. V201 corrected the three
+# built from #inv (total, nhs, private). These four still took 'Invoice' as their notion of
+# revenue, while every measure they are supposed to mirror divides [Total Revenue], which is the
+# sum of ALL types:
+#
+#     #rev    revenue_per_clinical_hour  DIVIDE([Total Revenue], clinical worked hours)
+#     #revd   revenue_per_dentist_hour   DIVIDE(CALCULATE([Total Revenue], dentist), dentist hours)
+#     #dr     discounts      DENOMINATOR DIVIDE(SUM('_Invoices'[Discount Amount]), [Total Revenue])
+#     #depr   deposit_ratio  DENOMINATOR DIVIDE(SUM('_Payments'[Deposit Amount]), [Total Revenue])
+#
+# Maple, measured on dev before the change:
+#
+#     revenue basis, invoice only      7,426,918.87
+#     revenue basis, every type       10,685,409.98     the measures' basis
+#     dentist revenue, invoice only    6,237,198.18
+#     dentist revenue, every type      9,471,634.18     capitation alone adds 2,616,271.11
+#     deposit_ratio                          1.80%  ->  1.25%   (1.25% is what the board shows)
+#
+# ==> THE TWO RATE METRICS WERE UNDERSTATED BY ABOUT A THIRD, AND BOTH HAD ALREADY BEEN SEEDED AS
+# ONBOARDING TARGETS. <== 167.37 and 215.09 per hour. A target set from an understated basis is
+# met on the first day and stays met, which is the same failure the zero-target skip exists to
+# prevent, just harder to see. Re-seed after this lands.
+#
+# The role filter on #revd STAYS -- that one is the measure's own
+# (CALCULATE([Total Revenue], Role = "dentist")). Only the Revenue Type filter was never the
+# measure's, and only that goes.
+#
+# ==> THE discounts NUMERATOR IS A SEPARATE MATTER AND IS NOT FIXED HERE. <==
+# Gold.Fact_Invoices.Discount_Amount is 0.00 on all 51,060 of Maple's invoices, so discounts reads
+# zero regardless of its denominator. Either the practice records no discounts or the loader never
+# populates that column; deciding which needs evidence this release does not have, and the guards
+# below deliberately do NOT assert a non-zero discount.
+#
+# Per-row CASTs are removed for the same reason V201 found: Amount is DECIMAL(18,6), capitation
+# genuinely uses that precision, and rounding each row before summing puts a figure on a different
+# basis from the same figure summed raw.
+#
+# No model republish: these measures read '_Revenue' and the aggregates, never this fact.
+# Fact_Metric_Actuals is a leaf and the procedure is DELETE + full rebuild, so one run corrects
+# every year.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V202__the_rest_of_the_v197_revenue_sweep.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# revenue_per_clinical_hour's practice-grain numerator is every dated revenue row, so it must equal
+# dated Fact_Revenue exactly. This is the assertion that was false: it equalled the invoice subset.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT Tenant_ID, SUM(Amount) AS expected FROM [Gold].[Fact_Revenue] WHERE fk_Date <> -1 GROUP BY Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Numerator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'revenue_per_clinical_hour' AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 1.00; IF @a > 0 BEGIN SET @e = 'V202 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' tenant(s) where revenue_per_clinical_hour is not based on all dated revenue.'; THROW 50300, @e, 1; END;
+
+# revenue_per_dentist_hour keeps the measure's role filter, so it must equal dated revenue
+# attributable to a dentist -- recomputed here from the same join the procedure uses.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT r.Tenant_ID, SUM(r.Amount) AS expected FROM [Gold].[Fact_Revenue] r JOIN [Gold].[Dim_Practitioners] p ON p.pk_Practitioner = r.fk_Practitioner AND p.Tenant_ID = r.Tenant_ID WHERE r.fk_Date <> -1 AND LOWER(p.Role) = 'dentist' GROUP BY r.Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Numerator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'revenue_per_dentist_hour' AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 1.00; IF @b > 0 BEGIN SET @f = 'V202 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' tenant(s) where revenue_per_dentist_hour is not based on all dated dentist revenue.'; THROW 50301, @f, 1; END;
+
+# Both ratio DENOMINATORS must be the same all-types revenue basis as [Total Revenue].
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT Tenant_ID, SUM(Amount) AS expected FROM [Gold].[Fact_Revenue] WHERE fk_Date <> -1 GROUP BY Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Denominator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'deposit_ratio' AND fk_Practice_Site = -1 AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 1.00; IF @c > 0 BEGIN SET @g = 'V202 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' tenant(s) where the deposit_ratio denominator is not all dated revenue.'; THROW 50302, @g, 1; END;
+
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT Tenant_ID, SUM(Amount) AS expected FROM [Gold].[Fact_Revenue] WHERE fk_Date <> -1 GROUP BY Tenant_ID) src FULL OUTER JOIN (SELECT Tenant_ID, SUM(Denominator) AS actual FROM [Gold].[Fact_Metric_Actuals] WHERE Metric = 'discounts' AND fk_Practice_Site = -1 AND fk_Practitioner = -1 GROUP BY Tenant_ID) got ON got.Tenant_ID = src.Tenant_ID WHERE ABS(ISNULL(src.expected,0) - ISNULL(got.actual,0)) > 1.00; IF @d2 > 0 BEGIN SET @h = 'V202 FAILED: ' + CAST(@d2 AS VARCHAR(10)) + ' tenant(s) where the discounts denominator is not all dated revenue.'; THROW 50303, @h, 1; END;
+
+# V201's invariants must still hold -- this release edits the same procedure.
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM (SELECT Tenant_ID, SUM(CASE WHEN Metric = 'total_revenue' THEN Numerator ELSE 0 END) - SUM(CASE WHEN Metric IN ('nhs_revenue','private_revenue','plan_capitation_revenue') THEN Numerator ELSE 0 END) AS diff FROM [Gold].[Fact_Metric_Actuals] WHERE fk_Practice_Site = -1 AND fk_Practitioner = -1 AND Metric IN ('total_revenue','nhs_revenue','private_revenue','plan_capitation_revenue') GROUP BY Tenant_ID) x WHERE ABS(diff) > 1.00; IF @p > 0 BEGIN SET @q = 'V202 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' tenant(s) where V201''s total = nhs + private + capitation no longer holds.'; THROW 50304, @q, 1; END;
+
+TEST
