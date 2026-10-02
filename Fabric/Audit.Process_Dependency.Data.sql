@@ -244,4 +244,5 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_DATA_QUALITY', 'GOLD_AGG_DATA_QUALITY_DETAIL', 'DATA', 6, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_KPI_SNAPSHOT', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 6, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_AGG_SITE_PRACT', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 6, 1);
-
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_DATE', 'GOLD_DIM_CLIENT', 'DATA', 5, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_CLIENT', 'GOLD_FACT_CLIENT_STATUS', 'DATA', 6, 1);
