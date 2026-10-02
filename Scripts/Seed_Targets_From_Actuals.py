@@ -64,11 +64,34 @@ from datetime import datetime, timezone
 
 import pyodbc
 
-WAREHOUSE = ('emeh72n2ntdufpj4q665b2lzx4-eljzajgm5cpe5i64szgon7sej4'
-             '.datawarehouse.fabric.microsoft.com')
+# ==> THIS TOOL READS ONE ENVIRONMENT AND WRITES ANOTHER'S DATABASE IF YOU LET IT. <== The
+# warehouse supplies the actuals, the AppDB receives the targets, and they are different servers.
+# --env moves both together; overriding one alone is allowed for a dry run but refused for --apply.
+ENVS = {
+    'prod': {
+        'warehouse': ('emeh72n2ntdufpj4q665b2lzx4-eljzajgm5cpe5i64szgon7sej4'
+                      '.datawarehouse.fabric.microsoft.com'),
+        'appdb_db': 'AppDB-prod',
+    },
+    'dev': {
+        'warehouse': ('emeh72n2ntdufpj4q665b2lzx4-4i26eirspjiujnltrvplquzkem'
+                      '.datawarehouse.fabric.microsoft.com'),
+        'appdb_db': 'AppDB-dev',
+    },
+}
+
+WAREHOUSE = ENVS['prod']['warehouse']   # default stays prod: onboarding is a prod activity
 WAREHOUSE_DB = 'WH_Dentally'
 APPDB_SERVER = 'sql-analytically.database.windows.net'
-APPDB_DB     = 'AppDB-prod'
+APPDB_DB     = ENVS['prod']['appdb_db']
+
+
+def _env_of(value, key):
+    """Which environment does this server/database belong to? None = not one of ours."""
+    for name, cfg in ENVS.items():
+        if cfg[key] == value:
+            return name
+    return None
 
 MIN_APPOINTMENTS = 100   # the cutover test, as used by Gold.usp_Load_Dim_Date_Grouping
 
@@ -149,7 +172,7 @@ def read_actuals(cur, tenant, fy):
     """, tenant, fy)
     # ==> A ZERO TARGET IS WORSE THAN A BLANK ONE. <== Blank reads as "no target set"; zero reads
     # as a target that is met forever, and every tile scored against it sits at 100%+ looking
-    # healthy. Dev's tenant 100 produced nhs_revenue = 0 from a year with real NHS income, which
+    # healthy. Prod's tenant 100 produced nhs_revenue = 0 from a year with real NHS income, which
     # is exactly the shape of a wrong number that looks authoritative. Same rule as the
     # no-complete-year one: say nothing rather than something false.
     return {r[0]: (r[1], float(r[2]))
@@ -162,12 +185,32 @@ def main():
     ap.add_argument('--apply', action='store_true', help='write to Input.Targets (default: dry run)')
     ap.add_argument('--replace', action='store_true',
                     help='overwrite targets that already exist for the destination FY')
-    ap.add_argument('--warehouse', default=WAREHOUSE)
+    ap.add_argument('--env', choices=sorted(ENVS), default='prod',
+                    help='which environment to read actuals from AND write targets to (default: prod)')
+    ap.add_argument('--warehouse', help='override the warehouse for --env (dry run only)')
     ap.add_argument('--appdb-server', default=APPDB_SERVER)
-    ap.add_argument('--appdb-db', default=APPDB_DB)
+    ap.add_argument('--appdb-db', help='override the AppDB for --env (dry run only)')
     a = ap.parse_args()
 
-    wh = connect(a.warehouse, WAREHOUSE_DB)
+    warehouse = a.warehouse or ENVS[a.env]['warehouse']
+    appdb_db  = a.appdb_db  or ENVS[a.env]['appdb_db']
+    wh_env    = _env_of(warehouse, 'warehouse')
+    db_env    = _env_of(appdb_db, 'appdb_db')
+
+    print('Reading      : %s warehouse' % (wh_env or warehouse))
+    print('Writing to   : %s  (%s)%s'
+          % (db_env or appdb_db, appdb_db, '' if a.apply else '   -- dry run, nothing written'))
+
+    # ==> NEVER WRITE ONE ENVIRONMENT'S TARGETS FROM ANOTHER'S ACTUALS. <== Dev's figures are
+    # synthetic; installing them as a real practice's targets would silently misstate every tile
+    # on their board. A mixed DRY RUN is fine and sometimes useful, so this gate is on --apply only.
+    if a.apply and wh_env != db_env:
+        print('\nREFUSING: actuals come from %s but the targets would be written to %s.\n'
+              '          Use --env to move both together, or drop --apply to compare read-only.'
+              % (wh_env or warehouse, db_env or appdb_db))
+        return 1
+
+    wh = connect(warehouse, WAREHOUSE_DB)
     cur = wh.cursor()
 
     year, why = pick_year(cur, a.tenant)
@@ -219,7 +262,7 @@ def main():
         print('\nDRY RUN -- re-run with --apply to write %d target(s).' % len(actuals))
         return 0
 
-    app = connect(a.appdb_server, a.appdb_db)
+    app = connect(a.appdb_server, appdb_db)
     acur = app.cursor()
     acur.execute("SELECT COUNT(*) FROM Input.Targets WHERE Tenant_ID = ? AND FY = ?",
                  a.tenant, dest_fy)
