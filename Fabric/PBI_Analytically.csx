@@ -50,18 +50,25 @@ if (mt == null)
         "_Measures does not exist. Create it first, then re-run. It must be a table that holds " +
         "measures -- in PBI Dentally it has no columns at all.");
 
-// ==> A CALCULATION GROUP IS NOT A MEASURES TABLE. <== They are different objects: a calculation
-// group holds calculation ITEMS (an attribute column plus Ordinal), whereas a measure group is a
-// columnless table holding ordinary measures. Analysis Services does not accept measures on a
-// calculation group table, so this stops here with something readable rather than letting the
-// model fail on save with an error that does not name the cause.
-if (mt.GetType().Name.Contains("CalculationGroup")
-    || mt.Columns.Any(c => c.Name.Contains("Calculation group")))
-    throw new Exception(
-        "_Measures is a CALCULATION GROUP, not a measures table. Creating a calculation group is " +
-        "what sets DiscourageImplicitMeasures, but it cannot hold these 28 measures. Keep it if " +
-        "you want that flag, and add a separate columnless table for the measures -- or convert " +
-        "this one by removing its calculation item and columns.");
+// ==> IS IT A CALCULATION GROUP? WARN, BUT DO NOT REFUSE. <== A calculation group holds
+// calculation ITEMS (an attribute column plus Ordinal); a measure group is a COLUMNLESS table
+// holding ordinary measures, which is what PBI Dentally has -- and the visible symptom is that
+// Power BI pins a columnless table to the top of the Data pane with a calculator icon, while a
+// table with any column (hidden or not) sorts alphabetically.
+//
+// An earlier version THREW here, on my assertion that Analysis Services rejects measures on a
+// calculation group table. I could not test that from outside Tabular Editor, and a guard built on
+// an untested assumption stopped the script doing the one job it was asked to do. So it warns and
+// continues: if AS accepts the measures, nothing was lost; if it refuses, the error comes from the
+// tool that actually knows, naming the real constraint instead of my guess at it.
+var looksLikeCalcGroup = mt.GetType().Name.Contains("CalculationGroup")
+    || mt.Columns.Any(c => c.Name.Contains("Calculation group"));
+if (looksLikeCalcGroup)
+    Info("WARNING: _Measures looks like a CALCULATION GROUP (" +
+         string.Join(", ", mt.Columns.Select(c => c.Name)) +
+         "). Measures are being added anyway. If the save is rejected, or the table does not pin to " +
+         "the top of the Data pane, make _Measures a COLUMNLESS table instead -- that is the shape " +
+         "PBI Dentally uses, and it demonstrably holds hundreds of measures.");
 
 Info("_Measures found with " + mt.Measures.Count + " existing measure(s); folders below are rebuilt.");
 }
