@@ -1,0 +1,44 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "name": "37f93a070955b8890d97",
+  "position": {
+    "x": 16,
+    "y": 12,
+    "z": 0,
+    "height": 44,
+    "width": 1200,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "Sales Pipeline",
+                    "textStyle": {
+                      "fontWeight": "bold",
+                      "fontSize": "16pt",
+                      "color": "#1f3b57"
+                    }
+                  },
+                  {
+                    "value": "   acquisition funnel and product usage, one row per client",
+                    "textStyle": {
+                      "fontSize": "10pt",
+                      "color": "#5ec4c0"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

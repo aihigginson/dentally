@@ -105,39 +105,39 @@ add("Customers",
     "#,##0");
 
 add("Prospects",
-    @"CALCULATE([Clients], 'List Client'[Is Prospect] = TRUE())",
+    @"COALESCE(CALCULATE([Clients], 'List Client'[Is Prospect] = TRUE()), 0)",
     "#,##0");
 
 // The monitoring requirement, as a number. Has Access Gap is computed in
 // Gold.usp_Load_Fact_Client_Status -- an ACTIVE client that nobody is using -- so the definition
 // lives in one place rather than being restated in DAX where it could drift.
 add("Clients at Risk",
-    @"CALCULATE([Clients], '_Client Status'[Has Access Gap] = TRUE())",
+    @"COALESCE(CALCULATE([Clients], '_Client Status'[Has Access Gap] = TRUE()), 0)",
     "#,##0");
 
 // Worth separating from "at risk": a client nobody has EVER signed into needs a different
 // conversation from one that used it and stopped.
 add("Clients Never Accessed",
-    @"CALCULATE(
+    @"COALESCE(CALCULATE(
     [Clients],
     'List Client'[Is Vendor] = FALSE(),
-    '_Client Status'[fk Date Last Access] = -1)",
+    '_Client Status'[fk Date Last Access] = -1), 0)",
     "#,##0");
 
 add("Clients Dormant 30d+",
-    @"CALCULATE(
+    @"COALESCE(CALCULATE(
     [Clients],
     'List Client'[Is Vendor] = FALSE(),
-    '_Client Status'[Days Since Last Access] >= 30)",
+    '_Client Status'[Days Since Last Access] >= 30), 0)",
     "#,##0");
 
 // Slipping is the window where something can still be done about it.
 add("Clients Slipping 8-29d",
-    @"CALCULATE(
+    @"COALESCE(CALCULATE(
     [Clients],
     'List Client'[Is Vendor] = FALSE(),
     '_Client Status'[Days Since Last Access] >= 8,
-    '_Client Status'[Days Since Last Access] <= 29)",
+    '_Client Status'[Days Since Last Access] <= 29), 0)",
     "#,##0");
 
 add("At Risk %",
@@ -247,8 +247,15 @@ add("Users Never Accessed",
     @"SUM('_Client Status'[Users Never Accessed])",
     "#,##0");
 
+// ==> THE VENDOR MUST BE OUT OF BOTH HALVES OF THIS RATIO, OR IT IS NOT A RATIO. <== Our own
+// client row has Users Provisioned = 0 (every analytically.info mailbox is excluded from the
+// roster by design) but Users Ever Accessed = 1, because our support logins ARE in the usage.
+// Summed across clients that gave 2/4 = 50.0% on the card while the only real customer sat at
+// 25.0% -- a number that is not wrong about any client and is wrong about the business.
 add("User Activation Rate",
-    @"DIVIDE([Users Ever Accessed], [Users Provisioned])",
+    @"DIVIDE(
+    CALCULATE([Users Ever Accessed],  'List Client'[Is Vendor] = FALSE()),
+    CALCULATE([Users Provisioned],    'List Client'[Is Vendor] = FALSE()))",
     "0.0%");
 }
 
