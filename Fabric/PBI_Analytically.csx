@@ -70,6 +70,35 @@ if (looksLikeCalcGroup)
          "the top of the Data pane, make _Measures a COLUMNLESS table instead -- that is the shape " +
          "PBI Dentally uses, and it demonstrably holds hundreds of measures.");
 
+// ==> NORMALISE THE TWO COSMETIC PROPERTIES THAT KEEP THE PIPELINE "DIFFERENT FROM SOURCE". <==
+// _Measures was created BY HAND in each model rather than built in dev and deployed across, and
+// Power BI names the pieces differently depending on how you got there. On 2026-10-03 the dev and
+// prod models differed in exactly two places, both inside this calculation group:
+//
+//     partitions[0].name           prod "Partition"   dev "_Measures"
+//     calculationItems[0].ordinal  prod 0             dev absent
+//
+// Nothing reads either one, and the two models behave identically -- but the deployment pipeline
+// compares model.bim, so it reported the semantic model as "Different from source" indefinitely,
+// and a deploy does not reconcile them. Hours went into that flag.
+//
+// ==> AND IT IS INVISIBLE IN TMDL. <== getDefinition?format=TMDL omits BOTH properties: each side
+// exports as nothing but `calculationGroup` + `calculationItem 'Calculation item' =
+// SELECTEDMEASURE()`. So diffing the TMDL says the table is identical while model.bim says it is
+// not. Compare model.bim, or the pipeline's own Compare view -- not the TMDL -- when chasing this.
+//
+// Asserted here rather than fixed by hand so both models converge on the next run and cannot drift
+// apart again. Values chosen to match PROD, so prod is left untouched and dev moves to meet it.
+{
+    foreach (var p in mt.Partitions)
+        if (p.Name != "Partition") { Info("renaming partition '" + p.Name + "' -> 'Partition'"); p.Name = "Partition"; }
+
+    var cg = mt as CalculationGroupTable;
+    if (cg != null)
+        foreach (var ci in cg.CalculationItems)
+            if (ci.Ordinal != 0) { Info("setting ordinal on '" + ci.Name + "': " + ci.Ordinal + " -> 0"); ci.Ordinal = 0; }
+}
+
 Info("_Measures found with " + mt.Measures.Count + " existing measure(s); folders below are rebuilt.");
 }
 
