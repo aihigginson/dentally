@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.7.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 0,
+    "z": 0,
+    "height": 40,
+    "width": 324,
+    "tabOrder": 0
+  },
+  "objects": {
+    "general": [
+      {
+        "properties": {
+          "paragraphs": [
+            {
+              "textRuns": [
+                {
+                  "value": "Sales Pipeline",
+                  "textStyle": {
+                    "fontWeight": "bold",
+                    "fontSize": "16pt",
+                    "color": "#1f3b57"
+                  }
+                },
+                {
+                  "value": "   customers and prospects ",
+                  "textStyle": {
+                    "fontSize": "10pt",
+                    "color": "#5ec4c0"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
