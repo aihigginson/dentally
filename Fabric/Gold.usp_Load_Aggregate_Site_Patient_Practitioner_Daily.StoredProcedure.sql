@@ -218,9 +218,32 @@ BEGIN
 
         -- ── Block/unavailable time (must come OUT of worked hours) ────────────
         -- No-patient block appointments (NOT WORKING / Lunch / Annual Leave / Bank Holiday /
-        -- Training / Meeting / Medical) are NOT available clinical time. INTERIM explicit reason
-        -- list -> replace with the reason-map Block category once the appointment-reason map is
-        -- re-seeded from real data.
+        -- Training / Meeting / Medical / Other) are NOT available clinical time. INTERIM explicit
+        -- reason list -> replace with the reason-map Block category once the appointment-reason
+        -- map is re-seeded from real data.
+        --
+        -- ==> 'Other' IS A BLOCK, AND IT IS THE BIGGEST ONE. <== Added 2026-10-05 after the owner
+        -- spotted a 90-minute internal meeting (Craig Jack, 2026-10-15 09:00-10:30) being reported
+        -- as free. At Maple alone that reason covers 4,147 no-patient entries and 22,164 hours,
+        -- which was ALL counted as available clinical time -- far more than the seven reasons
+        -- already listed.
+        --
+        -- The practice records WHAT the block is in the appointment's `notes`, which the ingest
+        -- deliberately drops (Fabric/Notebooks/build_Ingest_Dentally.py, t_appointment), so Reason
+        -- is the only marker that reaches the warehouse. Sampled 13 live from the Dentally API
+        -- before making this change: "Kate on annual leave", "Lunch", "Meeting with CCJ and LW",
+        -- "Reception meeting 10am", "Kate on a course all day" -- non-clinical in every case that
+        -- carried a note.
+        --
+        -- ==> KNOWN IMPRECISION, ACCEPTED. <== Two of the thirteen had an EMPTY note and one read
+        -- "leave this for Craig to use", which is a HELD slot rather than a block -- still
+        -- bookable, so it arguably should stay in available time. Reason alone cannot separate
+        -- those, and treating a held slot as blocked understates availability slightly. That is
+        -- the right way to be wrong here: counting a meeting as free overstates capacity, which is
+        -- the error that makes the practice look like it has room it does not have.
+        --
+        -- Exam (1,288) and Emergency (527) also appear with no patient and are deliberately NOT
+        -- listed: those are unfilled bookable template slots, which ARE free time.
         DROP TABLE IF EXISTS #block_agg;
         SELECT
             apt.fk_Practitioner,
@@ -232,7 +255,7 @@ BEGIN
         WHERE apt.Is_Cancelled = 0
           AND (apt.fk_Patient IS NULL OR apt.fk_Patient <= 0)
           AND apt.Reason IN ('NOT WORKING','Not working','Lunch','Annual Leave','Bank Holiday',
-                             'Training Course','Meeting','Medical appointment')
+                             'Training Course','Meeting','Medical appointment','Other')
         GROUP BY apt.fk_Practitioner, apt.fk_Date_Start, apt.Tenant_ID;
 
         -- ── Practitioner diary hours (block time subtracted, floored at 0) ────
