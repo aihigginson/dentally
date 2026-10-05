@@ -878,6 +878,7 @@
                         </label>
                         <button id="adm-aff-save" class="settings-btn">Link affiliate</button>
                         <button id="adm-aff-clear" class="settings-btn adm-danger">Unlink</button>
+                        <button id="adm-aff-invite" class="settings-btn">Send details link</button>
                     </div>
                 </div>
             </div>
@@ -2677,6 +2678,26 @@
         } catch (e) { _admSay('Failed.', true); }
     }
 
+    // Email the partner a link to fill in their OWN self-billing details. We never ask them to
+    // send a sort code by email and never type one in here: the fields on this screen stop at who
+    // they are and what they earn, which is all a staff member needs to see.
+    async function inviteAffiliate() {
+        const email = (document.getElementById('adm-aff-email').value || '').trim();
+        if (!email) { _admSay('Enter the affiliate email first.', true); return; }
+        _admSay('Sending…');
+        try {
+            const res = await authFetch('/api/admin/affiliate/invite', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email }) });
+            const j = await res.json();
+            if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
+            // Show the link whether or not the mail went: if sending failed this is the only copy,
+            // and if it worked it is still the quickest way to hand it over in a call.
+            _admSay((j.sent ? 'Link emailed to ' + j.email + '. ' : 'Email failed — copy this to them: ')
+                    + j.link + (j.already_supplied ? '  (they already have details on file — this replaces them)' : ''));
+        } catch (e) { _admSay('Failed.', true); }
+    }
+
     // Variances --------------------------------------------------------------
     async function loadVariances() {
         const list = document.getElementById('variances-list'), saveBtn = document.getElementById('variances-save');
@@ -3005,6 +3026,7 @@
                                 + 'keep the commission they were generated with.', 'Unlink', 'Cancel'))) return;
         saveAffiliate('clear');
     });
+    document.getElementById('adm-aff-invite').addEventListener('click', inviteAffiliate);
     document.getElementById('adm-month').addEventListener('change', e => loadAdmin(parseInt(e.target.value, 10)));
     document.getElementById('adm-raise').addEventListener('click', _admRaise);
     document.getElementById('adm-credit').addEventListener('click', _admCredit);

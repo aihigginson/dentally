@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Your Analytically partner details</title>
+    <style>
+        :root { --navy:#0b3d5c; --navy-dark:#082c43; --teal:#13b5a6; --bg:#f4f7f9; --line:#e2e8ee; --muted:#5b6b78; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif; background:var(--bg); color:var(--navy); }
+        header { background:var(--navy); color:#fff; padding:16px 24px; font-weight:700; font-size:18px; letter-spacing:.2px; }
+        .wrap { max-width:560px; margin:40px auto; padding:0 20px; }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(10,40,60,.06); }
+        h1 { font-size:22px; margin:0 0 6px; }
+        .sub { color:var(--muted); font-size:14px; margin:0 0 22px; line-height:1.5; }
+        label { display:block; font-size:13px; font-weight:600; margin:14px 0 6px; }
+        .hint { font-weight:400; color:var(--muted); }
+        input[type=text] { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:7px; font-size:15px; font-family:inherit; }
+        textarea { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:7px; font-size:15px; font-family:inherit; resize:vertical; min-height:76px; }
+        input:focus, textarea:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(19,181,166,.15); }
+        .row { display:flex; gap:12px; }
+        .row > div { flex:1; }
+        .btn { margin-top:22px; width:100%; padding:12px 16px; border:none; border-radius:7px; background:var(--navy); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+        .btn:hover { background:var(--navy-dark); }
+        .btn:disabled { opacity:.55; cursor:default; }
+        .msg { font-size:13px; margin-top:12px; min-height:18px; }
+        .msg.err { color:#b3261e; }
+        .msg.ok  { color:#1a7f4b; }
+        .warn { margin-top:18px; background:#eef4f7; border-left:3px solid var(--teal); border-radius:6px; padding:14px; font-size:13px; line-height:1.5; }
+        .warn strong { display:block; margin-bottom:4px; }
+        .attest { display:flex; gap:10px; align-items:flex-start; margin-top:18px; font-size:13px; line-height:1.45; }
+        .attest input { margin-top:3px; }
+        fieldset { border:0; padding:0; margin:14px 0 0; }
+        fieldset legend { font-size:13px; font-weight:600; padding:0; margin-bottom:6px; }
+        .vat { display:flex; gap:18px; font-size:14px; font-weight:400; }
+        .vat label { font-weight:400; margin:0; display:flex; gap:6px; align-items:center; }
+        .hidden { display:none; }
+        .done { text-align:center; padding:12px 0; }
+        .done .tick { font-size:34px; color:#1a7f4b; }
+    </style>
+</head>
+<body>
+<header>Analytically</header>
+<div class="wrap">
+    <div class="card">
+        <div id="loading" class="sub">Checking your link&hellip;</div>
+
+        <!-- Dead/expired token: one message for every failure, so a probe learns nothing. -->
+        <div id="bad" class="hidden">
+            <h1>This link is no longer valid</h1>
+            <p class="sub">Links expire after a couple of weeks. Email
+                <a href="mailto:partners@analytically.info">partners@analytically.info</a>
+                and we will send you a fresh one.</p>
+        </div>
+
+        <form id="form" class="hidden" novalidate>
+            <h1>Your partner details</h1>
+            <p class="sub">We raise your commission invoice for you and pay it by bank transfer, so
+                there is nothing for you to raise and nothing to chase. We need three things to do
+                that: where to invoice from, your VAT position, and the account to pay into.</p>
+
+            <label for="name">Your name or business name</label>
+            <input type="text" id="name" autocomplete="organization">
+
+            <label for="address">Address to invoice from</label>
+            <textarea id="address" autocomplete="street-address"></textarea>
+
+            <fieldset>
+                <legend>Are you VAT registered?</legend>
+                <div class="vat">
+                    <label><input type="radio" name="vat" value="yes"> Yes</label>
+                    <label><input type="radio" name="vat" value="no"> No</label>
+                </div>
+            </fieldset>
+
+            <div id="vatno" class="hidden">
+                <label for="vat_number">VAT number</label>
+                <input type="text" id="vat_number" placeholder="GB123456789">
+            </div>
+
+            <label for="bank_account_name">Account name <span class="hint">as the bank has it</span></label>
+            <input type="text" id="bank_account_name" autocomplete="off">
+
+            <div class="row">
+                <div>
+                    <label for="bank_sort_code">Sort code</label>
+                    <input type="text" id="bank_sort_code" inputmode="numeric" placeholder="12-34-56" autocomplete="off">
+                </div>
+                <div>
+                    <label for="bank_account_number">Account number</label>
+                    <input type="text" id="bank_account_number" inputmode="numeric" placeholder="12345678" autocomplete="off">
+                </div>
+            </div>
+
+            <!-- Shown only when details are already on file: a change of bank details is the one
+                 thing worth making someone pause over, and it is the thing a stolen link would do. -->
+            <div id="replacing" class="warn hidden">
+                <strong>You already have details with us</strong>
+                Submitting this form replaces them, including the account we pay into. We will let
+                our team know that they changed.
+            </div>
+
+            <label class="attest">
+                <input type="checkbox" id="agree">
+                <span>I agree to Analytically self-billing on my behalf &mdash; raising invoices in
+                    my name for the commission due &mdash; and I will tell you if my VAT position
+                    or bank details change.</span>
+            </label>
+
+            <button class="btn" id="submit" type="submit">Send my details</button>
+            <div class="msg" id="msg"></div>
+        </form>
+
+        <div id="done" class="hidden done">
+            <div class="tick">&#10003;</div>
+            <h1>Thank you</h1>
+            <p class="sub">We have everything we need to pay you. Commission is invoiced and paid
+                monthly, and you never need to raise anything.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// The token lives in the query string and is sent back on submit. It is never written to
+// localStorage or the page title -- it is a bearer credential for this one record.
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const $ = id => document.getElementById(id);
+
+function show(id) { $(id).classList.remove('hidden'); }
+function hide(id) { $(id).classList.add('hidden'); }
+
+function vatChosen() {
+    const r = document.querySelector('input[name=vat]:checked');
+    return r ? r.value === 'yes' : null;
+}
+document.querySelectorAll('input[name=vat]').forEach(r =>
+    r.addEventListener('change', () => vatChosen() ? show('vatno') : hide('vatno')));
+
+async function load() {
+    if (!TOKEN) { hide('loading'); show('bad'); return; }
+    try {
+        const r = await fetch('/api/partner/details?t=' + encodeURIComponent(TOKEN));
+        if (!r.ok) { hide('loading'); show('bad'); return; }
+        const d = await r.json();
+        $('name').value = d.name || '';
+        $('address').value = d.address || '';
+        $('vat_number').value = d.vat_number || '';
+        if (d.is_vat_registered === true || d.is_vat_registered === false) {
+            const v = document.querySelector('input[name=vat][value=' + (d.is_vat_registered ? 'yes' : 'no') + ']');
+            if (v) { v.checked = true; if (d.is_vat_registered) show('vatno'); }
+        }
+        // Bank details are never sent back to the browser -- only whether we hold any. A leaked
+        // link must not disclose a sort code, so the fields start empty every time.
+        if (d.has_bank || d.agreed_on) show('replacing');
+        hide('loading'); show('form');
+    } catch (e) { hide('loading'); show('bad'); }
+}
+
+$('form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const msg = $('msg'); msg.className = 'msg'; msg.textContent = '';
+    $('submit').disabled = true;
+    try {
+        const r = await fetch('/api/partner/details', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                t: TOKEN,
+                name: $('name').value,
+                address: $('address').value,
+                is_vat_registered: vatChosen(),
+                vat_number: $('vat_number').value,
+                bank_account_name: $('bank_account_name').value,
+                bank_sort_code: $('bank_sort_code').value,
+                bank_account_number: $('bank_account_number').value,
+                agree: $('agree').checked
+            })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            msg.className = 'msg err';
+            msg.textContent = d.error || 'Something went wrong. Please try again.';
+            $('submit').disabled = false;
+            return;
+        }
+        hide('form'); show('done');
+    } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'Could not reach us just now. Please try again.';
+        $('submit').disabled = false;
+    }
+});
+
+load();
+</script>
+</body>
+</html>

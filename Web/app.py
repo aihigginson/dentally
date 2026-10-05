@@ -1,4 +1,4 @@
-﻿from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
+from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
 from flask_cors import CORS
 import msal
 import requests
@@ -4249,6 +4249,202 @@ def admin_affiliate_set():
                                   'generated are unchanged.'})
     except Exception as e:
         return _server_error(e, 'admin_affiliate_set')
+
+
+# ---------------------------------------------------------------------------------------------
+# Partner self-billing details: an INVITED LINK, not a public form.
+#
+# We self-bill partners -- we raise the invoice on their behalf -- so we need their address, their
+# VAT position and their bank details before anyone can be paid. Three ways to collect that, and
+# the choice matters:
+#
+#   * a public form   -- bank details from unvetted strangers, and a spam surface to police;
+#   * admin typing    -- the details reach us by email first, which is the worst place for a sort
+#                        code and account number to sit, in two mailboxes, forever;
+#   * an invited link -- the partner fills in their own details over TLS, straight into the row.
+#
+# The third is what this is. The owner creates the partner, the partner gets a signed one-time-ish
+# link, and nothing sensitive travels by email in either direction.
+#
+# ==> THE TOKEN IS SIGNED, NOT STORED. <== _sign_state/_verify_state already give an HMAC-signed,
+# timestamped, URL-safe payload, so there is no invite table to create, migrate or clean up. The
+# cost of that choice, stated plainly rather than papered over: a signed token cannot be revoked
+# individually, and cannot be made strictly single-use without somewhere to record that it was
+# used. The compensating controls are below -- read them before shortening or lengthening anything.
+_PARTNER_TOKEN_PURPOSE = 'affiliate-selfbill-v1'
+_PARTNER_TOKEN_MAX_AGE = int(os.environ.get('PARTNER_LINK_DAYS', '14')) * 86400
+
+
+def _partner_token(affiliate_id):
+    """Sign an invite for one affiliate. The PURPOSE field is not decoration.
+
+    _verify_state is generic and is also used for the Xero OAuth `state`. Without a purpose check
+    a signed state from one flow would verify perfectly in the other -- same key, same format --
+    so every payload carries `p` and every consumer asserts it.
+    """
+    return _sign_state({'p': _PARTNER_TOKEN_PURPOSE, 'aff': int(affiliate_id), 'ts': time.time()})
+
+
+def _partner_from_token(token):
+    """(affiliate_id, None) on a good token, else (None, a response to return)."""
+    payload = _verify_state(token or '', max_age=_PARTNER_TOKEN_MAX_AGE)
+    if not payload or payload.get('p') != _PARTNER_TOKEN_PURPOSE or not payload.get('aff'):
+        # One message for every failure mode -- expired, tampered, wrong purpose, missing. Telling
+        # a caller WHICH only helps someone probing.
+        return None, (jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400)
+    return int(payload['aff']), None
+
+
+@app.route('/api/admin/affiliate/invite', methods=['POST'])
+def admin_affiliate_invite():
+    """Email a partner a link to supply their own self-billing details.
+
+    Returns the link as well as sending it, because the owner occasionally needs to hand it over
+    another way -- and because a route that claims to have emailed something, with no way to check,
+    is how you discover a mail failure a fortnight later.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return jsonify({'error': 'An affiliate email is required.'}), 400
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Affiliate_ID, Name, Self_Bill_Agreed_On FROM Billing.Affiliate "
+                    "WHERE LOWER(Email) = ?", email)
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': email + ' is not an affiliate yet. Link them to a practice '
+                                             'first, which creates them.'}), 404
+        aff_id, name, agreed = row[0], row[1], row[2]
+        link = f'https://{request.host}/partner/details?t=' + _partner_token(aff_id)
+        days = _PARTNER_TOKEN_MAX_AGE // 86400
+        body = (f"Hello{(' ' + name) if name else ''},\n\n"
+                "Before we can pay you, we need your address, your VAT position and the account to "
+                "pay into. You can enter them yourself here -- the link is private to you and we "
+                "never see the details by email:\n\n"
+                f"{link}\n\n"
+                f"The link works for {days} days. If it expires, just ask and we will send another.\n\n"
+                "Analytically\n")
+        sent = _send_email(email, 'Your Analytically partner details', body,
+                           reply_to=ONBOARDING_NOTIFY)
+        return jsonify({'ok': True, 'email': email, 'link': link, 'sent': bool(sent),
+                        'already_supplied': agreed is not None,
+                        'note': ('Link emailed.' if sent else
+                                 'Email could not be sent -- copy the link to them instead.')})
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate_invite')
+
+
+@app.route('/partner/details')
+def partner_details_page():
+    return send_from_directory('.', 'partner.html')
+
+
+@app.route('/api/partner/details', methods=['GET'])
+def partner_details_get():
+    """What the form needs to render. Deliberately NOT the bank details.
+
+    ==> A LEAKED LINK MUST NOT DISCLOSE A SORT CODE. <== The token lets someone WRITE the partner's
+    payment details, which is bad enough; it must never also let them READ what is there. So this
+    returns only whether bank details are on file, never the numbers -- and the form asks for them
+    again rather than pre-filling.
+    """
+    aff_id, err = _partner_from_token(request.args.get('t'))
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Email, Name, Address, VAT_Number, Is_VAT_Registered, "
+                    "       Self_Bill_Agreed_On, Bank_Account_Name "
+                    "FROM Billing.Affiliate WHERE Affiliate_ID = ?", aff_id)
+        r = cur.fetchone()
+        conn.close()
+        if not r:
+            return jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400
+        return jsonify({'email': r[0], 'name': r[1], 'address': r[2], 'vat_number': r[3],
+                        'is_vat_registered': (None if r[4] is None else bool(r[4])),
+                        'agreed_on': (r[5].isoformat() if r[5] else None),
+                        'has_bank': bool(r[6])})
+    except Exception as e:
+        return _server_error(e, 'partner_details_get')
+
+
+@app.route('/api/partner/details', methods=['POST'])
+def partner_details_post():
+    """The partner's own submission. Writes the row and stamps the agreement date."""
+    data = request.get_json(silent=True) or {}
+    aff_id, err = _partner_from_token(data.get('t'))
+    if err:
+        return err
+
+    name    = (data.get('name') or '').strip()[:255]
+    address = (data.get('address') or '').strip()[:500]
+    vat_reg = data.get('is_vat_registered')
+    vat_no  = (data.get('vat_number') or '').strip().upper().replace(' ', '')[:20]
+    bk_name = (data.get('bank_account_name') or '').strip()[:255]
+    # Digits only, no `re` import: people type sort codes as 12-34-56, 12 34 56 or 123456.
+    bk_sort = ''.join(c for c in (data.get('bank_sort_code') or '') if c.isdigit())
+    bk_acct = ''.join(c for c in (data.get('bank_account_number') or '') if c.isdigit())
+
+    # ==> "NOT REGISTERED" IS AN ANSWER; "UNANSWERED" IS NOT. <== Gold.usp_Load_Dim_Affiliates
+    # gates Can_Self_Bill on Is_VAT_Registered IS NOT NULL precisely so an unasked VAT question
+    # blocks payment. Accepting a blank here would write that NULL back and quietly un-pay them.
+    if vat_reg not in (True, False):
+        return jsonify({'error': 'Please tell us whether you are VAT registered.'}), 400
+    if vat_reg and not vat_no:
+        return jsonify({'error': 'A VAT number is required when you are VAT registered.'}), 400
+    if not address:
+        return jsonify({'error': 'Please give the address to invoice from.'}), 400
+    if not data.get('agree'):
+        return jsonify({'error': 'Please confirm you agree to us self-billing on your behalf.'}), 400
+    if len(bk_sort) != 6 or len(bk_acct) not in (7, 8):
+        return jsonify({'error': 'Please check the sort code (6 digits) and account number '
+                                 '(8 digits).'}), 400
+
+    try:
+        # autocommit: without it this write rolls back on close while the response says ok.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+        cur.execute("SELECT Email, Self_Bill_Agreed_On FROM Billing.Affiliate WHERE Affiliate_ID = ?",
+                    aff_id)
+        r = cur.fetchone()
+        if not r:
+            conn.close()
+            return jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400
+        email, previously = r[0], r[1]
+
+        cur.execute(
+            "UPDATE Billing.Affiliate SET Name = COALESCE(NULLIF(?, ''), Name), Address = ?, "
+            "       Is_VAT_Registered = ?, VAT_Number = ?, Bank_Account_Name = ?, "
+            "       Bank_Sort_Code = ?, Bank_Account_Number = ?, Self_Bill_Agreed_On = ? "
+            "WHERE Affiliate_ID = ?",
+            name, address, (1 if vat_reg else 0), (vat_no or None), bk_name,
+            bk_sort, bk_acct, datetime.utcnow().date(), aff_id)
+        conn.close()
+    except Exception as e:
+        return _server_error(e, 'partner_details_post')
+
+    # ==> DETECTION IS THE CONTROL A SIGNED TOKEN CANNOT PROVIDE. <== The link cannot be revoked
+    # individually and is not strictly single-use, so the one thing that must never happen quietly
+    # is a change of bank details. Every submission tells the owner, and says whether it REPLACED
+    # details already held -- which is the case worth looking at.
+    try:
+        what = 'CHANGED (details were already on file)' if previously else 'supplied for the first time'
+        _send_email(ONBOARDING_NOTIFY,
+                    f'Partner details {("changed" if previously else "received")}: {email}',
+                    f'{email} has just {what} their self-billing details.\n\n'
+                    f'VAT registered: {"yes, " + vat_no if vat_reg else "no"}\n'
+                    f'Bank account name: {bk_name}\n'
+                    f'Sort code ends: {bk_sort[-2:]}   Account ends: {bk_acct[-4:]}\n\n'
+                    'Full details are on the affiliate record. If this was not expected, treat it '
+                    'as a payment-redirection attempt and check before the next payout run.\n')
+    except Exception:
+        pass   # never fail the partner's submission because our own alert could not be sent
+
+    return jsonify({'ok': True, 'note': 'Thank you -- we have everything we need to pay you.'})
 
 
 def _capture(fn, *a, **kw):
