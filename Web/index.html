@@ -2721,8 +2721,7 @@
                 : '<span style="color:#b3261e;font-weight:600">Not payable</span> — ' + esc(j.blocked_because);
             box.innerHTML =
                 '<div style="font-weight:600;margin-bottom:6px">' + esc(j.name || j.email) + ' &middot; ' + pay + '</div>'
-              + (j.address ? 'Address: ' + esc(j.address).replace(/
-/g, ', ') + '<br>' : '')
+              + (j.address ? 'Address: ' + esc(j.address).split('\n').join(', ') + '<br>' : '')
               + 'VAT: ' + vat + '<br>'
               + 'Agreed to self-billing: ' + (j.agreed_on ? esc(j.agreed_on) : '—') + '<br>'
               + 'Rate: ' + (j.commission_pct == null ? '—' : esc(j.commission_pct) + '%') + '<br>'

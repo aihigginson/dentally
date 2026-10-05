@@ -932,6 +932,10 @@ TRIAL_DAYS         = int(os.environ.get('ONBOARDING_TRIAL_DAYS', '30'))
 # Where to send the "an onboarding is waiting to be provisioned" alert. Onboarding is throttled/run
 # by hand, so the operator needs a nudge per new signup. Defaults to the app's reply-to address.
 ONBOARDING_NOTIFY  = os.environ.get('ONBOARDING_NOTIFY', os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info'))
+# Partner mail goes to the partner mailbox, not sales. It is the address already printed on
+# partners.html, so a partner replying to our invite lands where they would have written anyway
+# -- and partner threads stay out of the practice sales inbox.
+PARTNER_NOTIFY     = os.environ.get('PARTNER_NOTIFY', 'partners@analytically.info')
 # Every Dentally endpoint the ingest reads, grouped by the read-permission a practice ticks when
 # creating the personal access token. The onboarding preflight probes each with the pasted token so
 # we confirm -- in real time -- that all the tables we need are actually readable BEFORE accepting the
@@ -4330,7 +4334,7 @@ def admin_affiliate_invite():
                 f"The link works for {days} days. If it expires, just ask and we will send another.\n\n"
                 "Analytically\n")
         sent = _send_email(email, 'Your Analytically partner details', body,
-                           reply_to=ONBOARDING_NOTIFY)
+                           reply_to=PARTNER_NOTIFY)
         return jsonify({'ok': True, 'email': email, 'link': link, 'sent': bool(sent),
                         'already_supplied': agreed is not None,
                         'note': ('Link emailed.' if sent else
@@ -4489,7 +4493,7 @@ def partner_details_post():
     # details already held -- which is the case worth looking at.
     try:
         what = 'CHANGED (details were already on file)' if previously else 'supplied for the first time'
-        _send_email(ONBOARDING_NOTIFY,
+        _send_email(PARTNER_NOTIFY,
                     f'Partner details {("changed" if previously else "received")}: {email}',
                     f'{email} has just {what} their self-billing details.\n\n'
                     f'VAT registered: {"yes, " + vat_no if vat_reg else "no"}\n'
