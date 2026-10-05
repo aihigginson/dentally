@@ -2710,7 +2710,13 @@
                           + escHtml(c.email || '') + ' &middot; ' + rate;
             document.getElementById('adm-aff-override').value =
                 (c.override_pct != null && c.override_pct !== c.standard_pct) ? c.override_pct : '';
-        } catch (e) { cur.textContent = 'Could not load the partners.'; }
+        } catch (e) {
+            // Say so in BOTH places. The register failing silently to an empty dropdown is
+            // exactly how this was missed once already -- nothing on screen said anything
+            // was wrong, it just looked as though no partners existed.
+            cur.textContent = 'Could not load the partners.';
+            listBox.textContent = 'Could not load the partner list — ' + (e.message || 'request failed') + '.';
+        }
     }
 
     // Selecting a partner loads them into the maintenance fields; "new partner" clears them and

@@ -4120,16 +4120,27 @@ def admin_affiliate():
         return err
     try:
         conn = _fabric_conn(); cur = conn.cursor()
+
+        # ==> THE PARTNER REGISTER IS NOT ABOUT A PRACTICE, SO IT MUST NOT NEED ONE. <== This route
+        # used to resolve a tenant FIRST and bail out if it could not, which meant the maintenance
+        # list -- the thing you use to create a partner before any practice exists -- vanished
+        # along with the practice-specific half. Both dropdowns came back empty and the screen gave
+        # no clue why, because the failure was in the half nobody was looking at.
+        #
+        # The tenant is now optional: `current` is simply null when there is no practice in
+        # context, and the register loads regardless.
         tid, terr = _admin_tenant(cur, upn)
-        if terr:
-            conn.close(); return terr
-        cur.execute(
-            "SELECT ab.Affiliate_ID, af.Email, af.Name, af.Commission_Pct, "
-            "       ab.Affiliate_Commission_Pct "
-            "FROM Billing.Account_Billing ab "
-            "LEFT JOIN Billing.Affiliate af ON af.Affiliate_ID = ab.Affiliate_ID "
-            "WHERE ab.Tenant_ID = ?", tid)
-        row = cur.fetchone()
+        row = None
+        if not terr:
+            cur.execute(
+                "SELECT ab.Affiliate_ID, af.Email, af.Name, af.Commission_Pct, "
+                "       ab.Affiliate_Commission_Pct "
+                "FROM Billing.Account_Billing ab "
+                "LEFT JOIN Billing.Affiliate af ON af.Affiliate_ID = ab.Affiliate_ID "
+                "WHERE ab.Tenant_ID = ?", tid)
+            row = cur.fetchone()
+        else:
+            tid = None
         current = None
         if row and row[0] is not None:
             # Standard rate AND override are both returned so it is obvious WHICH is in force.
