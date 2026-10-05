@@ -10,12 +10,16 @@
 // any of it; the control is that no practice login can open this model at all. A tenant-bearing
 // table added to PBI Dentally inherits NO RLS rule, so the separation is the whole safeguard.
 //
-// ==> AFFILIATE MEASURES ARE NOT IN HERE, AND THAT IS DELIBERATE. <== They were built by hand in
-// Desktop and exist only in the old PBI Affiliates dataset; nothing in this repository defines
-// them. They could not be read out from here (executeQueries blocks INFO.MEASURES and ADOMD.NET
-// is not installed on this machine), and commission is vendor money -- the last thing to
-// reconstruct from guesswork. Copy them across from the old model, or paste them in and they can
-// be folded into this script so the model is reproducible from source like PBI Dentally is.
+// ==> THERE ARE NO AFFILIATE MEASURES, AND NONE ARE NEEDED. <== Confirmed with the owner
+// 2026-10-05: the Affiliates report reads the payment LINES at their own grain, column by column,
+// so there is nothing to aggregate and nothing to port. An earlier version of this note said they
+// had been hand-built in Desktop and needed copying across -- that was my inference from their
+// absence, not a fact, and it put a phantom task on the list for days.
+//
+// If affiliate measures are ever wanted, note the constraint that made the wrong guess stick:
+// they cannot be read back out of a published model from here (executeQueries blocks
+// INFO.MEASURES and ADOMD.NET is not installed), so write them HERE first and run the script --
+// never hand-build them in Desktop, or the model stops being reproducible from source.
 //
 // WHAT THE TABLES MEAN, because two of them are the same dimension twice:
 //   '_Client Status'              ONE ROW PER CLIENT. A summary fact, not an event fact.

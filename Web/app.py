@@ -1,4 +1,4 @@
-﻿from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
+from flask import Flask, jsonify, send_from_directory, request, g, has_request_context, redirect
 from flask_cors import CORS
 import msal
 import requests
@@ -932,6 +932,10 @@ TRIAL_DAYS         = int(os.environ.get('ONBOARDING_TRIAL_DAYS', '30'))
 # Where to send the "an onboarding is waiting to be provisioned" alert. Onboarding is throttled/run
 # by hand, so the operator needs a nudge per new signup. Defaults to the app's reply-to address.
 ONBOARDING_NOTIFY  = os.environ.get('ONBOARDING_NOTIFY', os.environ.get('ONBOARDING_REPLY_TO', 'sales@analytically.info'))
+# Partner mail goes to the partner mailbox, not sales. It is the address already printed on
+# partners.html, so a partner replying to our invite lands where they would have written anyway
+# -- and partner threads stay out of the practice sales inbox.
+PARTNER_NOTIFY     = os.environ.get('PARTNER_NOTIFY', 'partners@analytically.info')
 # Every Dentally endpoint the ingest reads, grouped by the read-permission a practice ticks when
 # creating the personal access token. The onboarding preflight probes each with the pasted token so
 # we confirm -- in real time -- that all the tables we need are actually readable BEFORE accepting the
@@ -4116,16 +4120,27 @@ def admin_affiliate():
         return err
     try:
         conn = _fabric_conn(); cur = conn.cursor()
+
+        # ==> THE PARTNER REGISTER IS NOT ABOUT A PRACTICE, SO IT MUST NOT NEED ONE. <== This route
+        # used to resolve a tenant FIRST and bail out if it could not, which meant the maintenance
+        # list -- the thing you use to create a partner before any practice exists -- vanished
+        # along with the practice-specific half. Both dropdowns came back empty and the screen gave
+        # no clue why, because the failure was in the half nobody was looking at.
+        #
+        # The tenant is now optional: `current` is simply null when there is no practice in
+        # context, and the register loads regardless.
         tid, terr = _admin_tenant(cur, upn)
-        if terr:
-            conn.close(); return terr
-        cur.execute(
-            "SELECT ab.Affiliate_ID, af.Email, af.Name, af.Commission_Pct, "
-            "       ab.Affiliate_Commission_Pct "
-            "FROM Billing.Account_Billing ab "
-            "LEFT JOIN Billing.Affiliate af ON af.Affiliate_ID = ab.Affiliate_ID "
-            "WHERE ab.Tenant_ID = ?", tid)
-        row = cur.fetchone()
+        row = None
+        if not terr:
+            cur.execute(
+                "SELECT ab.Affiliate_ID, af.Email, af.Name, af.Commission_Pct, "
+                "       ab.Affiliate_Commission_Pct "
+                "FROM Billing.Account_Billing ab "
+                "LEFT JOIN Billing.Affiliate af ON af.Affiliate_ID = ab.Affiliate_ID "
+                "WHERE ab.Tenant_ID = ?", tid)
+            row = cur.fetchone()
+        else:
+            tid = None
         current = None
         if row and row[0] is not None:
             # Standard rate AND override are both returned so it is obvious WHICH is in force.
@@ -4135,14 +4150,34 @@ def admin_affiliate():
                        'standard_pct': float(row[3]) * 100 if row[3] is not None else None,
                        'override_pct': float(row[4]) * 100 if row[4] is not None else None,
                        'effective_pct': float(row[4] if row[4] is not None else (row[3] or 0)) * 100}
-        cur.execute("SELECT Affiliate_ID, Email, Name, Commission_Pct FROM Billing.Affiliate "
-                    "ORDER BY Email")
+        # Everything the maintenance list needs to show state at a glance: who is payable, who is
+        # still waiting to send their details, and how many practices each one has introduced.
+        cur.execute("SELECT a.Affiliate_ID, a.Email, a.Name, a.Commission_Pct, "
+                    "       a.Self_Bill_Agreed_On, a.Is_VAT_Registered, a.Bank_Account_Number, "
+                    "       (SELECT COUNT(*) FROM Billing.Account_Billing ab "
+                    "         WHERE ab.Affiliate_ID = a.Affiliate_ID) "
+                    "FROM Billing.Affiliate a ORDER BY a.Email")
         known = [{'affiliate_id': r[0], 'email': r[1], 'name': r[2],
-                  'pct': float(r[3]) * 100 if r[3] is not None else None} for r in cur.fetchall()]
+                  'pct': float(r[3]) * 100 if r[3] is not None else None,
+                  # Same rule as Gold.usp_Load_Dim_Affiliates, so the screen and the warehouse
+                  # cannot disagree about who can be paid.
+                  'can_self_bill': bool(r[4] is not None and r[5] is not None),
+                  'has_bank': bool(r[6]),
+                  'practices': r[7]} for r in cur.fetchall()]
         conn.close()
         return jsonify({'tenant_id': tid, 'current': current, 'known': known})
     except Exception as e:
         return _server_error(e, 'admin_affiliate')
+
+
+def _affiliate_by_email(cur, email, cols='Affiliate_ID'):
+    """Resolve a partner by their email key. Returns the row, or None.
+
+    The email IS the identifier -- immutable, shown in the dropdown, and printed on the self-billed
+    invoice -- so every action takes it rather than a surrogate id the owner never sees.
+    """
+    cur.execute("SELECT " + cols + " FROM Billing.Affiliate WHERE LOWER(Email) = ?", email)
+    return cur.fetchone()
 
 
 @app.route('/api/admin/affiliate', methods=['POST'])
@@ -4166,12 +4201,17 @@ def admin_affiliate_set():
     action = (body.get('action') or 'set').strip().lower()
     email  = (body.get('email') or '').strip().lower()
     name   = (body.get('name') or '').strip()
-    if action not in ('set', 'clear'):
+    if action not in ('set', 'clear', 'create', 'update', 'delete'):
         return jsonify({'error': 'Bad request'}), 400
     pct = None
-    if action == 'set':
+    if action in ('set', 'create', 'update'):
+        # ==> ASSIGNMENT PICKS AN EXISTING PARTNER; IT DOES NOT MAKE ONE. <== 'set' used to create
+        # an affiliate from any unrecognised email, so one typo in a free-text box silently
+        # produced a second affiliate record and split a partner's commission between the two.
+        # Every action now resolves an email that must already exist -- except 'create', which is
+        # the one place a new one is meant to appear.
         if '@' not in email or '.' not in email.split('@')[-1]:
-            return jsonify({'error': 'A valid affiliate email is required.'}), 400
+            return jsonify({'error': 'A valid partner email is required.'}), 400
         raw = body.get('commission_pct')
         if raw not in (None, ''):
             try:
@@ -4185,6 +4225,111 @@ def admin_affiliate_set():
             if pct < 0.5 or pct > 100:
                 return jsonify({'error': 'Enter the rate as a percentage, e.g. 10 for 10%. '
                                          'Values below 0.5 look like a fraction.'}), 400
+    # ==> CREATING A PARTNER MUST NOT REQUIRE A PRACTICE. <== Until this existed the ONLY way to
+    # create one was to link an unknown email to a practice, so a partner who had not yet
+    # introduced anybody could not be put on the system at all -- which is exactly the state every
+    # partner is in on the day you sign them up. It also blocked the self-billing invite, which
+    # needs the affiliate row to exist before it can send them anything. So: create first, collect
+    # their details, and link practices later as they introduce them.
+    if action == 'update':
+        # Maintenance: change a partner's name or their STANDARD rate. Separate from assignment on
+        # purpose -- this is the rate that applies to every practice they introduce from the next
+        # invoice run, so it is not something to change while thinking about one practice.
+        #
+        # ==> THE EMAIL IS THE KEY AND DOES NOT CHANGE. <== It is how a partner is recognised across
+        # the admin screen, the self-billing invite and every lookup in between, and it is what
+        # their commission statement is addressed to. There is deliberately no way to edit it: a
+        # rename in place would silently re-point history earned under the old address. If somebody
+        # genuinely changes address, create the new partner and move their practices across.
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            row = _affiliate_by_email(cur, email)
+            if not row:
+                conn.close(); return jsonify({'error': email + ' is not a partner.'}), 404
+            aff_id = row[0]
+            if name:
+                cur.execute("UPDATE Billing.Affiliate SET Name = ? WHERE Affiliate_ID = ?",
+                            name[:255], aff_id)
+            if pct is not None:
+                cur.execute("UPDATE Billing.Affiliate SET Commission_Pct = ? WHERE Affiliate_ID = ?",
+                            round(pct / 100.0, 5), aff_id)
+            conn.close()
+            return jsonify({'ok': True, 'affiliate_id': aff_id, 'email': email,
+                            'note': 'Saved. A changed rate applies from the next invoice run; '
+                                    'months already generated keep the rate they were raised '
+                                    'with, and any per-practice override still wins.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_update')
+
+    if action == 'delete':
+        # ==> ONLY A PARTNER WHO HAS EARNED NOTHING AND INTRODUCED NOBODY CAN GO. <== Deleting one
+        # with history would orphan commission already stamped onto invoice lines -- those rows
+        # carry Affiliate_ID and are what a self-billed invoice was raised from, so the record has
+        # to outlive the relationship. Both checks are explicit rather than relying on a foreign
+        # key, so the refusal can say WHICH thing is in the way.
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            row = _affiliate_by_email(cur, email)
+            if not row:
+                conn.close(); return jsonify({'error': email + ' is not a partner.'}), 404
+            aff_id = row[0]
+
+            cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Affiliate_ID = ?", aff_id)
+            linked = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM Billing.Invoice_Line WHERE Affiliate_ID = ?", aff_id)
+            earned = cur.fetchone()[0]
+            if linked or earned:
+                conn.close()
+                why = []
+                if linked:
+                    why.append('%d practice%s still assigned to them' % (linked, '' if linked == 1 else 's'))
+                if earned:
+                    why.append('commission on %d invoice line%s' % (earned, '' if earned == 1 else 's'))
+                return jsonify({'error': email + ' cannot be deleted: ' + ' and '.join(why) + '. '
+                                + ('Unlink the practice first. ' if linked else '')
+                                + ('Commission already earned has to stay on the record.' if earned else '')
+                                }), 409
+
+            cur.execute("DELETE FROM Billing.Affiliate WHERE Affiliate_ID = ?", aff_id)
+            conn.close()
+            app.logger.info("affiliate DELETED: by=%r affiliate=%r id=%s", upn, email, aff_id)
+            return jsonify({'ok': True, 'deleted': True, 'affiliate_id': aff_id, 'email': email,
+                            'note': email + ' deleted.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_delete')
+
+    if action == 'create':
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            cur.execute("SELECT Affiliate_ID, Commission_Pct FROM Billing.Affiliate "
+                        "WHERE LOWER(Email) = ?", email)
+            found = cur.fetchone()
+            if found:
+                # Deliberately NOT an update. Quietly re-rating an existing partner from a screen
+                # labelled "create" would change what every practice they have ever introduced
+                # pays them, with nothing downstream flagging it.
+                conn.close()
+                return jsonify({'error': email + ' already exists (ID ' + str(found[0]) + ', '
+                                + str(round(float(found[1] or 0) * 100, 3)) + '%). Use "Link '
+                                'affiliate" to attach them to this practice.'}), 409
+            if pct is None:
+                conn.close()
+                return jsonify({'error': 'A commission rate is required when creating a partner.'}), 400
+            cur.execute("SELECT ISNULL(MAX(Affiliate_ID), 0) + 1 FROM Billing.Affiliate")
+            aff_id = cur.fetchone()[0]
+            cur.execute("INSERT INTO Billing.Affiliate (Affiliate_ID, Email, Name, Commission_Pct, "
+                        " Created_At, Notes) VALUES (?,?,?,?,?,?)",
+                        aff_id, email[:255], (name or None), round(pct / 100.0, 5),
+                        datetime.utcnow().replace(microsecond=0), 'Created by ' + upn[:200])
+            conn.close()
+            return jsonify({'ok': True, 'created': True, 'affiliate_id': aff_id, 'email': email,
+                            'effective_pct': pct,
+                            'note': 'Partner created at ' + str(pct) + '%. Send them the details '
+                                    'link so they can supply their bank details, and link them to '
+                                    'a practice when they introduce one.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_create')
+
     try:
         # autocommit=True -- see admin_billing_adjust. Without it this writes nothing and reports
         # success.
@@ -4209,34 +4354,18 @@ def admin_affiliate_set():
                             'note': 'Unlinked. Invoices already generated keep the commission '
                                     'they were raised with.'})
 
-        cur.execute("SELECT Affiliate_ID, Commission_Pct FROM Billing.Affiliate "
-                    "WHERE LOWER(Email) = ?", email)
-        found = cur.fetchone()
+        found = _affiliate_by_email(cur, email, 'Affiliate_ID, Commission_Pct')
+        if not found:
+            conn.close()
+            return jsonify({'error': email + ' is not a partner yet. Create them under Partners '
+                                             'first, then assign them here.'}), 404
+        aff_id, std = found[0], found[1]
         created = False
-        if found:
-            aff_id, std = found[0], found[1]
-            if name:
-                cur.execute("UPDATE Billing.Affiliate SET Name = ? WHERE Affiliate_ID = ?",
-                            name[:255], aff_id)
-        else:
-            if pct is None:
-                conn.close()
-                return jsonify({'error': email + ' is new, so a commission rate is required to '
-                                                 'create them.'}), 400
-            # Affiliate_ID is manually assigned by design -- a small vendor-managed set, no
-            # IDENTITY on the table -- so the app takes the next one.
-            cur.execute("SELECT ISNULL(MAX(Affiliate_ID), 0) + 1 FROM Billing.Affiliate")
-            aff_id = cur.fetchone()[0]
-            std = round(pct / 100.0, 5)
-            cur.execute("INSERT INTO Billing.Affiliate (Affiliate_ID, Email, Name, Commission_Pct, "
-                        " Created_At, Notes) VALUES (?,?,?,?,?,?)",
-                        aff_id, email[:255], (name or None), std, now, 'Added by ' + upn[:200])
-            created = True
 
         # A rate given for an EXISTING affiliate is a PER-TENANT OVERRIDE, never a change to their
         # standard rate: one practice on different terms must not silently re-rate every other
         # practice that partner has introduced.
-        override = round(pct / 100.0, 5) if (pct is not None and not created) else None
+        override = round(pct / 100.0, 5) if pct is not None else None
         cur.execute("UPDATE Billing.Account_Billing "
                     "SET Affiliate_ID = ?, Affiliate_Commission_Pct = ?, Updated_At = ? "
                     "WHERE Tenant_ID = ?", aff_id, override, now, tid)
@@ -4244,11 +4373,262 @@ def admin_affiliate_set():
         conn.close()
         return jsonify({'ok': True, 'created': created, 'affiliate_id': aff_id, 'email': email,
                         'effective_pct': round(float(effective) * 100, 3),
-                        'note': ('Created and linked. ' if created else 'Linked. ')
-                                + 'Commission applies from the next invoice run; months already '
-                                  'generated are unchanged.'})
+                        'note': 'Linked. Commission applies from the next invoice run; '
+                                'months already generated are unchanged.'})
     except Exception as e:
         return _server_error(e, 'admin_affiliate_set')
+
+
+# ---------------------------------------------------------------------------------------------
+# Partner self-billing details: an INVITED LINK, not a public form.
+#
+# We self-bill partners -- we raise the invoice on their behalf -- so we need their address, their
+# VAT position and their bank details before anyone can be paid. Three ways to collect that, and
+# the choice matters:
+#
+#   * a public form   -- bank details from unvetted strangers, and a spam surface to police;
+#   * admin typing    -- the details reach us by email first, which is the worst place for a sort
+#                        code and account number to sit, in two mailboxes, forever;
+#   * an invited link -- the partner fills in their own details over TLS, straight into the row.
+#
+# The third is what this is. The owner creates the partner, the partner gets a signed one-time-ish
+# link, and nothing sensitive travels by email in either direction.
+#
+# ==> THE TOKEN IS SIGNED, NOT STORED. <== _sign_state/_verify_state already give an HMAC-signed,
+# timestamped, URL-safe payload, so there is no invite table to create, migrate or clean up. The
+# cost of that choice, stated plainly rather than papered over: a signed token cannot be revoked
+# individually, and cannot be made strictly single-use without somewhere to record that it was
+# used. The compensating controls are below -- read them before shortening or lengthening anything.
+_PARTNER_TOKEN_PURPOSE = 'affiliate-selfbill-v1'
+_PARTNER_TOKEN_MAX_AGE = int(os.environ.get('PARTNER_LINK_DAYS', '14')) * 86400
+
+
+def _partner_token(affiliate_id):
+    """Sign an invite for one affiliate. The PURPOSE field is not decoration.
+
+    _verify_state is generic and is also used for the Xero OAuth `state`. Without a purpose check
+    a signed state from one flow would verify perfectly in the other -- same key, same format --
+    so every payload carries `p` and every consumer asserts it.
+    """
+    return _sign_state({'p': _PARTNER_TOKEN_PURPOSE, 'aff': int(affiliate_id), 'ts': time.time()})
+
+
+def _partner_from_token(token):
+    """(affiliate_id, None) on a good token, else (None, a response to return)."""
+    payload = _verify_state(token or '', max_age=_PARTNER_TOKEN_MAX_AGE)
+    if not payload or payload.get('p') != _PARTNER_TOKEN_PURPOSE or not payload.get('aff'):
+        # One message for every failure mode -- expired, tampered, wrong purpose, missing. Telling
+        # a caller WHICH only helps someone probing.
+        return None, (jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400)
+    return int(payload['aff']), None
+
+
+@app.route('/api/admin/affiliate/invite', methods=['POST'])
+def admin_affiliate_invite():
+    """Email a partner a link to supply their own self-billing details.
+
+    Returns the link as well as sending it, because the owner occasionally needs to hand it over
+    another way -- and because a route that claims to have emailed something, with no way to check,
+    is how you discover a mail failure a fortnight later.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return jsonify({'error': 'An affiliate email is required.'}), 400
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Affiliate_ID, Name, Self_Bill_Agreed_On FROM Billing.Affiliate "
+                    "WHERE LOWER(Email) = ?", email)
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': email + ' is not an affiliate yet. Link them to a practice '
+                                             'first, which creates them.'}), 404
+        aff_id, name, agreed = row[0], row[1], row[2]
+        link = f'https://{request.host}/partner/details?t=' + _partner_token(aff_id)
+        days = _PARTNER_TOKEN_MAX_AGE // 86400
+        body = (f"Hello{(' ' + name) if name else ''},\n\n"
+                "Before we can pay you, we need your address, your VAT position and the account to "
+                "pay into. You can enter them yourself here -- the link is private to you and we "
+                "never see the details by email:\n\n"
+                f"{link}\n\n"
+                f"The link works for {days} days. If it expires, just ask and we will send another.\n\n"
+                "Analytically\n")
+        sent = _send_email(email, 'Your Analytically partner details', body,
+                           reply_to=PARTNER_NOTIFY)
+        return jsonify({'ok': True, 'email': email, 'link': link, 'sent': bool(sent),
+                        'already_supplied': agreed is not None,
+                        'note': ('Link emailed.' if sent else
+                                 'Email could not be sent -- copy the link to them instead.')})
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate_invite')
+
+
+@app.route('/api/admin/affiliate/payment', methods=['GET'])
+def admin_affiliate_payment():
+    """A partner's payment details, IN FULL, for staff making the transfer.
+
+    ==> THE PARTNER'S OWN LINK MUST NOT READ THESE BACK; THIS ROUTE MUST. <== Those are different
+    questions and the first answer nearly swallowed the second. The invited link is a bearer token
+    sitting in somebody's inbox, so it is write-only by design. Paying a partner by bank transfer
+    means a human reads a sort code off a screen and types it into banking -- masking it here would
+    make the whole feature useless and send the owner back to keeping bank details in email, which
+    is the exact thing the invited link was built to stop.
+
+    Staff-only via _require_staff (enforced here, not by the tab being hidden), and every read is
+    logged: who looked, at whose details, when. Bank details are the one thing in this app worth
+    being able to answer "who saw that" about.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    email = (request.args.get('email') or '').strip().lower()
+    if not email:
+        return jsonify({'error': 'An affiliate email is required.'}), 400
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Affiliate_ID, Email, Name, Address, VAT_Number, Is_VAT_Registered, "
+                    "       Self_Bill_Agreed_On, Bank_Account_Name, Bank_Sort_Code, "
+                    "       Bank_Account_Number, Commission_Pct "
+                    "FROM Billing.Affiliate WHERE LOWER(Email) = ?", email)
+        r = cur.fetchone()
+        conn.close()
+        if not r:
+            return jsonify({'error': email + ' is not an affiliate.'}), 404
+
+        sort_code = r[8] or ''
+        # Grouped for reading aloud and for typing into banking: 12-34-56 is how a sort code is
+        # written everywhere else, and a human transcribing 123456 is how a payment goes astray.
+        pretty_sort = '-'.join([sort_code[i:i + 2] for i in range(0, 6, 2)]) if len(sort_code) == 6 else sort_code
+        agreed = r[6]
+        vat_known = r[5] is not None
+        app.logger.info("affiliate payment details VIEWED: by=%r affiliate=%r id=%s", upn, email, r[0])
+        return jsonify({
+            'affiliate_id': r[0], 'email': r[1], 'name': r[2], 'address': r[3],
+            'vat_number': r[4], 'is_vat_registered': (None if r[5] is None else bool(r[5])),
+            'agreed_on': (agreed.isoformat() if agreed else None),
+            'bank_account_name': r[7], 'bank_sort_code': pretty_sort, 'bank_account_number': r[9],
+            'commission_pct': (float(r[10]) * 100 if r[10] is not None else None),
+            # Mirrors Gold.usp_Load_Dim_Affiliates so the screen and the warehouse cannot disagree
+            # about whether someone is payable.
+            'can_self_bill': bool(agreed is not None and vat_known),
+            'blocked_because': (None if (agreed is not None and vat_known) else
+                                ('No self-billing agreement yet.' if agreed is None
+                                 else 'VAT position unknown.')),
+        })
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate_payment')
+
+
+@app.route('/partner/details')
+def partner_details_page():
+    return send_from_directory('.', 'partner.html')
+
+
+@app.route('/api/partner/details', methods=['GET'])
+def partner_details_get():
+    """What the form needs to render. Deliberately NOT the bank details.
+
+    ==> A LEAKED LINK MUST NOT DISCLOSE A SORT CODE. <== The token lets someone WRITE the partner's
+    payment details, which is bad enough; it must never also let them READ what is there. So this
+    returns only whether bank details are on file, never the numbers -- and the form asks for them
+    again rather than pre-filling.
+    """
+    aff_id, err = _partner_from_token(request.args.get('t'))
+    if err:
+        return err
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Email, Name, Address, VAT_Number, Is_VAT_Registered, "
+                    "       Self_Bill_Agreed_On, Bank_Account_Name "
+                    "FROM Billing.Affiliate WHERE Affiliate_ID = ?", aff_id)
+        r = cur.fetchone()
+        conn.close()
+        if not r:
+            return jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400
+        return jsonify({'email': r[0], 'name': r[1], 'address': r[2], 'vat_number': r[3],
+                        'is_vat_registered': (None if r[4] is None else bool(r[4])),
+                        'agreed_on': (r[5].isoformat() if r[5] else None),
+                        'has_bank': bool(r[6])})
+    except Exception as e:
+        return _server_error(e, 'partner_details_get')
+
+
+@app.route('/api/partner/details', methods=['POST'])
+def partner_details_post():
+    """The partner's own submission. Writes the row and stamps the agreement date."""
+    data = request.get_json(silent=True) or {}
+    aff_id, err = _partner_from_token(data.get('t'))
+    if err:
+        return err
+
+    name    = (data.get('name') or '').strip()[:255]
+    address = (data.get('address') or '').strip()[:500]
+    vat_reg = data.get('is_vat_registered')
+    vat_no  = (data.get('vat_number') or '').strip().upper().replace(' ', '')[:20]
+    bk_name = (data.get('bank_account_name') or '').strip()[:255]
+    # Digits only, no `re` import: people type sort codes as 12-34-56, 12 34 56 or 123456.
+    bk_sort = ''.join(c for c in (data.get('bank_sort_code') or '') if c.isdigit())
+    bk_acct = ''.join(c for c in (data.get('bank_account_number') or '') if c.isdigit())
+
+    # ==> "NOT REGISTERED" IS AN ANSWER; "UNANSWERED" IS NOT. <== Gold.usp_Load_Dim_Affiliates
+    # gates Can_Self_Bill on Is_VAT_Registered IS NOT NULL precisely so an unasked VAT question
+    # blocks payment. Accepting a blank here would write that NULL back and quietly un-pay them.
+    if vat_reg not in (True, False):
+        return jsonify({'error': 'Please tell us whether you are VAT registered.'}), 400
+    if vat_reg and not vat_no:
+        return jsonify({'error': 'A VAT number is required when you are VAT registered.'}), 400
+    if not address:
+        return jsonify({'error': 'Please give the address to invoice from.'}), 400
+    if not data.get('agree'):
+        return jsonify({'error': 'Please confirm you agree to us self-billing on your behalf.'}), 400
+    if len(bk_sort) != 6 or len(bk_acct) not in (7, 8):
+        return jsonify({'error': 'Please check the sort code (6 digits) and account number '
+                                 '(8 digits).'}), 400
+
+    try:
+        # autocommit: without it this write rolls back on close while the response says ok.
+        conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+        cur.execute("SELECT Email, Self_Bill_Agreed_On FROM Billing.Affiliate WHERE Affiliate_ID = ?",
+                    aff_id)
+        r = cur.fetchone()
+        if not r:
+            conn.close()
+            return jsonify({'error': 'This link is no longer valid. Ask us for a new one.'}), 400
+        email, previously = r[0], r[1]
+
+        cur.execute(
+            "UPDATE Billing.Affiliate SET Name = COALESCE(NULLIF(?, ''), Name), Address = ?, "
+            "       Is_VAT_Registered = ?, VAT_Number = ?, Bank_Account_Name = ?, "
+            "       Bank_Sort_Code = ?, Bank_Account_Number = ?, Self_Bill_Agreed_On = ? "
+            "WHERE Affiliate_ID = ?",
+            name, address, (1 if vat_reg else 0), (vat_no or None), bk_name,
+            bk_sort, bk_acct, datetime.utcnow().date(), aff_id)
+        conn.close()
+    except Exception as e:
+        return _server_error(e, 'partner_details_post')
+
+    # ==> DETECTION IS THE CONTROL A SIGNED TOKEN CANNOT PROVIDE. <== The link cannot be revoked
+    # individually and is not strictly single-use, so the one thing that must never happen quietly
+    # is a change of bank details. Every submission tells the owner, and says whether it REPLACED
+    # details already held -- which is the case worth looking at.
+    try:
+        what = 'CHANGED (details were already on file)' if previously else 'supplied for the first time'
+        _send_email(PARTNER_NOTIFY,
+                    f'Partner details {("changed" if previously else "received")}: {email}',
+                    f'{email} has just {what} their self-billing details.\n\n'
+                    f'VAT registered: {"yes, " + vat_no if vat_reg else "no"}\n'
+                    f'Bank account name: {bk_name}\n'
+                    f'Sort code ends: {bk_sort[-2:]}   Account ends: {bk_acct[-4:]}\n\n'
+                    'Full details are on the affiliate record. If this was not expected, treat it '
+                    'as a payment-redirection attempt and check before the next payout run.\n')
+    except Exception:
+        pass   # never fail the partner's submission because our own alert could not be sent
+
+    return jsonify({'ok': True, 'note': 'Thank you -- we have everything we need to pay you.'})
 
 
 def _capture(fn, *a, **kw):
