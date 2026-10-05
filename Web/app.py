@@ -4339,6 +4339,62 @@ def admin_affiliate_invite():
         return _server_error(e, 'admin_affiliate_invite')
 
 
+@app.route('/api/admin/affiliate/payment', methods=['GET'])
+def admin_affiliate_payment():
+    """A partner's payment details, IN FULL, for staff making the transfer.
+
+    ==> THE PARTNER'S OWN LINK MUST NOT READ THESE BACK; THIS ROUTE MUST. <== Those are different
+    questions and the first answer nearly swallowed the second. The invited link is a bearer token
+    sitting in somebody's inbox, so it is write-only by design. Paying a partner by bank transfer
+    means a human reads a sort code off a screen and types it into banking -- masking it here would
+    make the whole feature useless and send the owner back to keeping bank details in email, which
+    is the exact thing the invited link was built to stop.
+
+    Staff-only via _require_staff (enforced here, not by the tab being hidden), and every read is
+    logged: who looked, at whose details, when. Bank details are the one thing in this app worth
+    being able to answer "who saw that" about.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    email = (request.args.get('email') or '').strip().lower()
+    if not email:
+        return jsonify({'error': 'An affiliate email is required.'}), 400
+    try:
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Affiliate_ID, Email, Name, Address, VAT_Number, Is_VAT_Registered, "
+                    "       Self_Bill_Agreed_On, Bank_Account_Name, Bank_Sort_Code, "
+                    "       Bank_Account_Number, Commission_Pct "
+                    "FROM Billing.Affiliate WHERE LOWER(Email) = ?", email)
+        r = cur.fetchone()
+        conn.close()
+        if not r:
+            return jsonify({'error': email + ' is not an affiliate.'}), 404
+
+        sort_code = r[8] or ''
+        # Grouped for reading aloud and for typing into banking: 12-34-56 is how a sort code is
+        # written everywhere else, and a human transcribing 123456 is how a payment goes astray.
+        pretty_sort = '-'.join([sort_code[i:i + 2] for i in range(0, 6, 2)]) if len(sort_code) == 6 else sort_code
+        agreed = r[6]
+        vat_known = r[5] is not None
+        app.logger.info("affiliate payment details VIEWED: by=%r affiliate=%r id=%s", upn, email, r[0])
+        return jsonify({
+            'affiliate_id': r[0], 'email': r[1], 'name': r[2], 'address': r[3],
+            'vat_number': r[4], 'is_vat_registered': (None if r[5] is None else bool(r[5])),
+            'agreed_on': (agreed.isoformat() if agreed else None),
+            'bank_account_name': r[7], 'bank_sort_code': pretty_sort, 'bank_account_number': r[9],
+            'commission_pct': (float(r[10]) * 100 if r[10] is not None else None),
+            # Mirrors Gold.usp_Load_Dim_Affiliates so the screen and the warehouse cannot disagree
+            # about whether someone is payable.
+            'can_self_bill': bool(agreed is not None and vat_known),
+            'blocked_because': (None if (agreed is not None and vat_known) else
+                                ('No self-billing agreement yet.' if agreed is None
+                                 else 'VAT position unknown.')),
+        })
+    except Exception as e:
+        return _server_error(e, 'admin_affiliate_payment')
+
+
 @app.route('/partner/details')
 def partner_details_page():
     return send_from_directory('.', 'partner.html')

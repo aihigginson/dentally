@@ -879,7 +879,9 @@
                         <button id="adm-aff-save" class="settings-btn">Link affiliate</button>
                         <button id="adm-aff-clear" class="settings-btn adm-danger">Unlink</button>
                         <button id="adm-aff-invite" class="settings-btn">Send details link</button>
+                        <button id="adm-aff-pay" class="settings-btn">Payment details</button>
                     </div>
+                    <div id="adm-aff-paybox" style="display:none;margin-top:12px;padding:12px 14px;border:1px solid #d9e2ea;border-left:3px solid #13b5a6;border-radius:6px;background:#f7fafc;font-size:13px;line-height:1.7"></div>
                 </div>
             </div>
 
@@ -2698,6 +2700,40 @@
         } catch (e) { _admSay('Failed.', true); }
     }
 
+    // Show a partner's payment details in full, for the bank transfer. Staff-only server-side and
+    // every read is logged. NOT masked, on purpose: the owner pays these people by transfer, and a
+    // screen that hides the sort code just sends the details back into email, which is what the
+    // invited link exists to prevent.
+    async function showAffiliatePayment() {
+        const email = (document.getElementById('adm-aff-email').value || '').trim();
+        const box = document.getElementById('adm-aff-paybox');
+        if (!email) { _admSay('Enter the affiliate email first.', true); return; }
+        box.style.display = 'block'; box.textContent = 'Loading…';
+        try {
+            const res = await authFetch('/api/admin/affiliate/payment?email=' + encodeURIComponent(email));
+            const j = await res.json();
+            if (!res.ok) { box.textContent = j.error || 'Failed.'; return; }
+            const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+            const vat = j.is_vat_registered === null ? '<b style="color:#b3261e">not answered</b>'
+                      : (j.is_vat_registered ? 'registered — ' + esc(j.vat_number) : 'not registered');
+            const pay = j.can_self_bill
+                ? '<span style="color:#1a7f4b;font-weight:600">Payable</span>'
+                : '<span style="color:#b3261e;font-weight:600">Not payable</span> — ' + esc(j.blocked_because);
+            box.innerHTML =
+                '<div style="font-weight:600;margin-bottom:6px">' + esc(j.name || j.email) + ' &middot; ' + pay + '</div>'
+              + (j.address ? 'Address: ' + esc(j.address).replace(/
+/g, ', ') + '<br>' : '')
+              + 'VAT: ' + vat + '<br>'
+              + 'Agreed to self-billing: ' + (j.agreed_on ? esc(j.agreed_on) : '—') + '<br>'
+              + 'Rate: ' + (j.commission_pct == null ? '—' : esc(j.commission_pct) + '%') + '<br>'
+              + '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #e2e8ee">'
+              + 'Account name: <b>' + esc(j.bank_account_name || '—') + '</b><br>'
+              + 'Sort code: <b style="font-family:monospace;font-size:14px">' + esc(j.bank_sort_code || '—') + '</b>'
+              + ' &nbsp; Account: <b style="font-family:monospace;font-size:14px">' + esc(j.bank_account_number || '—') + '</b>'
+              + '</div>';
+        } catch (e) { box.textContent = 'Failed.'; }
+    }
+
     // Variances --------------------------------------------------------------
     async function loadVariances() {
         const list = document.getElementById('variances-list'), saveBtn = document.getElementById('variances-save');
@@ -3027,6 +3063,7 @@
         saveAffiliate('clear');
     });
     document.getElementById('adm-aff-invite').addEventListener('click', inviteAffiliate);
+    document.getElementById('adm-aff-pay').addEventListener('click', showAffiliatePayment);
     document.getElementById('adm-month').addEventListener('change', e => loadAdmin(parseInt(e.target.value, 10)));
     document.getElementById('adm-raise').addEventListener('click', _admRaise);
     document.getElementById('adm-credit').addEventListener('click', _admCredit);
