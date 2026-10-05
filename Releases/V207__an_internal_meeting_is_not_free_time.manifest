@@ -1,0 +1,50 @@
+﻿# =====================================================================
+# Release V207 -- an internal meeting is not free chair time
+# =====================================================================
+# The owner spotted a 90-minute internal meeting being reported as available: Craig Jack,
+# Wed 2026-10-15 09:00-10:30, appointment 1018372591, Reason 'Other', no patient. His diary that
+# day is 09:00-18:50 (590 mins, no breaks recorded); Lunch was subtracted, the meeting was not, so
+# Worked_Hours read 530 when the truth is 440.
+#
+# Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily subtracts no-patient block appointments
+# from Worked_Hours using an explicit reason list, and 'Other' was missing from it. That is not a
+# one-appointment gap -- at Maple it covers 4,147 entries and 22,164 hours, more than the seven
+# reasons already listed put together.
+#
+# ==> VERIFIED AGAINST THE LIVE DENTALLY API BEFORE CHANGING THE RULE. <== The practice writes what
+# the block IS in the appointment's `notes`, which the ingest deliberately drops, so Reason is the
+# only marker that reaches the warehouse. Thirteen no-patient 'Other' appointments sampled live:
+# "Kate on annual leave", "Kate on a course all day", "Lunch", "Meeting with CCJ and LW",
+# "Reception meeting 10am", "Stephen talking to camera ... then SDR with Sarah". Non-clinical in
+# every case that carried a note.
+#
+# ==> KNOWN IMPRECISION, ACCEPTED. <== Two of the thirteen had an empty note and one read "leave
+# this for Craig to use" -- a HELD slot, still bookable, which this now treats as blocked. Reason
+# alone cannot separate those. Erring that way understates availability slightly; the error it
+# replaces overstated capacity, which is the one that makes a practice look like it has room it
+# does not have.
+#
+# Exam (1,288 no-patient) and Emergency (527) are deliberately NOT added: those are unfilled
+# bookable template slots, which ARE free time.
+#
+# The aggregate is a DROP/CREATE full rebuild, so re-running it restates every row. No backfill.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V207__an_internal_meeting_is_not_free_time.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# The reason that prompted the release must now be blocked. Re-derived from the fact rather than
+# diffed against the previous aggregate, so the guard cannot pass on a stale row.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM Gold.Fact_Appointments WHERE Is_Cancelled = 0 AND (fk_Patient IS NULL OR fk_Patient <= 0) AND Reason = 'Other'; IF @a = 0 BEGIN SET @e = 'V207 FAILED: no no-patient Other appointments found at all -- the reason string or the patient test has changed.'; THROW 50350, @e, 1; END;
+
+# Exam and Emergency must NOT have been swept in: they are bookable slots, not blocks.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM Gold.Fact_Appointments WHERE Is_Cancelled = 0 AND (fk_Patient IS NULL OR fk_Patient <= 0) AND Reason IN ('Exam','Emergency'); IF @b = 0 BEGIN SET @f = 'V207 FAILED: expected unfilled Exam/Emergency slots to still exist as free time.'; THROW 50351, @f, 1; END;
+
+# Worked hours can never exceed the diary's available clinical minutes, and can never go negative.
+# This is the invariant the block subtraction can break if a reason is double-counted.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM Gold.Aggregate_Site_Patient_Practitioner_Daily WHERE Worked_Hours < 0; IF @c <> 0 BEGIN SET @g = 'V207 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' row(s) have negative worked hours.'; THROW 50352, @g, 1; END;
+
+TEST

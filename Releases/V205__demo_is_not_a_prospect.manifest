@@ -1,0 +1,48 @@
+﻿# =====================================================================
+# Release V205 -- the demo practice is not a prospect, and a live tenant is not "no contact"
+# =====================================================================
+# Two defects the first published Sales Pipeline page made visible, both in the loads rather than
+# in DAX, so both are fixed where the definition lives.
+#
+# 1. Is_Prospect caught the DEMONSTRATION PRACTICE. The test was "no tenant, and not client 1".
+#    Prod's Audit.Tenants holds tenant 100 and nothing else -- there is no demo tenant in prod --
+#    so client 11 scored Tenant_Count = 0 and the board reported one sales prospect, which was a
+#    fixture. The one number on the page you would act on was the one that was invented.
+#
+# 2. The funnel put MAPLE at "No contact". Sales.Funnel_Event is logged only from the signup flow
+#    added on 2026-10-02, and prod's table is empty, so a live practice with four provisioned
+#    users and 216 report opens sat at stage 1. An active tenant exists only because a Dentally
+#    key was accepted, so it now resolves to stage 4 (token_accepted) -- and no further. The card
+#    stages stay unpopulated until a real card exists.
+#
+# Both procedures are full rebuilds, so re-running the two jobs re-states every row; there is no
+# backfill and nothing to migrate.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V205__demo_is_not_a_prospect.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Client.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Client_Status.StoredProcedure.sql
+
+# Rebuild both, in order: the fact reads Dim_Client's keys and its Active_Tenant_Count.
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Dim_Client @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Client_Status @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# The demo practice must not be a prospect. Asserted on the flag, not on a count, because a real
+# prospect arriving tomorrow would make a count guard pass for the wrong reason.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM Gold.Dim_Client WHERE Is_Demo = 1 AND Is_Prospect = 1; IF @a <> 0 BEGIN SET @e = 'V205 FAILED: the demonstration practice is still flagged as a prospect (' + CAST(@a AS VARCHAR(10)) + ' row(s)).'; THROW 50330, @e, 1; END;
+
+# Nor may the vendor be one. This was already true; it is asserted here so the NOT IN list cannot
+# be edited back to a bare Client_ID test without the release noticing.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM Gold.Dim_Client WHERE Is_Vendor = 1 AND Is_Prospect = 1; IF @b <> 0 BEGIN SET @f = 'V205 FAILED: the vendor client is flagged as a prospect (' + CAST(@b AS VARCHAR(10)) + ' row(s)).'; THROW 50331, @f, 1; END;
+
+# A client with a live tenant cannot read "no contact" (funnel pk 1). Re-derived from Dim_Client
+# rather than diffed against the previous load.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM Gold.Fact_Client_Status f JOIN Gold.Dim_Client c ON c.pk_Client = f.fk_Client WHERE c.Active_Tenant_Count > 0 AND f.fk_Sales_Status_Funnel = 1; IF @c <> 0 BEGIN SET @g = 'V205 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' client(s) with a live tenant still read No contact.'; THROW 50332, @g, 1; END;
+
+# Every funnel fk must resolve to a Funnel-group status, and every access fk to an Access one. The
+# new rung is a literal 4, so a renumbered dimension would silently point it at the wrong group.
+EXEC     DECLARE @d INT, @h VARCHAR(4000); SELECT @d = COUNT(*) FROM Gold.Fact_Client_Status f LEFT JOIN Gold.Dim_Sales_Status sf ON sf.pk_Sales_Status = f.fk_Sales_Status_Funnel AND sf.Status_Group = 'Funnel' LEFT JOIN Gold.Dim_Sales_Status sa ON sa.pk_Sales_Status = f.fk_Sales_Status_Access AND sa.Status_Group = 'Access' WHERE sf.pk_Sales_Status IS NULL OR sa.pk_Sales_Status IS NULL; IF @d <> 0 BEGIN SET @h = 'V205 FAILED: ' + CAST(@d AS VARCHAR(10)) + ' fact row(s) have a status fk outside their own group.'; THROW 50333, @h, 1; END;
+
+TEST
