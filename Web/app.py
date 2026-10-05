@@ -4170,10 +4170,10 @@ def admin_affiliate_set():
     action = (body.get('action') or 'set').strip().lower()
     email  = (body.get('email') or '').strip().lower()
     name   = (body.get('name') or '').strip()
-    if action not in ('set', 'clear'):
+    if action not in ('set', 'clear', 'create'):
         return jsonify({'error': 'Bad request'}), 400
     pct = None
-    if action == 'set':
+    if action in ('set', 'create'):
         if '@' not in email or '.' not in email.split('@')[-1]:
             return jsonify({'error': 'A valid affiliate email is required.'}), 400
         raw = body.get('commission_pct')
@@ -4189,6 +4189,44 @@ def admin_affiliate_set():
             if pct < 0.5 or pct > 100:
                 return jsonify({'error': 'Enter the rate as a percentage, e.g. 10 for 10%. '
                                          'Values below 0.5 look like a fraction.'}), 400
+    # ==> CREATING A PARTNER MUST NOT REQUIRE A PRACTICE. <== Until this existed the ONLY way to
+    # create one was to link an unknown email to a practice, so a partner who had not yet
+    # introduced anybody could not be put on the system at all -- which is exactly the state every
+    # partner is in on the day you sign them up. It also blocked the self-billing invite, which
+    # needs the affiliate row to exist before it can send them anything. So: create first, collect
+    # their details, and link practices later as they introduce them.
+    if action == 'create':
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            cur.execute("SELECT Affiliate_ID, Commission_Pct FROM Billing.Affiliate "
+                        "WHERE LOWER(Email) = ?", email)
+            found = cur.fetchone()
+            if found:
+                # Deliberately NOT an update. Quietly re-rating an existing partner from a screen
+                # labelled "create" would change what every practice they have ever introduced
+                # pays them, with nothing downstream flagging it.
+                conn.close()
+                return jsonify({'error': email + ' already exists (ID ' + str(found[0]) + ', '
+                                + str(round(float(found[1] or 0) * 100, 3)) + '%). Use "Link '
+                                'affiliate" to attach them to this practice.'}), 409
+            if pct is None:
+                conn.close()
+                return jsonify({'error': 'A commission rate is required when creating a partner.'}), 400
+            cur.execute("SELECT ISNULL(MAX(Affiliate_ID), 0) + 1 FROM Billing.Affiliate")
+            aff_id = cur.fetchone()[0]
+            cur.execute("INSERT INTO Billing.Affiliate (Affiliate_ID, Email, Name, Commission_Pct, "
+                        " Created_At, Notes) VALUES (?,?,?,?,?,?)",
+                        aff_id, email[:255], (name or None), round(pct / 100.0, 5),
+                        datetime.utcnow().replace(microsecond=0), 'Created by ' + upn[:200])
+            conn.close()
+            return jsonify({'ok': True, 'created': True, 'affiliate_id': aff_id, 'email': email,
+                            'effective_pct': pct,
+                            'note': 'Partner created at ' + str(pct) + '%. Send them the details '
+                                    'link so they can supply their bank details, and link them to '
+                                    'a practice when they introduce one.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_create')
+
     try:
         # autocommit=True -- see admin_billing_adjust. Without it this writes nothing and reports
         # success.
