@@ -4139,14 +4139,34 @@ def admin_affiliate():
                        'standard_pct': float(row[3]) * 100 if row[3] is not None else None,
                        'override_pct': float(row[4]) * 100 if row[4] is not None else None,
                        'effective_pct': float(row[4] if row[4] is not None else (row[3] or 0)) * 100}
-        cur.execute("SELECT Affiliate_ID, Email, Name, Commission_Pct FROM Billing.Affiliate "
-                    "ORDER BY Email")
+        # Everything the maintenance list needs to show state at a glance: who is payable, who is
+        # still waiting to send their details, and how many practices each one has introduced.
+        cur.execute("SELECT a.Affiliate_ID, a.Email, a.Name, a.Commission_Pct, "
+                    "       a.Self_Bill_Agreed_On, a.Is_VAT_Registered, a.Bank_Account_Number, "
+                    "       (SELECT COUNT(*) FROM Billing.Account_Billing ab "
+                    "         WHERE ab.Affiliate_ID = a.Affiliate_ID) "
+                    "FROM Billing.Affiliate a ORDER BY a.Email")
         known = [{'affiliate_id': r[0], 'email': r[1], 'name': r[2],
-                  'pct': float(r[3]) * 100 if r[3] is not None else None} for r in cur.fetchall()]
+                  'pct': float(r[3]) * 100 if r[3] is not None else None,
+                  # Same rule as Gold.usp_Load_Dim_Affiliates, so the screen and the warehouse
+                  # cannot disagree about who can be paid.
+                  'can_self_bill': bool(r[4] is not None and r[5] is not None),
+                  'has_bank': bool(r[6]),
+                  'practices': r[7]} for r in cur.fetchall()]
         conn.close()
         return jsonify({'tenant_id': tid, 'current': current, 'known': known})
     except Exception as e:
         return _server_error(e, 'admin_affiliate')
+
+
+def _affiliate_by_email(cur, email, cols='Affiliate_ID'):
+    """Resolve a partner by their email key. Returns the row, or None.
+
+    The email IS the identifier -- immutable, shown in the dropdown, and printed on the self-billed
+    invoice -- so every action takes it rather than a surrogate id the owner never sees.
+    """
+    cur.execute("SELECT " + cols + " FROM Billing.Affiliate WHERE LOWER(Email) = ?", email)
+    return cur.fetchone()
 
 
 @app.route('/api/admin/affiliate', methods=['POST'])
@@ -4170,12 +4190,17 @@ def admin_affiliate_set():
     action = (body.get('action') or 'set').strip().lower()
     email  = (body.get('email') or '').strip().lower()
     name   = (body.get('name') or '').strip()
-    if action not in ('set', 'clear', 'create'):
+    if action not in ('set', 'clear', 'create', 'update', 'delete'):
         return jsonify({'error': 'Bad request'}), 400
     pct = None
-    if action in ('set', 'create'):
+    if action in ('set', 'create', 'update'):
+        # ==> ASSIGNMENT PICKS AN EXISTING PARTNER; IT DOES NOT MAKE ONE. <== 'set' used to create
+        # an affiliate from any unrecognised email, so one typo in a free-text box silently
+        # produced a second affiliate record and split a partner's commission between the two.
+        # Every action now resolves an email that must already exist -- except 'create', which is
+        # the one place a new one is meant to appear.
         if '@' not in email or '.' not in email.split('@')[-1]:
-            return jsonify({'error': 'A valid affiliate email is required.'}), 400
+            return jsonify({'error': 'A valid partner email is required.'}), 400
         raw = body.get('commission_pct')
         if raw not in (None, ''):
             try:
@@ -4195,6 +4220,73 @@ def admin_affiliate_set():
     # partner is in on the day you sign them up. It also blocked the self-billing invite, which
     # needs the affiliate row to exist before it can send them anything. So: create first, collect
     # their details, and link practices later as they introduce them.
+    if action == 'update':
+        # Maintenance: change a partner's name or their STANDARD rate. Separate from assignment on
+        # purpose -- this is the rate that applies to every practice they introduce from the next
+        # invoice run, so it is not something to change while thinking about one practice.
+        #
+        # ==> THE EMAIL IS THE KEY AND DOES NOT CHANGE. <== It is how a partner is recognised across
+        # the admin screen, the self-billing invite and every lookup in between, and it is what
+        # their commission statement is addressed to. There is deliberately no way to edit it: a
+        # rename in place would silently re-point history earned under the old address. If somebody
+        # genuinely changes address, create the new partner and move their practices across.
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            row = _affiliate_by_email(cur, email)
+            if not row:
+                conn.close(); return jsonify({'error': email + ' is not a partner.'}), 404
+            aff_id = row[0]
+            if name:
+                cur.execute("UPDATE Billing.Affiliate SET Name = ? WHERE Affiliate_ID = ?",
+                            name[:255], aff_id)
+            if pct is not None:
+                cur.execute("UPDATE Billing.Affiliate SET Commission_Pct = ? WHERE Affiliate_ID = ?",
+                            round(pct / 100.0, 5), aff_id)
+            conn.close()
+            return jsonify({'ok': True, 'affiliate_id': aff_id, 'email': email,
+                            'note': 'Saved. A changed rate applies from the next invoice run; '
+                                    'months already generated keep the rate they were raised '
+                                    'with, and any per-practice override still wins.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_update')
+
+    if action == 'delete':
+        # ==> ONLY A PARTNER WHO HAS EARNED NOTHING AND INTRODUCED NOBODY CAN GO. <== Deleting one
+        # with history would orphan commission already stamped onto invoice lines -- those rows
+        # carry Affiliate_ID and are what a self-billed invoice was raised from, so the record has
+        # to outlive the relationship. Both checks are explicit rather than relying on a foreign
+        # key, so the refusal can say WHICH thing is in the way.
+        try:
+            conn = _fabric_conn(autocommit=True); cur = conn.cursor()
+            row = _affiliate_by_email(cur, email)
+            if not row:
+                conn.close(); return jsonify({'error': email + ' is not a partner.'}), 404
+            aff_id = row[0]
+
+            cur.execute("SELECT COUNT(*) FROM Billing.Account_Billing WHERE Affiliate_ID = ?", aff_id)
+            linked = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM Billing.Invoice_Line WHERE Affiliate_ID = ?", aff_id)
+            earned = cur.fetchone()[0]
+            if linked or earned:
+                conn.close()
+                why = []
+                if linked:
+                    why.append('%d practice%s still assigned to them' % (linked, '' if linked == 1 else 's'))
+                if earned:
+                    why.append('commission on %d invoice line%s' % (earned, '' if earned == 1 else 's'))
+                return jsonify({'error': email + ' cannot be deleted: ' + ' and '.join(why) + '. '
+                                + ('Unlink the practice first. ' if linked else '')
+                                + ('Commission already earned has to stay on the record.' if earned else '')
+                                }), 409
+
+            cur.execute("DELETE FROM Billing.Affiliate WHERE Affiliate_ID = ?", aff_id)
+            conn.close()
+            app.logger.info("affiliate DELETED: by=%r affiliate=%r id=%s", upn, email, aff_id)
+            return jsonify({'ok': True, 'deleted': True, 'affiliate_id': aff_id, 'email': email,
+                            'note': email + ' deleted.'})
+        except Exception as e:
+            return _server_error(e, 'admin_affiliate_delete')
+
     if action == 'create':
         try:
             conn = _fabric_conn(autocommit=True); cur = conn.cursor()
@@ -4251,34 +4343,18 @@ def admin_affiliate_set():
                             'note': 'Unlinked. Invoices already generated keep the commission '
                                     'they were raised with.'})
 
-        cur.execute("SELECT Affiliate_ID, Commission_Pct FROM Billing.Affiliate "
-                    "WHERE LOWER(Email) = ?", email)
-        found = cur.fetchone()
+        found = _affiliate_by_email(cur, email, 'Affiliate_ID, Commission_Pct')
+        if not found:
+            conn.close()
+            return jsonify({'error': email + ' is not a partner yet. Create them under Partners '
+                                             'first, then assign them here.'}), 404
+        aff_id, std = found[0], found[1]
         created = False
-        if found:
-            aff_id, std = found[0], found[1]
-            if name:
-                cur.execute("UPDATE Billing.Affiliate SET Name = ? WHERE Affiliate_ID = ?",
-                            name[:255], aff_id)
-        else:
-            if pct is None:
-                conn.close()
-                return jsonify({'error': email + ' is new, so a commission rate is required to '
-                                                 'create them.'}), 400
-            # Affiliate_ID is manually assigned by design -- a small vendor-managed set, no
-            # IDENTITY on the table -- so the app takes the next one.
-            cur.execute("SELECT ISNULL(MAX(Affiliate_ID), 0) + 1 FROM Billing.Affiliate")
-            aff_id = cur.fetchone()[0]
-            std = round(pct / 100.0, 5)
-            cur.execute("INSERT INTO Billing.Affiliate (Affiliate_ID, Email, Name, Commission_Pct, "
-                        " Created_At, Notes) VALUES (?,?,?,?,?,?)",
-                        aff_id, email[:255], (name or None), std, now, 'Added by ' + upn[:200])
-            created = True
 
         # A rate given for an EXISTING affiliate is a PER-TENANT OVERRIDE, never a change to their
         # standard rate: one practice on different terms must not silently re-rate every other
         # practice that partner has introduced.
-        override = round(pct / 100.0, 5) if (pct is not None and not created) else None
+        override = round(pct / 100.0, 5) if pct is not None else None
         cur.execute("UPDATE Billing.Account_Billing "
                     "SET Affiliate_ID = ?, Affiliate_Commission_Pct = ?, Updated_At = ? "
                     "WHERE Tenant_ID = ?", aff_id, override, now, tid)
@@ -4286,9 +4362,8 @@ def admin_affiliate_set():
         conn.close()
         return jsonify({'ok': True, 'created': created, 'affiliate_id': aff_id, 'email': email,
                         'effective_pct': round(float(effective) * 100, 3),
-                        'note': ('Created and linked. ' if created else 'Linked. ')
-                                + 'Commission applies from the next invoice run; months already '
-                                  'generated are unchanged.'})
+                        'note': 'Linked. Commission applies from the next invoice run; '
+                                'months already generated are unchanged.'})
     except Exception as e:
         return _server_error(e, 'admin_affiliate_set')
 

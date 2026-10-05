@@ -847,27 +847,25 @@
                     <div id="adm-out" class="adm-out" style="display:none"></div>
                 </div>
 
-                <div class="defs-group">Affiliate</div>
+                <div class="defs-group">Partners</div>
                 <div class="defs-item">
                     <div class="defs-item-desc">
-                        Who introduced this practice, and what they earn on it. The rate is a
-                        <strong>percentage of each invoiced line</strong> &mdash; enter 20 for 20%,
-                        the standard introducer rate.
-                        An email we do not already hold creates a new affiliate; one we do reuses
-                        them, and a rate given for an existing affiliate becomes an override for
-                        <em>this practice only</em>.
-                        <br>
-                        Commission applies from the <strong>next invoice run</strong>. Months already
-                        generated keep the commission they were raised with, so linking an affiliate
-                        never pays anyone for billing that happened before they introduced anyone.
+                        Everyone who introduces practices to us, and what they earn. Maintained here;
+                        <strong>assigning</strong> one to a practice is the section below.
+                        The rate is a <strong>percentage of each invoiced line</strong> &mdash; enter 20 for 20%,
+                        the standard introducer rate. The <strong>email address identifies a partner and
+                        cannot be changed</strong> once created.
                     </div>
-                    <div id="adm-aff-current" style="margin-top:10px;font-size:13px">Loading&hellip;</div>
+                    <div id="adm-aff-list" style="margin-top:10px;font-size:13px">Loading&hellip;</div>
                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:flex-end">
-                        <label style="font-size:13px">Affiliate email
-                            <input id="adm-aff-email" type="email" list="adm-aff-known" placeholder="jo@introducer.co.uk"
+                        <label style="font-size:13px">Partner
+                            <select id="adm-aff-pick"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:250px"></select>
+                        </label>
+                        <label style="font-size:13px">Email <span style="color:#888;font-weight:400">(fixed once created)</span>
+                            <input id="adm-aff-email" type="email" placeholder="jo@introducer.co.uk"
                                    style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:230px">
                         </label>
-                        <datalist id="adm-aff-known"></datalist>
                         <label style="font-size:13px">Name
                             <input id="adm-aff-name" type="text" placeholder="Jo Introducer"
                                    style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:170px">
@@ -876,13 +874,40 @@
                             <input id="adm-aff-pct" type="number" min="0.5" max="100" step="0.5" placeholder="20"
                                    style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:75px">
                         </label>
-                        <button id="adm-aff-create" class="settings-btn">Create partner</button>
-                        <button id="adm-aff-save" class="settings-btn">Link affiliate</button>
-                        <button id="adm-aff-clear" class="settings-btn adm-danger">Unlink</button>
+                        <button id="adm-aff-create" class="settings-btn">Create</button>
+                        <button id="adm-aff-update" class="settings-btn">Save changes</button>
+                        <button id="adm-aff-delete" class="settings-btn adm-danger">Delete</button>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
                         <button id="adm-aff-invite" class="settings-btn">Send details link</button>
                         <button id="adm-aff-pay" class="settings-btn">Payment details</button>
                     </div>
                     <div id="adm-aff-paybox" style="display:none;margin-top:12px;padding:12px 14px;border:1px solid #d9e2ea;border-left:3px solid #13b5a6;border-radius:6px;background:#f7fafc;font-size:13px;line-height:1.7"></div>
+                </div>
+
+                <div class="defs-group">Who introduced this practice</div>
+                <div class="defs-item">
+                    <div class="defs-item-desc">
+                        Pick a partner already set up above. A rate here is an <em>override for this
+                        practice only</em> &mdash; leave it blank to use their standard rate.
+                        <br>
+                        Commission applies from the <strong>next invoice run</strong>. Months already
+                        generated keep the commission they were raised with, so assigning a partner
+                        never pays anyone for billing that happened before they introduced anyone.
+                    </div>
+                    <div id="adm-aff-current" style="margin-top:10px;font-size:13px">Loading&hellip;</div>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:flex-end">
+                        <label style="font-size:13px">Partner
+                            <select id="adm-aff-assign"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:250px"></select>
+                        </label>
+                        <label style="font-size:13px">Override % <span style="color:#888;font-weight:400">(optional)</span>
+                            <input id="adm-aff-override" type="number" min="0.5" max="100" step="0.5" placeholder="standard"
+                                   style="display:block;margin-top:4px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:95px">
+                        </label>
+                        <button id="adm-aff-save" class="settings-btn">Assign to this practice</button>
+                        <button id="adm-aff-clear" class="settings-btn adm-danger">Unassign</button>
+                    </div>
                 </div>
             </div>
 
@@ -2622,54 +2647,111 @@
     // above it. There is deliberately no practice dropdown of its own: the tenant the server acts
     // on is the one it resolves for the caller, so this screen cannot touch a practice the rest of
     // the app is not showing.
+    // The partner list, shared by both sections: maintenance edits it, assignment picks from it.
+    let _affiliates = [];
+
+    function _affOption(a, selected) {
+        const label = (a.name ? a.name + ' — ' : '') + a.email
+                    + (a.pct != null ? ' (' + a.pct + '%)' : '');
+        return '<option value="' + escHtml(a.email) + '"'
+             + (a.email === selected ? ' selected' : '') + '>' + escHtml(label) + '</option>';
+    }
+
     async function loadAffiliate() {
         const cur = document.getElementById('adm-aff-current');
         if (!cur) return;
-        const list = document.getElementById('adm-aff-known');
-        cur.textContent = 'Loading\u2026';
+        const listBox = document.getElementById('adm-aff-list');
+        const pick    = document.getElementById('adm-aff-pick');
+        const assign  = document.getElementById('adm-aff-assign');
+        cur.textContent = 'Loading…';
         try {
             const res = await authFetch('/api/admin/affiliate');
             if (!res.ok) throw new Error('status ' + res.status);
             const j = await res.json();
-            list.innerHTML = (j.known || []).map(a =>
-                '<option value="' + escHtml(a.email) + '">' + escHtml(a.name || '')
-                + (a.pct != null ? ' \u2014 ' + a.pct + '%' : '') + '</option>').join('');
+            _affiliates = j.known || [];
             const c = j.current;
+
+            // ── Maintenance ────────────────────────────────────────────────────────────────
+            // State at a glance. "Payable" is the same rule the warehouse uses, so a partner who
+            // looks payable here is one the payout run will also treat as payable.
+            listBox.innerHTML = _affiliates.length
+                ? '<table style="border-collapse:collapse;font-size:13px">' + _affiliates.map(a =>
+                    '<tr>'
+                  + '<td style="padding:2px 14px 2px 0"><strong>' + escHtml(a.name || '—') + '</strong></td>'
+                  + '<td style="padding:2px 14px 2px 0">' + escHtml(a.email) + '</td>'
+                  + '<td style="padding:2px 14px 2px 0">' + (a.pct != null ? a.pct + '%' : '—') + '</td>'
+                  + '<td style="padding:2px 14px 2px 0">' + a.practices
+                        + ' practice' + (a.practices === 1 ? '' : 's') + '</td>'
+                  + '<td style="padding:2px 0;color:' + (a.can_self_bill ? '#1a7f4b' : '#b3261e') + '">'
+                        + (a.can_self_bill ? 'Payable' : 'Details outstanding') + '</td>'
+                  + '</tr>').join('') + '</table>'
+                : '<em>No partners yet.</em>';
+
+            const keepPick = pick.value;
+            pick.innerHTML = '<option value="">— new partner —</option>'
+                           + _affiliates.map(a => _affOption(a, keepPick)).join('');
+            _affFillForm();
+
+            // ── Assignment ─────────────────────────────────────────────────────────────────
+            assign.innerHTML = '<option value="">— none —</option>'
+                             + _affiliates.map(a => _affOption(a, c ? c.email : '')).join('');
             if (!c) {
-                cur.innerHTML = '<em>No affiliate on this practice.</em>';
-                document.getElementById('adm-aff-email').value = '';
-                document.getElementById('adm-aff-name').value = '';
-                // The standard 20%, pre-filled, so signing an introducer at the agreed rate is one
-                // click and anything else is a deliberate act. NOT done on the branch below, where
-                // the practice already has an affiliate: a blank rate there means "leave their rate
-                // alone", so pre-filling would propose an override every time the screen loads.
-                document.getElementById('adm-aff-pct').value = '20';
+                cur.innerHTML = '<em>No partner on this practice.</em>';
+                document.getElementById('adm-aff-override').value = '';
                 return;
             }
             // Show BOTH rates when they differ. An override that only ever rendered as "the rate"
             // is invisible until the day it surprises someone reconciling a payout.
             const rate = (c.override_pct != null && c.override_pct !== c.standard_pct)
                 ? c.effective_pct + '% <span style="color:#8a6d3b">(override for this practice '
-                  + '\u2014 their standard is ' + c.standard_pct + '%)</span>'
+                  + '— their standard is ' + c.standard_pct + '%)</span>'
                 : c.effective_pct + '%';
             cur.innerHTML = '<strong>' + escHtml(c.name || c.email) + '</strong> &middot; '
                           + escHtml(c.email || '') + ' &middot; ' + rate;
-            document.getElementById('adm-aff-email').value = c.email || '';
-            document.getElementById('adm-aff-name').value = c.name || '';
-            document.getElementById('adm-aff-pct').value = '';
-        } catch (e) { cur.textContent = 'Could not load the affiliate.'; }
+            document.getElementById('adm-aff-override').value =
+                (c.override_pct != null && c.override_pct !== c.standard_pct) ? c.override_pct : '';
+        } catch (e) { cur.textContent = 'Could not load the partners.'; }
+    }
+
+    // Selecting a partner loads them into the maintenance fields; "new partner" clears them and
+    // pre-fills the standard 20%, so signing someone at the agreed rate is one click and anything
+    // else is a deliberate act.
+    function _affFillForm() {
+        const email = document.getElementById('adm-aff-pick').value;
+        const a = _affiliates.find(x => x.email === email);
+        const emailBox = document.getElementById('adm-aff-email');
+        document.getElementById('adm-aff-name').value = a ? (a.name || '') : '';
+        document.getElementById('adm-aff-pct').value  = a ? (a.pct != null ? a.pct : '') : '20';
+        emailBox.value = a ? a.email : '';
+        // The email identifies the partner, so it is editable only while creating one.
+        emailBox.readOnly = !!a;
+        emailBox.style.background = a ? '#f1f3f5' : '';
     }
 
     async function saveAffiliate(action) {
         const body = { action: action };
-        if (action === 'set' || action === 'create') {
-            body.email = (document.getElementById('adm-aff-email').value || '').trim();
-            body.name = (document.getElementById('adm-aff-name').value || '').trim();
-            const pct = (document.getElementById('adm-aff-pct').value || '').trim();
-            if (pct !== '') body.commission_pct = pct;
-            if (!body.email) { _admSay('An affiliate email is required.', true); return; }
+        const inMaintenance = (action === 'create' || action === 'update' || action === 'delete');
+        if (inMaintenance) {
+            body.email = (action === 'create'
+                ? document.getElementById('adm-aff-email').value
+                : document.getElementById('adm-aff-pick').value || '').trim();
+            if (!body.email) {
+                _admSay(action === 'create' ? 'Enter an email address for the new partner.'
+                                            : 'Choose a partner first.', true);
+                return;
+            }
+            if (action !== 'delete') {
+                body.name = (document.getElementById('adm-aff-name').value || '').trim();
+                const pct = (document.getElementById('adm-aff-pct').value || '').trim();
+                if (pct !== '') body.commission_pct = pct;
+            }
+        } else if (action === 'set') {
+            body.email = (document.getElementById('adm-aff-assign').value || '').trim();
+            if (!body.email) { _admSay('Choose a partner to assign.', true); return; }
+            const ov = (document.getElementById('adm-aff-override').value || '').trim();
+            if (ov !== '') body.commission_pct = ov;
         }
-        _admSay('Saving\u2026');
+        _admSay('Saving…');
         try {
             const res = await authFetch('/api/admin/affiliate', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2677,10 +2759,8 @@
             const j = await res.json();
             if (!res.ok) { _admSay(j.error || 'Failed.', true); return; }
             _admSay(j.note || 'Saved.');
-            // A create changes no practice link, and reloading that view needs a practice
-            // selected -- which there need not be. Reporting a failure straight after a
-            // successful create is the most confusing thing this screen could do.
-            if (action !== 'create') await loadAffiliate();
+            if (action === 'create' || action === 'delete') document.getElementById('adm-aff-pick').value = '';
+            await loadAffiliate();
         } catch (e) { _admSay('Failed.', true); }
     }
 
@@ -3059,12 +3139,21 @@
         clearDirty(); showSettingsTab(b.dataset.stab);
     }));
     document.getElementById('adm-refresh').addEventListener('click', () => loadAdmin(_adm && _adm.year_month));
-    // Create needs no practice selected -- a partner you have just signed up has not introduced
-    // anyone yet, which is the whole point of signing them up.
+    // Maintenance needs no practice selected -- a partner you have just signed up has not
+    // introduced anyone yet, which is the whole point of signing them up.
+    document.getElementById('adm-aff-pick').addEventListener('change', _affFillForm);
     document.getElementById('adm-aff-create').addEventListener('click', () => saveAffiliate('create'));
+    document.getElementById('adm-aff-update').addEventListener('click', () => saveAffiliate('update'));
+    document.getElementById('adm-aff-delete').addEventListener('click', async () => {
+        const email = document.getElementById('adm-aff-pick').value;
+        if (!email) { _admSay('Choose a partner to delete.', true); return; }
+        if (!(await showConfirm('Delete ' + email + '? Only possible if they have no practices '
+                                + 'assigned and have never earned commission.', 'Delete', 'Cancel'))) return;
+        saveAffiliate('delete');
+    });
     document.getElementById('adm-aff-save').addEventListener('click', () => saveAffiliate('set'));
     document.getElementById('adm-aff-clear').addEventListener('click', async () => {
-        if (!(await showConfirm('Unlink the affiliate from this practice? Invoices already raised '
+        if (!(await showConfirm('Unassign the partner from this practice? Invoices already raised '
                                 + 'keep the commission they were generated with.', 'Unlink', 'Cancel'))) return;
         saveAffiliate('clear');
     });
