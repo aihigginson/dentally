@@ -64,6 +64,22 @@ def check_visual(path, j, problems):
                 projected.add(nm)
                 if kind == 'Measure':
                     measures_projected.add(nm)
+    # ==> NATIVE REFERENCE NAMES MUST BE UNIQUE WITHIN A VISUAL. <== Project two columns that
+    # happen to share a name -- List Patients[Full Name] and List Practitioners[Full Name] -- and
+    # the visual fails outright with "Could not resolve the QueryDefinition ... identical native
+    # reference name". Desktop suffixes a digit; hand-written PBIR has to do the same.
+    seen = {}
+    for role, block in qs.items():
+        for pr in block.get('projections', []):
+            nq = pr.get('nativeQueryRef')
+            if nq is None:
+                continue
+            if nq in seen and seen[nq] != pr.get('queryRef'):
+                problems.append((path, 'two projections share the native reference name %r (%s and '
+                                       '%s) -- the visual will not resolve; suffix one, e.g. %r'
+                                 % (nq, seen[nq], pr.get('queryRef'), nq + '1')))
+            seen[nq] = pr.get('queryRef')
+
     # Only for visuals where the sort does real work. Two Desktop-authored CARDS in this repo sort
     # on a measure they do not show, and they are fine -- a card has one value and nothing to order.
     # Flagging those would make the whole check noise.
