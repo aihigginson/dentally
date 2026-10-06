@@ -6,8 +6,10 @@
 --            table:
 --              * Aged_Debt_Band -- TIME-derived (days overdue vs "today"); computed
 --                LIVE so it is never stale. Unpaid invoices only.
---              * Is_Discount    -- sparse exception (invoice Amount > sum of its line
---                Total Price); LEFT JOIN the tiny positive set Gold.Invoice_Discount.
+--              * Is_Discount / Discount_Value -- sparse exception; LEFT JOIN the tiny
+--                positive set Gold.Invoice_Discount, which detects BOTH a negative line
+--                named 'Discount' (what the live practice does) and a header-exceeds-lines
+--                gap (what the demo generator produces).
 --            Meta.usp_Create_Gold_Views wraps this 1-1 into PBI.[List Invoices] and
 --            skips the table's own PBI view.
 --  History:
@@ -35,6 +37,10 @@ SELECT
     d.Invoice_Dated_On,
     -- Is_Discount: sparse positive set, LEFT JOINed rather than a mostly-0 flag.
     CAST(CASE WHEN disc.Invoice_ID IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Is_Discount,
+    -- How much was given away. NULL (not 0) when the invoice was not discounted, so an average
+    -- over the column is the average DISCOUNT rather than an average dragged to nothing by every
+    -- undiscounted invoice in the practice.
+    disc.Discount_Value,
     -- Time-derived aged-debt banding vs today; unpaid invoices only.
     CASE
         WHEN ISNULL(d.Invoice_Paid, 0) = 1 THEN NULL
