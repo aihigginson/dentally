@@ -2881,11 +2881,19 @@
     }
 
     // Plan capitation rates --------------------------------------------------
-    // Each plan holds a collection of (effective-from, monthly fee) rows -- the fee-over-time history.
-    function _planRateRowHtml(eff, val) {
+    // Each plan holds a collection of (effective-from, monthly fee, per-hygienist-visit value) rows
+    // -- the fee-over-time history. Both values share the one effective date, so a rate change
+    // moves them together and there is a single history rather than two to keep in step.
+    function _planRateRowHtml(eff, val, hyg) {
         return '<div class="plan-rate-row" style="display:flex;align-items:center;gap:6px;margin:3px 0">'
             + '<input type="date" class="plan-eff" title="Fee applies from this month onward" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + (eff || '') + '">'
+            + '<span style="font-size:11px;color:#888">monthly</span>'
             + '£<input type="number" min="0" step="0.01" class="plan-val" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (val != null && val !== '' ? val : '') + '">'
+            + '<span style="font-size:11px;color:#888">hygienist cross-charge per visit</span>'
+            // Left blank the value does nothing -- no revenue moves for that plan. That is the
+            // state every plan starts in, and the way to switch the transfer off for one plan
+            // without disturbing its capitation fee.
+            + '£<input type="number" min="0" step="0.01" class="plan-hyg" title="Cross-charged from the dentist to the hygienist for each completed hygienist visit by a plan member. Leave blank to cross-charge nothing." placeholder="—" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (hyg != null && hyg !== '' ? hyg : '') + '">'
             + '<button type="button" class="plan-rate-del" title="Remove this rate" style="border:none;background:none;color:#b3261e;cursor:pointer;font-size:16px;line-height:1;padding:0 4px">&times;</button>'
             + '</div>';
     }
@@ -2899,14 +2907,14 @@
             if (!plans || !plans.length) { list.textContent = 'No membership plans found.'; return; }
             let html = '';
             for (const p of plans) {
-                const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '' }];
+                const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '', hygienist_visit_value: '' }];
                 html += '<div class="plan-block" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '" style="padding:10px 0;border-bottom:1px solid #eee">'
                     + '<div style="display:flex;align-items:center;gap:14px">'
                     + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name) + '</span>'
                     + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + p.payment_plan_id + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
                     + '<span style="color:#aaa;font-size:11px">' + p.current_patients + ' active</span>'
                     + '</div>'
-                    + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value)).join('') + '</div>'
+                    + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value, rt.hygienist_visit_value)).join('') + '</div>'
                     + '<button type="button" class="plan-add-rate" style="margin-top:2px;border:none;background:none;color:#0b3d5c;cursor:pointer;font-size:12px;padding:0">+ add a rate change</button>'
                     + '</div>';
             }
@@ -2924,7 +2932,12 @@
             block.querySelectorAll('.plan-rate-row').forEach(row => {
                 const eff = row.querySelector('.plan-eff').value;
                 const val = row.querySelector('.plan-val').value;
-                if (eff && val !== '') rates.push({ tenant_id: tid, payment_plan_id: pid, effective_from: eff, monthly_value: +val });
+                const hyg = row.querySelector('.plan-hyg').value;
+                // A blank visit value is sent as null, not 0: "not decided yet" and "decided it is
+                // nil" are different answers and the server keeps them apart.
+                if (eff && val !== '') rates.push({ tenant_id: tid, payment_plan_id: pid, effective_from: eff,
+                                                    monthly_value: +val,
+                                                    hygienist_visit_value: (hyg === '' ? null : +hyg) });
             });
         });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
@@ -2942,12 +2955,12 @@
         _pl.addEventListener('change', e => { if (e.target.matches('.plan-def')) markDirty(); });
         _pl.addEventListener('click',  e => {
             if (e.target.matches('.plan-add-rate')) {
-                e.target.closest('.plan-block').querySelector('.plan-rates').insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                e.target.closest('.plan-block').querySelector('.plan-rates').insertAdjacentHTML('beforeend', _planRateRowHtml('', '', ''));
                 markDirty();
             } else if (e.target.matches('.plan-rate-del')) {
                 const cont = e.target.closest('.plan-rates');
                 e.target.closest('.plan-rate-row').remove();
-                if (!cont.querySelector('.plan-rate-row')) cont.insertAdjacentHTML('beforeend', _planRateRowHtml('', ''));
+                if (!cont.querySelector('.plan-rate-row')) cont.insertAdjacentHTML('beforeend', _planRateRowHtml('', '', ''));
                 markDirty();
             }
         });

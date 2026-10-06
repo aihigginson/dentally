@@ -1,0 +1,67 @@
+﻿# =====================================================================
+# Release V208 -- a discount recorded as an item is still a discount
+# =====================================================================
+# The practice owner said on 2026-10-05 that they DO discount and that it is "done as items".
+# The data agrees, and nothing in the warehouse had ever seen one.
+#
+#     Invisalign Final appointment   1000.00
+#     Invisalign aligner fit            0.00
+#     Discount                       -175.00
+#     -------------------------------------
+#     header Amount                   825.00   = SUM(lines)
+#
+# Gold.usp_Load_Dim_Invoices flagged a discount with "header Amount > SUM(line Total_Price)". A
+# negative line is already INSIDE that sum, so header equals lines and the test is always false.
+# Measured before the change: of 650 Maple invoices carrying a 'Discount' line, it flagged ZERO.
+# Every one of the 2,710 rows it did produce was tenant 11 -- the demo generator invents the
+# header-gap shape, which is the only reason the metric ever looked exercised.
+#
+# What was actually being missed: 654 lines, GBP 88,350 since 2021, 1.1-1.35% of gross invoiced
+# value every single year, average rising GBP 96 -> GBP 161.
+#
+# ==> BOTH SHAPES ARE KEPT. <== Dropping the header test would silently empty the demo tenant, and
+# a practice on another PMS may record it that way. Where both apply the ITEM total wins -- they
+# describe the same reduction, and adding them would double-count.
+#
+# ==> A NEGATIVE ITEM IS NOT AUTOMATICALLY A DISCOUNT. <== 981 negative items exist; only 654 are
+# discounts. The rest are 'Balance imported from Exact' (261 lines, -GBP 58,148 -- a one-off
+# migration artefact from the previous PMS), bad debt, 'Adjust...' corrections and refunds. The
+# match is on Name = 'Discount' (BIN2, so case-sensitive) AND Total_Price < 0, never on sign alone;
+# a sign-only rule would overstate discounting by about GBP 58k and put a 2020 data migration into
+# a trend.
+#
+# Discount_Value is new and NULL for an undiscounted invoice, deliberately -- so an average over
+# the column is the average DISCOUNT, not an average dragged to nothing by every full-price
+# invoice in the practice.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V208__a_discount_recorded_as_an_item.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Invoice_Discount.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Invoices.StoredProcedure.sql
+DEPLOY   Fabric\Gold.vw_Dim_Invoices.View.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Dim_Invoices @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# The column must exist, or the view returns a value nothing populates.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Gold' AND TABLE_NAME = 'Invoice_Discount' AND COLUMN_NAME = 'Discount_Value'; IF @a <> 1 BEGIN SET @e = 'V208 FAILED: Gold.Invoice_Discount.Discount_Value is missing.'; THROW 50360, @e, 1; END;
+
+# ==> THE GUARD THAT MATTERS. <== Every invoice carrying a negative 'Discount' line must now be
+# flagged. Re-derived from Silver rather than compared with a previous run, so it cannot pass by
+# agreeing with yesterday's wrong answer. This is the assertion that would have caught the
+# original bug on the day it shipped.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT DISTINCT ii.Tenant_ID, ii.Invoice_ID FROM Silver.Invoice_Items ii WHERE ii.Name = 'Discount' AND ii.Total_Price < 0) d WHERE NOT EXISTS (SELECT 1 FROM Gold.Invoice_Discount gd WHERE gd.Tenant_ID = d.Tenant_ID AND gd.Invoice_ID = d.Invoice_ID); IF @b <> 0 BEGIN SET @f = 'V208 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' invoice(s) with a negative Discount line are not flagged.'; THROW 50361, @f, 1; END;
+
+# The value must match the lines it came from, to the penny, for every item-based discount.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT ii.Tenant_ID, ii.Invoice_ID, SUM(-ii.Total_Price) AS v FROM Silver.Invoice_Items ii WHERE ii.Name = 'Discount' AND ii.Total_Price < 0 GROUP BY ii.Tenant_ID, ii.Invoice_ID) d JOIN Gold.Invoice_Discount gd ON gd.Tenant_ID = d.Tenant_ID AND gd.Invoice_ID = d.Invoice_ID WHERE ABS(ISNULL(gd.Discount_Value, 0) - d.v) > 0.005; IF @c <> 0 BEGIN SET @g = 'V208 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' invoice(s) have a Discount_Value that does not match their discount lines.'; THROW 50362, @g, 1; END;
+
+# The header-gap shape must still work -- the demo tenant is the only thing that exercises it, and
+# losing it would be invisible until someone opened a demo report.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM Gold.Invoice_Discount WHERE Tenant_ID = 11; IF @d2 = 0 BEGIN SET @h = 'V208 FAILED: the header-gap shape no longer detects anything in the demo tenant.'; THROW 50363, @h, 1; END;
+
+# Nothing may be flagged that has neither shape.
+EXEC     DECLARE @e2 INT, @k VARCHAR(4000); SELECT @e2 = COUNT(*) FROM Gold.Invoice_Discount gd WHERE ISNULL(gd.Discount_Value, 0) <= 0; IF @e2 <> 0 BEGIN SET @k = 'V208 FAILED: ' + CAST(@e2 AS VARCHAR(10)) + ' flagged invoice(s) have no positive discount value.'; THROW 50364, @k, 1; END;
+
+TEST

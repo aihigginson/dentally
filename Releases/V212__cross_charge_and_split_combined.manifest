@@ -1,0 +1,118 @@
+﻿# =====================================================================
+# Release V212 -- cross-charge AND the four-way split, in one pass
+# =====================================================================
+# ==> THIS EXISTS BECAUSE V210 AND V211 CANNOT BE REPLAYED SEPARATELY. <== Both touch
+# Gold.usp_Load_Fact_Revenue, and a manifest deploys that file's CURRENT state -- which is now the
+# split version. Running V210 into an environment without the four variant tables would deploy a
+# proc that writes to tables that do not exist; running V211 after it would snapshot a baseline that
+# already contained the cross-charge and then fail its own reconciliation. One release, or neither.
+#
+# This is for PROD, which is at pre-V209 revenue: Gold.Fact_Revenue is still a physical table with
+# no cross-charge in it. The first guard refuses to run anywhere else, so it cannot be applied twice
+# or to an environment already split.
+#
+# What lands, in one pass:
+#   * the hygienist cross-charge (was V210) -- a matched debit/credit pair per completed hygienist
+#     visit by a plan member, moving capitation from the dentist credited to the hygienist who did
+#     the work. Nets to zero; the capitation TOTAL does not move, only its attribution.
+#   * the four-way split (was V211) -- Fact_Revenue_Invoice / _NHS / _Capitation / _Cross_Charge,
+#     with Gold.vw_Fact_Revenue unioning them back into the column set everything downstream reads.
+#
+# ==> THE CROSS-CHARGE TABLE WILL BE EMPTY UNTIL THE RATES ARE ENTERED, AND THAT IS CORRECT. <==
+# It is priced from Input.Plan_Capitation_Rate.Hygienist_Visit_Value, which V209 added as NULL. A
+# plan with no value set writes nothing at all -- that is how the mechanism stays switched off per
+# plan. So on the day this ships the pair count is legitimately zero, every guard below still
+# passes, and the rows appear the first time the loader runs after the owner enters the values.
+# Nobody's revenue changes by accident.
+#
+# ==> THE RECONCILIATION IS SHAPED FOR A PRE-CROSS-CHARGE BASELINE. <== V211's guard compared
+# per-Revenue_Type totals through the view, which works only where the cross-charge already
+# existed. Here the capitation FEE rows must be untouched by the split and the cross-charge is new,
+# so each variant table is compared to its own baseline Revenue_Type and the pair is asserted to
+# net to zero separately. That is the stronger statement anyway: it proves the split moved nothing
+# AND that what was added nets out.
+#
+# ==> WHY CAPITATION CANNOT BE COMPARED FOR EXACT EQUALITY. <== The baseline is whatever the LAST
+# BUILD left behind, and capitation ACCRUES: an open spell runs to CAST(SYSUTCDATETIME() AS DATE),
+# so a rebuild on a later day adds the working days elapsed since. It adds them to the segment row
+# that already exists, so the ROW COUNT is unchanged and only the amount moves.
+#
+# That is exactly what happened on prod: the last build was 05/10/2026 21:23, the split ran on
+# 06/10, and capitation came out £2,263.47 higher on an identical 441,771 rows -- one working day of
+# accrual. £2,263 x ~21 working days is ~£47.5k a month, which across the ~70 months of history is
+# the £3.32m baseline. Nothing moved; the clock did.
+#
+# So the assertion is shaped to what the split is actually responsible for:
+#     Invoice and NHS   EXACT on rows and amount -- invoice lines and claims do not accrue
+#     Capitation        EXACT on rows; the amount may only have GROWN, by less than one month
+#     Cross-charge      nets to zero, and every structural invariant below
+#
+# Comparing a stored aggregate from one day against a rebuild from another is the error this guard
+# used to make. A guard must re-derive, or it must bound.
+#
+# Run (PROD):
+#   $env:FABRIC_SERVER = '<prod warehouse>'
+#   $env:FABRIC_ACCESS_TOKEN = (az account get-access-token --resource "https://database.windows.net" --query accessToken -o tsv)
+#   .\Scripts\Deploy.ps1 -Manifest Releases\V212__cross_charge_and_split_combined.manifest
+# =====================================================================
+
+# --- 0. refuse to run anywhere this does not belong ------------------------------------------------
+EXEC     DECLARE @t VARCHAR(20), @e VARCHAR(4000); SELECT @t = TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'Gold' AND TABLE_NAME = 'Fact_Revenue'; IF @t IS NULL OR @t <> 'BASE TABLE' BEGIN SET @e = 'V212 REFUSED: Gold.Fact_Revenue is ' + ISNULL(@t, 'missing') + ', not a BASE TABLE. This environment is already split -- V212 is the catch-up release for one that is not.'; THROW 50400, @e, 1; END;
+
+EXEC     DECLARE @h INT, @e2 VARCHAR(4000); SELECT @h = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Plan_Capitation_Rate' AND COLUMN_NAME = 'Hygienist_Visit_Value' AND TABLE_SCHEMA IN ('Input','Input_Stage'); IF @h <> 2 BEGIN SET @e2 = 'V212 REFUSED: Hygienist_Visit_Value is on ' + CAST(@h AS VARCHAR(10)) + ' of the 2 Input tables. Apply V209 (and V152 to AppDB) first.'; THROW 50401, @e2, 1; END;
+
+# --- 1. the baseline, taken before anything moves --------------------------------------------------
+EXEC     DROP TABLE IF EXISTS Audit.Revenue_Split_Baseline;
+
+EXEC     SELECT Revenue_Type, COUNT(*) AS Rows_Before, CAST(SUM(Amount) AS DECIMAL(38,6)) AS Amount_Before INTO Audit.Revenue_Split_Baseline FROM Gold.Fact_Revenue GROUP BY Revenue_Type;
+
+EXEC     DECLARE @b INT; SELECT @b = COUNT(*) FROM Audit.Revenue_Split_Baseline; IF @b = 0 THROW 50402, 'V212 FAILED: the baseline snapshot is empty -- refusing to split a fact we cannot reconcile to.', 1;
+
+# --- 2. the four variant tables, then the loader that fills them -----------------------------------
+DEPLOY   Fabric\Gold.Fact_Revenue_Invoice.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_NHS.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_Capitation.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_Cross_Charge.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# --- 3. the consolidated view, then retire the physical table ---------------------------------------
+DEPLOY   Fabric\Gold.vw_Fact_Revenue.View.sql
+
+EXEC     DROP TABLE IF EXISTS Gold.Fact_Revenue;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- 4. did the split move anything? ----------------------------------------------------------------
+# ==> THE GUARD THAT JUSTIFIES THE RELEASE. <== Each variant must match its own pre-split
+# Revenue_Type exactly -- same rows, same total to the penny. Amount is DECIMAL(18,6) throughout, so
+# this is equality, not a tolerance. Capitation is compared to the FEE rows only, because the
+# cross-charge is new and is asserted separately below.
+EXEC     DECLARE @e3 VARCHAR(4000), @n INT; WITH a AS (SELECT 'Invoice' AS rt, COUNT(*) AS c, CAST(SUM(Amount) AS DECIMAL(38,6)) AS s FROM Gold.Fact_Revenue_Invoice UNION ALL SELECT 'NHS', COUNT(*), CAST(SUM(Amount) AS DECIMAL(38,6)) FROM Gold.Fact_Revenue_NHS) SELECT @n = COUNT(*) FROM a JOIN Audit.Revenue_Split_Baseline b ON b.Revenue_Type = a.rt WHERE a.c <> b.Rows_Before OR a.s <> b.Amount_Before; IF @n <> 0 BEGIN SET @e3 = 'V212 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' of Invoice/NHS do not match the pre-split baseline exactly. Neither accrues, so this can only be the split losing or misrouting rows.'; THROW 50403, @e3, 1; END;
+
+EXEC     DECLARE @bc BIGINT, @ba DECIMAL(38,6), @nc BIGINT, @na DECIMAL(38,6), @mx DECIMAL(38,6), @ec VARCHAR(4000); SELECT @bc = Rows_Before, @ba = Amount_Before FROM Audit.Revenue_Split_Baseline WHERE Revenue_Type = 'Capitation'; SELECT @nc = COUNT(*), @na = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue_Capitation; SELECT @mx = ISNULL(MAX(m), 0) FROM (SELECT SUM(c.Amount) AS m FROM Gold.Fact_Revenue_Capitation c JOIN Gold.Dim_Date d ON d.pk_Date = c.fk_Date GROUP BY d.Month_Commencing_Date) z; IF @nc <> @bc OR @na < @ba OR (@na - @ba) > @mx BEGIN SET @ec = 'V212 FAILED: capitation rows ' + CAST(@nc AS VARCHAR(20)) + ' vs baseline ' + CAST(@bc AS VARCHAR(20)) + '; amount ' + CAST(@na AS VARCHAR(40)) + ' vs baseline ' + CAST(@ba AS VARCHAR(40)) + ' (a rebuild may only ADD accrual, and never more than one month: ' + CAST(@mx AS VARCHAR(40)) + ').'; THROW 50403, @ec, 1; END;
+
+# --- 5. and is what was ADDED sound? ----------------------------------------------------------------
+# Every one of these passes on an empty cross-charge table, which is the expected state until the
+# owner enters a Hygienist_Visit_Value. They assert the shape of what is there, not that anything is.
+EXEC     DECLARE @a DECIMAL(18,6), @f VARCHAR(4000); SELECT @a = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue_Cross_Charge; IF ABS(@a) > 0.000001 BEGIN SET @f = 'V212 FAILED: the cross-charge does not net to zero (' + CAST(@a AS VARCHAR(40)) + ').'; THROW 50404, @f, 1; END;
+
+EXEC     DECLARE @g INT, @h2 VARCHAR(4000); SELECT @g = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND Amount >= 0) OR (Leg = 'Credit' AND Amount <= 0) OR Leg NOT IN ('Debit','Credit'); IF @g <> 0 BEGIN SET @h2 = 'V212 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' cross-charge row(s) whose Leg disagrees with the sign of Amount.'; THROW 50405, @h2, 1; END;
+
+EXEC     DECLARE @p INT, @q INT, @r VARCHAR(4000); SELECT @p = COUNT(CASE WHEN Leg = 'Debit' THEN 1 END), @q = COUNT(CASE WHEN Leg = 'Credit' THEN 1 END) FROM Gold.Fact_Revenue_Cross_Charge; IF @p <> @q BEGIN SET @r = 'V212 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' debit(s) against ' + CAST(@q AS VARCHAR(10)) + ' credit(s).'; THROW 50406, @r, 1; END;
+
+# A debit's fk_Practitioner IS the dentist and a credit's IS the hygienist. If these ever disagree,
+# the aliased Dentist/Hygienist tables in the model name the wrong person while the totals still look
+# right -- the kind of wrong that is invisible until a payout is questioned.
+EXEC     DECLARE @s INT, @t2 VARCHAR(4000); SELECT @s = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND fk_Practitioner <> fk_Dentist) OR (Leg = 'Credit' AND fk_Practitioner <> fk_Hygienist); IF @s <> 0 BEGIN SET @t2 = 'V212 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' cross-charge row(s) where fk_Practitioner does not match the leg it sits on.'; THROW 50407, @t2, 1; END;
+
+# Every credit must land on a real HYGIENIST. The DEBIT side is deliberately NOT guarded: an
+# unresolved dentist is accepted -- the patient pays either way, a blank means the practice keeps the
+# revenue, and the cross-charge is still right because the hygienist's rate is what it corrects.
+EXEC     DECLARE @u INT, @v VARCHAR(4000); SELECT @u = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge x JOIN Gold.Dim_Practitioners d ON d.pk_Practitioner = x.fk_Hygienist WHERE d.Role <> 'Hygienist'; IF @u <> 0 BEGIN SET @v = 'V212 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' cross-charge row(s) credited to someone who is not a hygienist.'; THROW 50408, @v, 1; END;
+
+# The five PBI views the model needs must all exist after regeneration.
+EXEC     DECLARE @w INT, @x VARCHAR(4000); SELECT @w = COUNT(*) FROM sys.views v JOIN sys.schemas s ON s.schema_id = v.schema_id WHERE s.name = 'PBI' AND v.name IN ('_Revenue', '_Revenue Invoice', '_Revenue NHS', '_Revenue Capitation', '_Revenue Cross Charge'); IF @w <> 5 BEGIN SET @x = 'V212 FAILED: expected 5 PBI revenue views, found ' + CAST(@w AS VARCHAR(10)) + '.'; THROW 50409, @x, 1; END;
+
+TEST

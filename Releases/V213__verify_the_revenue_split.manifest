@@ -1,0 +1,66 @@
+﻿# =====================================================================
+# Release V213 -- finish and verify the four-way split on an environment already carrying it
+# =====================================================================
+# V212 applied the structural change to PROD and then failed its own reconciliation guard, for a
+# reason that was not a fault in the split. This release carries the corrected assertions and can be
+# run against an environment where the split is already in place -- it writes nothing.
+#
+# ==> WHY CAPITATION CANNOT BE COMPARED FOR EXACT EQUALITY. <== The baseline is whatever the LAST
+# BUILD left behind, and capitation ACCRUES: an open spell runs to CAST(SYSUTCDATETIME() AS DATE),
+# so a rebuild on a later day adds the working days elapsed since. It adds them to the segment row
+# that already exists, so the ROW COUNT is unchanged and only the amount moves.
+#
+# That is exactly what happened on prod: the last build was 05/10/2026 21:23, the split ran on
+# 06/10, and capitation came out £2,263.47 higher on an identical 441,771 rows -- one working day of
+# accrual. £2,263 x ~21 working days is ~£47.5k a month, which across the ~70 months of history is
+# the £3.32m baseline. Nothing moved; the clock did.
+#
+# So the assertion is shaped to what the split is actually responsible for:
+#     Invoice and NHS   EXACT on rows and amount -- invoice lines and claims do not accrue
+#     Capitation        EXACT on rows; the amount may only have GROWN, by less than one month
+#     Cross-charge      nets to zero, and every structural invariant below
+#
+# Comparing a stored aggregate from one day against a rebuild from another is the error this guard
+# used to make. A guard must re-derive, or it must bound.
+#
+# Run (PROD):
+#   $env:FABRIC_SERVER = '<prod warehouse>'
+#   $env:FABRIC_ACCESS_TOKEN = (az account get-access-token --resource "https://database.windows.net" --query accessToken -o tsv)
+#   .\Scripts\Deploy.ps1 -Manifest Releases\V213__verify_the_revenue_split.manifest
+# =====================================================================
+
+# --- 0. the split must already be in place ----------------------------------------------------------
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'Gold' AND TABLE_NAME IN ('Fact_Revenue_Invoice','Fact_Revenue_NHS','Fact_Revenue_Capitation','Fact_Revenue_Cross_Charge'); IF @n <> 4 BEGIN SET @e = 'V213 REFUSED: found ' + CAST(@n AS VARCHAR(10)) + ' of the 4 variant tables. Apply V212 (or V211) first.'; THROW 50410, @e, 1; END;
+
+EXEC     DECLARE @v INT, @e2 VARCHAR(4000); SELECT @v = COUNT(*) FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'Gold' AND TABLE_NAME = 'vw_Fact_Revenue'; IF @v <> 1 BEGIN SET @e2 = 'V213 REFUSED: Gold.vw_Fact_Revenue does not exist.'; THROW 50411, @e2, 1; END;
+
+EXEC     DECLARE @b INT, @e3 VARCHAR(4000); SELECT @b = COUNT(*) FROM Audit.Revenue_Split_Baseline; IF @b = 0 BEGIN SET @e3 = 'V213 REFUSED: Audit.Revenue_Split_Baseline is empty -- there is nothing to reconcile against.'; THROW 50412, @e3, 1; END;
+
+# --- 1. the variants that cannot accrue must match the baseline EXACTLY -------------------------------
+EXEC     DECLARE @e4 VARCHAR(4000), @m INT; WITH a AS (SELECT 'Invoice' AS rt, COUNT(*) AS c, CAST(SUM(Amount) AS DECIMAL(38,6)) AS s FROM Gold.Fact_Revenue_Invoice UNION ALL SELECT 'NHS', COUNT(*), CAST(SUM(Amount) AS DECIMAL(38,6)) FROM Gold.Fact_Revenue_NHS) SELECT @m = COUNT(*) FROM a JOIN Audit.Revenue_Split_Baseline b ON b.Revenue_Type = a.rt WHERE a.c <> b.Rows_Before OR a.s <> b.Amount_Before; IF @m <> 0 BEGIN SET @e4 = 'V213 FAILED: ' + CAST(@m AS VARCHAR(10)) + ' of Invoice/NHS do not match the pre-split baseline exactly. Neither accrues, so this can only be the split losing or misrouting rows.'; THROW 50414, @e4, 1; END;
+
+# --- 2. capitation: rows exact, amount may only have grown and only by less than a month --------------
+EXEC     DECLARE @bc BIGINT, @ba DECIMAL(38,6), @nc BIGINT, @na DECIMAL(38,6), @mx DECIMAL(38,6), @ec VARCHAR(4000); SELECT @bc = Rows_Before, @ba = Amount_Before FROM Audit.Revenue_Split_Baseline WHERE Revenue_Type = 'Capitation'; SELECT @nc = COUNT(*), @na = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue_Capitation; SELECT @mx = ISNULL(MAX(m), 0) FROM (SELECT SUM(c.Amount) AS m FROM Gold.Fact_Revenue_Capitation c JOIN Gold.Dim_Date d ON d.pk_Date = c.fk_Date GROUP BY d.Month_Commencing_Date) z; IF @nc <> @bc OR @na < @ba OR (@na - @ba) > @mx BEGIN SET @ec = 'V213 FAILED: capitation rows ' + CAST(@nc AS VARCHAR(20)) + ' vs baseline ' + CAST(@bc AS VARCHAR(20)) + '; amount ' + CAST(@na AS VARCHAR(40)) + ' vs baseline ' + CAST(@ba AS VARCHAR(40)) + ' (a rebuild may only ADD accrual, and never more than one month: ' + CAST(@mx AS VARCHAR(40)) + ').'; THROW 50413, @ec, 1; END;
+
+# --- 3. the cross-charge's structural invariants -------------------------------------------------------
+# Every one passes on an EMPTY table, which is the expected state until a Hygienist_Visit_Value is
+# entered. They assert the shape of what is there, not that anything is.
+EXEC     DECLARE @a DECIMAL(18,6), @f VARCHAR(4000); SELECT @a = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue_Cross_Charge; IF ABS(@a) > 0.000001 BEGIN SET @f = 'V213 FAILED: the cross-charge does not net to zero (' + CAST(@a AS VARCHAR(40)) + ').'; THROW 50415, @f, 1; END;
+
+EXEC     DECLARE @g INT, @h VARCHAR(4000); SELECT @g = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND Amount >= 0) OR (Leg = 'Credit' AND Amount <= 0) OR Leg NOT IN ('Debit','Credit'); IF @g <> 0 BEGIN SET @h = 'V213 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' cross-charge row(s) whose Leg disagrees with the sign of Amount.'; THROW 50416, @h, 1; END;
+
+EXEC     DECLARE @p INT, @q INT, @r VARCHAR(4000); SELECT @p = COUNT(CASE WHEN Leg = 'Debit' THEN 1 END), @q = COUNT(CASE WHEN Leg = 'Credit' THEN 1 END) FROM Gold.Fact_Revenue_Cross_Charge; IF @p <> @q BEGIN SET @r = 'V213 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' debit(s) against ' + CAST(@q AS VARCHAR(10)) + ' credit(s).'; THROW 50417, @r, 1; END;
+
+EXEC     DECLARE @s INT, @t VARCHAR(4000); SELECT @s = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND fk_Practitioner <> fk_Dentist) OR (Leg = 'Credit' AND fk_Practitioner <> fk_Hygienist); IF @s <> 0 BEGIN SET @t = 'V213 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' cross-charge row(s) where fk_Practitioner does not match the leg it sits on.'; THROW 50418, @t, 1; END;
+
+EXEC     DECLARE @u INT, @w VARCHAR(4000); SELECT @u = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge x JOIN Gold.Dim_Practitioners d ON d.pk_Practitioner = x.fk_Hygienist WHERE d.Role <> 'Hygienist'; IF @u <> 0 BEGIN SET @w = 'V213 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' cross-charge row(s) credited to someone who is not a hygienist.'; THROW 50419, @w, 1; END;
+
+# --- 4. the model's five views ------------------------------------------------------------------------
+EXEC     DECLARE @x INT, @y VARCHAR(4000); SELECT @x = COUNT(*) FROM sys.views v JOIN sys.schemas s ON s.schema_id = v.schema_id WHERE s.name = 'PBI' AND v.name IN ('_Revenue', '_Revenue Invoice', '_Revenue NHS', '_Revenue Capitation', '_Revenue Cross Charge'); IF @x <> 5 BEGIN SET @y = 'V213 FAILED: expected 5 PBI revenue views, found ' + CAST(@x AS VARCHAR(10)) + '.'; THROW 50420, @y, 1; END;
+
+# --- 5. the consolidated view must still agree with its parts -------------------------------------------
+# Cheap, and it is the one thing none of the above covers: that vw_Fact_Revenue actually unions all
+# four and loses nothing in the process.
+EXEC     DECLARE @vt BIGINT, @pt BIGINT, @z VARCHAR(4000); SELECT @vt = COUNT(*) FROM Gold.vw_Fact_Revenue; SELECT @pt = (SELECT COUNT(*) FROM Gold.Fact_Revenue_Invoice) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_NHS) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_Capitation) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge); IF @vt <> @pt BEGIN SET @z = 'V213 FAILED: Gold.vw_Fact_Revenue returns ' + CAST(@vt AS VARCHAR(20)) + ' rows, the four tables hold ' + CAST(@pt AS VARCHAR(20)) + '.'; THROW 50421, @z, 1; END;
+
+TEST

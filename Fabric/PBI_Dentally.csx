@@ -1758,9 +1758,94 @@ add("Total Revenue",
     @"SUM('_Revenue'[Amount])",
     "£#,##0");
 
+// ==> CAPITATION SPLITS IN TWO, AND A REPORT NEEDS BOTH HALVES SEPARATELY. <== Plan Capitation
+// Revenue is everything of Revenue Type "Capitation", which since V210 means the plan fee AND the
+// hygienist cross-charge. Those net to zero across the practice, so the combined measure is right
+// for a practice total and useless for a breakdown: it cannot answer "what did the plan pay" and
+// "what moved to the hygienist" in the same table. These can.
+// ==> THESE MEASURES NEED THE V211 TABLES. <== The four variant views are separate model
+// tables, so a measure naming one before it has been added fails deep inside Tabular Editor on
+// an unresolved column. Say which one is missing, and say it here.
+{
+    var need = new[] { "_Revenue Capitation", "_Revenue Cross Charge",
+                       "List Dentist", "List Hygienist" };
+    var missing = need.Where(n => Model.Tables.FirstOrDefault(mt => mt.Name == n) == null).ToList();
+    if (missing.Count > 0)
+        throw new Exception(
+            "PBI_Dentally.csx: the model is missing " + string.Join(", ", missing) + ". Add the "
+          + "V211 PBI views (_Revenue Capitation, _Revenue Cross Charge) and the two "
+          + "List Practitioners aliases (List Dentist on fk Dentist, List Hygienist on "
+          + "fk Hygienist) before running this script.");
+}
+
+add("Plan Capitation Fee",
+    @"SUM('_Revenue Capitation'[Amount])",
+    "£#,##0");
+
+// SIGNED: negative for the dentist it came from, positive for the hygienist it went to.
+// Deliberately not wrapped in ABS -- the sign is the information, and this is what a practitioner
+// must see on their own page.
+add("Hygienist Cross-Charge",
+    @"SUM('_Revenue Cross Charge'[Amount])",
+    "£#,##0");
+
+// ==> AT PLAN OR MONTH GRAIN THE SIGNED MEASURE READS ZERO, AND ROLE = "HYGIENIST" READS BLANK. <==
+// Both legs of a pair share the same patient, plan and date, so they cancel in any breakdown that
+// does not split by practitioner. The obvious fix -- take the credit side by filtering
+// 'List Practitioners'[Role] = "Hygienist" -- is WRONG HERE, because My Data filters the report to
+// the signed-in practitioner: on a dentist's own page the role filter and the practitioner filter
+// have no rows in common, and the column comes back empty. Craig is a dentist.
+//
+// The LEG already carries the side, with no reference to the practitioner table: a debit is the
+// dentist's, a credit is the hygienist's. So these read correctly for a dentist (Out only), for
+// a hygienist (In only), and for the whole practice (Out = In).
+//
+// ==> READ [Leg], NOT THE SIGN OF [Amount]. <== They say the same thing, but filtering a
+// measure on a DECIMAL column makes the engine build a filter table over every distinct value
+// in it. Leg has two. The Amount-sign version of this is what blew the per-query memory limit.
+add("Cross-Charge Out",
+    @"-CALCULATE(
+    SUM('_Revenue Cross Charge'[Amount]),
+    '_Revenue Cross Charge'[Leg] = ""Debit"")",
+    "£#,##0");
+
+add("Cross-Charge In",
+    @"CALCULATE(
+    SUM('_Revenue Cross Charge'[Amount]),
+    '_Revenue Cross Charge'[Leg] = ""Credit"")",
+    "£#,##0");
+
+// The visits the cross-charge was actually paid on, counted from the cross-charge rows themselves.
+// Counting completed hygienist APPOINTMENTS instead (the previous [Plan Hygiene Visits]) was wrong
+// twice over: it forced Role = "Hygienist", so it blanked on a dentist's page, and it counted every
+// hygiene appointment whether or not the patient was in a plan at the time.
+//
+// A visit is a patient on a date, counted over the PAIR, so one visit is one visit whether the
+// filter is a dentist, a hygienist or nobody -- 5,484 for Craig, 5,018 for Maxine, 17,936 for the
+// practice against 35,880 legs. COUNTROWS(SUMMARIZE(..)) because there is no single visit key.
+add("Cross-Charged Visits",
+    @"COUNTROWS(SUMMARIZE(
+    '_Revenue Cross Charge',
+    '_Revenue Cross Charge'[fk Patient],
+    '_Revenue Cross Charge'[fk Date]))",
+    "#,##0");
+
+// Members actually billed capitation in the period, not a static roster. The model's existing
+// [Plan Patients] ignores filter context -- it returns 14,420 for every month and every plan --
+// so it cannot answer "plan numbers by month", which is the whole point of the page below.
+add("Plan Members",
+    @"DISTINCTCOUNT('_Revenue Capitation'[fk Patient])",
+    "#,##0");
+
 // Stated on the measures themselves so it reaches anyone hovering the field list, not only
 // whoever reads this file.
 {
+    t.Measures["Plan Capitation Fee"].Description = "The plan fee only, excluding the hygienist cross-charge: it reads _Revenue Capitation, which holds nothing else. ESTIMATE, not observed income -- see Plan Capitation Revenue.";
+    t.Measures["Hygienist Cross-Charge"].Description = "Moved from the dentist credited with a patient's capitation to the hygienist who saw them, per completed visit, at the owner's per-plan rate. NEGATIVE for the dentist, positive for the hygienist, and zero across the practice -- which is the invariant, not an empty measure.";
+    t.Measures["Cross-Charge Out"].Description = "Cross-charge debited FROM the dentist(s) in scope, as a positive number. Keyed off the sign of the leg, not the practitioner's role, so it still reads correctly on a single dentist's My Data page. Zero for a hygienist.";
+    t.Measures["Cross-Charge In"].Description = "Cross-charge credited TO the hygienist(s) in scope, as a positive number. Zero for a dentist. Across the whole practice this equals Cross-Charge Out, which is the invariant the pairing guarantees.";
+    t.Measures["Cross-Charged Visits"].Description = "Completed hygienist visits by a plan member that generated a cross-charge, counted as patient-and-date over the pair -- so one visit counts once whether the filter is the dentist, the hygienist, or neither.";
+    t.Measures["Plan Members"].Description = "Distinct patients billed capitation in the period. Filter-aware, unlike [Plan Patients], which returns the same number for every month and plan.";
     var pcr = t.Measures["Plan Capitation Revenue"];
     pcr.Description = "ESTIMATE, not observed income. Membership fees are collected by the plan provider (Denplan/Tabeo/etc) and their statements are the authoritative figures; Dentally holds no invoice or payment for them. Reconstructed here from completed free exams priced at the plan's curated rate. Good for trend, mix and patient value; do not reconcile it to the bank.";
     var tr = t.Measures["Total Revenue"];

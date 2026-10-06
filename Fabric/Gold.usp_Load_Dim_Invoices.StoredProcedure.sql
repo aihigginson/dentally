@@ -7,9 +7,11 @@
 --    *01     20/06/2026  AIH Initial release. Invoice header dimension (1/invoice).
 --                            Upsert pattern (DELETE-orphan + hash UPDATE + ROW_NUMBER
 --                            INSERT + -1 seed), mirroring Gold.usp_Load_Dim_Patients.
---                            Also rebuilds Gold.Invoice_Discount from Silver (invoice
---                            Amount > sum of its line Total Price) so Is_Discount is
---                            decoupled from fact load order.
+--                            Also rebuilds Gold.Invoice_Discount from Silver so Is_Discount
+--                            is decoupled from fact load order.
+--    *02     06/10/2026  AIH Detect ITEM-based discounts (a negative line named 'Discount')
+--                            as well as the header-gap shape, and carry Discount_Value.
+--                            The old rule caught 0 of 650 real discounted invoices.
 --  To Run			 :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Dim_Invoices @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -111,16 +113,55 @@ BEGIN
         SELECT -1, -1, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Invoices WHERE pk_Invoice = -1);
 
-        -- Rebuild the discount "positive" set: invoices whose header Amount exceeds
-        -- the sum of their line Total Price. Sourced from Silver so it does not depend
-        -- on Fact load order. The invoice dim view LEFT JOINs it for Is_Discount.
+        -- Rebuild the discount "positive" set. Sourced from Silver so it does not depend on
+        -- Fact load order; the invoice dim view LEFT JOINs it for Is_Discount.
+        --
+        -- ==> A DISCOUNT IS RECORDED TWO WAYS AND ONLY ONE WAS EVER DETECTED. <== Confirmed with
+        -- the practice owner on 2026-10-05 and then in the data:
+        --
+        --   AS AN ITEM     a negative line named 'Discount'. What the live practice does -- 654
+        --                  lines, -GBP 88,350 since 2021, ~1.1-1.35% of gross every year. The old
+        --                  rule found NONE of them, because a negative line is already inside
+        --                  SUM(Total_Price), so header = lines and "header > lines" is false.
+        --                  Measured: 0 of 650 invoices flagged.
+        --   AS A HEADER GAP  invoice Amount exceeds the sum of its lines. The ONLY shape the old
+        --                  rule caught -- and the only shape the demo generator produces, which is
+        --                  why every one of the 2,710 rows this used to produce was tenant 11 and
+        --                  the metric looked exercised while counting nothing real.
+        --
+        -- Both are kept: dropping the header test would silently empty the demo tenant, and a
+        -- practice on another PMS may well record it that way.
+        --
+        -- ==> Total_Price < 0 IS REQUIRED, NOT COSMETIC. <== Nine 'Discount' lines are not
+        -- negative: eight are GBP 0.00 no-ops and one is +GBP 100, a sign error. Summing them
+        -- unsigned would net the real discount DOWN by the mistake.
+        --
+        -- Temp table rather than a CTE: in Fabric a re-referenced CTE re-evaluates its source.
+        DROP TABLE IF EXISTS #inv_lines;
+        SELECT ii.Tenant_ID,
+               ii.Invoice_ID,
+               SUM(CASE WHEN ii.Name = 'Discount' AND ii.Total_Price < 0
+                        THEN -ii.Total_Price ELSE 0 END)      AS Item_Discount,
+               SUM(ISNULL(ii.Total_Price, 0))                 AS Line_Total
+        INTO   #inv_lines
+        FROM   Silver.Invoice_Items ii
+        GROUP BY ii.Tenant_ID, ii.Invoice_ID;
+
         DELETE FROM Gold.Invoice_Discount;
-        INSERT INTO Gold.Invoice_Discount (Tenant_ID, Invoice_ID)
-        SELECT inv.Tenant_ID, CAST(inv.Id AS INT)
+        INSERT INTO Gold.Invoice_Discount (Tenant_ID, Invoice_ID, Discount_Value)
+        SELECT inv.Tenant_ID,
+               CAST(inv.Id AS INT),
+               -- The item total when there are discount lines, else the header gap. Not the sum
+               -- of both: they are two ways of describing the same reduction, and adding them
+               -- would double-count any invoice that happened to carry both.
+               CASE WHEN l.Item_Discount > 0 THEN l.Item_Discount
+                    ELSE ISNULL(inv.Amount, 0) - l.Line_Total END
         FROM   Silver.Invoices inv
-        JOIN   Silver.Invoice_Items ii ON ii.Invoice_ID = inv.Id AND ii.Tenant_ID = inv.Tenant_ID
-        GROUP BY inv.Tenant_ID, CAST(inv.Id AS INT)
-        HAVING MAX(ISNULL(inv.Amount, 0)) > SUM(ISNULL(ii.Total_Price, 0));
+        JOIN   #inv_lines l ON l.Invoice_ID = inv.Id AND l.Tenant_ID = inv.Tenant_ID
+        WHERE  l.Item_Discount > 0
+            OR ISNULL(inv.Amount, 0) > l.Line_Total;
+
+        DROP TABLE IF EXISTS #inv_lines;
 
         --*********************************
         --**** Procedure logic ends    ****

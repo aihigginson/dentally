@@ -18,3 +18,47 @@
 - [Just do the thing](just-do-the-thing.md) — act first; one line of caveat, not a menu of options.
 - [SQL files are mostly UTF-8, not UTF-16](sql-files-are-mostly-utf8-not-utf16.md) — CLAUDE.md is stale, and grep silently skips the UTF-16 ones.
 - [Affiliate commission never in the customer model](affiliate-commission-never-in-the-customer-model.md) — vendor money; no RLS, not in PBI Dentally, ever. Absence is the control.
+- [Calibrate the demo tenant against live](calibrate-the-demo-tenant-against-live.md) — query tenant 100 for the real figure; invented rates were wrong by factors of 30.
+- [T11 is both demo and regression fixture](t11-is-both-demo-and-regression-fixture.md) — the baselines are stale; don't preserve rng draws to protect them.
+- [Batch generator changes before reseeding](batch-generator-changes-before-reseeding.md) — one reseed+chain per fix throttled the shared capacity; verify offline first.
+- [How to bounce the Fabric capacity](how-to-bounce-the-fabric-capacity.md) — az fabric capacity suspend/resume; poll for Paused before resuming.
+- [Publishing from Desktop overwrites a service refresh](publishing-from-desktop-overwrites-a-service-refresh.md) — a .pbix publish ships its cached data; check partition RefreshedTime before blaming RLS.
+- [Never infer a write succeeded from a wrapper](piping-to-tail-hides-the-exit-code.md) — tail and timeout have each hidden a half-written Bronze; count rows after.
+- [Manifest not found on D:\a\dentally](manifest-not-found-on-d-a-dentally-means-unpushed.md) — that path is the Actions runner; the commit was never pushed.
+- [Never compare two rolling windows built on different days](never-compare-two-rolling-windows-built-on-different-days.md) — a guard must re-derive from source, not diff yesterday's aggregate.
+- [Get Data bakes a literal endpoint into the model](get-data-bakes-a-literal-endpoint-into-the-model.md) — a table added that way ignores pServer and does not repoint on promotion.
+- [A detail table needs a column, not a measure](a-detail-table-needs-a-column-not-a-measure.md) — a measure kills auto-exist and multiplies the rows out.
+- [Never deploy an Input.* table in a release](never-deploy-an-input-table-in-a-release.md) — those files start with DROP TABLE and Input.* is owner-curated data.
+- [Capitation is an estimate, not observed income](capitation-is-an-estimate-not-observed-income.md) — reconstructed from free exams; the real figures are the plan provider's spreadsheets.
+- [Fabric collation is case-sensitive](fabric-collation-is-case-sensitive.md) — Latin1_General_100_BIN2_UTF8; LIKE and = do not ignore case.
+- [Releases touching one file cannot replay individually](releases-touching-one-file-cannot-replay-individually.md) — a manifest deploys the file's current state; write a combined one for environments behind.
+- [Demo tenant Bronze accumulates every generation](demo-tenant-bronze-accumulates-every-generation.md) — no delete step; purge T11 across Bronze/Silver/Gold before seeding.
+- [Read the schema before querying it](read-the-schema-before-querying-it.md) — layer naming does not generalise; six wrong guesses in one session, two inside release guards.
+- [A -1 FK hides under "All" and kills under a selection](a-minus-one-fk-hides-under-all-and-kills-under-a-selection.md) — filter blanks tiles? count fk_*=-1 per tenant before touching DAX.
+- [Heredocs eat backslashes, write a script file](heredocs-eat-backslashes-write-a-script-file.md) — cost a csx compile error; use Write + run by path, and lint generated code.
+- [A new model table has no RLS](a-new-model-table-has-no-rls.md) — rules are per table; dev's two tenants cannot reveal a missing one, so check rather than assume.
+- [Verify aggregation changes on two tenants](verify-aggregation-changes-on-two-tenants.md) — SUM and MAX agree on one row; a group's board is where they diverge.
+- [Group target aggregation is unresolved](group-target-aggregation-is-unresolved.md) — rates and point-in-time take the max across practices; deferred until a real group exists.
+- [DEV targets are dummy, PROD's are real](dev-targets-are-dummy-prod-targets-are-real.md) — they have never matched by design; the gap is not evidence of a reset.
+- [NHS income is the UDA value](nhs-income-is-the-uda-value.md) — the patient's band charge is a slice of it, never income on top; V197 fixed a 3%-of-actual measure.
+- [Prefer temp tables over CTEs](prefer-temp-tables-over-ctes.md) — the owner writes none; in Fabric a re-referenced CTE re-evaluates its source and loses statistics.
+- [Scale target is 100 practices](scale-target-is-100-practices.md) — one live today; judge architecture at 100 tenants, not by this month's capacity bill.
+- [Onboarding is manual by choice](onboarding-is-manual-by-choice.md) — signups are provisioned by hand until there are more than a handful; don't propose automating it yet.
+- ["Act as" reloads and re-embeds ten reports](act-as-reloads-and-re-embeds-ten-reports.md) — SETTLED: 4-5 switches broke BOTH dev and prod; preload now off.
+- [Metrics app: Health is live, Compute is a nightly import](metrics-app-health-is-live-compute-is-a-nightly-import.md) — different freshness, nothing on screen says so; I misread it twice in an hour.
+- [pyodbc hides a THROW until nextset](pyodbc-hides-a-throw-until-nextset.md) — execute() returns quietly on a failing guard; drain result sets. Deploy.ps1 is fine.
+- [Changing a fact means sweeping its derivations](changing-a-fact-means-sweeping-its-derivations.md) — V197 made a predicate unreachable; nhs_revenue read 0.00 for three months.
+- [Discounts are negative invoice items](discounts-are-negative-invoice-items.md) — Maple DOES discount; the warehouse rule looks for the wrong shape and finds none.
+- [A report render costs about 27 CU-seconds](a-report-render-costs-about-27-cu-seconds.md) — measured; an F4 carries ~44 page loads per 5-min window, so 10 users fit with the preload off.
+- [Maple's targets are hand-set — never seed over them](maple-targets-are-hand-set-never-seed-over-them.md) — all 334 rows are the owner's; the seeder has never run. A dry run is not state.
+- [My Data is unfiltered for vendor accounts by design](my-data-is-unfiltered-for-vendor-accounts-by-design.md) — no practitioner linked = aggregate + free slicer, so support can reproduce bugs. Not a defect.
+- [Sales monitor shape, and the deferred card stages](sales-monitor-shape-and-deferred-card-stages.md) — Sales.* → Gold → PBI Affiliates; card stages wait for a real card. Do not build them blind.
+- [A table projection takes no displayName](a-table-projection-takes-no-displayname.md) — renaming a measure in a tableEx drops the column silently; cards are fine.
+- [Pipeline deploy clears the model's connection](pipeline-deploy-clears-the-models-connection.md) — and ships dev's parameters; deployment rules are the fix, PBI Dentally is the reference.
+- [Sunday is dev's weekly build day](sunday-is-devs-weekly-build-day.md) — two builds in one 24h window; the capacity figure is a trailing total, not a live reading.
+- [First reseller is an informal individual](first-reseller-is-an-informal-individual.md) — non-VAT, self-bill UI can wait; the free month means no commission for a month, automatically.
+- [Grace is an affiliate, not staff](grace-is-an-affiliate-not-staff.md) — an @analytically.info mailbox identifies a mailbox, never a role.
+- [A role filter blanks on My Data](a-role-filter-blanks-on-my-data.md) — the page is filtered to one practitioner; filtering Role too intersects to nothing.
+- [Sort a month on Month Commencing Date](sort-a-month-on-month-commencing-date.md) — Month Year is text with no sort column, and sorting on a non-projected column is dropped.
+- [The cross-charge exists for hygienist £/hour](the-cross-charge-exists-for-hygienist-pound-per-hour.md) — not a payment; a blank dentist on the debit leg is fine, not a fault to chase.
+- [Never run exploratory DAX on the shared capacity](never-run-exploratory-dax-on-the-shared-capacity.md) — one F4 serves the live customer; a probe took the site down. A memory-refusal is a STOP, not a retry.
