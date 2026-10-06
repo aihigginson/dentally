@@ -20,6 +20,11 @@
 --                             monthly reporting unchanged, because a segment spans neither
 --                             boundary. Same arithmetic regrouped, so it reconciles to the penny.
 --                             Also writes Gold.Fact_Plan_Spell from the same pass.
+--    *06     2026-10-06  AIH  Hygienist cross-charge: a matched debit/credit pair per COMPLETED
+--                             hygienist visit inside a member's spell, priced from the owner's
+--                             Input.Plan_Capitation_Rate.Hygienist_Visit_Value. Moves capitation
+--                             from the dentist who was credited to the hygienist who did the work.
+--                             Nets to zero, so the capitation TOTAL is unchanged by construction.
 --    *05     2026-09-27  AIH  Spell end is now a DATE with two cases: still on a rated plan and
 --                             active -> today; otherwise -> the last attended free exam. It used
 --                             to run to the END of the closing month either way, billing weeks of
@@ -357,6 +362,109 @@ BEGIN
         JOIN      wdays wd  ON wd.Month_Commencing_Date = s.Month_Commencing_Date
         JOIN      [Gold].[Dim_Date] dseg ON dseg.Full_Date = s.seg_start;
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
+
+        -- ===== Hygienist cross-charge: a matched pair per completed plan hygienist visit ======
+        --
+        -- A plan patient's hygienist visit costs them nothing -- the capitation fee covers it --
+        -- and every penny of that fee was credited above to the DENTIST. So a hygienist can see
+        -- thousands of plan patients a year and earn nothing from any of them, while the dentist is
+        -- credited for work they did not do. The practice settles this per visit in reality; this
+        -- is where the warehouse finally says so.
+        --
+        -- ==> TWO ROWS, EQUAL AND OPPOSITE, SO THE TOTAL CANNOT MOVE. <== One negative against the
+        -- dentist, one positive to the hygienist, same figure, same date, same patient. Capitation
+        -- in total is already correct and must stay correct: this changes only WHOSE it is. Any
+        -- version of this that writes one row without the other is wrong, however convenient.
+        --
+        -- ==> THE DEBIT GOES TO WHOEVER WAS CREDITED, NOT MERELY TO "A DENTIST". <== The pair is
+        -- sourced from #spell -- the same temp table that produced the capitation rows above -- so
+        -- Dentist_Practitioner_ID here is by construction the practitioner who received the money
+        -- being moved. Debiting any other dentist would leave one short and another with a windfall
+        -- while the practice total still looked right.
+        --
+        -- ==> ONLY INSIDE THE SPELL, AND ONLY AFTER CUTOVER. <== A visit outside the membership
+        -- window has no capitation behind it, so cross-charging it would invent a debit against a
+        -- credit that was never made -- the dentist would go negative on a patient they were never
+        -- paid for. Cutover_Date is the same clip the capitation rows use.
+        --
+        -- ==> COMPLETED ONLY. <== Confirmed with the owner: the cross-charge follows work done, so
+        -- a cancellation or a DNA moves nothing. The hygienist lost the time either way, but no
+        -- plan fee was earned against that slot.
+        --
+        -- Rate: the latest Hygienist_Visit_Value effective on or before the VISIT date, mirroring
+        -- how Monthly_Value is resolved. NULL means the owner has not set a figure for that plan,
+        -- and then nothing at all is written -- that is how the feature stays switched off per plan.
+        DROP TABLE IF EXISTS #hyg_visit;
+        SELECT  sp.Tenant_ID,
+                sp.fk_Patient,
+                sp.attributed_plan_id,
+                sp.Dentist_Practitioner_ID,
+                sp.Site_ID,
+                dpr.pk_Practitioner                      AS fk_Hygienist,
+                CAST(a.Start_Time AS DATE)               AS visit_date
+        INTO    #hyg_visit
+        FROM    #spell sp
+        JOIN    [Gold].[Dim_Patients]     pt  ON pt.pk_Patient = sp.fk_Patient
+        JOIN    [Silver].[Appointments]   a   ON a.Tenant_ID  = sp.Tenant_ID
+                                             AND a.Patient_ID = pt.Patient_ID
+        JOIN    [Gold].[Dim_Practitioners] dpr ON dpr.Tenant_ID = a.Tenant_ID
+                                             AND dpr.Practitioner_ID = a.Practitioner_ID
+                                             AND dpr.Role = 'Hygienist'
+        JOIN    [Audit].[Tenants] tn ON tn.Tenant_ID = sp.Tenant_ID
+        WHERE   a.State = 'Completed'
+          AND   a.Patient_ID IS NOT NULL
+          AND   CAST(a.Start_Time AS DATE) BETWEEN sp.start_m AND sp.end_date
+          AND   CAST(a.Start_Time AS DATE) >= tn.Cutover_Date
+          AND   CAST(a.Start_Time AS DATE) <= CAST(SYSUTCDATETIME() AS DATE);
+
+        -- Price each visit at the rate in force on the day, then emit the pair. Written as one
+        -- INSERT over a CROSS APPLY of two signed legs so a leg can never be added, filtered or
+        -- reordered on its own; the arithmetic that makes them net to zero is a single expression.
+        DROP TABLE IF EXISTS #hyg_priced;
+        SELECT  v.*, rr.Hygienist_Visit_Value AS cross_charge
+        INTO    #hyg_priced
+        FROM    #hyg_visit v
+        CROSS APPLY (
+            SELECT TOP 1 r.Hygienist_Visit_Value
+            FROM   [Input].[Plan_Capitation_Rate] r
+            WHERE  r.Tenant_ID = v.Tenant_ID
+              AND  r.Payment_Plan_ID = v.attributed_plan_id
+              AND  r.Effective_From_Date <= v.visit_date
+              AND  r.Hygienist_Visit_Value IS NOT NULL
+            ORDER BY r.Effective_From_Date DESC
+        ) rr;
+
+        INSERT INTO [Gold].[Fact_Revenue]
+            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
+             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
+             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
+        SELECT  p.Tenant_ID, 'Capitation', 'Plan hygienist cross-charge',
+                -1, p.fk_Patient, leg.fk_Practitioner,
+                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
+                d.pk_Date,
+                leg.Amount,
+                0,
+                -- Estimated, like everything else in a capitation figure: it is a share of a fee
+                -- the warehouse has never observed being paid.
+                1, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
+        FROM    #hyg_priced p
+        JOIN    [Gold].[Dim_Date] d ON d.Full_Date = p.visit_date
+        LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = p.Tenant_ID AND dpp.Payment_Plan_ID = p.attributed_plan_id
+        LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = p.Tenant_ID AND dps.Site_ID = p.Site_ID
+        CROSS APPLY (
+            -- The debit and the credit, together, from one row of source. Equal and opposite by
+            -- construction rather than by two statements that happen to agree.
+            SELECT ISNULL(ddr.pk_Practitioner, -1) AS fk_Practitioner, -p.cross_charge AS Amount
+            FROM   (SELECT 1 AS x) z
+            LEFT JOIN [Gold].[Dim_Practitioners] ddr ON ddr.Tenant_ID = p.Tenant_ID
+                                                    AND ddr.Practitioner_ID = p.Dentist_Practitioner_ID
+            UNION ALL
+            SELECT p.fk_Hygienist, p.cross_charge
+        ) leg;
+        SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
+
+        DROP TABLE IF EXISTS #hyg_visit;
+        DROP TABLE IF EXISTS #hyg_priced;
 
         -- ===== The spell itself, stored once ==================================================
         -- Remember what this is: an inferred membership history, not a subscription ledger.

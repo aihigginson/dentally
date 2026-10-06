@@ -1,0 +1,63 @@
+﻿# =====================================================================
+# Release V210 -- the hygienist gets their share of the plan
+# =====================================================================
+# A plan patient's hygienist visit costs them nothing: the capitation fee covers it, and every penny
+# of that fee was credited to the DENTIST. At Maple that is ~3,400 visits a year a hygienist does
+# and earns nothing from, while the dentist is credited for work they did not do. The practice
+# settles this per visit in reality; the warehouse now says so.
+#
+# For every COMPLETED hygienist appointment inside a member's spell, two rows are written:
+#
+#     dentist who was credited   -value      Revenue_Category 'Plan hygienist cross-charge'
+#     hygienist who did the work +value      Revenue_Category 'Plan hygienist cross-charge'
+#
+# ==> THE CAPITATION TOTAL DOES NOT MOVE, BY CONSTRUCTION. <== Equal and opposite, same date, same
+# patient, emitted from ONE row of source via a CROSS APPLY of two signed legs -- so a leg cannot be
+# added, filtered or reordered on its own. The total was already right; only its attribution moves.
+# The guard below asserts the sum is zero rather than trusting the arithmetic.
+#
+# ==> THE DEBIT GOES TO WHOEVER WAS CREDITED. <== Sourced from the same #spell that produced the
+# capitation rows, so the dentist debited is by construction the one who received the money being
+# moved. Debiting any other dentist leaves one short and another with a windfall while the practice
+# total still looks right -- the kind of wrong that is invisible until a payout is questioned.
+#
+# ==> ONLY INSIDE THE SPELL, ONLY AFTER CUTOVER, ONLY COMPLETED. <== A visit outside the membership
+# window has no capitation behind it, so cross-charging it would invent a debit against a credit
+# never made. Cancellations and DNAs move nothing: the cross-charge follows work done (confirmed
+# with the owner).
+#
+# Priced from Input.Plan_Capitation_Rate.Hygienist_Visit_Value, latest effective on or before the
+# VISIT date -- the same resolution Monthly_Value uses. A plan with no value set writes nothing at
+# all, which is how this stays switched off per plan.
+#
+# ==> IT IS STILL AN ESTIMATE. <== Is_Estimated_Plan = 1 on every row. This is a share of a fee the
+# warehouse has never observed being paid; see the header of Gold.usp_Load_Fact_Revenue.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V210__hygienist_cross_charge.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# ==> THE ONE GUARD THAT MATTERS. <== Debits and credits must cancel exactly. If this ever fails,
+# capitation has silently changed in total and every revenue figure built on it is wrong.
+EXEC     DECLARE @a DECIMAL(18,6), @e VARCHAR(4000); SELECT @a = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue WHERE Revenue_Category = 'Plan hygienist cross-charge'; IF ABS(@a) > 0.000001 BEGIN SET @e = 'V210 FAILED: the cross-charge does not net to zero (' + CAST(@a AS VARCHAR(40)) + ').'; THROW 50380, @e, 1; END;
+
+# Equal numbers of debits and credits -- a pair that nets to zero on value could still be two
+# credits and two debits of mismatched counts if the legs were ever filtered separately.
+EXEC     DECLARE @b INT, @c INT, @f VARCHAR(4000); SELECT @b = COUNT(CASE WHEN Amount < 0 THEN 1 END), @c = COUNT(CASE WHEN Amount > 0 THEN 1 END) FROM Gold.Fact_Revenue WHERE Revenue_Category = 'Plan hygienist cross-charge'; IF @b <> @c BEGIN SET @f = 'V210 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' debit(s) against ' + CAST(@c AS VARCHAR(10)) + ' credit(s).'; THROW 50381, @f, 1; END;
+
+# Every credit must land on a HYGIENIST and every debit on someone who is not the same person.
+# A pair pointing at one practitioner would net to zero and move nothing, which is worse than
+# failing because it looks like it worked.
+EXEC     DECLARE @g INT, @h VARCHAR(4000); SELECT @g = COUNT(*) FROM Gold.Fact_Revenue r JOIN Gold.Dim_Practitioners p ON p.pk_Practitioner = r.fk_Practitioner WHERE r.Revenue_Category = 'Plan hygienist cross-charge' AND r.Amount > 0 AND p.Role <> 'Hygienist'; IF @g <> 0 BEGIN SET @h = 'V210 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' credit(s) landed on someone who is not a hygienist.'; THROW 50382, @h, 1; END;
+
+# No zero-value rows: a plan with no cross-charge set should produce NOTHING, not a pair of zeros.
+EXEC     DECLARE @k INT, @m VARCHAR(4000); SELECT @k = COUNT(*) FROM Gold.Fact_Revenue WHERE Revenue_Category = 'Plan hygienist cross-charge' AND Amount = 0; IF @k <> 0 BEGIN SET @m = 'V210 FAILED: ' + CAST(@k AS VARCHAR(10)) + ' zero-value cross-charge row(s).'; THROW 50383, @m, 1; END;
+
+# Capitation overall must still be positive and substantial -- a sanity floor in case the pairing
+# ever inverted and ate the fee it was meant to redistribute.
+EXEC     DECLARE @n DECIMAL(18,6), @p VARCHAR(4000); SELECT @n = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue WHERE Revenue_Type = 'Capitation'; IF @n <= 0 BEGIN SET @p = 'V210 FAILED: total capitation is ' + CAST(@n AS VARCHAR(40)) + '; the cross-charge has consumed it.'; THROW 50384, @p, 1; END;
+
+TEST
