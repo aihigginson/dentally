@@ -203,64 +203,64 @@
           }
         }
       ]
-    },
-    "filterConfig": {
-      "filters": [
-        {
-          "name": "a85a1d4b1318be56c529",
-          "field": {
-            "Column": {
-              "Expression": {
-                "SourceRef": {
-                  "Entity": "_Revenue"
-                }
-              },
-              "Property": "Revenue Category"
-            }
-          },
-          "type": "Categorical",
-          "filter": {
-            "Version": 2,
-            "From": [
-              {
-                "Name": "r",
-                "Entity": "_Revenue",
-                "Type": 0
+    }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "a85a1d4b1318be56c529",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Revenue"
               }
-            ],
-            "Where": [
-              {
-                "Condition": {
-                  "In": {
-                    "Expressions": [
+            },
+            "Property": "Revenue Category"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "r",
+              "Entity": "_Revenue",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "r"
+                          }
+                        },
+                        "Property": "Revenue Category"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
                       {
-                        "Column": {
-                          "Expression": {
-                            "SourceRef": {
-                              "Source": "r"
-                            }
-                          },
-                          "Property": "Revenue Category"
+                        "Literal": {
+                          "Value": "'Plan hygienist cross-charge'"
                         }
                       }
-                    ],
-                    "Values": [
-                      [
-                        {
-                          "Literal": {
-                            "Value": "'Plan hygienist cross-charge'"
-                          }
-                        }
-                      ]
                     ]
-                  }
+                  ]
                 }
               }
-            ]
-          },
-          "displayName": "Cross-charge only"
-        }
-      ]
-    }
+            }
+          ]
+        },
+        "displayName": "Cross-charge only"
+      }
+    ]
   }
 }
