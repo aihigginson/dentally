@@ -1779,26 +1779,40 @@ add("Hygienist Cross-Charge",
     '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"")",
     "£#,##0");
 
-// ==> AT PLAN OR MONTH GRAIN THE SIGNED MEASURE READS ZERO, WHICH LOOKS BROKEN. <== Both legs of a
-// pair share the same patient, plan and DATE, so they cancel in any breakdown that does not also
-// split by practitioner. For a by-plan or by-month view the question is "how much moved", so take
-// the credit side only. Both measures are kept; they answer different questions.
-add("Cross-Charge to Hygienists",
-    @"CALCULATE(
-    SUM('_Revenue'[Amount]),
-    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"",
-    'List Practitioners'[Role]   = ""Hygienist"")",
+// ==> AT PLAN OR MONTH GRAIN THE SIGNED MEASURE READS ZERO, AND ROLE = "HYGIENIST" READS BLANK. <==
+// Both legs of a pair share the same patient, plan and date, so they cancel in any breakdown that
+// does not split by practitioner. The obvious fix -- take the credit side by filtering
+// 'List Practitioners'[Role] = "Hygienist" -- is WRONG HERE, because My Data filters the report to
+// the signed-in practitioner: on a dentist's own page the role filter and the practitioner filter
+// have no rows in common, and the column comes back empty. Craig is a dentist.
+//
+// The SIGN of the leg already carries the side, with no reference to the practitioner table: a
+// debit is the dentist's, a credit is the hygienist's. So these read correctly for a dentist
+// (Out only), for a hygienist (In only), and for the whole practice (Out = In).
+add("Cross-Charge Out",
+    @"-CALCULATE(
+    SUMX(FILTER('_Revenue', '_Revenue'[Amount] < 0), '_Revenue'[Amount]),
+    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"")",
     "£#,##0");
 
-// The visits the cross-charge is paid on. Counted from the APPOINTMENT fact, not from the revenue
-// rows, so a plan with no cross-charge rate set still shows its visits -- "we saw them 200 times
-// and moved nothing" is a question worth being able to ask. It also makes the gap visible where a
-// visit fell outside the member's spell and generated no pair.
-add("Plan Hygiene Visits",
+add("Cross-Charge In",
     @"CALCULATE(
-    [Appointment Count],
-    'List Practitioners'[Role] = ""Hygienist"",
-    '_Appointments'[Is Completed] = TRUE())",
+    SUMX(FILTER('_Revenue', '_Revenue'[Amount] > 0), '_Revenue'[Amount]),
+    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"")",
+    "£#,##0");
+
+// The visits the cross-charge was actually paid on, counted from the cross-charge rows themselves.
+// Counting completed hygienist APPOINTMENTS instead (the previous [Plan Hygiene Visits]) was wrong
+// twice over: it forced Role = "Hygienist", so it blanked on a dentist's page, and it counted every
+// hygiene appointment whether or not the patient was in a plan at the time.
+//
+// A visit is a patient on a date, counted over the PAIR, so one visit is one visit whether the
+// filter is a dentist, a hygienist or nobody -- 5,484 for Craig, 5,018 for Maxine, 17,936 for the
+// practice against 35,880 legs. COUNTROWS(SUMMARIZE(..)) because there is no single visit key.
+add("Cross-Charged Visits",
+    @"CALCULATE(
+    COUNTROWS(SUMMARIZE('_Revenue', '_Revenue'[fk Patient], '_Revenue'[fk Date])),
+    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"")",
     "#,##0");
 
 // Members actually billed capitation in the period, not a static roster. The model's existing
@@ -1815,8 +1829,9 @@ add("Plan Members",
 {
     t.Measures["Plan Capitation Fee"].Description = "The plan fee only, excluding the hygienist cross-charge. ESTIMATE, not observed income -- see Plan Capitation Revenue.";
     t.Measures["Hygienist Cross-Charge"].Description = "Moved from the dentist credited with a patient's capitation to the hygienist who saw them, per completed visit, at the owner's per-plan rate. NEGATIVE for the dentist, positive for the hygienist, and zero across the practice -- which is the invariant, not an empty measure.";
-    t.Measures["Cross-Charge to Hygienists"].Description = "How much moved TO hygienists. Use this for by-plan or by-month views: the signed Hygienist Cross-Charge cancels to zero there, because both legs of a pair share a patient, plan and date.";
-    t.Measures["Plan Hygiene Visits"].Description = "Completed hygienist appointments. Counted from appointments rather than revenue, so visits still show for a plan with no cross-charge rate set.";
+    t.Measures["Cross-Charge Out"].Description = "Cross-charge debited FROM the dentist(s) in scope, as a positive number. Keyed off the sign of the leg, not the practitioner's role, so it still reads correctly on a single dentist's My Data page. Zero for a hygienist.";
+    t.Measures["Cross-Charge In"].Description = "Cross-charge credited TO the hygienist(s) in scope, as a positive number. Zero for a dentist. Across the whole practice this equals Cross-Charge Out, which is the invariant the pairing guarantees.";
+    t.Measures["Cross-Charged Visits"].Description = "Completed hygienist visits by a plan member that generated a cross-charge, counted as patient-and-date over the pair -- so one visit counts once whether the filter is the dentist, the hygienist, or neither.";
     t.Measures["Plan Members"].Description = "Distinct patients billed capitation in the period. Filter-aware, unlike [Plan Patients], which returns the same number for every month and plan.";
     var pcr = t.Measures["Plan Capitation Revenue"];
     pcr.Description = "ESTIMATE, not observed income. Membership fees are collected by the plan provider (Denplan/Tabeo/etc) and their statements are the authoritative figures; Dentally holds no invoice or payment for them. Reconstructed here from completed free exams priced at the plan's curated rate. Good for trend, mix and patient value; do not reconcile it to the bank.";

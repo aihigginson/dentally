@@ -2,37 +2,19 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "eab698b496fafcb3bbe7",
   "position": {
-    "x": 786,
-    "y": 128,
+    "x": 782.1911262798635,
+    "y": 127.98634812286689,
     "z": 6001,
-    "height": 226,
-    "width": 486,
+    "height": 196.0,
+    "width": 489.99317406143336,
     "tabOrder": 6001
   },
+  "isHidden": true,
   "visual": {
     "visualType": "pivotTable",
     "query": {
       "queryState": {
         "Rows": {
-          "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Date"
-                    }
-                  },
-                  "Property": "Month Year"
-                }
-              },
-              "queryRef": "List Date.Month Year",
-              "nativeQueryRef": "Month Year",
-              "active": true
-            }
-          ]
-        },
-        "Columns": {
           "projections": [
             {
               "field": {
@@ -47,7 +29,24 @@
               },
               "queryRef": "List Practitioners.Full Name",
               "nativeQueryRef": "Full Name",
+              "displayName": "Practitioner",
               "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Date"
+                    }
+                  },
+                  "Property": "Month Commencing Date"
+                }
+              },
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
+              "displayName": "Month",
+              "format": "MMM yyyy"
             }
           ]
         },
@@ -61,11 +60,39 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Cross-Charge to Hygienists"
+                  "Property": "Cross-Charged Visits"
                 }
               },
-              "queryRef": "_Measures.Cross-Charge to Hygienists",
-              "nativeQueryRef": "Cross-Charge to Hygienists"
+              "queryRef": "_Measures.Cross-Charged Visits",
+              "nativeQueryRef": "Cross-Charged Visits"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cross-Charge Out"
+                }
+              },
+              "queryRef": "_Measures.Cross-Charge Out",
+              "nativeQueryRef": "Cross-Charge Out"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cross-Charge In"
+                }
+              },
+              "queryRef": "_Measures.Cross-Charge In",
+              "nativeQueryRef": "Cross-Charge In"
             }
           ]
         }
@@ -74,13 +101,13 @@
         "sort": [
           {
             "field": {
-              "Column": {
+              "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "List Date"
+                    "Entity": "_Measures"
                   }
                 },
-                "Property": "Calendar Year Month"
+                "Property": "Cross-Charged Visits"
               }
             },
             "direction": "Descending"
@@ -158,7 +185,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Cross-charge to each hygienist, by month'"
+                  "Value": "'By practitioner'"
                 }
               }
             },

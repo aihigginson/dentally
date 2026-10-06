@@ -2,13 +2,14 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "f23e328a6835926cc84e",
   "position": {
-    "x": 8,
-    "y": 360,
+    "x": 8.19112627986348,
+    "y": 327.9863481228669,
     "z": 6002,
-    "height": 224,
-    "width": 1264,
+    "height": 256.1433447098976,
+    "width": 1263.9931740614334,
     "tabOrder": 6002
   },
+  "isHidden": true,
   "visual": {
     "visualType": "tableEx",
     "query": {
@@ -27,7 +28,8 @@
                 }
               },
               "queryRef": "List Date.Full Date",
-              "nativeQueryRef": "Full Date"
+              "nativeQueryRef": "Full Date",
+              "format": "dd/MM/yyyy"
             },
             {
               "field": {
@@ -172,7 +174,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Every visit behind it — one row per leg, so a visit appears twice and nets to nil'"
+                  "Value": "'Visit detail'"
                 }
               }
             },
@@ -211,7 +213,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "a85a1d4b1318be56c529",
+        "name": "f1f2f3f4f5f6f7f80011",
         "field": {
           "Column": {
             "Expression": {

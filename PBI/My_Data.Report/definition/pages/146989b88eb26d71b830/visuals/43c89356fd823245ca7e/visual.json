@@ -2,13 +2,14 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "43c89356fd823245ca7e",
   "position": {
-    "x": 8,
-    "y": 128,
+    "x": 8.19112627986348,
+    "y": 127.98634812286689,
     "z": 6000,
-    "height": 226,
-    "width": 770,
+    "height": 196.0,
+    "width": 770.0,
     "tabOrder": 6000
   },
+  "isHidden": true,
   "visual": {
     "visualType": "pivotTable",
     "query": {
@@ -23,11 +24,13 @@
                       "Entity": "List Date"
                     }
                   },
-                  "Property": "Month Year"
+                  "Property": "Month Commencing Date"
                 }
               },
-              "queryRef": "List Date.Month Year",
-              "nativeQueryRef": "Month Year",
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
+              "displayName": "Month",
+              "format": "MMM yyyy",
               "active": true
             },
             {
@@ -43,6 +46,7 @@
               },
               "queryRef": "List Payment Plans.Payment Plan Name",
               "nativeQueryRef": "Payment Plan Name",
+              "displayName": "Plan",
               "active": true
             }
           ]
@@ -85,11 +89,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Plan Hygiene Visits"
+                  "Property": "Cross-Charged Visits"
                 }
               },
-              "queryRef": "_Measures.Plan Hygiene Visits",
-              "nativeQueryRef": "Plan Hygiene Visits"
+              "queryRef": "_Measures.Cross-Charged Visits",
+              "nativeQueryRef": "Cross-Charged Visits"
             },
             {
               "field": {
@@ -99,11 +103,25 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Cross-Charge to Hygienists"
+                  "Property": "Cross-Charge Out"
                 }
               },
-              "queryRef": "_Measures.Cross-Charge to Hygienists",
-              "nativeQueryRef": "Cross-Charge to Hygienists"
+              "queryRef": "_Measures.Cross-Charge Out",
+              "nativeQueryRef": "Cross-Charge Out"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cross-Charge In"
+                }
+              },
+              "queryRef": "_Measures.Cross-Charge In",
+              "nativeQueryRef": "Cross-Charge In"
             }
           ]
         }
@@ -118,7 +136,7 @@
                     "Entity": "List Date"
                   }
                 },
-                "Property": "Calendar Year Month"
+                "Property": "Month Commencing Date"
               }
             },
             "direction": "Descending"
@@ -196,7 +214,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'By month and plan — members, capitation, hygiene visits, cross-charge'"
+                  "Value": "'By month and plan'"
                 }
               }
             },
