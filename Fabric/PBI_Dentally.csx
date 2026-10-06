@@ -1758,9 +1758,66 @@ add("Total Revenue",
     @"SUM('_Revenue'[Amount])",
     "£#,##0");
 
+// ==> CAPITATION SPLITS IN TWO, AND A REPORT NEEDS BOTH HALVES SEPARATELY. <== Plan Capitation
+// Revenue is everything of Revenue Type "Capitation", which since V210 means the plan fee AND the
+// hygienist cross-charge. Those net to zero across the practice, so the combined measure is right
+// for a practice total and useless for a breakdown: it cannot answer "what did the plan pay" and
+// "what moved to the hygienist" in the same table. These can.
+add("Plan Capitation Fee",
+    @"CALCULATE(
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[Revenue Type]     = ""Capitation"",
+    '_Revenue'[Revenue Category] = ""Plan Capitation (estimated)"")",
+    "£#,##0");
+
+// SIGNED: negative for the dentist it came from, positive for the hygienist it went to.
+// Deliberately not wrapped in ABS -- the sign is the information, and this is what a practitioner
+// must see on their own page.
+add("Hygienist Cross-Charge",
+    @"CALCULATE(
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"")",
+    "£#,##0");
+
+// ==> AT PLAN OR MONTH GRAIN THE SIGNED MEASURE READS ZERO, WHICH LOOKS BROKEN. <== Both legs of a
+// pair share the same patient, plan and DATE, so they cancel in any breakdown that does not also
+// split by practitioner. For a by-plan or by-month view the question is "how much moved", so take
+// the credit side only. Both measures are kept; they answer different questions.
+add("Cross-Charge to Hygienists",
+    @"CALCULATE(
+    SUM('_Revenue'[Amount]),
+    '_Revenue'[Revenue Category] = ""Plan hygienist cross-charge"",
+    'List Practitioners'[Role]   = ""Hygienist"")",
+    "£#,##0");
+
+// The visits the cross-charge is paid on. Counted from the APPOINTMENT fact, not from the revenue
+// rows, so a plan with no cross-charge rate set still shows its visits -- "we saw them 200 times
+// and moved nothing" is a question worth being able to ask. It also makes the gap visible where a
+// visit fell outside the member's spell and generated no pair.
+add("Plan Hygiene Visits",
+    @"CALCULATE(
+    [Appointment Count],
+    'List Practitioners'[Role] = ""Hygienist"",
+    '_Appointments'[Is Completed] = TRUE())",
+    "#,##0");
+
+// Members actually billed capitation in the period, not a static roster. The model's existing
+// [Plan Patients] ignores filter context -- it returns 14,420 for every month and every plan --
+// so it cannot answer "plan numbers by month", which is the whole point of the page below.
+add("Plan Members",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Revenue'[fk Patient]),
+    '_Revenue'[Revenue Category] = ""Plan Capitation (estimated)"")",
+    "#,##0");
+
 // Stated on the measures themselves so it reaches anyone hovering the field list, not only
 // whoever reads this file.
 {
+    t.Measures["Plan Capitation Fee"].Description = "The plan fee only, excluding the hygienist cross-charge. ESTIMATE, not observed income -- see Plan Capitation Revenue.";
+    t.Measures["Hygienist Cross-Charge"].Description = "Moved from the dentist credited with a patient's capitation to the hygienist who saw them, per completed visit, at the owner's per-plan rate. NEGATIVE for the dentist, positive for the hygienist, and zero across the practice -- which is the invariant, not an empty measure.";
+    t.Measures["Cross-Charge to Hygienists"].Description = "How much moved TO hygienists. Use this for by-plan or by-month views: the signed Hygienist Cross-Charge cancels to zero there, because both legs of a pair share a patient, plan and date.";
+    t.Measures["Plan Hygiene Visits"].Description = "Completed hygienist appointments. Counted from appointments rather than revenue, so visits still show for a plan with no cross-charge rate set.";
+    t.Measures["Plan Members"].Description = "Distinct patients billed capitation in the period. Filter-aware, unlike [Plan Patients], which returns the same number for every month and plan.";
     var pcr = t.Measures["Plan Capitation Revenue"];
     pcr.Description = "ESTIMATE, not observed income. Membership fees are collected by the plan provider (Denplan/Tabeo/etc) and their statements are the authoritative figures; Dentally holds no invoice or payment for them. Reconstructed here from completed free exams priced at the plan's curated rate. Good for trend, mix and patient value; do not reconcile it to the bank.";
     var tr = t.Measures["Total Revenue"];
