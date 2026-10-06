@@ -134,7 +134,10 @@ if ($violations.Count -gt 0) {
     Write-Host "A Gold load that reads another Gold FACT should be GOLD_AGG (terminal), so the"
     Write-Host "build orders it after that fact. To fix each:"
     Write-Host "  1) Audit.Process_Config: change the load's code GOLD_FACT_X -> GOLD_AGG_X (category GOLD_AGG)"
-    Write-Host "  2) Audit.usp_Load_All: that step's @Step -> 'Agg_X' (so 'GOLD_'+UPPER(@Step) yields the AGG code)"
+    Write-Host "  2) OR -- usually better -- just add the missing edge to Audit.Process_Dependency.Data.sql.
+     A GOLD_FACT may read another GOLD_FACT provided the edge exists; the build computes
+     waves with Kahn over the edges, so the edge IS the ordering. (Audit.usp_Load_All is
+     defunct -- ignore any advice to edit it.)"
     Write-Host "  3) re-run Scripts\Generate_Process_Dependencies.ps1 to emit the Gold->Agg edge(s)"
     Write-Host "  (If the load is NOT terminal -- another Gold load reads it -- that's a deeper design issue.)"
     exit 1
