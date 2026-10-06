@@ -3433,13 +3433,17 @@ def get_plan_capitation():
         conn.close()
         if tids and plans:
             ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
-            acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default "
+            acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default, "
+                         f"       Hygienist_Visit_Value "
                          f"FROM Input.Plan_Capitation_Rate WHERE Tenant_ID IN ({ph}) "
                          f"ORDER BY Effective_From_Date", tids)
             by_plan, defaults = {}, set()
             for r in acur.fetchall():
+                # hygienist_visit_value rides the SAME effective-dated row as the monthly fee, so a
+                # rate change moves both together and there is one history, not two.
                 by_plan.setdefault((r[0], r[1]), []).append(
-                    {'effective_from': r[3].isoformat() if r[3] else None, 'monthly_value': float(r[2])})
+                    {'effective_from': r[3].isoformat() if r[3] else None, 'monthly_value': float(r[2]),
+                     'hygienist_visit_value': (float(r[5]) if r[5] is not None else None)})
                 if r[4]:
                     defaults.add((r[0], r[1]))
             ac.close()
@@ -3455,7 +3459,8 @@ def get_plan_capitation():
 @app.route('/api/plan-capitation', methods=['POST'])
 def save_plan_capitation():
     """Replace the tenant's plan capitation rates in AppDB.Input.Plan_Capitation_Rate. Each plan can
-    carry MANY effective-dated (Effective_From_Date, Monthly_Value) rows -- the fee-over-time history.
+    carry MANY effective-dated rows -- the fee-over-time history -- each with the monthly fee AND the
+    per-visit value that moves plan revenue from the dentist to the hygienist.
     Blank/zero value or blank date skips that row. `default_plan_id` flags every row of the one plan
     that values lapsed members. Duplicate dates within a plan are de-duped (last wins)."""
     upn, err = _auth()
@@ -3496,17 +3501,35 @@ def save_plan_capitation():
                 continue
             if mvf <= 0:
                 continue
-            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, 1 if pid == default_pid else 0)
+            # ==> THE VISIT VALUE IS OPTIONAL, AND BLANK MEANS "MOVE NOTHING". <== Leaving it empty
+            # must stay a first-class answer: it is the state every plan is in until the owner
+            # decides a figure, and it is how you switch the transfer off for one plan without
+            # deleting its capitation rate. Blank -> NULL, never 0, so "not decided" and "decided
+            # it is nil" remain distinguishable downstream.
+            hv  = r.get('hygienist_visit_value')
+            try:
+                hvf = float(hv) if hv not in (None, '') else None
+            except (TypeError, ValueError):
+                hvf = None
+            # A NEGATIVE value would move revenue from the hygienist TO the dentist, which is the
+            # opposite of the whole feature; treat it as not entered rather than silently inverting.
+            if hvf is not None and hvf <= 0:
+                hvf = None
+            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, 1 if pid == default_pid else 0, hvf)
         valid = list(seen.values())
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         for t in payload_tids:
             acur.execute("DELETE FROM Input.Plan_Capitation_Rate WHERE Tenant_ID = ?", t)
         if valid:
             acur.fast_executemany = True
+            # fast_executemany sizes parameter buffers from the FIRST row. Every column here is
+            # fixed-width (int/bigint/date/decimal/bit) or the unchanged varchar, so a leading NULL
+            # Hygienist_Visit_Value cannot narrow a buffer the way a short leading string would.
             acur.executemany(
                 "INSERT INTO Input.Plan_Capitation_Rate (Tenant_ID, Payment_Plan_ID, Effective_From_Date, "
-                "Monthly_Value, Is_Default, Updated_At, Updated_By) VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
-                [(t, p, e, m, d, upn) for t, p, e, m, d in valid])
+                "Monthly_Value, Is_Default, Hygienist_Visit_Value, Updated_At, Updated_By) "
+                "VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, e, m, d, h, upn) for t, p, e, m, d, h in valid])
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:

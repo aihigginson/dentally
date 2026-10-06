@@ -1,0 +1,61 @@
+﻿# =====================================================================
+# Release V209 -- somewhere to put the hygienist's share of a plan
+# =====================================================================
+# A plan patient's hygienist visit costs them nothing: the capitation fee covers it. Every penny of
+# that fee is currently credited to the DENTIST -- Gold.usp_Load_Fact_Revenue posts capitation to
+# Dim_Patients.Dentist_Practitioner_ID -- so at Maple a hygienist sees roughly 3,400 plan patients
+# a year and earns nothing from any of them. The owner settles this per visit in practice; the
+# warehouse has never reflected it.
+#
+# This release is the PLUMBING ONLY: one owner-entered amount per plan, effective-dated. The
+# matched dentist-debit / hygienist-credit pair that consumes it comes next, and until a value is
+# entered the whole mechanism produces no rows at all. Nobody's revenue changes on the day this
+# ships, which is the point of splitting it this way.
+#
+# ==> IT RIDES THE EXISTING RATE ROW. <== Input.Plan_Capitation_Rate is already keyed
+# (Tenant_ID, Payment_Plan_ID, Effective_From_Date) and Gold.usp_Load_Fact_Revenue already resolves
+# "latest rate effective on or before the month". Putting the visit value beside the monthly fee
+# gives ONE rate history, one effective date to reason about, and means a change next April cannot
+# retrospectively rewrite this year's split. A separate table would be a second history to keep in
+# step with the first.
+#
+# ==> EXPECT IT TO EXCEED THE MONTHLY FEE, SO NO CHECK CONSTRAINT. <== A plan covers one or two
+# hygienist visits a YEAR, so a sensible per-visit figure is a multiple of the monthly charge.
+# DECIMAL(9,2), same as Monthly_Value.
+#
+# ==> THE Input.* FILES ARE NOT DEPLOYED HERE, DELIBERATELY. <== Both open with DROP TABLE and
+# Input.Plan_Capitation_Rate holds the owner's curated rates, which exist nowhere else -- deploying
+# the file would delete eight hand-entered rows and the capitation estimate with them. The repo
+# DDL is updated for a FRESH environment; existing ones get the guarded ALTERs below.
+#
+# ==> APPDB FIRST, AND THAT HAS ALREADY HAPPENED. <== Web/appdb_sync.py reads the column list from
+# Input_Stage and SELECTs exactly those columns from AppDB, so adding the column to Input_Stage
+# before AppDB has it breaks the ten-minute sync on an invalid column name. Migrations/V152 applied
+# it to AppDB-dev before this release was written. APPLY V152 TO AppDB-prod BEFORE DEPLOYING THIS
+# TO THE PROD WAREHOUSE.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V209__hygienist_visit_value.manifest
+# =====================================================================
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM sys.columns c JOIN sys.tables t ON t.object_id = c.object_id JOIN sys.schemas s ON s.schema_id = t.schema_id WHERE s.name = 'Input' AND t.name = 'Plan_Capitation_Rate' AND c.name = 'Hygienist_Visit_Value') ALTER TABLE [Input].[Plan_Capitation_Rate] ADD [Hygienist_Visit_Value] DECIMAL(9,2) NULL;
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM sys.columns c JOIN sys.tables t ON t.object_id = c.object_id JOIN sys.schemas s ON s.schema_id = t.schema_id WHERE s.name = 'Input_Stage' AND t.name = 'Plan_Capitation_Rate' AND c.name = 'Hygienist_Visit_Value') ALTER TABLE [Input_Stage].[Plan_Capitation_Rate] ADD [Hygienist_Visit_Value] DECIMAL(9,2) NULL;
+
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+
+# Both columns must exist, or the next appdb_sync fails on an invalid column name -- and that job
+# runs every ten minutes, so a failure here is noisy rather than subtle. Checked on BOTH tables
+# because the sync reads Input_Stage's shape and writes Input's.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Plan_Capitation_Rate' AND COLUMN_NAME = 'Hygienist_Visit_Value' AND TABLE_SCHEMA IN ('Input','Input_Stage'); IF @a <> 2 BEGIN SET @e = 'V209 FAILED: expected Hygienist_Visit_Value on both Input and Input_Stage, found ' + CAST(@a AS VARCHAR(10)) + '.'; THROW 50370, @e, 1; END;
+
+# ==> THE RATES MUST STILL BE THERE. <== The one way this release could do real damage is by
+# deploying an Input.* file over the owner's curated rows. It does not, and this asserts it: eight
+# plans carry a monthly capitation value at Maple and every capitation figure in the warehouse
+# depends on them.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM [Input].[Plan_Capitation_Rate]; IF @b = 0 BEGIN SET @f = 'V209 FAILED: Input.Plan_Capitation_Rate is EMPTY -- the owner-curated rates have been lost.'; THROW 50371, @f, 1; END;
+
+# Nothing should have a visit value yet. If one appears here it came from somewhere unintended,
+# and silently moving revenue between practitioners is the error this split exists to avoid.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM [Input].[Plan_Capitation_Rate] WHERE Hygienist_Visit_Value IS NOT NULL; IF @c <> 0 BEGIN SET @g = 'V209 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' rate row(s) already carry a Hygienist_Visit_Value; this release should be inert.'; THROW 50372, @g, 1; END;
+
+TEST
