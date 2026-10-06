@@ -5,7 +5,7 @@
     "x": 8.19112627986348,
     "y": 327.9863481228669,
     "z": 6002,
-    "height": 256.14334470989758,
+    "height": 256.1433447098976,
     "width": 1263.9931740614334,
     "tabOrder": 6002
   },
@@ -66,15 +66,44 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Practitioners"
+                      "Entity": "List Dentist"
                     }
                   },
                   "Property": "Full Name"
                 }
               },
-              "queryRef": "List Practitioners.Full Name",
+              "queryRef": "List Dentist.Full Name",
               "nativeQueryRef": "Full Name1",
-              "displayName": "Practitioner"
+              "displayName": "Dentist"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Hygienist"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Hygienist.Full Name",
+              "nativeQueryRef": "Full Name2",
+              "displayName": "Hygienist"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Revenue Cross Charge"
+                    }
+                  },
+                  "Property": "Leg"
+                }
+              },
+              "queryRef": "_Revenue Cross Charge.Leg",
+              "nativeQueryRef": "Leg"
             },
             {
               "field": {
@@ -209,63 +238,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "f1f2f3f4f5f6f7f80011",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Revenue"
-              }
-            },
-            "Property": "Revenue Category"
-          }
-        },
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "r",
-              "Entity": "_Revenue",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "In": {
-                  "Expressions": [
-                    {
-                      "Column": {
-                        "Expression": {
-                          "SourceRef": {
-                            "Source": "r"
-                          }
-                        },
-                        "Property": "Revenue Category"
-                      }
-                    }
-                  ],
-                  "Values": [
-                    [
-                      {
-                        "Literal": {
-                          "Value": "'Plan hygienist cross-charge'"
-                        }
-                      }
-                    ]
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        "displayName": "Cross-charge only"
-      }
-    ]
   }
 }
