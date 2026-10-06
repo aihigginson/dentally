@@ -25,6 +25,18 @@
 --                             Input.Plan_Capitation_Rate.Hygienist_Visit_Value. Moves capitation
 --                             from the dentist who was credited to the hygienist who did the work.
 --                             Nets to zero, so the capitation TOTAL is unchanged by construction.
+--    *07     2026-10-06  AIH  Revenue SPLIT into four variant tables -- Fact_Revenue_Invoice,
+--                             _NHS, _Capitation and _Cross_Charge -- unioned back by
+--                             Gold.vw_Fact_Revenue, which keeps the old column set so every
+--                             reader of Gold.Fact_Revenue is untouched. Each variant also gets
+--                             its own PBI view, so a capitation, NHS or discounts report reads
+--                             one table instead of filtering a string out of ~830k mixed rows.
+--                             Cross-charge gains fk_Dentist/fk_Hygienist/Leg so the model can
+--                             alias List Practitioners and show both sides of a visit. Also
+--                             fixes Fact_Plan_Spell.Segments, which had counted cross-charge
+--                             legs as billing segments since V210 (both are 'Capitation').
+--                             Behaviour-preserving otherwise; the release reconciles to the
+--                             pre-split counts and sums per Revenue_Type.
 --    *05     2026-09-27  AIH  Spell end is now a DATE with two cases: still on a rated plan and
 --                             active -> today; otherwise -> the last attended free exam. It used
 --                             to run to the END of the closing month either way, billing weeks of
@@ -52,10 +64,15 @@
 --  the provider's own figures are ever loaded, they belong in an Input.* table as the actual, with
 --  this kept alongside as the estimate -- not silently replaced by it.
 --
---  Purpose          :  One row per revenue unit -- a private invoice line, a capitation
---                      week-within-month segment, or an NHS claim at its contract UDA rate.
---                      Also rebuilds Gold.Fact_Plan_Spell. Revenue is
---                      defined once here so header/line/category totals cannot diverge. Full rebuild.
+--  Purpose          :  One row per revenue unit, written to the variant table it belongs to:
+--                      Gold.Fact_Revenue_Invoice   -- a private invoice line
+--                      Gold.Fact_Revenue_NHS       -- a claim at its contract UDA/UOA rate
+--                      Gold.Fact_Revenue_Capitation-- a week-within-month segment of a spell
+--                      Gold.Fact_Revenue_Cross_Charge -- the hygienist debit/credit pair
+--                      Gold.vw_Fact_Revenue unions them into the consolidated fact everything
+--                      downstream still reads as Gold.Fact_Revenue. Also rebuilds
+--                      Gold.Fact_Plan_Spell. Revenue is defined once here so header/line/
+--                      category totals cannot diverge. Full rebuild.
 --  To Run           :  DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue
 --                      @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 ---------------------------------------------------------------------
@@ -84,12 +101,16 @@ BEGIN
 
         DECLARE @Current_Month DATE = DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1);
 
-        DROP TABLE IF EXISTS [Gold].[Fact_Revenue];
-
-        CREATE TABLE [Gold].[Fact_Revenue] (
-              [pk_Revenue]          BIGINT IDENTITY   NOT NULL,
+        -- ==> FOUR TABLES, ONE PER VARIANT, UNIONED BACK BY Gold.vw_Fact_Revenue. <== They were
+        -- never the same shape: an invoice line has an invoice, a treatment, an item and a
+        -- quantity; capitation has a payment plan and none of those; an NHS claim has UDAs. One
+        -- table meant every row paid for every other variant in NULLs, and any report wanting one
+        -- variant filtered a string out of ~830k mixed rows. The DDL is repeated in the matching
+        -- Gold.Fact_Revenue_*.Table.sql files, as it always was for Fact_Revenue.
+        DROP TABLE IF EXISTS [Gold].[Fact_Revenue_Invoice];
+        CREATE TABLE [Gold].[Fact_Revenue_Invoice] (
+              [pk_Revenue_Invoice]  BIGINT IDENTITY   NOT NULL,
               [Tenant_ID]           INT               NOT NULL,
-              [Revenue_Type]        VARCHAR(20)       NOT NULL,
               [Revenue_Category]    VARCHAR(100)      NOT NULL,
               [fk_Invoice]          BIGINT            NOT NULL,
               [fk_Patient]          BIGINT            NOT NULL,
@@ -99,8 +120,6 @@ BEGIN
               [fk_Treatment]        BIGINT            NOT NULL,
               [fk_Date]             BIGINT            NOT NULL,
               [Amount]              DECIMAL(18,6)     NOT NULL,
-              [NHS_Charge]          DECIMAL(12,2)     NULL,
-              [Is_Estimated_Plan]   BIT               NOT NULL,
               [bk_Invoice_Item_ID]  VARCHAR(100)      NULL,
               [Item_Name]           VARCHAR(255)      NULL,
               [Item_Price]          DECIMAL(18,4)     NULL,
@@ -108,20 +127,68 @@ BEGIN
               [DW_Created_At]       DATETIME2(3)      NOT NULL
         );
 
+        DROP TABLE IF EXISTS [Gold].[Fact_Revenue_NHS];
+        CREATE TABLE [Gold].[Fact_Revenue_NHS] (
+              [pk_Revenue_NHS]      BIGINT IDENTITY   NOT NULL,
+              [Tenant_ID]           INT               NOT NULL,
+              [Revenue_Category]    VARCHAR(100)      NOT NULL,
+              [fk_Patient]          BIGINT            NOT NULL,
+              [fk_Practitioner]     BIGINT            NOT NULL,
+              [fk_Practice_Site]    BIGINT            NOT NULL,
+              [fk_Date]             BIGINT            NOT NULL,
+              [Amount]              DECIMAL(18,6)     NOT NULL,
+              [bk_NHS_Claim_ID]     VARCHAR(100)      NULL,
+              [Claim_Description]   VARCHAR(255)      NULL,
+              [Unit_Value]          DECIMAL(18,4)     NULL,
+              [Units]               DECIMAL(18,4)     NULL,
+              [DW_Created_At]       DATETIME2(3)      NOT NULL
+        );
+
+        DROP TABLE IF EXISTS [Gold].[Fact_Revenue_Capitation];
+        CREATE TABLE [Gold].[Fact_Revenue_Capitation] (
+              [pk_Revenue_Capitation] BIGINT IDENTITY NOT NULL,
+              [Tenant_ID]           INT               NOT NULL,
+              [fk_Patient]          BIGINT            NOT NULL,
+              [fk_Practitioner]     BIGINT            NOT NULL,
+              [fk_Practice_Site]    BIGINT            NOT NULL,
+              [fk_Payment_Plan]     BIGINT            NOT NULL,
+              [fk_Date]             BIGINT            NOT NULL,
+              [Amount]              DECIMAL(18,6)     NOT NULL,
+              [Is_Estimated_Plan]   BIT               NOT NULL,
+              [DW_Created_At]       DATETIME2(3)      NOT NULL
+        );
+
+        DROP TABLE IF EXISTS [Gold].[Fact_Revenue_Cross_Charge];
+        CREATE TABLE [Gold].[Fact_Revenue_Cross_Charge] (
+              [pk_Revenue_Cross_Charge] BIGINT IDENTITY NOT NULL,
+              [Tenant_ID]           INT               NOT NULL,
+              [fk_Patient]          BIGINT            NOT NULL,
+              [fk_Practitioner]     BIGINT            NOT NULL,
+              [fk_Dentist]          BIGINT            NOT NULL,
+              [fk_Hygienist]        BIGINT            NOT NULL,
+              [fk_Practice_Site]    BIGINT            NOT NULL,
+              [fk_Payment_Plan]     BIGINT            NOT NULL,
+              [fk_Date]             BIGINT            NOT NULL,
+              [Amount]              DECIMAL(18,6)     NOT NULL,
+              [Leg]                 VARCHAR(10)       NOT NULL,
+              [Is_Estimated_Plan]   BIT               NOT NULL,
+              [DW_Created_At]       DATETIME2(3)      NOT NULL
+        );
+
         -- ===== Invoice lines (Silver.Invoice_Items -- proven Fact_Invoice_Items resolution) =====
-        INSERT INTO [Gold].[Fact_Revenue]
-            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
-             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
-             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
+        INSERT INTO [Gold].[Fact_Revenue_Invoice]
+            (Tenant_ID, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
+             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount,
+             bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
         SELECT
-              ii.Tenant_ID, 'Invoice',
+              ii.Tenant_ID,
               CASE WHEN NULLIF(LTRIM(RTRIM(ii.Sundry_ID)),'') IS NOT NULL THEN 'Sundries'
                    ELSE COALESCE(dt.Standard_Treatment_Category, 'Other') END,
               ISNULL(dinv.pk_Invoice, -1), ISNULL(dpat.pk_Patient, -1), ISNULL(dpr.pk_Practitioner, -1),
               ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), ISNULL(dt.pk_Treatment, -1),
               ISNULL(dd_inv.pk_Date, -1),
-              CAST(ISNULL(ii.Total_Price,0) AS DECIMAL(18,6)), CAST(ISNULL(ii.NHS_Charge,0) AS DECIMAL(12,2)),
-              0, CAST(ii.Id AS VARCHAR(100)), NULLIF(LTRIM(RTRIM(ii.Name)),''),
+              CAST(ISNULL(ii.Total_Price,0) AS DECIMAL(18,6)),
+              CAST(ii.Id AS VARCHAR(100)), NULLIF(LTRIM(RTRIM(ii.Name)),''),
               CAST(ISNULL(ii.Item_Price,0) AS DECIMAL(18,4)), CAST(ISNULL(ii.Quantity,0) AS DECIMAL(18,4)), SYSUTCDATETIME()
         FROM [Silver].[Invoice_Items] ii
         LEFT JOIN [Silver].[Invoices] inv        ON inv.Id = ii.Invoice_ID AND inv.Tenant_ID = ii.Tenant_ID
@@ -158,21 +225,20 @@ BEGIN
         -- ==> THE STATUS COMPARISON IS CASE-SENSITIVE. <== The collation is BIN2 and these
         -- statuses are lower case in the source; 'Invalid' would match nothing and silently
         -- bank revenue the practice is never going to see.
-        INSERT INTO [Gold].[Fact_Revenue]
-            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
-             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
-             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
+        INSERT INTO [Gold].[Fact_Revenue_NHS]
+            (Tenant_ID, Revenue_Category, fk_Patient, fk_Practitioner,
+             fk_Practice_Site, fk_Date, Amount,
+             bk_NHS_Claim_ID, Claim_Description, Unit_Value, Units, DW_Created_At)
         SELECT
-              cl.Tenant_ID, 'NHS',
+              cl.Tenant_ID,
               CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN 'NHS Orthodontic (UOA)'
                    ELSE 'NHS Contract (UDA)' END,
-              -1, ISNULL(cl.fk_Patient, -1), ISNULL(cl.fk_Practitioner, -1),
-              ISNULL(cl.fk_Practice_Site, -1), -1, -1,
+              ISNULL(cl.fk_Patient, -1), ISNULL(cl.fk_Practitioner, -1),
+              ISNULL(cl.fk_Practice_Site, -1),
               cl.fk_Date_Submitted,
               CAST(COALESCE(cl.Awarded_UDA, cl.Expected_UDA, 0)
                    * CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN ISNULL(ct.UOA_Value, 0)
                           ELSE ISNULL(ct.UDA_Value, 0) END AS DECIMAL(18,6)),
-              0, 0,
               'NHSCLAIM:' + cl.bk_NHS_Claim_ID,
               CASE WHEN ISNULL(cl.Ortho, 0) = 1 THEN 'NHS UOA claim'
                    ELSE 'NHS UDA claim'
@@ -341,20 +407,19 @@ BEGIN
                      CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
                           THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END
         )
-        INSERT INTO [Gold].[Fact_Revenue]
-            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
-             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
-             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
-        -- ==> THE CATEGORY SAYS "ESTIMATED" BECAUSE IT IS. <== This is the string that
-        -- labels every revenue-by-category breakdown, so it is the cheapest honest place to
-        -- put it. See the estimate warning in the header: not one penny of this is a payment
-        -- the warehouse has observed.
-        SELECT s.Tenant_ID, 'Capitation', 'Plan Capitation (estimated)',
-               -1, s.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
-               ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
+        INSERT INTO [Gold].[Fact_Revenue_Capitation]
+            (Tenant_ID, fk_Patient, fk_Practitioner, fk_Practice_Site, fk_Payment_Plan,
+             fk_Date, Amount, Is_Estimated_Plan, DW_Created_At)
+        -- ==> THE CATEGORY SAYS "ESTIMATED" BECAUSE IT IS. <== It labels every
+        -- revenue-by-category breakdown, and it is now supplied once by Gold.vw_Fact_Revenue
+        -- rather than stored 600k times, so it cannot be spelled two ways. See the estimate
+        -- warning in the header: not one penny of this is a payment the warehouse has observed.
+        SELECT s.Tenant_ID,
+               s.fk_Patient, ISNULL(dpr.pk_Practitioner, -1),
+               ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1),
                dseg.pk_Date,
                s.Monthly_Value / wd.wd * s.wd_seg,
-               0, s.is_estimated, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
+               s.is_estimated, SYSUTCDATETIME()
         FROM   seg s
         LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = s.Tenant_ID AND dpp.Payment_Plan_ID = s.attributed_plan_id
         LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = s.Tenant_ID AND dpr.Practitioner_ID = s.Dentist_Practitioner_ID
@@ -434,32 +499,39 @@ BEGIN
             ORDER BY r.Effective_From_Date DESC
         ) rr;
 
-        INSERT INTO [Gold].[Fact_Revenue]
-            (Tenant_ID, Revenue_Type, Revenue_Category, fk_Invoice, fk_Patient, fk_Practitioner,
-             fk_Practice_Site, fk_Payment_Plan, fk_Treatment, fk_Date, Amount, NHS_Charge,
-             Is_Estimated_Plan, bk_Invoice_Item_ID, Item_Name, Item_Price, Quantity, DW_Created_At)
-        SELECT  p.Tenant_ID, 'Capitation', 'Plan hygienist cross-charge',
-                -1, p.fk_Patient, leg.fk_Practitioner,
-                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1), -1,
+        INSERT INTO [Gold].[Fact_Revenue_Cross_Charge]
+            (Tenant_ID, fk_Patient, fk_Practitioner, fk_Dentist, fk_Hygienist,
+             fk_Practice_Site, fk_Payment_Plan, fk_Date, Amount, Leg,
+             Is_Estimated_Plan, DW_Created_At)
+        SELECT  p.Tenant_ID,
+                p.fk_Patient, leg.fk_Practitioner,
+                -- ==> BOTH SIDES ON BOTH LEGS. <== fk_Practitioner is whose leg this is, so a
+                -- report filtered to one person finds their own rows. These two name the pair,
+                -- so the model can alias List Practitioners into Dentist and Hygienist and a
+                -- workings report shows who paid and who received on a single line.
+                ISNULL(ddr.pk_Practitioner, -1), p.fk_Hygienist,
+                ISNULL(dps.pk_Practice_Site, -1), ISNULL(dpp.pk_Payment_Plan, -1),
                 d.pk_Date,
                 leg.Amount,
-                0,
+                leg.Leg,
                 -- Estimated, like everything else in a capitation figure: it is a share of a fee
                 -- the warehouse has never observed being paid.
-                1, NULL, NULL, NULL, NULL, SYSUTCDATETIME()
+                1, SYSUTCDATETIME()
         FROM    #hyg_priced p
         JOIN    [Gold].[Dim_Date] d ON d.Full_Date = p.visit_date
         LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = p.Tenant_ID AND dpp.Payment_Plan_ID = p.attributed_plan_id
         LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = p.Tenant_ID AND dps.Site_ID = p.Site_ID
+        -- Lifted out of the CROSS APPLY, which used to resolve the dentist for the debit leg
+        -- only. Both legs need the name now, and the APPLY is left doing one job: deciding
+        -- whose leg it is and which way the money goes.
+        LEFT JOIN [Gold].[Dim_Practitioners] ddr ON ddr.Tenant_ID = p.Tenant_ID
+                                                AND ddr.Practitioner_ID = p.Dentist_Practitioner_ID
         CROSS APPLY (
             -- The debit and the credit, together, from one row of source. Equal and opposite by
             -- construction rather than by two statements that happen to agree.
-            SELECT ISNULL(ddr.pk_Practitioner, -1) AS fk_Practitioner, -p.cross_charge AS Amount
-            FROM   (SELECT 1 AS x) z
-            LEFT JOIN [Gold].[Dim_Practitioners] ddr ON ddr.Tenant_ID = p.Tenant_ID
-                                                    AND ddr.Practitioner_ID = p.Dentist_Practitioner_ID
+            SELECT ISNULL(ddr.pk_Practitioner, -1) AS fk_Practitioner, -p.cross_charge AS Amount, 'Debit' AS Leg
             UNION ALL
-            SELECT p.fk_Hygienist, p.cross_charge
+            SELECT p.fk_Hygienist, p.cross_charge, 'Credit'
         ) leg;
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
@@ -513,12 +585,18 @@ BEGIN
                SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM   #spell s
         LEFT JOIN (
+            -- ==> THIS MUST READ THE CAPITATION TABLE, NOT EVERYTHING TYPED "Capitation". <==
+            -- It used to say WHERE Revenue_Type = 'Capitation' against the shared fact. Since
+            -- V210 the hygienist cross-charge is ALSO Revenue_Type 'Capitation', so a
+            -- cross-charge leg was being counted as a billing SEGMENT and could drag
+            -- Billed_From/Billed_To to a visit date. The value survived only because the
+            -- debit and credit cancel within the same patient. Reading the variant table
+            -- says what was always meant.
             SELECT r.Tenant_ID, r.fk_Patient,
                    MIN(d.Full_Date) AS billed_from, MAX(d.Full_Date) AS billed_to,
                    COUNT(*) AS segments, SUM(r.Amount) AS spell_value
-            FROM   [Gold].[Fact_Revenue] r
+            FROM   [Gold].[Fact_Revenue_Capitation] r
             JOIN   [Gold].[Dim_Date] d ON d.pk_Date = r.fk_Date
-            WHERE  r.Revenue_Type = 'Capitation'
             GROUP BY r.Tenant_ID, r.fk_Patient
         ) b ON b.Tenant_ID = s.Tenant_ID AND b.fk_Patient = s.fk_Patient
         LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = s.Tenant_ID AND dpp.Payment_Plan_ID = s.attributed_plan_id

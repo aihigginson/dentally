@@ -1,0 +1,106 @@
+﻿# =====================================================================
+# Release V211 -- revenue splits into four facts, consolidated by a view
+# =====================================================================
+# Gold.Fact_Revenue held four different things in one shape. An invoice line has an invoice, a
+# treatment, an item name and a quantity. A capitation segment has a payment plan and none of those.
+# An NHS claim has a UDA count and a contract rate. A cross-charge leg has two practitioners. One
+# table meant every row paid for every other variant's columns in NULLs, and every report that
+# wanted ONE variant filtered a category string out of ~830k mixed rows.
+#
+#     Gold.Fact_Revenue_Invoice        private invoice lines
+#     Gold.Fact_Revenue_NHS            claims at the contract UDA/UOA rate
+#     Gold.Fact_Revenue_Capitation     week-within-month segments of a plan spell  (~600k rows)
+#     Gold.Fact_Revenue_Cross_Charge   the hygienist debit/credit pair
+#
+# ==> NOTHING DOWNSTREAM CHANGES. <== Gold.vw_Fact_Revenue unions the four and emits the exact
+# column set the physical table had, so usp_Load_Aggregate_Practitioner_Contribution,
+# usp_Load_Aggregate_Site_Patient_Current, usp_Load_Aggregate_Site_Patient_Practitioner_Daily and
+# usp_Load_Fact_Metric_Actuals all keep reading Gold.Fact_Revenue untouched. Meta.usp_Create_Gold_Views
+# treats a Gold view named vw_<X> as the source for entity <X>, so PBI.[_Revenue] is still PBI.[_Revenue].
+#
+# ==> THE FOUR NEW PBI VIEWS ARE THE POINT, NOT A SIDE EFFECT. <== PBI.[_Revenue Capitation] and
+# PBI.[_Revenue Cross Charge] are what the capitation report needs; NHS reporting reads its own
+# section without 600k capitation rows in the way, and deposits/discounts read invoice lines alone.
+# ==> EACH NEEDS ITS RLS RULE ADDED IN THE MODEL. <== A new table has none by default, and dev's two
+# tenants cannot reveal a missing one.
+#
+# ==> THE CROSS-CHARGE NOW NAMES BOTH SIDES ON BOTH LEGS. <== fk_Practitioner stays whose leg it is,
+# so a report filtered to one person finds their own rows -- that is what My Data does. fk_Dentist
+# and fk_Hygienist name the pair, so the model can alias List Practitioners twice and a workings
+# report shows who paid and who received on one line. Reaching across to the other leg with a
+# measure instead is not merely awkward: it destroys auto-exist in a detail table and materialises
+# the full date x patient x plan crossjoin.
+#
+# ==> IT ALSO FIXES A V210 BUG. <== Fact_Plan_Spell's billed window counted a patient's segments
+# WHERE Revenue_Type = 'Capitation'. A cross-charge leg is Revenue_Type 'Capitation' too, so since
+# V210 those legs have been counted as billing SEGMENTS and could drag Billed_From/Billed_To to a
+# visit date. The value was saved only by the pair cancelling within the same patient. It now reads
+# Gold.Fact_Revenue_Capitation, which is what was always meant.
+#
+# ==> OTHERWISE BEHAVIOUR-PRESERVING, AND PROVEN SO. <== Same sources, same filters, same arithmetic.
+# Step 1 snapshots the pre-split counts and sums per Revenue_Type into Audit.Revenue_Split_Baseline
+# BEFORE anything is touched, and the guards below assert the view reconciles to it exactly. A
+# release that cannot show it changed nothing has not shown anything.
+#
+# NOTE: the snapshot and the rebuild must fall on the same DAY. An open spell ends at
+# CAST(SYSUTCDATETIME() AS DATE), so a run spanning midnight legitimately produces one more
+# segment per open member and the reconciliation guard will fail. Re-run it, do not weaken it.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V211__revenue_splits_into_four_facts.manifest
+# =====================================================================
+
+# --- 1. the baseline, taken before anything moves --------------------------------------------------
+EXEC     DROP TABLE IF EXISTS Audit.Revenue_Split_Baseline;
+
+EXEC     SELECT Revenue_Type, COUNT(*) AS Rows_Before, CAST(SUM(Amount) AS DECIMAL(38,6)) AS Amount_Before INTO Audit.Revenue_Split_Baseline FROM Gold.Fact_Revenue GROUP BY Revenue_Type;
+
+EXEC     DECLARE @b INT; SELECT @b = COUNT(*) FROM Audit.Revenue_Split_Baseline; IF @b = 0 THROW 50390, 'V211 FAILED: the baseline snapshot is empty -- refusing to split a fact we cannot reconcile to.', 1;
+
+# --- 2. the four variant tables, then the loader that fills them -----------------------------------
+DEPLOY   Fabric\Gold.Fact_Revenue_Invoice.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_NHS.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_Capitation.Table.sql
+DEPLOY   Fabric\Gold.Fact_Revenue_Cross_Charge.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# --- 3. the consolidated view, then retire the physical table ---------------------------------------
+# The view first, so there is never a moment with neither. They do not collide: the view is
+# vw_Fact_Revenue, the table is Fact_Revenue.
+DEPLOY   Fabric\Gold.vw_Fact_Revenue.View.sql
+
+EXEC     DROP TABLE IF EXISTS Gold.Fact_Revenue;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- 4. does it reconcile? --------------------------------------------------------------------------
+# ==> THE GUARD THAT JUSTIFIES THE WHOLE RELEASE. <== Every Revenue_Type must come back with the same
+# row count and the same total to the penny. Amount is DECIMAL(18,6) throughout, so this is exact
+# equality, not a tolerance.
+EXEC     DECLARE @e VARCHAR(4000), @n INT; WITH a AS (SELECT Revenue_Type, COUNT(*) AS c, CAST(SUM(Amount) AS DECIMAL(38,6)) AS s FROM Gold.vw_Fact_Revenue GROUP BY Revenue_Type) SELECT @n = COUNT(*) FROM Audit.Revenue_Split_Baseline b FULL OUTER JOIN a ON a.Revenue_Type = b.Revenue_Type WHERE ISNULL(a.c, -1) <> ISNULL(b.Rows_Before, -1) OR ISNULL(a.s, -1) <> ISNULL(b.Amount_Before, -1); IF @n <> 0 BEGIN SET @e = 'V211 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' Revenue_Type(s) do not reconcile to the pre-split baseline. Compare Audit.Revenue_Split_Baseline against Gold.vw_Fact_Revenue.'; THROW 50391, @e, 1; END;
+
+# The pair still nets to zero -- carried forward from V210, because it is the invariant that keeps
+# practice capitation unchanged.
+EXEC     DECLARE @a DECIMAL(18,6), @f VARCHAR(4000); SELECT @a = ISNULL(SUM(Amount), 0) FROM Gold.Fact_Revenue_Cross_Charge; IF ABS(@a) > 0.000001 BEGIN SET @f = 'V211 FAILED: the cross-charge does not net to zero (' + CAST(@a AS VARCHAR(40)) + ').'; THROW 50392, @f, 1; END;
+
+# Equal numbers of debits and credits, and the Leg label must agree with the sign.
+EXEC     DECLARE @g INT, @h VARCHAR(4000); SELECT @g = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND Amount >= 0) OR (Leg = 'Credit' AND Amount <= 0) OR Leg NOT IN ('Debit','Credit'); IF @g <> 0 BEGIN SET @h = 'V211 FAILED: ' + CAST(@g AS VARCHAR(10)) + ' cross-charge row(s) whose Leg disagrees with the sign of Amount.'; THROW 50393, @h, 1; END;
+
+EXEC     DECLARE @p INT, @q INT, @r VARCHAR(4000); SELECT @p = COUNT(CASE WHEN Leg = 'Debit' THEN 1 END), @q = COUNT(CASE WHEN Leg = 'Credit' THEN 1 END) FROM Gold.Fact_Revenue_Cross_Charge; IF @p <> @q BEGIN SET @r = 'V211 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' debit(s) against ' + CAST(@q AS VARCHAR(10)) + ' credit(s).'; THROW 50394, @r, 1; END;
+
+# ==> THE NEW COLUMNS MUST AGREE WITH THE LEG THEY SIT ON. <== A debit's fk_Practitioner IS the
+# dentist and a credit's IS the hygienist. If these ever disagree, the aliased Dentist/Hygienist
+# tables in the model would name the wrong person while every total still looked right.
+EXEC     DECLARE @s INT, @t VARCHAR(4000); SELECT @s = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge WHERE (Leg = 'Debit' AND fk_Practitioner <> fk_Dentist) OR (Leg = 'Credit' AND fk_Practitioner <> fk_Hygienist); IF @s <> 0 BEGIN SET @t = 'V211 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' cross-charge row(s) where fk_Practitioner does not match the leg it sits on.'; THROW 50395, @t, 1; END;
+
+# Every credit must land on a real HYGIENIST. The DEBIT side is deliberately NOT guarded: an
+# unresolved dentist is accepted -- the patient pays either way, a blank means the practice keeps
+# the revenue, and the cross-charge is still right because the hygienist's rate is what it corrects.
+EXEC     DECLARE @u INT, @v VARCHAR(4000); SELECT @u = COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge x JOIN Gold.Dim_Practitioners d ON d.pk_Practitioner = x.fk_Hygienist WHERE d.Role <> 'Hygienist'; IF @u <> 0 BEGIN SET @v = 'V211 FAILED: ' + CAST(@u AS VARCHAR(10)) + ' cross-charge row(s) credited to someone who is not a hygienist.'; THROW 50396, @v, 1; END;
+
+# The five PBI views the model needs must all exist after regeneration -- the consolidated one and
+# the four variants. If the generator's naming ever changes, this is where it shows up.
+EXEC     DECLARE @w INT, @x VARCHAR(4000); SELECT @w = COUNT(*) FROM sys.views v JOIN sys.schemas s ON s.schema_id = v.schema_id WHERE s.name = 'PBI' AND v.name IN ('_Revenue', '_Revenue Invoice', '_Revenue NHS', '_Revenue Capitation', '_Revenue Cross Charge'); IF @w <> 5 BEGIN SET @x = 'V211 FAILED: expected 5 PBI revenue views, found ' + CAST(@w AS VARCHAR(10)) + '.'; THROW 50397, @x, 1; END;
+
+TEST
