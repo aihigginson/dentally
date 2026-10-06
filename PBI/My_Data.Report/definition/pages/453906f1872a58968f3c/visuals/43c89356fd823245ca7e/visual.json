@@ -1,19 +1,19 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "1aa94e6878d58935d74e",
+  "name": "43c89356fd823245ca7e",
   "position": {
-    "x": 330,
-    "y": 74,
-    "z": 200,
-    "height": 266,
-    "width": 934,
-    "tabOrder": 200
+    "x": 16,
+    "y": 64,
+    "z": 100,
+    "height": 330,
+    "width": 762,
+    "tabOrder": 100
   },
   "visual": {
-    "visualType": "columnChart",
+    "visualType": "pivotTable",
     "query": {
       "queryState": {
-        "Category": {
+        "Rows": {
           "projections": [
             {
               "field": {
@@ -29,10 +29,25 @@
               "queryRef": "List Date.Month Year",
               "nativeQueryRef": "Month Year",
               "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Payment Plans"
+                    }
+                  },
+                  "Property": "Payment Plan Name"
+                }
+              },
+              "queryRef": "List Payment Plans.Payment Plan Name",
+              "nativeQueryRef": "Payment Plan Name",
+              "active": true
             }
           ]
         },
-        "Y": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -42,11 +57,53 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Plan Capitation Revenue"
+                  "Property": "Plan Members"
                 }
               },
-              "queryRef": "_Measures.Plan Capitation Revenue",
-              "nativeQueryRef": "Plan Capitation Revenue"
+              "queryRef": "_Measures.Plan Members",
+              "nativeQueryRef": "Plan Members"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Plan Capitation Fee"
+                }
+              },
+              "queryRef": "_Measures.Plan Capitation Fee",
+              "nativeQueryRef": "Plan Capitation Fee"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Plan Hygiene Visits"
+                }
+              },
+              "queryRef": "_Measures.Plan Hygiene Visits",
+              "nativeQueryRef": "Plan Hygiene Visits"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Cross-Charge to Hygienists"
+                }
+              },
+              "queryRef": "_Measures.Cross-Charge to Hygienists",
+              "nativeQueryRef": "Cross-Charge to Hygienists"
             }
           ]
         }
@@ -64,14 +121,14 @@
                 "Property": "Calendar Year Month"
               }
             },
-            "direction": "Ascending"
+            "direction": "Descending"
           }
         ],
         "isDefaultSort": true
       }
     },
     "objects": {
-      "categoryAxis": [
+      "columnHeaders": [
         {
           "properties": {
             "fontSize": {
@@ -87,18 +144,11 @@
                   "Value": "'Arial'"
                 }
               }
-            },
-            "showAxisTitle": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
             }
           }
         }
       ],
-      "valueAxis": [
+      "values": [
         {
           "properties": {
             "fontSize": {
@@ -114,34 +164,27 @@
                   "Value": "'Arial'"
                 }
               }
-            },
-            "showAxisTitle": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
             }
           }
         }
       ],
-      "dataPoint": [
+      "rowHeaders": [
         {
           "properties": {
-            "fill": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#13b5a6'"
-                    }
-                  }
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
                 }
               }
             }
-          },
-          "selector": {
-            "id": "default"
           }
         }
       ]
@@ -153,7 +196,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Cross-charge by month — negative is paid away, positive is received'"
+                  "Value": "'By month and plan — members, capitation, hygiene visits, cross-charge'"
                 }
               }
             },

@@ -1,11 +1,11 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "b5e40f1f48a5e3be36c4",
+  "name": "f23e328a6835926cc84e",
   "position": {
     "x": 16,
-    "y": 352,
+    "y": 402,
     "z": 300,
-    "height": 352,
+    "height": 302,
     "width": 1248,
     "tabOrder": 300
   },
@@ -79,11 +79,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Plan Capitation Revenue"
+                  "Property": "Hygienist Cross-Charge"
                 }
               },
-              "queryRef": "_Measures.Plan Capitation Revenue",
-              "nativeQueryRef": "Plan Capitation Revenue"
+              "queryRef": "_Measures.Hygienist Cross-Charge",
+              "nativeQueryRef": "Hygienist Cross-Charge"
             }
           ]
         }
@@ -169,7 +169,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Every visit behind the figure — one row per leg, so a visit appears twice'"
+                  "Value": "'Every visit behind it — one row per leg, so a visit appears twice and nets to nil'"
                 }
               }
             },
@@ -201,6 +201,64 @@
               }
             }
           }
+        }
+      ]
+    },
+    "filterConfig": {
+      "filters": [
+        {
+          "name": "a85a1d4b1318be56c529",
+          "field": {
+            "Column": {
+              "Expression": {
+                "SourceRef": {
+                  "Entity": "_Revenue"
+                }
+              },
+              "Property": "Revenue Category"
+            }
+          },
+          "type": "Categorical",
+          "filter": {
+            "Version": 2,
+            "From": [
+              {
+                "Name": "r",
+                "Entity": "_Revenue",
+                "Type": 0
+              }
+            ],
+            "Where": [
+              {
+                "Condition": {
+                  "In": {
+                    "Expressions": [
+                      {
+                        "Column": {
+                          "Expression": {
+                            "SourceRef": {
+                              "Source": "r"
+                            }
+                          },
+                          "Property": "Revenue Category"
+                        }
+                      }
+                    ],
+                    "Values": [
+                      [
+                        {
+                          "Literal": {
+                            "Value": "'Plan hygienist cross-charge'"
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "displayName": "Cross-charge only"
         }
       ]
     }
