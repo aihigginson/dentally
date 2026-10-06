@@ -1769,7 +1769,7 @@ add("Total Revenue",
 {
     var need = new[] { "_Revenue Capitation", "_Revenue Cross Charge",
                        "List Dentist", "List Hygienist" };
-    var missing = need.Where(n => Model.Tables.FirstOrDefault(t => t.Name == n) == null).ToList();
+    var missing = need.Where(n => Model.Tables.FirstOrDefault(mt => mt.Name == n) == null).ToList();
     if (missing.Count > 0)
         throw new Exception(
             "PBI_Dentally.csx: the model is missing " + string.Join(", ", missing) + ". Add the "
