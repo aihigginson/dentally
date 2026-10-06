@@ -1,0 +1,44 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "name": "24571666b32e8a41c858",
+  "position": {
+    "x": 16,
+    "y": 10,
+    "z": 0,
+    "height": 56,
+    "width": 1248,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "Plan cross-charge",
+                    "textStyle": {
+                      "fontWeight": "bold",
+                      "fontSize": "14pt",
+                      "color": "#0b3d5c"
+                    }
+                  },
+                  {
+                    "value": "   every completed hygienist visit by a plan patient moves a fixed amount from the dentist credited with their capitation to the hygienist who did the work. The two sides are equal and opposite, so practice capitation is unchanged.",
+                    "textStyle": {
+                      "fontSize": "9pt",
+                      "color": "#5b6b78"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
