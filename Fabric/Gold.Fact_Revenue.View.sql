@@ -1,8 +1,14 @@
-/****** Object: View [Gold].[vw_Fact_Revenue] ******/
+/****** Object: View [Gold].[Fact_Revenue] ******/
 -- The consolidated revenue fact, composed from the four variant tables.
 --
--- ==> THIS VIEW EXISTS SO THAT NOTHING DOWNSTREAM HAD TO CHANGE. <== It emits the exact column set
--- Gold.Fact_Revenue had as a physical table, in the same types, so its four readers --
+-- ==> IT TAKES THE NAME OF THE TABLE IT REPLACED, AND THAT IS THE WHOLE POINT. <== It was first
+-- shipped as vw_Fact_Revenue, and the four procedures that read Gold.Fact_Revenue failed the next
+-- night with "Invalid object name 'Gold.Fact_Revenue'" -- the release guards never caught it
+-- because those procedures only run in the nightly build. The vw_ prefix exists to let a view
+-- SUPERSEDE a table of the same name for Meta.usp_Create_Gold_Views; with the table gone there is
+-- nothing to supersede, so the view simply takes the name and every reader is genuinely unchanged.
+--
+-- It emits the exact column set Gold.Fact_Revenue had as a physical table, in the same types, so --
 -- usp_Load_Aggregate_Practitioner_Contribution, usp_Load_Aggregate_Site_Patient_Current,
 -- usp_Load_Aggregate_Site_Patient_Practitioner_Daily and usp_Load_Fact_Metric_Actuals -- carry on
 -- reading Gold.Fact_Revenue unchanged, and so does the model: Meta.usp_Create_Gold_Views treats a
@@ -27,9 +33,9 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-DROP VIEW IF EXISTS [Gold].[vw_Fact_Revenue]
+DROP VIEW IF EXISTS [Gold].[Fact_Revenue]
 GO
-CREATE VIEW [Gold].[vw_Fact_Revenue]
+CREATE VIEW [Gold].[Fact_Revenue]
 AS
 -- pk_Revenue: each variant has its own IDENTITY, so a constant offset per branch keeps the key
 -- unique across the union. Nothing in the warehouse or the model joins on it -- it is kept only

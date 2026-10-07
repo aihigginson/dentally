@@ -33,3 +33,21 @@ procedure whose header claims it "MIRRORS the live DAX" as a reconciliation orac
 invariant that a release can quietly break. Prefer a guard that asserts the mirror
 (total = sum of its parts, and the parts against the source) over trusting the comment. Related:
 [[nhs-income-is-the-uda-value]], [[verify-aggregation-changes-on-two-tenants]].
+
+**2026-10-06, the sharper version: RENAMING an object breaks readers a release never executes.**
+V211/V212 split Gold.Fact_Revenue into four tables, dropped the table and shipped the consolidated
+view as `Gold.vw_Fact_Revenue`. Four procedures read `Gold.Fact_Revenue` by name. Every release
+guard passed -- they verified the FACT -- and the next nightly build failed:
+
+        usp_Load_Aggregate_Site_Patient_Practitioner_Daily   Invalid object name 'Gold.Fact_Revenue'
+        usp_Load_Aggregate_Practitioner_Contribution         Invalid object name 'Gold.Fact_Revenue'
+        usp_Load_Aggregate_Site_Patient_Current              Invalid object name 'Gold.Fact_Revenue'
+        usp_Load_Fact_Metric_Actuals                         never ran -- Kahn blocks a failed job's dependents
+
+A manifest that deploys and verifies a fact does not execute its consumers, so nothing could catch
+it. One of the four was also missed by `grep` because that file is UTF-16 -- see
+[[sql-files-are-mostly-utf8-not-utf16]]. The fix was to give the view the name its readers already
+use; `vw_` exists only to supersede a table of the same name, and there was no longer a table.
+
+**So: a release that renames, drops or replaces a Gold object MUST run its consumers as a step, not
+merely assert the object's own shape.** V214 does exactly that and is the template.

@@ -1,0 +1,53 @@
+# =====================================================================
+# Release V214 -- the consolidated view takes the name its readers use
+# =====================================================================
+# ==> V211/V212 BROKE THE NIGHTLY BUILD AND NO GUARD CAUGHT IT. <== The split dropped the table
+# Gold.Fact_Revenue and shipped the consolidated view as Gold.vw_Fact_Revenue. Four procedures read
+# Gold.Fact_Revenue by name, so the first nightly build after the split failed:
+#
+#     Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily   Invalid object name 'Gold.Fact_Revenue'
+#     Gold.usp_Load_Aggregate_Practitioner_Contribution         Invalid object name 'Gold.Fact_Revenue'
+#     Gold.usp_Load_Aggregate_Site_Patient_Current              Invalid object name 'Gold.Fact_Revenue'
+#     Gold.usp_Load_Fact_Metric_Actuals                         never ran -- Kahn blocks the dependents
+#                                                               of a failed job
+#
+# The release guards passed because those procedures run ONLY in the nightly build; a manifest that
+# deploys and verifies a fact never executes its consumers.
+#
+# ==> THE vw_ PREFIX IS FOR SUPERSEDING A TABLE, AND THERE IS NO LONGER A TABLE. <==
+# Meta.usp_Create_Gold_Views treats a Gold view vw_<X> as the source for entity <X> so a view can
+# override a table of the same name. With Gold.Fact_Revenue dropped there is nothing to override, so
+# the view simply takes the name -- and then every reader is genuinely unchanged, which is what the
+# split claimed in the first place. PBI.[_Revenue] is unaffected: a Gold view that does not match
+# vw_* maps by its own name, and Fact_% still yields _Revenue.
+#
+# Re-runs the four consumers so the day's aggregates are correct rather than a day stale.
+#
+# Run (both environments):
+#   .\Scripts\Deploy.ps1 -Manifest Releases\V214__the_consolidated_view_takes_the_tables_name.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.Fact_Revenue.View.sql
+
+EXEC     DROP VIEW IF EXISTS Gold.vw_Fact_Revenue;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# ==> THE GUARD THAT SHOULD HAVE EXISTED IN V211: ACTUALLY RUN THE CONSUMERS. <==
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Practitioner_Daily @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Aggregate_Practitioner_Contribution @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Patient_Current @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# The view exists under the name the readers use, and the old name is gone.
+EXEC     DECLARE @a INT, @b INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Revenue'; SELECT @b = COUNT(*) FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='vw_Fact_Revenue'; IF @a <> 1 OR @b <> 0 BEGIN SET @e = 'V214 FAILED: Gold.Fact_Revenue view count ' + CAST(@a AS VARCHAR(10)) + ', stale vw_Fact_Revenue count ' + CAST(@b AS VARCHAR(10)) + '.'; THROW 50450, @e, 1; END;
+
+# And it still returns the four tables, so nothing was lost in the rename.
+EXEC     DECLARE @vt BIGINT, @pt BIGINT, @z VARCHAR(4000); SELECT @vt = COUNT(*) FROM Gold.Fact_Revenue; SELECT @pt = (SELECT COUNT(*) FROM Gold.Fact_Revenue_Invoice) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_NHS) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_Capitation) + (SELECT COUNT(*) FROM Gold.Fact_Revenue_Cross_Charge); IF @vt <> @pt BEGIN SET @z = 'V214 FAILED: Gold.Fact_Revenue returns ' + CAST(@vt AS VARCHAR(20)) + ' rows, the four tables hold ' + CAST(@pt AS VARCHAR(20)) + '.'; THROW 50451, @z, 1; END;
+
+EXEC     DECLARE @p INT, @y VARCHAR(4000); SELECT @p = COUNT(*) FROM sys.views v JOIN sys.schemas s ON s.schema_id = v.schema_id WHERE s.name = 'PBI' AND v.name IN ('_Revenue', '_Revenue Invoice', '_Revenue NHS', '_Revenue Capitation', '_Revenue Cross Charge'); IF @p <> 5 BEGIN SET @y = 'V214 FAILED: expected 5 PBI revenue views, found ' + CAST(@p AS VARCHAR(10)) + '.'; THROW 50452, @y, 1; END;
+
+TEST
