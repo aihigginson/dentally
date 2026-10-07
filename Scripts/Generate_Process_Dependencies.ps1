@@ -222,6 +222,39 @@ foreach ($gfName in $goldSps.Keys) {
     }
 }
 
+# -- Level 7: Gold Fact SP writes Gold.X  &  ANOTHER Gold Fact SP mentions Gold.X -----------------
+# The rule that was missing. There are rules for Silver->Silver (2) and Agg->Agg (6), but a FACT
+# that reads another FACT could not produce an edge at all -- so Fact_Revenue reading Fact_NHS_Claims
+# (V197) went unordered for months and survived on luck of execution order within the wave.
+#
+# The number is the RULE's id, not a position in the build. Orchestrate_Build computes waves with
+# Kahn over the edges and never reads Dependency_Level; a wave is whatever has its prereqs met.
+foreach ($f1Name in $goldSps.Keys) {
+    if (-not $pcMap.ContainsKey($f1Name)) { continue }
+    $f1Codes = @($pcMap[$f1Name] | Where-Object { $_ -like 'GOLD_FACT_*' })
+    if ($f1Codes.Count -eq 0) { continue }
+
+    $f1Writes = Get-WriteTargets $goldSps[$f1Name] 'Gold'
+    if ($f1Writes.Count -eq 0) { continue }
+
+    foreach ($f2Name in $goldSps.Keys) {
+        if ($f2Name -eq $f1Name) { continue }
+        if (-not $pcMap.ContainsKey($f2Name)) { continue }
+        $f2Codes = @($pcMap[$f2Name] | Where-Object { $_ -like 'GOLD_FACT_*' })
+        if ($f2Codes.Count -eq 0) { continue }
+
+        $f2Mentions = Get-Mentions $goldSps[$f2Name] 'Gold'
+        $shared     = $f1Writes | Where-Object { $f2Mentions -contains $_ }
+        if ($shared.Count -eq 0) { continue }
+
+        foreach ($f1c in $f1Codes) {
+            foreach ($f2c in $f2Codes) {
+                $deps.Add("$f1c|$f2c|7")
+            }
+        }
+    }
+}
+
 # -- Level 6: Gold Agg SP writes Gold.X  &  another Gold Agg SP mentions Gold.X --
 # Orders an aggregate that reads ANOTHER aggregate's output (e.g.
 # Fact_Metric_Actuals reads Aggregate_Site_Patient_Practitioner_Daily) after it.

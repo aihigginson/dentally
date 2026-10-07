@@ -231,6 +231,10 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_REVENUE', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_REVENUE', 'GOLD_AGG_METRIC_ACTUALS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_REVENUE', 'GOLD_AGG_PRACT_CONTRIBUTION', 'DATA', 5, 1);
+
+-- Gold.usp_Load_Fact_Revenue values NHS revenue from Gold.Fact_NHS_Claims (V197), so it must run after it.
+-- A GOLD_FACT that reads another GOLD_FACT: the only one, and the generator rule that emits it is Level 7.
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_NHS_CLAIMS', 'GOLD_FACT_REVENUE', 'DATA', 7, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_APPOINTMENTS', 'GOLD_AGG_NEW_PATIENTS', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_PLAN_ITEMS', 'GOLD_AGG_DAILY', 'DATA', 5, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_FACT_TREATMENT_PLAN_ITEMS', 'GOLD_AGG_KPI_SNAPSHOT', 'DATA', 5, 1);

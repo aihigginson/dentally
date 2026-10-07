@@ -1,20 +1,20 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "43c89356fd823245ca7e",
+  "name": "a1b2c3d4e5f600112255",
   "position": {
-    "x": 8.19112627986348,
-    "y": 127.98634812286689,
-    "z": 6000,
-    "height": 196,
-    "width": 774,
-    "tabOrder": 6000
+    "x": 8,
+    "y": 300,
+    "z": 12002,
+    "height": 284,
+    "width": 1264,
+    "tabOrder": 12002
   },
   "isHidden": true,
   "visual": {
-    "visualType": "pivotTable",
+    "visualType": "tableEx",
     "query": {
       "queryState": {
-        "Rows": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -24,14 +24,27 @@
                       "Entity": "List Date"
                     }
                   },
-                  "Property": "Month Commencing Date"
+                  "Property": "Full Date"
                 }
               },
-              "queryRef": "List Date.Month Commencing Date",
-              "nativeQueryRef": "Month Commencing Date",
-              "displayName": "Month",
-              "format": "MMM yyyy",
-              "active": true
+              "queryRef": "List Date.Full Date",
+              "nativeQueryRef": "Full Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Patients.Full Name",
+              "nativeQueryRef": "Full Name",
+              "displayName": "Patient"
             },
             {
               "field": {
@@ -46,26 +59,51 @@
               },
               "queryRef": "List Payment Plans.Payment Plan Name",
               "nativeQueryRef": "Payment Plan Name",
-              "displayName": "Plan",
-              "active": true
-            }
-          ]
-        },
-        "Values": {
-          "projections": [
+              "displayName": "Plan"
+            },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Measures"
+                      "Entity": "List Dentist"
                     }
                   },
-                  "Property": "Plan Members"
+                  "Property": "Full Name"
                 }
               },
-              "queryRef": "_Measures.Plan Members",
-              "nativeQueryRef": "Plan Members"
+              "queryRef": "List Dentist.Full Name",
+              "nativeQueryRef": "Full Name1",
+              "displayName": "Dentist"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Hygienist"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Hygienist.Full Name",
+              "nativeQueryRef": "Full Name2",
+              "displayName": "Hygienist"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Revenue Cross Charge"
+                    }
+                  },
+                  "Property": "Leg"
+                }
+              },
+              "queryRef": "_Revenue Cross Charge.Leg",
+              "nativeQueryRef": "Leg"
             },
             {
               "field": {
@@ -75,53 +113,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Plan Capitation Fee"
+                  "Property": "Hygienist Cross-Charge"
                 }
               },
-              "queryRef": "_Measures.Plan Capitation Fee",
-              "nativeQueryRef": "Plan Capitation Fee"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Cross-Charged Visits"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charged Visits",
-              "nativeQueryRef": "Cross-Charged Visits"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Cross-Charge Out"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charge Out",
-              "nativeQueryRef": "Cross-Charge Out"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Cross-Charge In"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charge In",
-              "nativeQueryRef": "Cross-Charge In"
+              "queryRef": "_Measures.Hygienist Cross-Charge",
+              "nativeQueryRef": "Hygienist Cross-Charge"
             }
           ]
         }
@@ -136,7 +132,7 @@
                     "Entity": "List Date"
                   }
                 },
-                "Property": "Month Commencing Date"
+                "Property": "Full Date"
               }
             },
             "direction": "Descending"
@@ -186,20 +182,13 @@
           }
         }
       ],
-      "rowHeaders": [
+      "total": [
         {
           "properties": {
-            "fontSize": {
+            "totals": {
               "expr": {
                 "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
+                  "Value": "true"
                 }
               }
             }
@@ -214,7 +203,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'By month and plan'"
+                  "Value": "'Visit detail'"
                 }
               }
             },

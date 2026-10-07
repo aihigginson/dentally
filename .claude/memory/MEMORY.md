@@ -62,3 +62,5 @@
 - [Sort a month on Month Commencing Date](sort-a-month-on-month-commencing-date.md) — Month Year is text with no sort column, and sorting on a non-projected column is dropped.
 - [The cross-charge exists for hygienist £/hour](the-cross-charge-exists-for-hygienist-pound-per-hour.md) — not a payment; a blank dentist on the debit leg is fine, not a fault to chase.
 - [Never run exploratory DAX on the shared capacity](never-run-exploratory-dax-on-the-shared-capacity.md) — one F4 serves the live customer; a probe took the site down. A memory-refusal is a STOP, not a retry.
+- [No in-product staleness warning](no-in-product-staleness-warning.md) — SETTLED: a "data as at" banner generates support calls; monitor and fix fast instead.
+- [PREPROD is the plan when revenue allows](preprod-is-the-plan-when-revenue-allows.md) — overnight PREPROD will gate PROD; today there is no such gate, so releases must run their own consumers.

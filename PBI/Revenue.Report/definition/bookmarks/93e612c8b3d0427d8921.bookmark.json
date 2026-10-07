@@ -14,7 +14,10 @@
       "553a234395511b50b112",
       "35da7ab5d003a991bd8d",
       "75b829ab6ee608ddc022",
-      "6af642ed5ff4439ab1e1"
+      "6af642ed5ff4439ab1e1",
+      "a1b2c3d4e5f600112233",
+      "a1b2c3d4e5f600112244",
+      "a1b2c3d4e5f600112255"
     ],
     "suppressData": true
   },
@@ -109,6 +112,33 @@
             "singleVisual": {
               "visualType": "tableEx",
               "objects": {}
+            }
+          },
+          "a1b2c3d4e5f600112233": {
+            "singleVisual": {
+              "visualType": "pivotTable",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "a1b2c3d4e5f600112244": {
+            "singleVisual": {
+              "visualType": "pivotTable",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "a1b2c3d4e5f600112255": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
             }
           }
         }

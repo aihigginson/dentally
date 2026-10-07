@@ -1,21 +1,36 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
-  "name": "43c89356fd823245ca7e",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "a1b2c3d4e5f600112244",
   "position": {
-    "x": 8.19112627986348,
-    "y": 127.98634812286689,
-    "z": 6000,
-    "height": 196,
-    "width": 774,
-    "tabOrder": 6000
+    "x": 712,
+    "y": 76,
+    "z": 12001,
+    "height": 220,
+    "width": 560,
+    "tabOrder": 12001
   },
-  "isHidden": true,
   "visual": {
     "visualType": "pivotTable",
     "query": {
       "queryState": {
         "Rows": {
           "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Practitioners"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Practitioners.Full Name",
+              "nativeQueryRef": "Full Name",
+              "active": true,
+              "displayName": "Practitioner"
+            },
             {
               "field": {
                 "Column": {
@@ -29,58 +44,14 @@
               },
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
+              "active": false,
               "displayName": "Month",
-              "format": "MMM yyyy",
-              "active": true
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "List Payment Plans"
-                    }
-                  },
-                  "Property": "Payment Plan Name"
-                }
-              },
-              "queryRef": "List Payment Plans.Payment Plan Name",
-              "nativeQueryRef": "Payment Plan Name",
-              "displayName": "Plan",
-              "active": true
+              "format": "MMM yyyy"
             }
           ]
         },
         "Values": {
           "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Plan Members"
-                }
-              },
-              "queryRef": "_Measures.Plan Members",
-              "nativeQueryRef": "Plan Members"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Plan Capitation Fee"
-                }
-              },
-              "queryRef": "_Measures.Plan Capitation Fee",
-              "nativeQueryRef": "Plan Capitation Fee"
-            },
             {
               "field": {
                 "Measure": {
@@ -130,13 +101,13 @@
         "sort": [
           {
             "field": {
-              "Column": {
+              "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "List Date"
+                    "Entity": "_Measures"
                   }
                 },
-                "Property": "Month Commencing Date"
+                "Property": "Cross-Charged Visits"
               }
             },
             "direction": "Descending"
@@ -214,7 +185,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'By month and plan'"
+                  "Value": "'By practitioner'"
                 }
               }
             },
@@ -249,5 +220,6 @@
         }
       ]
     }
-  }
+  },
+  "isHidden": true
 }

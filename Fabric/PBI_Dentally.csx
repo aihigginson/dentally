@@ -2030,8 +2030,30 @@ add("Deposit Value",
 
 // Invoice grain split: per-invoice discount (header Amount - sum of its line Total Price,
 // when positive) is precomputed as Fact_Invoices.Discount_Amount, so this is a simple ratio.
+// ==> THE DISCOUNT LIVES ON A DIMENSION, SO IT MUST BE SUMMED THROUGH THE FACT. <==
+// Fact_Invoices.Discount_Amount is a HEADER GAP -- invoice total minus the sum of its lines --
+// and at Maple it is 0.00 on every invoice ever loaded, because their discount IS a line: a
+// negative item called "Discount". V208 detects that shape into Gold.Invoice_Discount, which
+// surfaces as 'List Invoices'[Discount Value] -- 643 invoices, GBP 88,365.20 on prod.
+//
+// But SUM('List Invoices'[Discount Value]) is WRONG, and was briefly shipped: List Invoices is a
+// DIMENSION. Period and practitioner filters reach the facts, not the dimensions hanging off
+// them, so that sum returned every discount ever recorded no matter what was selected -- the
+// same constant numerator against each row's own revenue, which is why the patient list showed
+// 589,101.3% for one patient after another.
+//
+// SUMMARIZE over '_Invoices' walks the relationship the other way: the invoices IN SCOPE after
+// the filters have been applied to the fact, each contributing its own discount once. Grouping
+// by pk Invoice keeps it one row per invoice, so an invoice with several lines is not counted
+// repeatedly.
+add("Discount Value",
+    @"SUMX(
+    SUMMARIZE('_Invoices', 'List Invoices'[pk Invoice], 'List Invoices'[Discount Value]),
+    'List Invoices'[Discount Value])",
+    "£#,##0");
+
 add("Discounts",
-    @"DIVIDE(SUM('_Invoices'[Discount Amount]), [Total Revenue])",
+    @"DIVIDE([Discount Value], [Total Revenue])",
     "0.0%");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────

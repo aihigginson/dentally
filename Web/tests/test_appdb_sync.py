@@ -5,6 +5,7 @@ load-bearing: too eager and it sends 144 emails a day and gets filtered into obl
 an outage passes unnoticed, which is the exact failure it exists to prevent. Everything else in the
 job is I/O against two databases and is proved by running it.
 """
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -315,3 +316,184 @@ def test_nothing_changed_and_recently_merged_skips():
 
 def test_the_sentinel_cannot_collide_with_a_real_table():
     assert js.PROC_SENTINEL not in js.FULL_TABLES
+
+
+# ---------------------------------------------------------------------------
+#  _fast_skip -- the decision that avoids opening a Fabric session at all.
+#
+#  4,015 of 4,015 access runs over 14 days had nothing to do, and every one
+#  connected to the warehouse to find that out. This decides from the AppDB
+#  mirror instead. It is the riskiest function in the file: a wrong "skip"
+#  freezes Security.Application_Users against a source that has moved on, and
+#  unlike _why_run_proc it does so WITHOUT the warehouse ever being consulted.
+#
+#  So every uncertainty must return None (= go the Fabric route). These test
+#  that, not just the happy path.
+# ---------------------------------------------------------------------------
+
+class _LocalCur:
+    """Stands in for the AppDB cursor: serves Input.Sync_State, then source tables."""
+
+    def __init__(self, state=None, rows=None, blow_up_on_source=False):
+        self.state = state
+        self.rows = rows if rows is not None else _nonempty_rows()
+        self.blow_up_on_source = blow_up_on_source
+        self._next = []
+
+    def execute(self, sql, *a):
+        if 'Sync_State' in sql:
+            if self.state is None:
+                raise RuntimeError('Invalid object name Input.Sync_State')
+            self._next = self.state
+        else:
+            if self.blow_up_on_source:
+                raise RuntimeError('source unavailable')
+            for t in js.FULL_TABLES:
+                if f'[{t}]' in sql:
+                    self._next = self.rows[t]
+                    break
+            else:
+                self._next = []
+        return self
+
+    def fetchall(self):
+        return self._next
+
+
+def _nonempty_rows():
+    """Every table one row. The NONEMPTY floors (Application_Users, Targets) make an all-empty
+    fixture fall through on the floor check rather than on the thing under test."""
+    return {t: [('a row',)] for t in js.FULL_TABLES}
+
+
+def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=(), force_age_h=1):
+    """A cache that says 'nothing has changed', which individual tests then spoil."""
+    rows = rows if rows is not None else _nonempty_rows()
+    cols = cols if cols is not None else {t: ['A'] for t in js.FULL_TABLES}
+    when = NOW - timedelta(minutes=age_min)        # relative to the suite's fixed NOW
+    out = []
+    for t in js.FULL_TABLES:
+        out.append((t, len(rows[t]), js._fingerprint(rows[t]), None, when))
+    out.append((js.COLS_SENTINEL, None, None, json.dumps(cols), when))
+    out.append((js.STATUS_SENTINEL, None, status, None, when))
+    out.append((js.PROC_SENTINEL, 0, '0' * 64, None, when))
+    out.append((js.FORCE_SENTINEL, None, 'forced', None,
+                NOW - timedelta(hours=force_age_h)))
+    return [r for r in out if r[0] not in drop]
+
+
+def test_unchanged_everything_skips_without_touching_fabric():
+    why = js._fast_skip(_LocalCur(_state()), NOW)
+    assert why and 'no Fabric session opened' in why
+
+
+def test_a_missing_cache_falls_through_to_fabric():
+    # V153 not applied yet, or first run. Must behave exactly as before.
+    assert js._fast_skip(_LocalCur(None), NOW) is None
+
+
+def test_a_changed_row_falls_through_to_fabric():
+    cache = _state()
+    live = _nonempty_rows()
+    live[js.FULL_TABLES[0]] = [('a row',), ('one more',)]
+    assert js._fast_skip(_LocalCur(cache, rows=live), NOW) is None
+
+
+def test_a_failed_previous_run_falls_through_to_fabric():
+    assert js._fast_skip(_LocalCur(_state(status='FAILED')), NOW) is None
+
+
+def test_a_stale_merge_falls_through_to_fabric():
+    stale = _state(age_min=js.PROC_MAX_SKIP_MINUTES + 1)
+    assert js._fast_skip(_LocalCur(stale), NOW) is None
+
+
+def test_a_missing_sentinel_falls_through_to_fabric():
+    for sentinel in (js.PROC_SENTINEL, js.STATUS_SENTINEL, js.COLS_SENTINEL):
+        assert js._fast_skip(_LocalCur(_state(drop=(sentinel,))), NOW) is None, sentinel
+
+
+def test_an_unparseable_column_map_falls_through_to_fabric():
+    bad = [r if r[0] != js.COLS_SENTINEL else (r[0], None, None, 'not json', r[4])
+           for r in _state()]
+    assert js._fast_skip(_LocalCur(bad), NOW) is None
+
+
+def test_a_table_missing_from_the_column_map_falls_through_to_fabric():
+    cols = {t: ['A'] for t in js.FULL_TABLES}
+    del cols[js.FULL_TABLES[0]]
+    assert js._fast_skip(_LocalCur(_state(cols=cols)), NOW) is None
+
+
+def test_an_unreadable_source_falls_through_to_fabric():
+    assert js._fast_skip(_LocalCur(_state(), blow_up_on_source=True), NOW) is None
+
+
+def test_a_source_below_its_floor_falls_through_to_fabric():
+    # Application_Users going empty is the one input that could do real harm; the Fabric path
+    # raises a proper error for it, so the fast path must not quietly skip instead.
+    empty = dict(_nonempty_rows())
+    empty['Application_Users'] = []
+    assert js._fast_skip(_LocalCur(_state(rows=empty), rows=empty), NOW) is None
+
+
+def test_a_future_dated_sentinel_falls_through_to_fabric():
+    # Clock skew between AppDB and the job host. A negative age must not authorise a skip --
+    # it would keep authorising one for as long as the skew lasted.
+    assert js._fast_skip(_LocalCur(_state(age_min=-30)), NOW) is None
+
+
+# ---------------------------------------------------------------------------
+#  The daily forced restage. Nothing else ever rewrites Input_Stage
+#  unconditionally -- the "nightly full sync" the code used to reference was
+#  never a scheduled job -- so this is what re-proves that staging still
+#  matches source. It must therefore outrank "nothing changed".
+# ---------------------------------------------------------------------------
+
+class _DueCur:
+    """Serves the single FORCE_SENTINEL lookup _restage_due makes."""
+    def __init__(self, age_h=1, present=True, blow_up=False):
+        self.age_h, self.present, self.blow_up = age_h, present, blow_up
+        self._next = None
+
+    def execute(self, sql, *a):
+        if self.blow_up:
+            raise RuntimeError('no such table')
+        self._next = (NOW - timedelta(hours=self.age_h),) if self.present else None
+        return self
+
+    def fetchone(self):
+        return self._next
+
+
+def test_a_recent_restage_is_not_due():
+    assert js._restage_due(_DueCur(age_h=1), NOW) is False
+
+
+def test_an_aged_out_restage_is_due():
+    assert js._restage_due(_DueCur(age_h=js.FORCE_MAX_AGE_HOURS + 1), NOW) is True
+
+
+def test_never_having_restaged_is_due():
+    # First run after this ships, or a cleared cache. Costs one slow run; re-establishes the
+    # invariant the whole fingerprint skip depends on.
+    assert js._restage_due(_DueCur(present=False), NOW) is True
+
+
+def test_an_unreadable_sentinel_is_due():
+    assert js._restage_due(_DueCur(blow_up=True), NOW) is True
+
+
+def test_a_future_dated_restage_is_due():
+    # Clock skew must not postpone the one thing that re-proves staging.
+    assert js._restage_due(_DueCur(age_h=-5), NOW) is True
+
+
+def test_a_due_restage_beats_nothing_changed():
+    # Even with every fingerprint matching, the fast path must stand aside so the restage runs.
+    due = _state(force_age_h=js.FORCE_MAX_AGE_HOURS + 1)
+    assert js._fast_skip(_LocalCur(due), NOW) is None
+
+
+def test_a_missing_force_sentinel_falls_through_to_fabric():
+    assert js._fast_skip(_LocalCur(_state(drop=(js.FORCE_SENTINEL,))), NOW) is None
