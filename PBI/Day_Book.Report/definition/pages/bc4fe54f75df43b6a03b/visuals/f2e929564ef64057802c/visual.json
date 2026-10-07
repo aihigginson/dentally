@@ -115,6 +115,36 @@
                       "Entity": "_Data Quality Detail"
                     }
                   },
+                  "Property": "Dentist Visits"
+                }
+              },
+              "queryRef": "_Data Quality Detail.Dentist Visits",
+              "nativeQueryRef": "Dentist Visits",
+              "displayName": "Dentist"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Data Quality Detail"
+                    }
+                  },
+                  "Property": "Hygienist Visits"
+                }
+              },
+              "queryRef": "_Data Quality Detail.Hygienist Visits",
+              "nativeQueryRef": "Hygienist Visits",
+              "displayName": "Hygiene"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Data Quality Detail"
+                    }
+                  },
                   "Property": "Detail Note"
                 }
               },
@@ -254,6 +284,34 @@
           },
           "selector": {
             "metadata": "_Data Quality Detail.Detail Date"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "70D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Data Quality Detail.Dentist Visits"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "70D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Data Quality Detail.Hygienist Visits"
           }
         },
         {

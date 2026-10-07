@@ -62,6 +62,12 @@ EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCH
 
 DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
 
+# ==> AND THE PRESENTATION VIEW OVER IT. <== Gold.vw_Dim_Patients overrides the table in
+# Meta.usp_Create_Gold_Views and passes an EXPLICIT column list, so a column added to the table
+# alone reaches Gold and stops there. The first dev deploy of this release did exactly that:
+# PBI.[List Patients] came back with its original 52 columns, no error, no warning.
+DEPLOY   Fabric\Gold.vw_Dim_Patients.View.sql
+
 # ==> AND RUN IT. <== There is no PREPROD gate, so a release has to run its own consumers. Without
 # this the three dates stay NULL until the overnight build, and a NULL allocated-dentist date is
 # indistinguishable from "never seen them" -- the check would flag all 1,410 members tonight.
@@ -113,5 +119,13 @@ EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Aggreg
 # leaver on the list would be a false positive at exactly the moment the practice is deciding
 # who to chase.
 EXEC     DECLARE @r INT, @s VARCHAR(4000); SELECT @r = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND ISNULL(p.Active, 0) = 0; IF @r <> 0 BEGIN SET @s = 'V216 FAILED: ' + CAST(@r AS VARCHAR(10)) + ' flagged patient(s) are not active.'; THROW 50476, @s, 1; END;
+
+# 8. ==> THE THREE DATES MUST REACH THE PRESENTATION LAYER. <== The override view is the step
+# that silently drops a new column, and a report binding a field the view does not expose is a
+# broken visual rather than a failed deploy -- found at the practice, not here.
+EXEC     DECLARE @t INT, @u VARCHAR(4000); SELECT @t = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Patients' AND COLUMN_NAME IN ('Last Dentist Visit Date', 'Last Hygienist Visit Date', 'Last Allocated Dentist Visit Date'); IF @t <> 3 BEGIN SET @u = 'V216 FAILED: PBI.[List Patients] exposes ' + CAST(@t AS VARCHAR(10)) + ' of the 3 new visit dates -- Gold.vw_Dim_Patients is not passing them through.'; THROW 50477, @u, 1; END;
+
+# 9. And the same for the pair on the detail fact, which the drillthrough table binds by name.
+EXEC     DECLARE @v INT, @w VARCHAR(4000); SELECT @v = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Data Quality Detail' AND COLUMN_NAME IN ('Dentist Visits', 'Hygienist Visits'); IF @v <> 2 BEGIN SET @w = 'V216 FAILED: PBI.[_Data Quality Detail] exposes ' + CAST(@v AS VARCHAR(10)) + ' of the 2 visit columns the Day Book drillthrough binds.'; THROW 50478, @w, 1; END;
 
 TEST
