@@ -5,8 +5,8 @@
     "x": 9.05050505050505,
     "y": 0,
     "z": 0,
-    "height": 720.16161616161617,
-    "width": 769.29292929292933,
+    "height": 720.1616161616162,
+    "width": 769.2929292929293,
     "tabOrder": 0
   },
   "visual": {
@@ -79,11 +79,41 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Discounts"
+                  "Property": "Treatment Value"
                 }
               },
-              "queryRef": "_Measures.Discounts",
-              "nativeQueryRef": "Discounts"
+              "queryRef": "_Measures.Treatment Value",
+              "nativeQueryRef": "Treatment Value",
+              "displayName": "Treatment"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Discount Value"
+                }
+              },
+              "queryRef": "_Measures.Discount Value",
+              "nativeQueryRef": "Discount Value",
+              "displayName": "Discount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Discount %"
+                }
+              },
+              "queryRef": "_Measures.Discount %",
+              "nativeQueryRef": "Discount %"
             }
           ]
         }
@@ -98,12 +128,13 @@
                     "Entity": "_Measures"
                   }
                 },
-                "Property": "Discounts"
+                "Property": "Discount Value"
               }
             },
             "direction": "Descending"
           }
-        ]
+        ],
+        "isDefaultSort": true
       }
     },
     "objects": {
