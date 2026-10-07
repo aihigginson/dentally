@@ -1076,7 +1076,10 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // one practitioner, consistently everywhere. Revisit by apportioning across line practitioners if
 // the mis-attribution ever matters more than the additivity.
 add("Patients With Discount",
-    @"CALCULATE(DISTINCTCOUNT('_Invoices'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
+    @"CALCULATE(
+    DISTINCTCOUNT('_Revenue Invoice'[fk Patient]),
+    FILTER('_Revenue Invoice',
+           '_Revenue Invoice'[Item Name] = ""Discount"" && '_Revenue Invoice'[Amount] < 0))",
     "#,##0");
 
 add("Patients With Outstanding Invoice",
@@ -2066,10 +2069,28 @@ add("Deposit Value",
 // the filters have been applied to the fact, each contributing its own discount once. Grouping
 // by pk Invoice keeps it one row per invoice, so an invoice with several lines is not counted
 // repeatedly.
+// ==> ATTRIBUTED TO THE LINE THAT CARRIES IT. <== Confirmed with the practice owner on
+// 2026-10-07: the discount belongs to whoever did the work, not to whoever happens to head the
+// invoice. Gold.Fact_Invoices picks ONE practitioner per invoice ("prefer dentist/ortho/
+// specialist, else any"), and on prod 8,765 invoices of 50,934 -- 17%, GBP 1.36m of 7.55m --
+// carry lines from more than one.
+//
+// No warehouse change was needed: the discount IS an invoice line, so it is already a row in
+// Fact_Revenue_Invoice with that line's own practitioner. 655 rows, -GBP 88,365.20, 18
+// practitioners, none unresolved, and the total matches Gold.Invoice_Discount to the penny.
+//
+// Additive, which header attribution was preferred for: one discount line has one practitioner,
+// so summing across practitioners returns the practice total rather than double-counting.
+//
+// The sign test is NOT cosmetic. Nine 'Discount' lines are not negative -- eight are GBP 0.00
+// no-ops and one is +GBP 100, a sign error -- and summing them unsigned nets the real discount
+// DOWN by the mistake. It is applied inside the Item Name subset, so the numeric predicate only
+// ever sees a few hundred rows.
 add("Discount Value",
-    @"SUMX(
-    SUMMARIZE('_Invoices', 'List Invoices'[pk Invoice], 'List Invoices'[Discount Value]),
-    'List Invoices'[Discount Value])",
+    @"-SUMX(
+    FILTER('_Revenue Invoice',
+           '_Revenue Invoice'[Item Name] = ""Discount"" && '_Revenue Invoice'[Amount] < 0),
+    '_Revenue Invoice'[Amount])",
     "£#,##0");
 
 // ==> Invoice Amount IS NET OF THE DISCOUNT. <== Checked against Silver.Invoice_Items on prod:
@@ -2081,7 +2102,7 @@ add("Discount Value",
 //
 // So "what the treatment was worth" has to be reconstructed; there is no gross column to read.
 add("Treatment Value",
-    @"SUM('_Invoices'[Invoice Amount]) + [Discount Value]",
+    @"SUM('_Revenue Invoice'[Amount]) + [Discount Value]",
     "£#,##0");
 
 // The discount as a share of the work done, which is what anyone means by "a 20% discount".
