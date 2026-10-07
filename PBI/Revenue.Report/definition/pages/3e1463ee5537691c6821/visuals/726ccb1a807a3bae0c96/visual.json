@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "726ccb1a807a3bae0c96",
   "position": {
     "x": 9.05050505050505,
     "y": 0,
     "z": 0,
-    "height": 720.1616161616162,
-    "width": 769.2929292929293,
+    "height": 720.16161616161617,
+    "width": 769.29292929292933,
     "tabOrder": 0
   },
   "visual": {
@@ -138,19 +138,18 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "_Measures"
+                    "Entity": "List Date"
                   }
                 },
-                "Property": "Discount Value"
+                "Property": "Full Date"
               }
             },
             "direction": "Descending"
           }
-        ],
-        "isDefaultSort": true
+        ]
       }
     },
     "objects": {
