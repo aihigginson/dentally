@@ -29,8 +29,24 @@
 #                      cover between dentists looks identical, which is why the visit counts and
 #                      the name of whoever they ARE seeing are both on the row.
 #
-# Disjoint by construction -- the first requires no visits in the window, the second at least one --
-# and guard 10 asserts no patient reaches both. On dev tenant 100: 60 inactive, 47 misallocated.
+# Disjoint by construction -- the first requires no visits in the window, the second a visit to an
+# active other dentist -- and guard 10 asserts no patient reaches both.
+#
+# ==> TWO THINGS THAT LOOK LIKE A WRONG ALLOCATION AND ARE NOT. <==
+#
+#   A HANDOVER. The first cut asked "has the allocated dentist seen them?" and read no as evidence.
+#   It is an absence, and a departed dentist's reassigned list answers it in full: Ian Hunt left,
+#   David Mason took the list, and 28 of 56 rows were patients correctly allocated to the successor
+#   who had simply not seen them yet. A mis-allocation needs POSITIVE evidence -- a visit to an
+#   ACTIVE dentist who is not the allocated one. That also drops the 15 whose only visits were to a
+#   hygienist, where there is no evidence either way.
+#
+#   A BOOKING. Both findings describe something going wrong, and a booking is the practice already
+#   putting it right -- "you cant be inactive if you have a forward appointment". Inactive drops
+#   anyone with anything booked; Misallocated drops anyone booked WITH THEIR OWN DENTIST, and keeps
+#   anyone booked with someone else, because that confirms the finding rather than answering it.
+#
+# On dev tenant 100: 57 inactive, 7 misallocated (was 60 and 47). Tenant 11: 172 and 1.
 #
 # ==> WHO COUNTS AS A PLAN PATIENT: Input.Plan_Capitation_Rate, NOT Gold.Fact_Plan_Spell. <== A
 # spell is reconstructed from attended free exams, so a member who has never been through the door
@@ -138,5 +154,16 @@ EXEC     DECLARE @v INT, @w VARCHAR(4000); SELECT @v = COUNT(*) FROM INFORMATION
 # PLAN_MISALLOCATED is "at least one", so a patient on both would mean the two branches are
 # counting visits differently -- which is exactly the drift the paired procs are prone to.
 EXEC     DECLARE @x INT, @y VARCHAR(4000); SELECT @x = COUNT(*) FROM (SELECT d.Tenant_ID, d.fk_Patient FROM Gold.Fact_Data_Quality_Detail d WHERE d.Check_Code IN ('PLAN_INACTIVE','PLAN_MISALLOCATED') GROUP BY d.Tenant_ID, d.fk_Patient HAVING COUNT(DISTINCT d.Check_Code) > 1) z; IF @x <> 0 BEGIN SET @y = 'V216 FAILED: ' + CAST(@x AS VARCHAR(10)) + ' patient(s) appear on BOTH plan checks, which cannot be true of disjoint predicates.'; THROW 50479, @y, 1; END;
+
+# 11. ==> A HANDOVER IS NOT A MIS-ALLOCATION. <== Every flagged patient must have SEEN an ACTIVE
+# dentist other than their allocated one inside the window. Without this the check reads an absence
+# as evidence, and a departed dentist's reassigned list answers that absence in full: Ian Hunt left,
+# David Mason took the list, and 28 of 56 rows were patients correctly allocated to the successor.
+EXEC     DECLARE @aa INT, @ab VARCHAR(4000); DECLARE @T DATE = CAST(SYSUTCDATETIME() AS DATE); SELECT @aa = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_MISALLOCATED' AND NOT EXISTS (SELECT 1 FROM Gold.Fact_Appointments a JOIN Gold.Dim_Date dd ON dd.pk_Date = a.fk_Date_Start JOIN Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner WHERE a.Tenant_ID = p.Tenant_ID AND a.fk_Patient = p.pk_Patient AND a.State = 'Completed' AND pr.Role = 'Dentist' AND pr.Active = 1 AND pr.Practitioner_ID <> ISNULL(p.Dentist_Practitioner_ID, -1) AND dd.Full_Date <= @T AND dd.Full_Date >= DATEADD(MONTH, -12, @T)); IF @aa <> 0 BEGIN SET @ab = 'V216 FAILED: ' + CAST(@aa AS VARCHAR(10)) + ' patient(s) are called misallocated with no visit to an active other dentist -- a handover or a hygienist-only attender is being read as evidence.'; THROW 50480, @ab, 1; END;
+
+# 12. ==> THE FORWARD DIARY SETTLES BOTH. <== Nothing already being put right may sit on either
+# worklist: nothing booked at all for Inactive, nothing booked with their own dentist for
+# Misallocated. A list of things that are already fixed is a list people stop working.
+EXEC     DECLARE @ac INT, @ad VARCHAR(4000); DECLARE @T2 DATE = CAST(SYSUTCDATETIME() AS DATE); SELECT @ac = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code IN ('PLAN_INACTIVE','PLAN_MISALLOCATED') AND EXISTS (SELECT 1 FROM Gold.Fact_Appointments a JOIN Gold.Dim_Date dd ON dd.pk_Date = a.fk_Date_Start LEFT JOIN Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner WHERE a.Tenant_ID = p.Tenant_ID AND a.fk_Patient = p.pk_Patient AND ISNULL(a.Is_Cancelled, 0) = 0 AND dd.Full_Date > @T2 AND (d.Check_Code = 'PLAN_INACTIVE' OR pr.Practitioner_ID = ISNULL(p.Dentist_Practitioner_ID, -1))); IF @ac <> 0 BEGIN SET @ad = 'V216 FAILED: ' + CAST(@ac AS VARCHAR(10)) + ' flagged patient(s) already have the booking that answers the finding.'; THROW 50481, @ad, 1; END;
 
 TEST

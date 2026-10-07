@@ -139,11 +139,57 @@ BEGIN
             JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
             JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
             WHERE  a.State = 'Completed'
-              AND  pr.Role = 'Dentist'
+              AND  pr.Role = 'Dentist' AND pr.Active = 1   -- V216: never name a leaver
               AND  d.Full_Date <= @Today
               AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today)
         ) x
         WHERE  x.rn = 1;
+
+        -- ==> THE EVIDENCE A MIS-ALLOCATION ACTUALLY NEEDS. <== (V216)
+        --
+        -- Not "the allocated dentist has not seen them" -- that is an absence, and a departed
+        -- dentist's whole list answers it the moment the list is reassigned. Ian Hunt left and
+        -- David Mason took the list over; 28 of 56 flagged rows were that handover, every one
+        -- correctly allocated to a successor who had simply not seen them yet.
+        --
+        -- So: the patient must have SEEN an ACTIVE dentist who is not the one they are
+        -- allocated to. Active rules out the handover. A dentist rules out the patient whose
+        -- only visits were to a hygienist, where there is no evidence either way. One
+        -- predicate, both false positives.
+        SELECT DISTINCT a.Tenant_ID, a.fk_Patient
+        INTO   #plan_other_dentist
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
+        JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        JOIN   Gold.Dim_Patients p       ON p.pk_Patient       = a.fk_Patient
+                                        AND p.Tenant_ID        = a.Tenant_ID
+        WHERE  a.State = 'Completed'
+          AND  pr.Role = 'Dentist' AND pr.Active = 1
+          AND  pr.Practitioner_ID <> ISNULL(p.Dentist_Practitioner_ID, -1)
+          AND  d.Full_Date <= @Today
+          AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today);
+
+        -- ==> AND THE FORWARD DIARY, WHICH SETTLES BOTH CHECKS. <== (V216)
+        --
+        -- Both findings describe something going wrong, and a booking is the practice already
+        -- putting it right. A worklist that lists what is already fixed is a worklist people
+        -- stop working, which is why PAT_DORMANT has excluded booked patients from the start.
+        --
+        -- With_Allocated_Dentist is the distinction that matters: INACTIVE drops anyone with
+        -- anything booked at all -- they are coming back. MISALLOCATED drops them only if the
+        -- booking is WITH THEIR OWN DENTIST; booked with somebody else CONFIRMS the finding
+        -- rather than answering it, so those stay on the list.
+        SELECT a.Tenant_ID, a.fk_Patient,
+               MAX(CASE WHEN pr.Practitioner_ID = ISNULL(p.Dentist_Practitioner_ID, -1)
+                        THEN 1 ELSE 0 END) AS With_Allocated_Dentist
+        INTO   #plan_booked
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d     ON d.pk_Date    = a.fk_Date_Start
+        JOIN   Gold.Dim_Patients p ON p.pk_Patient = a.fk_Patient AND p.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        WHERE  ISNULL(a.Is_Cancelled, 0) = 0
+          AND  d.Full_Date > @Today
+        GROUP BY a.Tenant_ID, a.fk_Patient;
 
         -- Appointments with a real calendar date, flagged as in the aggregate.
         SELECT a.Tenant_ID, a.fk_Patient, a.fk_Practitioner, a.State,
@@ -301,6 +347,8 @@ BEGIN
             FROM #plan_patient pp
             LEFT JOIN #plan_visit pv ON pv.Tenant_ID = pp.Tenant_ID AND pv.fk_Patient = pp.pk_Patient
             WHERE ISNULL(pv.Dentist_Visits, 0) = 0 AND ISNULL(pv.Hygienist_Visits, 0) = 0
+              AND NOT EXISTS (SELECT 1 FROM #plan_booked b
+                              WHERE b.Tenant_ID = pp.Tenant_ID AND b.fk_Patient = pp.pk_Patient)
 
             UNION ALL
             SELECT 'PLAN_MISALLOCATED', pp.Tenant_ID, pp.pk_Patient, 'Patient',
@@ -316,12 +364,15 @@ BEGIN
                                + ' months ago)' END
                    + ISNULL('. ' + pp.Standard_Payment_Plan, '')
             FROM #plan_patient pp
-            JOIN #plan_visit pv ON pv.Tenant_ID = pp.Tenant_ID AND pv.fk_Patient = pp.pk_Patient
+            -- INNER. This is the evidence, not a decoration: no active other dentist, no finding.
+            JOIN #plan_other_dentist od ON od.Tenant_ID = pp.Tenant_ID AND od.fk_Patient = pp.pk_Patient
             LEFT JOIN #plan_seen_by sb ON sb.Tenant_ID = pp.Tenant_ID AND sb.fk_Patient = pp.pk_Patient
             WHERE pp.Allocated_Dentist IS NOT NULL
-              AND (ISNULL(pv.Dentist_Visits, 0) + ISNULL(pv.Hygienist_Visits, 0)) > 0
               AND (pp.Last_Allocated_Dentist_Visit_Date IS NULL
                    OR pp.Last_Allocated_Dentist_Visit_Date < DATEADD(MONTH, -@Plan_Months, @Today))
+              AND NOT EXISTS (SELECT 1 FROM #plan_booked b
+                              WHERE b.Tenant_ID = pp.Tenant_ID AND b.fk_Patient = pp.pk_Patient
+                                AND b.With_Allocated_Dentist = 1)
 
             UNION ALL
             SELECT 'PAT_NO_DENTIST', p.Tenant_ID, p.pk_Patient, 'Patient',
@@ -484,6 +535,8 @@ BEGIN
         DROP TABLE #plan_patient;
         DROP TABLE #plan_visit;
         DROP TABLE #plan_seen_by;
+        DROP TABLE #plan_other_dentist;
+        DROP TABLE #plan_booked;
 
         --*********************************
         --**** Procedure logic ends    ****
