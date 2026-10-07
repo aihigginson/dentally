@@ -1812,9 +1812,11 @@ def test_the_authz_cache_expires(client, appmod, monkeypatch):
     assert client.get('/api/embed-token?report=revenue').status_code == 200
     assert len(conns) == 1
 
-    # Age the entry past its TTL rather than sleeping.
-    ts, cid, tids, access = appmod._authz_cache['u@x.com']
-    appmod._authz_cache['u@x.com'] = (ts - appmod._AUTHZ_TTL - 1, cid, tids, access)
+    # Age the entry past its TTL rather than sleeping. Keyed on (upn, acting client, acting
+    # tenant) since the acting scope changes which tenants resolve.
+    key = ('u@x.com', None, None)
+    ts, cid, tids, access = appmod._authz_cache[key]
+    appmod._authz_cache[key] = (ts - appmod._AUTHZ_TTL - 1, cid, tids, access)
 
     assert client.get('/api/embed-token?report=revenue').status_code == 200
     assert len(conns) == 2, 'the cache did not expire -- access changes would never take effect'
@@ -1843,3 +1845,34 @@ def test_a_token_is_still_minted_per_request(client, appmod, monkeypatch):
 
     assert len(posts) == 3, 'GenerateToken must be called for every request'
     assert all(p['identities'][0]['username'] == 'u@x.com' for p in posts)
+
+
+def test_the_authz_cache_does_not_serve_one_practice_answer_for_another(client, appmod, monkeypatch):
+    """==> THE BUG THIS EXISTS FOR. <== _authz_for cached on the UPN alone, while _get_user_info
+    narrows tids by the acting client -- that being the whole mechanism by which a support login
+    looks at ONE practice. So the same person with a different practice picked was served the
+    previous practice's tenant set for up to _AUTHZ_TTL.
+
+    It mattered at exactly one caller: /api/embed-token, where tids decides RLS. With two permitted
+    tenants and no single one in scope, customData is not attached and the model ADDS THE PRACTICES
+    UP -- observed on dev as Total Revenue 785,899 against Maple's own 468,703, under Maple's name.
+    """
+    conns, gets = [], []
+    _embed_stubs(appmod, monkeypatch, conns, gets)
+
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    before = len(conns)
+
+    # Same user, same TTL window, DIFFERENT practice picked. It must re-resolve rather than reuse.
+    # X-Acting-Tenant rather than X-Acting-Client because the client picker is staff-only -- for a
+    # non-staff caller _acting_client_id correctly returns None whatever the header says. The
+    # tenant picker is not staff-only (a group customer running three practices needs it), so it
+    # exercises the same cache key without needing a staff fixture.
+    assert client.get('/api/embed-token?report=revenue',
+                      headers={'X-Acting-Tenant': '7'}).status_code == 200
+    assert len(conns) == before + 1, (
+        'the acting client was not part of the cache key -- one practice would be shown '
+        "under another practice's name")
+
+    # And the two scopes are held separately rather than overwriting each other.
+    assert ('u@x.com', None, None) in appmod._authz_cache
