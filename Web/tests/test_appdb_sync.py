@@ -366,7 +366,7 @@ def _nonempty_rows():
     return {t: [('a row',)] for t in js.FULL_TABLES}
 
 
-def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=()):
+def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=(), force_age_h=1):
     """A cache that says 'nothing has changed', which individual tests then spoil."""
     rows = rows if rows is not None else _nonempty_rows()
     cols = cols if cols is not None else {t: ['A'] for t in js.FULL_TABLES}
@@ -377,6 +377,8 @@ def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=()):
     out.append((js.COLS_SENTINEL, None, None, json.dumps(cols), when))
     out.append((js.STATUS_SENTINEL, None, status, None, when))
     out.append((js.PROC_SENTINEL, 0, '0' * 64, None, when))
+    out.append((js.FORCE_SENTINEL, None, 'forced', None,
+                NOW - timedelta(hours=force_age_h)))
     return [r for r in out if r[0] not in drop]
 
 
@@ -439,3 +441,59 @@ def test_a_future_dated_sentinel_falls_through_to_fabric():
     # Clock skew between AppDB and the job host. A negative age must not authorise a skip --
     # it would keep authorising one for as long as the skew lasted.
     assert js._fast_skip(_LocalCur(_state(age_min=-30)), NOW) is None
+
+
+# ---------------------------------------------------------------------------
+#  The daily forced restage. Nothing else ever rewrites Input_Stage
+#  unconditionally -- the "nightly full sync" the code used to reference was
+#  never a scheduled job -- so this is what re-proves that staging still
+#  matches source. It must therefore outrank "nothing changed".
+# ---------------------------------------------------------------------------
+
+class _DueCur:
+    """Serves the single FORCE_SENTINEL lookup _restage_due makes."""
+    def __init__(self, age_h=1, present=True, blow_up=False):
+        self.age_h, self.present, self.blow_up = age_h, present, blow_up
+        self._next = None
+
+    def execute(self, sql, *a):
+        if self.blow_up:
+            raise RuntimeError('no such table')
+        self._next = (NOW - timedelta(hours=self.age_h),) if self.present else None
+        return self
+
+    def fetchone(self):
+        return self._next
+
+
+def test_a_recent_restage_is_not_due():
+    assert js._restage_due(_DueCur(age_h=1), NOW) is False
+
+
+def test_an_aged_out_restage_is_due():
+    assert js._restage_due(_DueCur(age_h=js.FORCE_MAX_AGE_HOURS + 1), NOW) is True
+
+
+def test_never_having_restaged_is_due():
+    # First run after this ships, or a cleared cache. Costs one slow run; re-establishes the
+    # invariant the whole fingerprint skip depends on.
+    assert js._restage_due(_DueCur(present=False), NOW) is True
+
+
+def test_an_unreadable_sentinel_is_due():
+    assert js._restage_due(_DueCur(blow_up=True), NOW) is True
+
+
+def test_a_future_dated_restage_is_due():
+    # Clock skew must not postpone the one thing that re-proves staging.
+    assert js._restage_due(_DueCur(age_h=-5), NOW) is True
+
+
+def test_a_due_restage_beats_nothing_changed():
+    # Even with every fingerprint matching, the fast path must stand aside so the restage runs.
+    due = _state(force_age_h=js.FORCE_MAX_AGE_HOURS + 1)
+    assert js._fast_skip(_LocalCur(due), NOW) is None
+
+
+def test_a_missing_force_sentinel_falls_through_to_fabric():
+    assert js._fast_skip(_LocalCur(_state(drop=(js.FORCE_SENTINEL,))), NOW) is None

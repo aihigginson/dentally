@@ -76,6 +76,14 @@ PROC_SENTINEL = '(access proc)'
 # Two more sentinels, used only in the AppDB cache (Input.Sync_State). Same no-collision reasoning.
 COLS_SENTINEL = '(columns)'          # Payload = JSON {table: [column, ...]} for Input_Stage
 STATUS_SENTINEL = '(last status)'    # outcome of the previous access run
+FORCE_SENTINEL = '(last full restage)'   # when every table was last rewritten unconditionally
+
+# ==> SOMETHING MUST REWRITE Input_Stage UNCONDITIONALLY, OR A BAD COPY IS PERMANENT. <== The
+# fingerprint skip is only safe while staging is known to match source. If staging were edited
+# directly, or a write half-failed in a way that left the fingerprint looking right, nothing would
+# ever correct it -- the comparison would match forever. _run's comment has always claimed a nightly
+# full sync re-established truth; there is no such job, so the access run does it itself this often.
+FORCE_MAX_AGE_HOURS = float(os.environ.get('FORCE_MAX_AGE_HOURS', '20'))
 # Run the access proc at least this often even when nothing has changed, so that no mistake in the
 # skip logic can stop the merge for longer than this.
 PROC_MAX_SKIP_MINUTES = float(os.environ.get('PROC_MAX_SKIP_MINUTES', '60'))
@@ -313,7 +321,7 @@ def _save_local(src, item, row_count=None, fingerprint=None, payload=None):
         'VALUES (?, ?, ?, ?, SYSUTCDATETIME())', item, row_count, fingerprint, payload)
 
 
-def _mirror_local(src, fps, colmap, status):
+def _mirror_local(src, fps, colmap, status, forced=False):
     """Write the cache in the same breath as the warehouse copy it mirrors.
 
     Called only after a run that actually reached the warehouse, so the cache can never claim a
@@ -322,12 +330,34 @@ def _mirror_local(src, fps, colmap, status):
     try:
         for t, (n, fp) in fps.items():
             _save_local(src, t, row_count=n, fingerprint=fp)
+        if forced:
+            # Written only here, after a verified rewrite of every table, so a failure part way
+            # through leaves the restage due rather than marking it done.
+            _save_local(src, FORCE_SENTINEL, fingerprint='forced')
         _save_local(src, COLS_SENTINEL, payload=json.dumps(colmap, sort_keys=True))
         _save_local(src, STATUS_SENTINEL, fingerprint=status)
     except Exception as e:
         # The cache is an optimisation. Failing to write it must never fail the sync -- the next
         # run simply takes the Fabric path, which is what happens today anyway.
         print(f'  (could not write local sync state: {str(e)[:80]})')
+
+
+def _restage_due(src, started):
+    """Is a forced rewrite of Input_Stage overdue? Unknown or out-of-range means yes.
+
+    Deliberately pessimistic: a missing sentinel (first run after this ships, cache cleared) forces
+    a restage, which costs one ordinary slow run and re-establishes the invariant the skip logic
+    depends on.
+    """
+    try:
+        src.execute('SELECT Updated_At FROM [Input].[Sync_State] WHERE Item = ?', FORCE_SENTINEL)
+        row = src.fetchone()
+    except Exception:
+        return True
+    if not row or not row[0]:
+        return True
+    age_h = (started - row[0]).total_seconds() / 3600.0
+    return age_h < 0 or age_h >= FORCE_MAX_AGE_HOURS
 
 
 def _fast_skip(src, started):
@@ -367,6 +397,15 @@ def _fast_skip(src, started):
     # wrong way would otherwise sail past the >= below and skip for as long as the skew lasts.
     # Out of range in either direction means the state is not trustworthy, so take the Fabric path.
     if age_min < 0 or age_min >= PROC_MAX_SKIP_MINUTES:
+        return None
+
+    # A restage that is due outranks "nothing changed" -- the whole point is that it runs even
+    # when the fingerprints agree, because the fingerprints are what it exists to re-prove.
+    forced = state.get(FORCE_SENTINEL)
+    if not forced or not forced[3]:
+        return None
+    force_age_h = (started - forced[3]).total_seconds() / 3600.0
+    if force_age_h < 0 or force_age_h >= FORCE_MAX_AGE_HOURS:
         return None
 
     # Only now read the source, and only to prove it is unchanged.
@@ -647,10 +686,21 @@ def main():
 
 
 def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
-    # The ten-minute access job skips tables whose contents are provably identical; the nightly
-    # full sync and the copy-for-comparison mode always rewrite, so truth is re-established once a
-    # day no matter what happened to Input_Stage in between.
-    counts, changed, fps, colmap = copy_tables(src, tgt, tables, force=(mode != 'access'))
+    # The access job skips tables whose contents are provably identical. That is only safe while
+    # staging is known to match source, so something must rewrite it unconditionally from time to
+    # time -- otherwise a staging table edited directly, or left half-written in a way the
+    # fingerprint still matches, would never be corrected.
+    #
+    # ==> THAT USED TO SAY "the nightly full sync does it", AND THERE WAS NO SUCH JOB. <== The only
+    # scheduled container jobs are the two `access` ones, and access never passed force. So the
+    # access run now forces a restage itself once FORCE_MAX_AGE_HOURS has elapsed; `full` and `copy`
+    # still always rewrite.
+    # access forces a restage when the last one has aged out; every other mode always forces.
+    force_due = (mode == 'access') and _restage_due(src, started)
+    if force_due:
+        print(f'forcing a full restage: last one over {FORCE_MAX_AGE_HOURS:.0f}h ago')
+    counts, changed, fps, colmap = copy_tables(src, tgt, tables,
+                                               force=(mode != 'access') or force_due)
     bad = [t for t, (a, b) in counts.items() if a != b]
     if bad:
         # Do NOT run the procs on a partial copy. They MERGE from staging, so a half-filled
@@ -679,7 +729,7 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
         if why is None:
             print(f'{proc}: skipped -- staging unchanged, last merge within '
                   f'{PROC_MAX_SKIP_MINUTES:.0f} min')
-            _mirror_local(src, fps, colmap, 'SUCCEEDED')
+            _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due)
             _log_run(tgt_cn, mode, started, 'SUCCEEDED', rows=sum(a for a, _ in counts.values()))
             _alert(tgt_cn, mode, started, 'SUCCEEDED')
             src_cn.close()
@@ -700,7 +750,7 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
         print(f'{proc}: done')
 
     # Mirror AFTER the proc returned, so the cache can never say "done" for a merge that threw.
-    _mirror_local(src, fps, colmap, 'SUCCEEDED')
+    _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due)
     _log_run(tgt_cn, mode, started, 'SUCCEEDED', rows=sum(a for a, _ in counts.values()))
     _alert(tgt_cn, mode, started, 'SUCCEEDED')
     src_cn.close()
