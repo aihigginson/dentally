@@ -11,6 +11,10 @@
 -- the report sorts by urgency. Plain text sorts alphabetically -- High, Low, Medium -- which
 -- buries the least urgent band in the middle.
 --
+-- Why_It_Matters and What_To_Do are VARCHAR(500), Check_Name VARCHAR(200). Overrun one and
+-- Fabric answers "String or binary data would be truncated" WITHOUT naming the column, which
+-- is a long way to go to find a sentence that is too long. Count before you deploy.
+--
 -- Every Check_Code here MUST have a matching branch in Gold.usp_Load_Aggregate_Data_Quality.
 -- A code with no branch silently reports 0, which reads as a passing check -- the worst
 -- failure this table has.
@@ -75,7 +79,7 @@ VALUES
     ('PLAN_DENTIST_NOT_SEEN', 'Patients',
      'Plan Patients Not Seeing Their Dentist',
      '1: High', 1,
-     'A plan patient pays every month whether or not they come in, and these have not seen the dentist they are allocated to for a year. The Dentist and Hygiene visit counts separate two different problems: nought and nought is a member who has stopped attending while still paying, which is the one that ends in a cancelled direct debit; visits against another clinician mean they are attending but the allocation is out of date, so recall runs, workload and the capitation credited to each dentist all point at the wrong person. Informal holiday cover between dentists is normal and will show here as a single recent visit elsewhere -- read the counts before reassigning anyone.',
+     'A plan patient pays every month whether or not they come in, and these have not seen their allocated dentist for a year. The visit counts separate two problems: nought and nought is a member who has stopped attending while the direct debit runs; visits against another clinician mean the allocation is out of date, so recall runs, workload and the capitation credited to each dentist all point at the wrong person. Holiday cover is normal -- read the counts before reassigning anyone.',
      'Work the list by the visit counts. Nought and nought: contact them for a plan review -- the fee is being collected regardless. Attending but not with their own dentist: change the allocated dentist on the patient record to whoever is actually seeing them.',
      'PLAN_PATIENTS', 1, 75),
 
