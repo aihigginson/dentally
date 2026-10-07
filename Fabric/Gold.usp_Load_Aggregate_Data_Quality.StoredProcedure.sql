@@ -67,7 +67,7 @@ BEGIN
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
-        DECLARE @Plan_Months    INT  = 6;   -- V216, and matches the detail proc
+        DECLARE @Plan_Months    INT  = 12;  -- V216, and matches the detail proc
 
         -- ── Tenant spine ─────────────────────────────────────────────────────
         -- A practice with no patients is not a live practice; there is nothing to

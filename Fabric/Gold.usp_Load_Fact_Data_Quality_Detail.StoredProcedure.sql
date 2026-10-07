@@ -71,9 +71,14 @@ BEGIN
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
-        -- Six months, not twelve: a plan patient is bought two exams and two hygiene visits
-        -- a year, so six months without their own dentist is already a missed one.
-        DECLARE @Plan_Months    INT  = 6;
+        -- ==> TWELVE MONTHS, NOT SIX. <== Six was the first cut and it was too tight: it
+        -- flagged 201 of 1,405 plan patients on the live practice, and most of that is the
+        -- ordinary drift between a recall falling due and the appointment happening -- the
+        -- owner's words, "it is fairly common for patients to be over 6 months in the normal
+        -- course of events". A plan buys two exams a year, so at twelve months the patient
+        -- has missed a whole year of what they are paying for and nobody can call it drift.
+        -- Twelve flags 102. A check that cries wolf 201 times is a check nobody opens.
+        DECLARE @Plan_Months    INT  = 12;
 
         -- ==> WHO IS A PLAN PATIENT? THE OWNER'S RATE TABLE SAYS SO. <== (V216)
         --
@@ -102,8 +107,10 @@ BEGIN
           AND  EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
                        WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID);
 
-        -- The supporting pair: visits in the SAME six months the check tests, counted across
-        -- all clinicians of that role. One row per patient, so it cannot fan the detail out.
+        -- The supporting pair: visits over the SAME window the check tests -- which is what
+        -- makes nought and nought mean "has not been in at all" rather than "not lately".
+        -- Counted across all clinicians of that role, one row per patient, so it cannot fan
+        -- the detail out.
         SELECT a.Tenant_ID, a.fk_Patient,
                SUM(CASE WHEN pr.Role = 'Dentist'   THEN 1 ELSE 0 END) AS Dentist_Visits,
                SUM(CASE WHEN pr.Role = 'Hygienist' THEN 1 ELSE 0 END) AS Hygienist_Visits

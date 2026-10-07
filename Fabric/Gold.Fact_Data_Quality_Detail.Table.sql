@@ -49,7 +49,7 @@ CREATE TABLE [Gold].[Fact_Data_Quality_Detail] (
     [Next_Appointment_Days]      [int]           NULL,   -- days from now; sort ascending
     [Next_Appointment_Band]      [varchar](20)   NOT NULL,
     [Next_Appointment_Band_Sort] [smallint]      NOT NULL,
-    -- V216: the supporting pair for PLAN_DENTIST_NOT_SEEN, over the same six months the
+    -- V216: the supporting pair for PLAN_DENTIST_NOT_SEEN, over the same twelve months the
     -- check tests. NULL on every other check, which is the honest value -- 0 would read as
     -- "did not attend" on rows where attendance was never the question.
     --

@@ -19,12 +19,12 @@
 # ==> MEASURED ON PROD BEFORE IT WAS BUILT. <== Of 1,405 active plan patients with an allocated
 # dentist:
 #
-#      49  have never seen that dentist AND have not attended in six months  (12 never at all)
-#      84  have seen them before, but have not attended in six months
-#      20  are attending, and have NEVER seen their allocated dentist
-#      50  are attending, and last saw their own dentist more than six months ago
+#      31  have never seen that dentist AND have not attended in a year
+#      27  have seen them before, but have not attended in a year
+#      34  are attending, and have NEVER seen their allocated dentist
+#      10  are attending, and last saw their own dentist more than a year ago
 #   -----
-#     203  flagged (14.4%), 1,202 clean
+#     102  flagged (7.3%), 1,303 clean
 #
 # ==> WHO COUNTS AS A PLAN PATIENT: Input.Plan_Capitation_Rate, NOT Gold.Fact_Plan_Spell. <== A
 # spell is reconstructed from attended free exams, so a member who has never been through the door
@@ -34,8 +34,11 @@
 # Gold.Fact_Revenue_Capitation bills against, so the check and the income it protects count the
 # same people, with no per-tenant plan name hard-coded anywhere.
 #
-# ==> SIX MONTHS, AND NO EXCLUSION FOR A BOOKED APPOINTMENT. <== A plan buys two exams and two
-# hygiene visits a year, so six months without the allocated dentist is already a missed one.
+# ==> TWELVE MONTHS, AND NO EXCLUSION FOR A BOOKED APPOINTMENT. <== Six was the first cut and it
+# flagged 201 -- too tight, because "it is fairly common for patients to be over 6 months in the
+# normal course of events". A plan buys two exams a year, so twelve months is a patient who has
+# missed a full year of what they are paying for, and no part of that is ordinary drift.
+#
 # PAT_DORMANT excludes anyone with something in the diary; this check must not, because an
 # appointment next week with somebody else does not answer the finding. The Next in column on the
 # detail row already says whether they are coming, which is all that exclusion was ever for.
@@ -93,7 +96,7 @@ EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT a.T
 
 # 4. Every flagged row must actually satisfy the rule -- re-derived from the dimension here rather
 # than trusted from the proc that wrote it.
-EXEC     DECLARE @h INT, @k VARCHAR(4000); SELECT @h = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND p.Last_Allocated_Dentist_Visit_Date >= DATEADD(MONTH, -6, CAST(SYSUTCDATETIME() AS DATE)); IF @h <> 0 BEGIN SET @k = 'V216 FAILED: ' + CAST(@h AS VARCHAR(10)) + ' flagged patient(s) HAVE seen their allocated dentist within six months.'; THROW 50473, @k, 1; END;
+EXEC     DECLARE @h INT, @k VARCHAR(4000); SELECT @h = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND p.Last_Allocated_Dentist_Visit_Date >= DATEADD(MONTH, -12, CAST(SYSUTCDATETIME() AS DATE)); IF @h <> 0 BEGIN SET @k = 'V216 FAILED: ' + CAST(@h AS VARCHAR(10)) + ' flagged patient(s) HAVE seen their allocated dentist within twelve months.'; THROW 50473, @k, 1; END;
 
 # 5. The supporting pair belongs to this check and no other. NULL elsewhere is the honest value --
 # 0 would read as "did not attend" on rows where attendance was never the question.
@@ -103,5 +106,12 @@ EXEC     DECLARE @m INT, @n VARCHAR(4000); SELECT @m = COUNT(*) FROM Gold.Fact_D
 # which is the worst failure this table has. If a tenant has plan members, the population must see
 # them -- and if it has plan members and a scorecard row, that row must have a population.
 EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Aggregate_Data_Quality a WHERE a.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND ISNULL(a.Population, 0) = 0 AND EXISTS (SELECT 1 FROM Gold.Dim_Patients p JOIN Input.Plan_Capitation_Rate r ON r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID WHERE p.Tenant_ID = a.Tenant_ID AND p.Active = 1 AND p.Dentist_Practitioner_ID IS NOT NULL); IF @p <> 0 BEGIN SET @q = 'V216 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' tenant(s) have plan members but a population of zero, so the check reports as clean.'; THROW 50475, @q, 1; END;
+
+# 7. ==> THE POPULATION IS ACTIVE PATIENTS ONLY. <== Active = 1 appears in the branch, in the
+# detail's #plan_patient and in the PLAN_PATIENTS denominator, and this asserts it rather than
+# trusting that all three stayed in step. An inactive patient is not paying a plan fee, so a
+# leaver on the list would be a false positive at exactly the moment the practice is deciding
+# who to chase.
+EXEC     DECLARE @r INT, @s VARCHAR(4000); SELECT @r = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND ISNULL(p.Active, 0) = 0; IF @r <> 0 BEGIN SET @s = 'V216 FAILED: ' + CAST(@r AS VARCHAR(10)) + ' flagged patient(s) are not active.'; THROW 50476, @s, 1; END;
 
 TEST
