@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "a1b2c3d4e5f600112244",
   "position": {
-    "x": 712.0,
-    "y": 76.0,
+    "x": 712,
+    "y": 76,
     "z": 12001,
-    "height": 220.0,
-    "width": 560.0,
+    "height": 220,
+    "width": 560,
     "tabOrder": 12001
   },
   "isHidden": true,
@@ -77,20 +77,6 @@
               },
               "queryRef": "_Measures.Cross-Charge In",
               "nativeQueryRef": "Cross-Charge In"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Revenue Per Clinical Hour"
-                }
-              },
-              "queryRef": "_Measures.Revenue Per Clinical Hour",
-              "nativeQueryRef": "Revenue Per Clinical Hour"
             }
           ]
         }
@@ -183,7 +169,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'By practitioner, with £ per clinical hour'"
+                  "Value": "'By practitioner'"
                 }
               }
             },
