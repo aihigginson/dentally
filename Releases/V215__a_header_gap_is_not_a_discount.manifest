@@ -1,0 +1,54 @@
+# =====================================================================
+# Release V215 -- a header exceeding its lines is not a discount
+# =====================================================================
+# Gold.Invoice_Discount detected two shapes. One is real: a negative invoice line named 'Discount',
+# which is what the live practice does -- 654 lines, GBP 88,350 since 2021. The other was the header
+# gap, inv.Amount > SUM(lines), and it is not a discount at all. Asked directly, the owner was
+# unambiguous (2026-10-07). It is also the wrong shape arithmetically: a discount makes a header
+# LESS than its lines, not more. A header above its lines is an invoice that does not reconcile --
+# missing or uningested items -- which is a data-quality question, not a commercial one.
+#
+# ==> IT ACCOUNTED FOR EVERY ROW THE DEMO TENANT HAD, AND NOTHING ON THE LIVE PRACTICE. <==
+#
+#     tenant   shape           invoices      value
+#       11     header gap         2,710   36,636.91     dev only, 100% of its rows
+#      100     negative line        642   88,350.20     dev
+#      100     negative line        643   88,365.20     prod, 100% of its rows
+#
+# So prod loses nothing here and dev loses 2,710 invoices that were never discounted.
+#
+# ==> IT HAD ALSO REACHED THE REPORT. <== [Treatment Value] reconstructs the pre-discount figure as
+# Invoice Amount + Discount Value, which is right for a negative line -- the header is net, verified
+# against Silver.Invoice_Items -- and WRONG for a header gap, whose header is already ABOVE its
+# lines. On the demo tenant the discounts detail was overstating the treatment value of every row.
+#
+# ==> THE GUARD THAT WOULD HAVE CAUGHT THIS IS THE CONVERSE OF THE ONE V208 WROTE. <== V208 asserted
+# that every invoice with a negative Discount line IS flagged. It never asserted that everything
+# flagged CAME FROM one, so 2,710 rows of a different shape sat there unremarked. Step 3 below is
+# that missing direction, and it is the reason this release exists at all.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V215__a_header_gap_is_not_a_discount.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Invoices.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC Gold.usp_Load_Dim_Invoices @Mode = 'LIVE', @Logging = 0, @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# 1. Every invoice with a negative 'Discount' line is still flagged (carried from V208).
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT DISTINCT ii.Tenant_ID, ii.Invoice_ID FROM Silver.Invoice_Items ii WHERE ii.Name = 'Discount' AND ii.Total_Price < 0) d WHERE NOT EXISTS (SELECT 1 FROM Gold.Invoice_Discount gd WHERE gd.Tenant_ID = d.Tenant_ID AND gd.Invoice_ID = d.Invoice_ID); IF @a <> 0 BEGIN SET @e = 'V215 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' invoice(s) with a negative Discount line are not flagged.'; THROW 50460, @e, 1; END;
+
+# 2. And the value still matches those lines exactly (carried from V208).
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT ii.Tenant_ID, ii.Invoice_ID, SUM(-ii.Total_Price) AS v FROM Silver.Invoice_Items ii WHERE ii.Name = 'Discount' AND ii.Total_Price < 0 GROUP BY ii.Tenant_ID, ii.Invoice_ID) d JOIN Gold.Invoice_Discount gd ON gd.Tenant_ID = d.Tenant_ID AND gd.Invoice_ID = d.Invoice_ID WHERE ABS(ISNULL(gd.Discount_Value, 0) - d.v) > 0.005; IF @b <> 0 BEGIN SET @f = 'V215 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' invoice(s) have a Discount_Value that does not match their discount lines.'; THROW 50461, @f, 1; END;
+
+# 3. ==> THE DIRECTION V208 NEVER CHECKED. <== Nothing may be flagged that does not come from a
+# negative 'Discount' line. Without this, a second detection shape can sit in the table for weeks
+# looking like real discounts -- which is exactly what happened.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM Gold.Invoice_Discount gd WHERE NOT EXISTS (SELECT 1 FROM Silver.Invoice_Items ii WHERE ii.Tenant_ID = gd.Tenant_ID AND TRY_CAST(ii.Invoice_ID AS INT) = gd.Invoice_ID AND ii.Name = 'Discount' AND ii.Total_Price < 0); IF @c <> 0 BEGIN SET @g = 'V215 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' flagged invoice(s) have no negative Discount line -- something other than an itemised discount is being detected.'; THROW 50462, @g, 1; END;
+
+# 4. No zero or negative discounts.
+EXEC     DECLARE @h INT, @k VARCHAR(4000); SELECT @h = COUNT(*) FROM Gold.Invoice_Discount WHERE ISNULL(Discount_Value, 0) <= 0; IF @h <> 0 BEGIN SET @k = 'V215 FAILED: ' + CAST(@h AS VARCHAR(10)) + ' flagged invoice(s) have no positive discount value.'; THROW 50463, @k, 1; END;
+
+# 5. The canary: if Silver holds discounted invoices, Gold must have found them.
+EXEC     DECLARE @m INT, @n INT, @p VARCHAR(4000); SELECT @m = COUNT(*) FROM (SELECT DISTINCT ii.Tenant_ID, ii.Invoice_ID FROM Silver.Invoice_Items ii WHERE ii.Name = 'Discount' AND ii.Total_Price < 0) s; SELECT @n = COUNT(*) FROM Gold.Invoice_Discount; IF @m > 0 AND @n = 0 BEGIN SET @p = 'V215 FAILED: Silver holds ' + CAST(@m AS VARCHAR(10)) + ' discounted invoice(s) and Gold detected none.'; THROW 50464, @p, 1; END;
+
+TEST

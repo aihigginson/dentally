@@ -324,7 +324,7 @@ def health():
 # whether to mint at all.
 _AUTHZ_TTL       = 60.0      # seconds
 _REPORT_META_TTL = 3600.0    # embedUrl/datasetId change only when a report is republished
-_authz_cache       = {}      # upn -> (ts, client_id, tids, access)
+_authz_cache       = {}      # (upn, acting_client, acting_tenant) -> (ts, client_id, tids, access)
 _report_meta_cache = {}      # report_id -> (ts, embed_url, dataset_id)
 
 
@@ -334,7 +334,20 @@ def _authz_for(upn):
     Raises on a warehouse failure exactly as the inline lookup did -- a cache miss must not
     become a silent grant.
     """
-    hit = _authz_cache.get(upn)
+    # ==> THE ACTING SCOPE IS PART OF THE IDENTITY, SO IT MUST BE PART OF THE KEY. <== This cached
+    # on the UPN alone. _get_user_info narrows tids by the acting client -- that is the whole
+    # mechanism by which a support login looks at ONE practice -- so two requests from the same
+    # person with different practices picked resolve to different tenant sets, and the second was
+    # being served the first one's answer for up to _AUTHZ_TTL.
+    #
+    # It leaked through /api/embed-token, which is the one caller where tids decides RLS: with two
+    # permitted tenants and no single one in scope, customData is not set and the model adds the
+    # practices up. Observed on dev with a login granted tenants 11 and 100 -- Total Revenue
+    # 785,899 against Maple's own 468,703, under Maple's name. Every other route resolves through
+    # _get_user_info directly and was never affected, which is why the UI named one practice while
+    # the reports showed two.
+    key = (upn, _acting_client_id(upn), _acting_tenant_id(upn))
+    hit = _authz_cache.get(key)
     if hit and time.time() - hit[0] < _AUTHZ_TTL:
         return hit[1], hit[2], hit[3]
 
@@ -346,7 +359,7 @@ def _authz_for(upn):
     finally:
         conn.close()
 
-    _authz_cache[upn] = (time.time(), client_id, tids, access)
+    _authz_cache[key] = (time.time(), client_id, tids, access)
     return client_id, tids, access
 
 

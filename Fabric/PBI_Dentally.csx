@@ -2052,6 +2052,25 @@ add("Discount Value",
     'List Invoices'[Discount Value])",
     "£#,##0");
 
+// ==> Invoice Amount IS NET OF THE DISCOUNT. <== Checked against Silver.Invoice_Items on prod:
+// for every discounted invoice the header equals the sum of ALL lines including the negative
+// one, so the positive lines -- the work actually done -- are header + discount:
+//
+//     header 2,600 + discount 1,000 = 3,600 of treatment
+//     header   300 + discount   950 = 1,250 of treatment   (a 76% discount)
+//
+// So "what the treatment was worth" has to be reconstructed; there is no gross column to read.
+add("Treatment Value",
+    @"SUM('_Invoices'[Invoice Amount]) + [Discount Value]",
+    "£#,##0");
+
+// The discount as a share of the work done, which is what anyone means by "a 20% discount".
+// NOT the same as [Discounts], which is discounts over TOTAL REVENUE -- a practice-level
+// ratio that makes no sense against one patient.
+add("Discount %",
+    @"DIVIDE([Discount Value], [Treatment Value])",
+    "0.0%");
+
 add("Discounts",
     @"DIVIDE([Discount Value], [Total Revenue])",
     "0.0%");

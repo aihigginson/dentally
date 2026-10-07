@@ -11,6 +11,9 @@
 --                            is decoupled from fact load order.
 --    *02     06/10/2026  AIH Detect ITEM-based discounts (a negative line named 'Discount')
 --                            as well as the header-gap shape, and carry Discount_Value.
+--    *03     07/10/2026  AIH STOP detecting the header gap: a header above its lines is not a
+--                            discount (confirmed with the owner). It produced every one of the
+--                            demo tenant's 2,710 rows and nothing at all on the live practice.
 --                            The old rule caught 0 of 650 real discounted invoices.
 --  To Run			 :   DECLARE  @Run_Inserts BIGINT, @Run_Updates BIGINT, @Run_Deletes BIGINT; EXEC Gold.usp_Load_Dim_Invoices @Run_Inserts=@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT, @Run_Deletes=@Run_Deletes OUT
 ---------------------------------------------------------------------
@@ -125,12 +128,19 @@ BEGIN
         --                  SUM(Total_Price), so header = lines and "header > lines" is false.
         --                  Measured: 0 of 650 invoices flagged.
         --   AS A HEADER GAP  invoice Amount exceeds the sum of its lines. The ONLY shape the old
-        --                  rule caught -- and the only shape the demo generator produces, which is
-        --                  why every one of the 2,710 rows this used to produce was tenant 11 and
-        --                  the metric looked exercised while counting nothing real.
+        --                  rule caught -- and, it turned out, the only shape the demo generator
+        --                  produces, which is why every row it ever yielded was tenant 11.
         --
-        -- Both are kept: dropping the header test would silently empty the demo tenant, and a
-        -- practice on another PMS may well record it that way.
+        -- ==> THE HEADER GAP IS NOT A DISCOUNT, AND IS NO LONGER DETECTED. <== Asked directly, the
+        -- practice owner was unambiguous (2026-10-07). It is also the wrong shape arithmetically:
+        -- a discount makes the header LESS than its lines, not more. A header ABOVE its lines is an
+        -- invoice that does not reconcile -- missing or uningested items -- which is a data-quality
+        -- question, not a commercial one.
+        --
+        -- This used to read "both are kept: dropping the header test would silently empty the demo
+        -- tenant". Emptying it was the right outcome: those 2,710 invoices and GBP 36,637 were never
+        -- discounts, and they reached the report, where Treatment Value = header + discount
+        -- double-counts a shape whose header is already ABOVE its lines.
         --
         -- ==> Total_Price < 0 IS REQUIRED, NOT COSMETIC. <== Nine 'Discount' lines are not
         -- negative: eight are GBP 0.00 no-ops and one is +GBP 100, a sign error. Summing them
@@ -151,15 +161,12 @@ BEGIN
         INSERT INTO Gold.Invoice_Discount (Tenant_ID, Invoice_ID, Discount_Value)
         SELECT inv.Tenant_ID,
                CAST(inv.Id AS INT),
-               -- The item total when there are discount lines, else the header gap. Not the sum
-               -- of both: they are two ways of describing the same reduction, and adding them
-               -- would double-count any invoice that happened to carry both.
-               CASE WHEN l.Item_Discount > 0 THEN l.Item_Discount
-                    ELSE ISNULL(inv.Amount, 0) - l.Line_Total END
+               -- The discount lines and nothing else. Total_Price < 0 is applied upstream in
+               -- #inv_lines, so this is already the signed-correct total.
+               l.Item_Discount
         FROM   Silver.Invoices inv
         JOIN   #inv_lines l ON l.Invoice_ID = inv.Id AND l.Tenant_ID = inv.Tenant_ID
-        WHERE  l.Item_Discount > 0
-            OR ISNULL(inv.Amount, 0) > l.Line_Total;
+        WHERE  l.Item_Discount > 0;
 
         DROP TABLE IF EXISTS #inv_lines;
 
