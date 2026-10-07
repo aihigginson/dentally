@@ -2030,8 +2030,15 @@ add("Deposit Value",
 
 // Invoice grain split: per-invoice discount (header Amount - sum of its line Total Price,
 // when positive) is precomputed as Fact_Invoices.Discount_Amount, so this is a simple ratio.
+// ==> READS List Invoices, NOT _Invoices[Discount Amount]. <== Fact_Invoices.Discount_Amount is a
+// HEADER GAP -- invoice total minus the sum of its lines -- and at Maple it is 0.00 across every
+// invoice ever loaded, because their discount IS a line: a negative item called "Discount".
+// V208 detects that shape into Gold.Invoice_Discount, which surfaces as
+// 'List Invoices'[Discount Value]: 643 invoices and GBP 88,365.20 on prod where this measure
+// was reporting zero. The two shapes never co-occur on one invoice (checked: 0 overlap), so this
+// is a straight swap rather than a sum of both.
 add("Discounts",
-    @"DIVIDE(SUM('_Invoices'[Discount Amount]), [Total Revenue])",
+    @"DIVIDE(SUM('List Invoices'[Discount Value]), [Total Revenue])",
     "0.0%");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
