@@ -76,12 +76,19 @@ VALUES
      'Run a reactivation contact, then mark as inactive the ones who do not respond.',
      'ACTIVE_PATIENTS', 1, 70),
 
-    ('PLAN_DENTIST_NOT_SEEN', 'Patients',
-     'Plan Patients Not Seeing Their Dentist',
+    ('PLAN_INACTIVE', 'Patients',
+     'Inactive Plan Patients',
      '1: High', 1,
-     'A plan patient pays every month whether or not they come in, and these have not seen their allocated dentist for a year. The visit counts separate two problems: nought and nought is a member who has stopped attending while the direct debit runs; visits against another clinician mean the allocation is out of date, so recall runs, workload and the capitation credited to each dentist all point at the wrong person. Holiday cover is normal -- read the counts before reassigning anyone.',
-     'Work the list by the visit counts. Nought and nought: contact them for a plan review -- the fee is being collected regardless. Attending but not with their own dentist: change the allocated dentist on the patient record to whoever is actually seeing them.',
+     'These members pay every month and have not been through the door for a year. It is the plan fee the practice is least likely to keep: the patient notices the direct debit long before they notice the care they are not taking, and the cancellation arrives without warning. They are also invisible to the ordinary dormancy check, which only looks at two years.',
+     'Contact them for a plan review. If they have moved away or no longer want the plan, take them off it rather than leaving the fee running until they cancel it themselves.',
      'PLAN_PATIENTS', 1, 75),
+
+    ('PLAN_MISALLOCATED', 'Patients',
+     'Plan Patients Possibly Incorrectly Allocated',
+     '2: Medium', 2,
+     'They are coming in -- just never to the dentist whose list they are on. Usually the allocation is simply out of date, and while it is, recall runs, workload per dentist and the capitation credited to each dentist all point at the wrong person. Informal holiday cover between dentists is normal and looks the same, so read the visit counts before changing anything.',
+     'The detail names who they are actually seeing. Where that is settled rather than cover, change the allocated dentist on the patient record to match.',
+     'PLAN_PATIENTS', 1, 76),
 
     ('PAT_NO_DENTIST', 'Patients',
      'No Dentist Assigned',

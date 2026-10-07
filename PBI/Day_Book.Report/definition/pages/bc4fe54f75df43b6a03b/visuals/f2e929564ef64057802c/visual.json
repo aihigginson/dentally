@@ -5,8 +5,8 @@
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 589,
-    "width": 991,
+    "height": 540,
+    "width": 1060,
     "tabOrder": 0
   },
   "visual": {
@@ -84,12 +84,13 @@
                       "Entity": "_Data Quality Detail"
                     }
                   },
-                  "Property": "Detail Label"
+                  "Property": "Detail Date"
                 }
               },
-              "queryRef": "_Data Quality Detail.Detail Label",
-              "nativeQueryRef": "Detail Label",
-              "displayName": "Date is"
+              "queryRef": "_Data Quality Detail.Detail Date",
+              "nativeQueryRef": "Detail Date",
+              "displayName": "Date",
+              "format": "dd/MM/yyyy"
             },
             {
               "field": {
@@ -99,13 +100,12 @@
                       "Entity": "_Data Quality Detail"
                     }
                   },
-                  "Property": "Detail Date"
+                  "Property": "Detail Label"
                 }
               },
-              "queryRef": "_Data Quality Detail.Detail Date",
-              "nativeQueryRef": "Detail Date",
-              "displayName": "Date",
-              "format": "dd/MM/yyyy"
+              "queryRef": "_Data Quality Detail.Detail Label",
+              "nativeQueryRef": "Detail Label",
+              "displayName": "Date type"
             },
             {
               "field": {
@@ -221,7 +221,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "80D"
+                  "Value": "70D"
                 }
               }
             }
@@ -235,7 +235,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "170D"
+                  "Value": "150D"
                 }
               }
             }
@@ -249,7 +249,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "90D"
+                  "Value": "80D"
                 }
               }
             }
@@ -263,7 +263,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "80D"
+                  "Value": "115D"
                 }
               }
             }
@@ -319,7 +319,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "85D"
+                  "Value": "80D"
                 }
               }
             }

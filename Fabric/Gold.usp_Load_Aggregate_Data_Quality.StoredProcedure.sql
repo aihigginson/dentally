@@ -139,6 +139,21 @@ BEGIN
         INTO #pop
         FROM #tenants t;
 
+        -- V216. The same window and the same role literals the detail proc counts over -- the
+        -- two plan checks are defined by these counts, so they have to be built identically or
+        -- the scorecard and the drillthrough disagree about who is attending.
+        SELECT a.Tenant_ID, a.fk_Patient,
+               SUM(CASE WHEN pr.Role = 'Dentist'   THEN 1 ELSE 0 END) AS Dentist_Visits,
+               SUM(CASE WHEN pr.Role = 'Hygienist' THEN 1 ELSE 0 END) AS Hygienist_Visits
+        INTO   #plan_visit
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
+        JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        WHERE  a.State = 'Completed'
+          AND  d.Full_Date <= @Today
+          AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today)
+        GROUP BY a.Tenant_ID, a.fk_Patient;
+
         -- ── The checks ───────────────────────────────────────────────────────
         -- One branch per Check_Code in Config.Data_Quality_Check. Counts only --
         -- the wording, severity and guidance all come from the catalogue.
@@ -214,15 +229,28 @@ BEGIN
               AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
             GROUP BY p.Tenant_ID
 
-            -- ==> PREDICATE MUST MATCH usp_Load_Fact_Data_Quality_Detail EXACTLY. <== (V216)
+            -- ==> BOTH PREDICATES MUST MATCH usp_Load_Fact_Data_Quality_Detail EXACTLY. <== (V216)
+            -- #pv is the same window and the same role literals the detail proc counts over.
             UNION ALL
-            SELECT 'PLAN_DENTIST_NOT_SEEN', p.Tenant_ID, COUNT(*)
+            SELECT 'PLAN_INACTIVE', p.Tenant_ID, COUNT(*)
             FROM Gold.Dim_Patients p
-            JOIN Gold.Dim_Practitioners alloc ON alloc.Tenant_ID       = p.Tenant_ID
-                                             AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+            LEFT JOIN #plan_visit pv ON pv.Tenant_ID = p.Tenant_ID AND pv.fk_Patient = p.pk_Patient
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
                           WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID)
+              AND ISNULL(pv.Dentist_Visits, 0) = 0 AND ISNULL(pv.Hygienist_Visits, 0) = 0
+            GROUP BY p.Tenant_ID
+
+            UNION ALL
+            SELECT 'PLAN_MISALLOCATED', p.Tenant_ID, COUNT(*)
+            FROM Gold.Dim_Patients p
+            JOIN Gold.Dim_Practitioners alloc ON alloc.Tenant_ID       = p.Tenant_ID
+                                             AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+            JOIN #plan_visit pv ON pv.Tenant_ID = p.Tenant_ID AND pv.fk_Patient = p.pk_Patient
+            WHERE p.pk_Patient > 0 AND p.Active = 1
+              AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                          WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID)
+              AND (ISNULL(pv.Dentist_Visits, 0) + ISNULL(pv.Hygienist_Visits, 0)) > 0
               AND (p.Last_Allocated_Dentist_Visit_Date IS NULL
                    OR p.Last_Allocated_Dentist_Visit_Date < DATEADD(MONTH, -@Plan_Months, @Today))
             GROUP BY p.Tenant_ID
@@ -354,6 +382,7 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #hits;
+        DROP TABLE #plan_visit;
         DROP TABLE #pop;
         DROP TABLE #appt;
         DROP TABLE #tenants;
