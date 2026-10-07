@@ -31,6 +31,22 @@
               "nativeQueryRef": "Full Name",
               "displayName": "Practitioner",
               "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Date"
+                    }
+                  },
+                  "Property": "Month Commencing Date"
+                }
+              },
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
+              "displayName": "Month",
+              "format": "MMM yyyy"
             }
           ]
         },
