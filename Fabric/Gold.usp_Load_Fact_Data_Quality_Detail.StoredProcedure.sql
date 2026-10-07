@@ -5,6 +5,7 @@
 --  Initial Date     :  23/09/2026
 --  History          :
 --    *01     23/09/2026  AIH  Initial Release (V176)
+--    *02     07/10/2026  AIH  V216: PLAN_DENTIST_NOT_SEEN + the Dentist/Hygienist visit pair
 --  Notes:
 --    Grain  : one row per offending record per check -- the named list behind every count on
 --             Gold.Aggregate_Data_Quality.
@@ -70,6 +71,50 @@ BEGIN
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
+        -- Six months, not twelve: a plan patient is bought two exams and two hygiene visits
+        -- a year, so six months without their own dentist is already a missed one.
+        DECLARE @Plan_Months    INT  = 6;
+
+        -- ==> WHO IS A PLAN PATIENT? THE OWNER'S RATE TABLE SAYS SO. <== (V216)
+        --
+        -- Input.Plan_Capitation_Rate is the curated list of payment plans that ARE plans, and
+        -- it is what Gold.Fact_Revenue_Capitation bills against -- so this check and the
+        -- capitation it protects count the same members. On the live practice that is 1,410
+        -- active patients, exactly the eight Denplan tiers, with no per-tenant plan name
+        -- hard-coded anywhere.
+        --
+        -- NOT Gold.Fact_Plan_Spell: a spell is reconstructed from attended free exams, so a
+        -- member who has never been through the door has no spell -- and they are the single
+        -- most important row on this list. Using the spell would have hidden 36 of them.
+        --
+        -- The JOIN to the practitioner dim, not a LEFT JOIN, drops the five plan patients with
+        -- no allocated dentist at all. There is nothing to compare them against and
+        -- PAT_NO_DENTIST already names them.
+        SELECT p.Tenant_ID, p.pk_Patient, p.Patient_ID, p.Full_Name, p.Standard_Payment_Plan,
+               p.Last_Dentist_Visit_Date, p.Last_Hygienist_Visit_Date,
+               p.Last_Allocated_Dentist_Visit_Date,
+               CAST(alloc.Full_Name AS VARCHAR(255)) AS Allocated_Dentist
+        INTO   #plan_patient
+        FROM   Gold.Dim_Patients p
+        JOIN   Gold.Dim_Practitioners alloc ON alloc.Tenant_ID       = p.Tenant_ID
+                                          AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+        WHERE  p.pk_Patient > 0 AND p.Active = 1
+          AND  EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                       WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID);
+
+        -- The supporting pair: visits in the SAME six months the check tests, counted across
+        -- all clinicians of that role. One row per patient, so it cannot fan the detail out.
+        SELECT a.Tenant_ID, a.fk_Patient,
+               SUM(CASE WHEN pr.Role = 'Dentist'   THEN 1 ELSE 0 END) AS Dentist_Visits,
+               SUM(CASE WHEN pr.Role = 'Hygienist' THEN 1 ELSE 0 END) AS Hygienist_Visits
+        INTO   #plan_visit
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
+        JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        WHERE  a.State = 'Completed'
+          AND  d.Full_Date <= @Today
+          AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today)
+        GROUP BY a.Tenant_ID, a.fk_Patient;
 
         -- Appointments with a real calendar date, flagged as in the aggregate.
         SELECT a.Tenant_ID, a.fk_Patient, a.fk_Practitioner, a.State,
@@ -203,6 +248,33 @@ BEGIN
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
               AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
 
+            -- ==> PREDICATE MUST MATCH usp_Load_Aggregate_Data_Quality EXACTLY. <== (V216)
+            -- Deliberately NOT narrowed by whether anything is booked, unlike PAT_DORMANT:
+            -- the finding is that the allocated dentist has not seen them, and an appointment
+            -- next week with somebody else does not answer it. The Next in column on the row
+            -- says whether they are coming, which is all that exclusion was ever for.
+            UNION ALL
+            SELECT 'PLAN_DENTIST_NOT_SEEN', pp.Tenant_ID, pp.pk_Patient, 'Patient',
+                   pp.Full_Name, CAST(pp.Patient_ID AS VARCHAR(100)),
+                   pp.Last_Allocated_Dentist_Visit_Date, 'Seen by own dentist',
+                   ISNULL(pp.Standard_Payment_Plan, 'Plan') + ' -- allocated to '
+                   + pp.Allocated_Dentist
+                   + CASE WHEN pp.Last_Allocated_Dentist_Visit_Date IS NULL
+                          THEN ', who has never seen them'
+                          ELSE ', last seen by them '
+                               + CAST(DATEDIFF(MONTH, pp.Last_Allocated_Dentist_Visit_Date, @Today) AS VARCHAR(10))
+                               + ' months ago' END
+                   + CASE WHEN pp.Last_Dentist_Visit_Date IS NULL
+                          THEN '. No dentist visit on record at all'
+                          ELSE '. Last saw a dentist '
+                               + CONVERT(VARCHAR(10), pp.Last_Dentist_Visit_Date, 103) END
+                   + CASE WHEN pp.Last_Hygienist_Visit_Date IS NULL THEN ''
+                          ELSE ', a hygienist '
+                               + CONVERT(VARCHAR(10), pp.Last_Hygienist_Visit_Date, 103) END
+            FROM #plan_patient pp
+            WHERE pp.Last_Allocated_Dentist_Visit_Date IS NULL
+               OR pp.Last_Allocated_Dentist_Visit_Date < DATEADD(MONTH, -@Plan_Months, @Today)
+
             UNION ALL
             SELECT 'PAT_NO_DENTIST', p.Tenant_ID, p.pk_Patient, 'Patient',
                    p.Full_Name, CAST(p.Patient_ID AS VARCHAR(100)),
@@ -300,6 +372,7 @@ BEGIN
             Record_Reference, Detail_Date, Detail_Label, Detail_Note,
             fk_Date_Next_Appointment, Next_Appointment_Date, Next_Appointment_Days,
             Next_Appointment_Band, Next_Appointment_Band_Sort,
+            Dentist_Visits, Hygienist_Visits,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -340,17 +413,28 @@ BEGIN
                  WHEN np.Next_Appointment_Date <= DATEADD(DAY,  7, @Today) THEN 2
                  WHEN np.Next_Appointment_Date <= DATEADD(DAY, 30, @Today) THEN 3
                  ELSE 4 END,
+            -- Joined on at the end rather than carried through #hits, for the same reason
+            -- Next_Appointment is: #hits is one UNION ALL of sixteen branches that must all
+            -- project identical columns, and two more would be fourteen extra NULLs to keep
+            -- in step. Gated on the check code so the pair cannot leak a count onto a row
+            -- where attendance was never the finding.
+            CASE WHEN h.Check_Code = 'PLAN_DENTIST_NOT_SEEN' THEN ISNULL(pv.Dentist_Visits, 0) END,
+            CASE WHEN h.Check_Code = 'PLAN_DENTIST_NOT_SEEN' THEN ISNULL(pv.Hygienist_Visits, 0) END,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #hits h
         -- Catalogue-gated: a check switched off in Config.Data_Quality_Check must not leave
         -- orphan detail rows behind a count that is no longer on the scorecard.
         JOIN Config.Data_Quality_Check c ON c.Check_Code = h.Check_Code AND c.Is_Active = 1
         LEFT JOIN Gold.Dim_Patients np ON np.pk_Patient = h.fk_Patient
-                                      AND np.Tenant_ID  = h.Tenant_ID;
+                                      AND np.Tenant_ID  = h.Tenant_ID
+        LEFT JOIN #plan_visit pv ON pv.fk_Patient = h.fk_Patient
+                                AND pv.Tenant_ID  = h.Tenant_ID;
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #hits;
         DROP TABLE #appt;
+        DROP TABLE #plan_patient;
+        DROP TABLE #plan_visit;
 
         --*********************************
         --**** Procedure logic ends    ****

@@ -56,6 +56,14 @@ CREATE TABLE [Gold].[Dim_Patients](
     [Next_Scale_Polish_Date]             [date]          NULL,
     [Last_FTA_Date]                      [date]          NULL,
     [Last_Cancelled_Appointment_Date]    [date]          NULL,
+    -- V216: last seen by ROLE, and by the patient's OWN dentist. Last_Exam_Date and
+    -- Last_Scale_Polish_Date above are Dentally's, and they are procedures rather than
+    -- people: a hygienist does most scale and polishes but not all of them, and an exam is
+    -- not the only reason a patient sits in a dentist's chair. These three are by the
+    -- clinician, which is what a plan review and the allocation checks need.
+    [Last_Dentist_Visit_Date]            [date]          NULL,
+    [Last_Hygienist_Visit_Date]          [date]          NULL,
+    [Last_Allocated_Dentist_Visit_Date]  [date]          NULL,   -- NULL = never seen by them
     [Total_Paid]                         [decimal](18, 4) NULL,
     [Total_Invoiced]                     [decimal](18, 4) NULL,
     [Patient_Created_Date]               [date]          NULL,

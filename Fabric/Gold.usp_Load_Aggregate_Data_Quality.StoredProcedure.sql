@@ -67,6 +67,7 @@ BEGIN
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
+        DECLARE @Plan_Months    INT  = 6;   -- V216, and matches the detail proc
 
         -- ── Tenant spine ─────────────────────────────────────────────────────
         -- A practice with no patients is not a live practice; there is nothing to
@@ -121,7 +122,20 @@ BEGIN
                                   WHERE pr.Tenant_ID = t.Tenant_ID AND pr.pk_Practitioner > 0
                                     AND pr.Active = 1),
                TREATMENTS = (SELECT COUNT(*) FROM Gold.Dim_Treatments tr
-                                  WHERE tr.Tenant_ID = t.Tenant_ID AND tr.pk_Treatment > 0)
+                                  WHERE tr.Tenant_ID = t.Tenant_ID AND tr.pk_Treatment > 0),
+               -- V216. Plan members get their own denominator because the whole practice is
+               -- the wrong one: 203 of 1,405 plan patients is 14% and worth a morning, the
+               -- same 203 out of 7,036 active patients is 3% and reads as noise. Patients
+               -- with no allocated dentist are excluded from BOTH sides -- see the check.
+               PLAN_PATIENTS = (SELECT COUNT(*) FROM Gold.Dim_Patients p
+                                  JOIN Gold.Dim_Practitioners alloc
+                                       ON alloc.Tenant_ID       = p.Tenant_ID
+                                      AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+                                  WHERE p.Tenant_ID = t.Tenant_ID AND p.pk_Patient > 0
+                                    AND p.Active = 1
+                                    AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                                                WHERE r.Tenant_ID       = p.Tenant_ID
+                                                  AND r.Payment_Plan_ID = p.Payment_Plan_ID))
         INTO #pop
         FROM #tenants t;
 
@@ -198,6 +212,19 @@ BEGIN
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
               AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
+            GROUP BY p.Tenant_ID
+
+            -- ==> PREDICATE MUST MATCH usp_Load_Fact_Data_Quality_Detail EXACTLY. <== (V216)
+            UNION ALL
+            SELECT 'PLAN_DENTIST_NOT_SEEN', p.Tenant_ID, COUNT(*)
+            FROM Gold.Dim_Patients p
+            JOIN Gold.Dim_Practitioners alloc ON alloc.Tenant_ID       = p.Tenant_ID
+                                             AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+            WHERE p.pk_Patient > 0 AND p.Active = 1
+              AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                          WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID)
+              AND (p.Last_Allocated_Dentist_Visit_Date IS NULL
+                   OR p.Last_Allocated_Dentist_Visit_Date < DATEADD(MONTH, -@Plan_Months, @Today))
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -315,6 +342,7 @@ BEGIN
                         WHEN 'OVERDUE_RECALLS'      THEN pp.OVERDUE_RECALLS
                         WHEN 'ACTIVE_PRACTITIONERS' THEN pp.ACTIVE_PRACTITIONERS
                         WHEN 'TREATMENTS'           THEN pp.TREATMENTS
+                        WHEN 'PLAN_PATIENTS'        THEN pp.PLAN_PATIENTS
                    END AS Population
             FROM #tenants t
             CROSS JOIN Config.Data_Quality_Check c

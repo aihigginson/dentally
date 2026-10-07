@@ -49,6 +49,15 @@ CREATE TABLE [Gold].[Fact_Data_Quality_Detail] (
     [Next_Appointment_Days]      [int]           NULL,   -- days from now; sort ascending
     [Next_Appointment_Band]      [varchar](20)   NOT NULL,
     [Next_Appointment_Band_Sort] [smallint]      NOT NULL,
+    -- V216: the supporting pair for PLAN_DENTIST_NOT_SEEN, over the same six months the
+    -- check tests. NULL on every other check, which is the honest value -- 0 would read as
+    -- "did not attend" on rows where attendance was never the question.
+    --
+    -- These are columns and not measures deliberately. A measure in a detail table kills
+    -- auto-exist and multiplies the rows out, and the whole point of the pair is to be read
+    -- one patient at a time.
+    [Dentist_Visits]             [int]               NULL,
+    [Hygienist_Visits]           [int]               NULL,
     [DW_Created_At]          [datetime2](6)  NOT NULL,
     [DW_Updated_At]          [datetime2](6)  NOT NULL
 )

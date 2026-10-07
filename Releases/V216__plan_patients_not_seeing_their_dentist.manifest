@@ -1,0 +1,107 @@
+# =====================================================================
+# Release V216 -- plan patients not being seen by their allocated dentist
+# =====================================================================
+# "What we are looking for are plan patients not being seen by their allocated dentists FULLSTOP.
+#  Now wrongly allocated ones are a subset of these. But it should also show up where Plan Patients
+#  are not coming in. So it is Patients on Plan not seen by their allocated dentist in 6 months and
+#  as a supporting pair of metrics we need Dentist and Hygienist Visits in total. So you could have
+#  Mr X 0 dentist 0 Hygiene (they havent attended at all) or Mrs Y 2 dentist 1 hygiene (they have
+#  attended but not seen their dentist)."   -- the practice owner, 07/10/2026
+#
+# This supersedes the narrower rule that was on the table ("the allocated dentist has done none of
+# this patient's plan care"). That one only ever found mis-allocation. This one finds the money
+# problem as well, because the two share a single symptom -- a member paying a monthly fee that the
+# dentist responsible for them is not earning -- and the supporting pair is what tells them apart:
+#
+#     0 dentist, 0 hygiene  ->  not coming in at all, while the direct debit runs
+#     2 dentist, 1 hygiene  ->  coming in, just never to their own dentist
+#
+# ==> MEASURED ON PROD BEFORE IT WAS BUILT. <== Of 1,405 active plan patients with an allocated
+# dentist:
+#
+#      49  have never seen that dentist AND have not attended in six months  (12 never at all)
+#      84  have seen them before, but have not attended in six months
+#      20  are attending, and have NEVER seen their allocated dentist
+#      50  are attending, and last saw their own dentist more than six months ago
+#   -----
+#     203  flagged (14.4%), 1,202 clean
+#
+# ==> WHO COUNTS AS A PLAN PATIENT: Input.Plan_Capitation_Rate, NOT Gold.Fact_Plan_Spell. <== A
+# spell is reconstructed from attended free exams, so a member who has never been through the door
+# has no spell at all -- and they are the single most important row on this list. The rate table
+# gives 1,410 active members on the live practice, the spell gives 1,374, and the 36 missing are
+# precisely the non-attenders the owner asked to see. The rate table is also what
+# Gold.Fact_Revenue_Capitation bills against, so the check and the income it protects count the
+# same people, with no per-tenant plan name hard-coded anywhere.
+#
+# ==> SIX MONTHS, AND NO EXCLUSION FOR A BOOKED APPOINTMENT. <== A plan buys two exams and two
+# hygiene visits a year, so six months without the allocated dentist is already a missed one.
+# PAT_DORMANT excludes anyone with something in the diary; this check must not, because an
+# appointment next week with somebody else does not answer the finding. The Next in column on the
+# detail row already says whether they are coming, which is all that exclusion was ever for.
+#
+# ==> THE DIMENSION GETS THREE DATES IT HAS NEVER HAD. <== Dentally's patient_stats carry
+# Last_Exam_Date and Last_Scale_And_Polish_Date, which are PROCEDURES, not people. Nothing in the
+# warehouse could answer "when did this patient last see a dentist", let alone "their own dentist".
+# Last_Dentist_Visit_Date, Last_Hygienist_Visit_Date and Last_Allocated_Dentist_Visit_Date are
+# added by ALTER, not by deploying Gold.Dim_Patients.Table.sql: that file opens with DROP TABLE,
+# and dropping the patient dimension regenerates every pk_Patient, orphaning fk_Patient on every
+# fact in the warehouse. The aggregate below IS deployed from its .Table.sql, because an aggregate
+# is rebuilt from scratch in this same release and loses nothing.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V216__plan_patients_not_seeing_their_dentist.manifest
+# =====================================================================
+
+# ── 1. The three dates on the patient dimension ──────────────────────────────────────────
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Last_Dentist_Visit_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Last_Dentist_Visit_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Last_Hygienist_Visit_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Last_Hygienist_Visit_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Last_Allocated_Dentist_Visit_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Last_Allocated_Dentist_Visit_Date] [date] NULL;
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+
+# ==> AND RUN IT. <== There is no PREPROD gate, so a release has to run its own consumers. Without
+# this the three dates stay NULL until the overnight build, and a NULL allocated-dentist date is
+# indistinguishable from "never seen them" -- the check would flag all 1,410 members tonight.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ── 2. The check ─────────────────────────────────────────────────────────────────────────
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+DEPLOY   Fabric\Gold.Fact_Data_Quality_Detail.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Data_Quality.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Data_Quality_Detail.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# ── 3. Verification ──────────────────────────────────────────────────────────────────────
+# 1. ==> THE ALLOCATED DENTIST'S VISIT IS A DENTIST VISIT. <== If the allocated practitioner holds
+# Role='Dentist', then the date they last saw the patient cannot be LATER than the date the patient
+# last saw any dentist -- it is one of the dates that maximum is taken over. This is the one guard
+# that would catch the role literals drifting out of case, the join landing on the wrong
+# practitioner, or the two MAX() expressions being computed over different sets of appointments.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Practitioners alloc ON alloc.Tenant_ID = p.Tenant_ID AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID WHERE alloc.Role = 'Dentist' AND p.Last_Allocated_Dentist_Visit_Date IS NOT NULL AND (p.Last_Dentist_Visit_Date IS NULL OR p.Last_Allocated_Dentist_Visit_Date > p.Last_Dentist_Visit_Date); IF @a <> 0 BEGIN SET @e = 'V216 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' patient(s) last saw their allocated dentist AFTER they last saw any dentist, which is arithmetically impossible.'; THROW 50470, @e, 1; END;
+
+# 2. No visit date may be in the future. The appointment book runs to March 2027 and a booking is
+# not a visit; the <= @Today guard in the loader is the only thing standing between the two.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM Gold.Dim_Patients WHERE Last_Dentist_Visit_Date > CAST(SYSUTCDATETIME() AS DATE) OR Last_Hygienist_Visit_Date > CAST(SYSUTCDATETIME() AS DATE) OR Last_Allocated_Dentist_Visit_Date > CAST(SYSUTCDATETIME() AS DATE); IF @b <> 0 BEGIN SET @f = 'V216 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' patient(s) carry a last-visit date in the future -- a future booking is being counted as a visit.'; THROW 50471, @f, 1; END;
+
+# 3. The scorecard and the drillthrough must agree, for EVERY check (carried from V179). The two
+# procedures answer the same question at different grains and nothing but this enforces it.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @c <> 0 BEGIN SET @g = 'V216 reconciliation FAILED: ' + CAST(@c AS VARCHAR(10)) + ' check(s) where the detail row count does not match Records_Affected.'; THROW 50472, @g, 1; END;
+
+# 4. Every flagged row must actually satisfy the rule -- re-derived from the dimension here rather
+# than trusted from the proc that wrote it.
+EXEC     DECLARE @h INT, @k VARCHAR(4000); SELECT @h = COUNT(*) FROM Gold.Fact_Data_Quality_Detail d JOIN Gold.Dim_Patients p ON p.pk_Patient = d.fk_Patient AND p.Tenant_ID = d.Tenant_ID WHERE d.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND p.Last_Allocated_Dentist_Visit_Date >= DATEADD(MONTH, -6, CAST(SYSUTCDATETIME() AS DATE)); IF @h <> 0 BEGIN SET @k = 'V216 FAILED: ' + CAST(@h AS VARCHAR(10)) + ' flagged patient(s) HAVE seen their allocated dentist within six months.'; THROW 50473, @k, 1; END;
+
+# 5. The supporting pair belongs to this check and no other. NULL elsewhere is the honest value --
+# 0 would read as "did not attend" on rows where attendance was never the question.
+EXEC     DECLARE @m INT, @n VARCHAR(4000); SELECT @m = COUNT(*) FROM Gold.Fact_Data_Quality_Detail WHERE (Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND (Dentist_Visits IS NULL OR Hygienist_Visits IS NULL)) OR (Check_Code <> 'PLAN_DENTIST_NOT_SEEN' AND (Dentist_Visits IS NOT NULL OR Hygienist_Visits IS NOT NULL)); IF @m <> 0 BEGIN SET @n = 'V216 FAILED: ' + CAST(@m AS VARCHAR(10)) + ' detail row(s) carry the visit pair on the wrong check, or are missing it on the right one.'; THROW 50474, @n, 1; END;
+
+# 6. The canary. A denominator of zero makes Pct_Affected NULL and the whole check read as clean,
+# which is the worst failure this table has. If a tenant has plan members, the population must see
+# them -- and if it has plan members and a scorecard row, that row must have a population.
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Aggregate_Data_Quality a WHERE a.Check_Code = 'PLAN_DENTIST_NOT_SEEN' AND ISNULL(a.Population, 0) = 0 AND EXISTS (SELECT 1 FROM Gold.Dim_Patients p JOIN Input.Plan_Capitation_Rate r ON r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID WHERE p.Tenant_ID = a.Tenant_ID AND p.Active = 1 AND p.Dentist_Practitioner_ID IS NOT NULL); IF @p <> 0 BEGIN SET @q = 'V216 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' tenant(s) have plan members but a population of zero, so the check reports as clean.'; THROW 50475, @q, 1; END;
+
+TEST
