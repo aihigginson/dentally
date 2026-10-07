@@ -1055,8 +1055,28 @@ Action<string,string,string> add = (name, dax, fmt) => {
 
 // -- Financial cohorts: distinct patients tied to an invoice/payment condition --
 
+// ==> COUNTED THROUGH _Invoices, SO THE SUMMARY AND ITS OWN DETAIL CANNOT DISAGREE. <== This
+// counted through '_Revenue', which keeps the PER-LINE practitioner, while the drill-through and
+// [Discount Value] / [Treatment Value] / [Discount %] all read '_Invoices', which carries ONE
+// practitioner per invoice ("prefer dentist/ortho/specialist, else any"). An invoice worked by two
+// dentists therefore counted under both and detailed under one:
+//
+//     64093945  18/08/2026  header Craig Jack   line Craig Jack   Steven Rhodes    83
+//     63465373  06/08/2026  header David Mason  line Craig Jack   Gary Moore      580   <-- here
+//     62853389  28/07/2026  header Craig Jack   line Craig Jack   Andrew Dunbar   200
+//
+// Craig's bar read 3 and his drill-through listed 2. Both were self-consistent, which is what
+// made it confusing -- and the same chart was mixing the two, the bar line-attributed and the
+// Discounts series header-attributed.
+//
+// ==> IT IS AN ATTRIBUTION DECISION, NOT JUST A BUG. <== Header attribution puts the whole GBP 580
+// against David Mason even though Craig worked a line of it. The alternative -- attributing by
+// line -- shows the invoice under both dentists and DOUBLE-COUNTS the discount when summed across
+// practitioners, which is worse for a figure whose practice total has to hold. So: one invoice,
+// one practitioner, consistently everywhere. Revisit by apportioning across line practitioners if
+// the mis-attribution ever matters more than the additivity.
 add("Patients With Discount",
-    @"CALCULATE(DISTINCTCOUNT('_Revenue'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
+    @"CALCULATE(DISTINCTCOUNT('_Invoices'[fk Patient]), 'List Invoices'[Is Discount] = TRUE())",
     "#,##0");
 
 add("Patients With Outstanding Invoice",
