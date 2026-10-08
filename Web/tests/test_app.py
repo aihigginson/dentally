@@ -296,6 +296,70 @@ def test_onboarding_token_stores_and_notifies(client, appmod, monkeypatch):
     assert 'Acme Dental' in notified['body']
 
 
+# ==> A PRACTICE THAT IS ALREADY A CUSTOMER MUST BE TURNED AWAY. <==
+# On 2026-10-08 a new member of staff at a live customer went through the whole signup, queued a
+# duplicate pending_provision for a practice that already had a tenant, opened a second trial for
+# someone who already pays, and emailed the operator asking him to provision it. The flow had the
+# Dentally practice id in its hand and never asked whether it already knew it.
+
+def _onboarding_stubs(appmod, monkeypatch, saved, notified, practice_id=99):
+    monkeypatch.setattr(appmod.requests, 'get',
+                        lambda *a, **k: _Resp(200, {'practices': [{'id': practice_id, 'name': 'Acme Dental'}]}))
+    monkeypatch.setattr(appmod, '_kv_json', lambda name: {})
+    monkeypatch.setattr(appmod, '_kv_set', lambda name, val: saved.update(name=name, val=val))
+    monkeypatch.setattr(appmod, '_send_email',
+                        lambda to, subj, body: notified.update(to=to, subj=subj, body=body) or True)
+
+
+def test_onboarding_bounces_an_existing_customer(client, appmod, monkeypatch):
+    saved, notified = {}, {}
+    _onboarding_stubs(appmod, monkeypatch, saved, notified)
+    # Silver.Practice already holds this Dentally practice id -> it is tenant 100's.
+    monkeypatch.setattr(appmod, '_fabric_conn',
+                        lambda *a, **k: FakeConn(FakeCursor(one_row=('Maple Dental Care',))))
+
+    r = client.post('/api/onboarding/dentally/token',
+                    json={'verified': _verified_token(appmod), 'attested': True, 'token': 'tok' * 15})
+
+    assert r.status_code == 409
+    j = r.get_json()
+    assert j['reason'] == 'already_onboarded'
+    assert 'Maple Dental Care' in j['error']
+    assert 'ign in' in j['error']          # told where to go instead
+    assert not saved                       # no pending trial queued
+    assert not notified                    # and the operator is NOT asked to provision a duplicate
+
+
+def test_onboarding_allows_a_genuinely_new_practice(client, appmod, monkeypatch):
+    # The converse, so the guard cannot quietly start refusing everyone: no row in Silver.Practice.
+    saved, notified = {}, {}
+    _onboarding_stubs(appmod, monkeypatch, saved, notified)
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn(FakeCursor(one_row=None)))
+
+    r = client.post('/api/onboarding/dentally/token',
+                    json={'verified': _verified_token(appmod), 'attested': True, 'token': 'tok' * 15})
+
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    assert saved and notified
+
+
+def test_onboarding_fails_open_if_the_warehouse_is_down(client, appmod, monkeypatch):
+    # Deliberate: provisioning is a manual step with a human reading the email, so a duplicate is
+    # recoverable -- turning a real practice away at the door is not.
+    saved, notified = {}, {}
+    _onboarding_stubs(appmod, monkeypatch, saved, notified)
+
+    def _boom(*a, **k):
+        raise RuntimeError('warehouse unreachable')
+    monkeypatch.setattr(appmod, '_fabric_conn', _boom)
+
+    r = client.post('/api/onboarding/dentally/token',
+                    json={'verified': _verified_token(appmod), 'attested': True, 'token': 'tok' * 15})
+
+    assert r.status_code == 200 and r.get_json()['ok'] is True
+    assert saved and notified
+
+
 def _stub_admin(appmod, monkeypatch, maintain=True):
     monkeypatch.setattr(appmod, '_auth', lambda: ('admin@x.com', None))
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn(FakeCursor(one_row=('Maple Dental',))))

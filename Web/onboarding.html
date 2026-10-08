@@ -140,6 +140,11 @@
             var p = new URLSearchParams(location.search).get('status');
             if (p === 'connected') { show('step-done'); }
             else if (p === 'error') { show('step-connect'); msg('msg-connect', 'That didn’t complete — please try connecting again.', false); }
+            // Already a customer. Not an error -- they have an account, they just came in the wrong door.
+            else if (p === 'already') { show('step-connect'); msg('msg-connect',
+                'Your practice is already set up on Analytically, so there is no trial to start. Sign in at '
+                + 'app.analytically.info with your work email — and if you came to update a Dentally token, '
+                + 'sign in first: Settings has a Dentally connection page that replaces it.', false); }
         })();
 
         $('btn-send').addEventListener('click', async function () {
