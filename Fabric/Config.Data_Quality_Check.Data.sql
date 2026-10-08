@@ -11,6 +11,10 @@
 -- the report sorts by urgency. Plain text sorts alphabetically -- High, Low, Medium -- which
 -- buries the least urgent band in the middle.
 --
+-- Why_It_Matters and What_To_Do are VARCHAR(500), Check_Name VARCHAR(200). Overrun one and
+-- Fabric answers "String or binary data would be truncated" WITHOUT naming the column, which
+-- is a long way to go to find a sentence that is too long. Count before you deploy.
+--
 -- Every Check_Code here MUST have a matching branch in Gold.usp_Load_Aggregate_Data_Quality.
 -- A code with no branch silently reports 0, which reads as a passing check -- the worst
 -- failure this table has.
@@ -71,6 +75,20 @@ VALUES
      'They still count towards the active list, so patient numbers, revenue per patient and capacity planning are all measured against people who have gone.',
      'Run a reactivation contact, then mark as inactive the ones who do not respond.',
      'ACTIVE_PATIENTS', 1, 70),
+
+    ('PLAN_INACTIVE', 'Patients',
+     'Inactive Plan Patients',
+     '1: High', 1,
+     'These members pay every month, have not been through the door for a year, and have nothing booked. It is the plan fee the practice is least likely to keep: the patient notices the direct debit long before they notice the care they are not taking, and the cancellation arrives without warning. They are also invisible to the ordinary dormancy check, which only looks at two years.',
+     'Contact them for a plan review. If they have moved away or no longer want the plan, take them off it rather than leaving the fee running until they cancel it themselves.',
+     'PLAN_PATIENTS', 1, 75),
+
+    ('PLAN_MISALLOCATED', 'Patients',
+     'Plan Patients Possibly Incorrectly Allocated',
+     '2: Medium', 2,
+     'They are coming in and have seen a different dentist who is still at the practice, but not the one whose list they are on. While that stands, recall runs, workload per dentist and the capitation credited to each dentist all point at the wrong person. A departed dentist''s reassigned list is NOT counted: those patients are correctly allocated to a successor who has not seen them yet. Nor is anyone already booked in with their own dentist.',
+     'The detail names who they are actually seeing. Where that is settled rather than holiday cover, change the allocated dentist on the patient record to match.',
+     'PLAN_PATIENTS', 1, 76),
 
     ('PAT_NO_DENTIST', 'Patients',
      'No Dentist Assigned',

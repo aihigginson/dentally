@@ -65,3 +65,7 @@
 - [No in-product staleness warning](no-in-product-staleness-warning.md) — SETTLED: a "data as at" banner generates support calls; monitor and fix fast instead.
 - [PREPROD is the plan when revenue allows](preprod-is-the-plan-when-revenue-allows.md) — overnight PREPROD will gate PROD; today there is no such gate, so releases must run their own consumers.
 - [The acting practice is part of the identity](the-acting-practice-is-part-of-the-identity.md) — a cache keyed on UPN alone made embed-token add two practices up under one name.
+- [Attribute by line, not by invoice header](attribute-by-line-not-by-invoice-header.md) — OPEN with Craig; revenue is already line-attributed and the discount line names its own practitioner.
+- [Who counts as a plan patient](who-counts-as-a-plan-patient.md) — Input.Plan_Capitation_Rate, not Fact_Plan_Spell; a never-attender has no spell.
+- [A vw_ override silently drops new columns](a-vw-override-silently-drops-new-columns.md) — vw_Dim_Patients lists columns by hand; a new one reaches Gold and never PBI.
+- [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.

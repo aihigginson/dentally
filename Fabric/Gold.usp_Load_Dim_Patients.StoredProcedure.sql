@@ -29,6 +29,9 @@
 --    *13     22/07/2026  AIH V110: denormalise Standard_Payment_Plan onto the patient (dedup Silver
 --                            plan name + Input.Payment_Plan_Map override) so patients slice by plan
 --                            without a per-tenant natural-key relationship. Drives Patients-by-Plan.
+--    *14     07/10/2026  AIH V216: Last_Dentist_Visit_Date, Last_Hygienist_Visit_Date and
+--                            Last_Allocated_Dentist_Visit_Date -- last seen by role and by
+--                            the patient's own allocated dentist, from the appointment book.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -58,6 +61,47 @@ BEGIN
         --*********************************
         --**** Procedure logic starts  ****
         --*********************************
+
+        -- ==> LAST SEEN BY A DENTIST, BY A HYGIENIST, AND BY THEIR OWN DENTIST. <== (V216)
+        --
+        -- Read from SILVER, not Gold.Fact_Appointments, and that is not a style choice: this
+        -- is a dimension, dimensions load before facts, so reading the appointment fact here
+        -- would silently answer with yesterday's book. Silver.Appointments is already loaded.
+        --
+        -- The role comes from Silver.Practitioners.User_Role, which is the exact value
+        -- Gold.Dim_Practitioners.Role passes through unchanged -- so a patient's last dentist
+        -- visit here and a dentist's appointment list there cannot disagree about who is a
+        -- dentist. The collation is case-sensitive, so these literals are the stored case.
+        --
+        -- Seen is State = 'Completed'. NOT Completed_At IS NOT NULL, which is what the
+        -- appointment fact's Is_Completed means: on the live practice 1,004 CANCELLED
+        -- appointments carry a Completed_At, and a cancelled appointment is not a visit
+        -- however it came to be stamped.
+        SELECT a.Tenant_ID, a.Patient_ID, a.Practitioner_ID, pr.User_Role,
+               TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE) AS Visit_Date
+        INTO   #seen
+        FROM   Silver.Appointments a
+        JOIN   Silver.Practitioners pr ON pr.Practitioner_ID = a.Practitioner_ID
+                                      AND pr.Tenant_ID       = a.Tenant_ID
+        WHERE  a.State = 'Completed'
+          AND  a.Patient_ID IS NOT NULL
+          AND  TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE) <= @Today;
+
+        -- Matched on the patient's CURRENT allocation. A patient reassigned last week
+        -- therefore reads as never having seen their new dentist until they next come in,
+        -- which is the honest answer: the practice has allocated them to someone who has
+        -- not seen them.
+        SELECT s.Tenant_ID, s.Patient_ID,
+               MAX(CASE WHEN s.User_Role = 'Dentist'   THEN s.Visit_Date END) AS Last_Dentist_Visit_Date,
+               MAX(CASE WHEN s.User_Role = 'Hygienist' THEN s.Visit_Date END) AS Last_Hygienist_Visit_Date,
+               MAX(CASE WHEN s.Practitioner_ID = pt.Dentist_Practitioner_ID
+                        THEN s.Visit_Date END)                                AS Last_Allocated_Dentist_Visit_Date
+        INTO   #role_visit
+        FROM   #seen s
+        JOIN   Silver.Patients pt ON pt.Patient_ID = s.Patient_ID AND pt.Tenant_ID = s.Tenant_ID
+        GROUP BY s.Tenant_ID, s.Patient_ID;
+
+        DROP TABLE #seen;
 
         SELECT
             p.Tenant_ID                                                                             AS Tenant_ID,
@@ -128,6 +172,9 @@ BEGIN
             TRY_CAST(NULLIF(TRIM(ps.Next_Scale_And_Polish_Date), '') AS DATE)                       AS Next_Scale_Polish_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_FTA_Appointment_Date), '') AS DATE)                        AS Last_FTA_Date,
             TRY_CAST(NULLIF(TRIM(ps.Last_Cancelled_Appointment_Date), '') AS DATE)                  AS Last_Cancelled_Appointment_Date,
+            rv.Last_Dentist_Visit_Date                                                              AS Last_Dentist_Visit_Date,
+            rv.Last_Hygienist_Visit_Date                                                            AS Last_Hygienist_Visit_Date,
+            rv.Last_Allocated_Dentist_Visit_Date                                                    AS Last_Allocated_Dentist_Visit_Date,
             CAST(ps.Total_Paid AS DECIMAL(18,4))                                                    AS Total_Paid,
             CAST(ps.Total_Invoiced AS DECIMAL(18,4))                                                AS Total_Invoiced,
             TRY_CAST(p.Created_At AS DATE)                                                          AS Patient_Created_Date,
@@ -165,6 +212,7 @@ BEGIN
             AND      TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''), 10) AS DATE) > CAST(SYSUTCDATETIME() AS DATE)
             GROUP BY a.Patient_ID, a.Tenant_ID
         ) next_apt ON next_apt.Patient_ID = p.Patient_ID AND next_apt.Tenant_ID = p.Tenant_ID
+        LEFT JOIN #role_visit rv ON rv.Patient_ID = p.Patient_ID AND rv.Tenant_ID = p.Tenant_ID
         LEFT JOIN Gold.Dim_Acquisition_Sources das
             ON das.Acquisition_Source_ID = NULLIF(TRIM(p.Acquisition_Source_ID), '')
            AND das.Tenant_ID             = p.Tenant_ID
@@ -235,6 +283,9 @@ BEGIN
             Next_Scale_Polish_Date              = src.Next_Scale_Polish_Date,
             Last_FTA_Date                       = src.Last_FTA_Date,
             Last_Cancelled_Appointment_Date     = src.Last_Cancelled_Appointment_Date,
+            Last_Dentist_Visit_Date             = src.Last_Dentist_Visit_Date,
+            Last_Hygienist_Visit_Date           = src.Last_Hygienist_Visit_Date,
+            Last_Allocated_Dentist_Visit_Date   = src.Last_Allocated_Dentist_Visit_Date,
             Total_Paid                          = src.Total_Paid,
             Total_Invoiced                      = src.Total_Invoiced,
             Patient_Updated_Date                = src.Patient_Updated_Date,
@@ -282,6 +333,9 @@ BEGIN
            ISNULL(CAST(tgt.[Next_Scale_Polish_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Last_FTA_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Last_Cancelled_Appointment_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Last_Dentist_Visit_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Last_Hygienist_Visit_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Last_Allocated_Dentist_Visit_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
@@ -327,6 +381,9 @@ BEGIN
            ISNULL(CAST(src.[Next_Scale_Polish_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Last_FTA_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Last_Cancelled_Appointment_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Last_Dentist_Visit_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Last_Hygienist_Visit_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Last_Allocated_Dentist_Visit_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Paid] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
@@ -352,6 +409,7 @@ BEGIN
             First_Exam_Date, Last_Exam_Date, Next_Exam_Date,
             Last_Scale_Polish_Date, Next_Scale_Polish_Date,
             Last_FTA_Date, Last_Cancelled_Appointment_Date,
+            Last_Dentist_Visit_Date, Last_Hygienist_Visit_Date, Last_Allocated_Dentist_Visit_Date,
             Total_Paid, Total_Invoiced,
             Patient_Created_Date, Patient_Updated_Date, Lapsed_Type, fk_Date_Lapsed, Lapsed_Date, Lapsed_Reason, Patient_Count, DW_Created_At, DW_Updated_At
         )
@@ -369,6 +427,7 @@ BEGIN
             src.First_Exam_Date, src.Last_Exam_Date, src.Next_Exam_Date,
             src.Last_Scale_Polish_Date, src.Next_Scale_Polish_Date,
             src.Last_FTA_Date, src.Last_Cancelled_Appointment_Date,
+            src.Last_Dentist_Visit_Date, src.Last_Hygienist_Visit_Date, src.Last_Allocated_Dentist_Visit_Date,
             src.Total_Paid, src.Total_Invoiced,
             src.Patient_Created_Date, src.Patient_Updated_Date, src.Lapsed_Type, src.fk_Date_Lapsed, src.Lapsed_Date, src.Lapsed_Reason, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
@@ -376,6 +435,7 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+        DROP TABLE #role_visit;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
         INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, Patient_Count, DW_Created_At, DW_Updated_At)

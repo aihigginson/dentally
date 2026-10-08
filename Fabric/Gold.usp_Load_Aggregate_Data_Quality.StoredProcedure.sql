@@ -67,6 +67,7 @@ BEGIN
         DECLARE @Today          DATE = CAST(SYSUTCDATETIME() AS DATE);
         DECLARE @Recent_Days    INT  = 90;
         DECLARE @Dormant_Months INT  = 24;
+        DECLARE @Plan_Months    INT  = 12;  -- V216, and matches the detail proc
 
         -- ── Tenant spine ─────────────────────────────────────────────────────
         -- A practice with no patients is not a live practice; there is nothing to
@@ -121,9 +122,83 @@ BEGIN
                                   WHERE pr.Tenant_ID = t.Tenant_ID AND pr.pk_Practitioner > 0
                                     AND pr.Active = 1),
                TREATMENTS = (SELECT COUNT(*) FROM Gold.Dim_Treatments tr
-                                  WHERE tr.Tenant_ID = t.Tenant_ID AND tr.pk_Treatment > 0)
+                                  WHERE tr.Tenant_ID = t.Tenant_ID AND tr.pk_Treatment > 0),
+               -- V216. Plan members get their own denominator because the whole practice is
+               -- the wrong one: 203 of 1,405 plan patients is 14% and worth a morning, the
+               -- same 203 out of 7,036 active patients is 3% and reads as noise. Patients
+               -- with no allocated dentist are excluded from BOTH sides -- see the check.
+               PLAN_PATIENTS = (SELECT COUNT(*) FROM Gold.Dim_Patients p
+                                  JOIN Gold.Dim_Practitioners alloc
+                                       ON alloc.Tenant_ID       = p.Tenant_ID
+                                      AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+                                  WHERE p.Tenant_ID = t.Tenant_ID AND p.pk_Patient > 0
+                                    AND p.Active = 1
+                                    AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                                                WHERE r.Tenant_ID       = p.Tenant_ID
+                                                  AND r.Payment_Plan_ID = p.Payment_Plan_ID))
         INTO #pop
         FROM #tenants t;
+
+        -- V216. The same window and the same role literals the detail proc counts over -- the
+        -- two plan checks are defined by these counts, so they have to be built identically or
+        -- the scorecard and the drillthrough disagree about who is attending.
+        SELECT a.Tenant_ID, a.fk_Patient,
+               SUM(CASE WHEN pr.Role = 'Dentist'   THEN 1 ELSE 0 END) AS Dentist_Visits,
+               SUM(CASE WHEN pr.Role = 'Hygienist' THEN 1 ELSE 0 END) AS Hygienist_Visits
+        INTO   #plan_visit
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
+        JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        WHERE  a.State = 'Completed'
+          AND  d.Full_Date <= @Today
+          AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today)
+        GROUP BY a.Tenant_ID, a.fk_Patient;
+
+        -- ==> THE EVIDENCE A MIS-ALLOCATION ACTUALLY NEEDS. <== (V216)
+        --
+        -- Not "the allocated dentist has not seen them" -- that is an absence, and a departed
+        -- dentist's whole list answers it the moment the list is reassigned. Ian Hunt left and
+        -- David Mason took the list over; 28 of 56 flagged rows were that handover, every one
+        -- correctly allocated to a successor who had simply not seen them yet.
+        --
+        -- So: the patient must have SEEN an ACTIVE dentist who is not the one they are
+        -- allocated to. Active rules out the handover. A dentist rules out the patient whose
+        -- only visits were to a hygienist, where there is no evidence either way. One
+        -- predicate, both false positives.
+        SELECT DISTINCT a.Tenant_ID, a.fk_Patient
+        INTO   #plan_other_dentist
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d           ON d.pk_Date          = a.fk_Date_Start
+        JOIN   Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        JOIN   Gold.Dim_Patients p       ON p.pk_Patient       = a.fk_Patient
+                                        AND p.Tenant_ID        = a.Tenant_ID
+        WHERE  a.State = 'Completed'
+          AND  pr.Role = 'Dentist' AND pr.Active = 1
+          AND  pr.Practitioner_ID <> ISNULL(p.Dentist_Practitioner_ID, -1)
+          AND  d.Full_Date <= @Today
+          AND  d.Full_Date >= DATEADD(MONTH, -@Plan_Months, @Today);
+
+        -- ==> AND THE FORWARD DIARY, WHICH SETTLES BOTH CHECKS. <== (V216)
+        --
+        -- Both findings describe something going wrong, and a booking is the practice already
+        -- putting it right. A worklist that lists what is already fixed is a worklist people
+        -- stop working, which is why PAT_DORMANT has excluded booked patients from the start.
+        --
+        -- With_Allocated_Dentist is the distinction that matters: INACTIVE drops anyone with
+        -- anything booked at all -- they are coming back. MISALLOCATED drops them only if the
+        -- booking is WITH THEIR OWN DENTIST; booked with somebody else CONFIRMS the finding
+        -- rather than answering it, so those stay on the list.
+        SELECT a.Tenant_ID, a.fk_Patient,
+               MAX(CASE WHEN pr.Practitioner_ID = ISNULL(p.Dentist_Practitioner_ID, -1)
+                        THEN 1 ELSE 0 END) AS With_Allocated_Dentist
+        INTO   #plan_booked
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d     ON d.pk_Date    = a.fk_Date_Start
+        JOIN   Gold.Dim_Patients p ON p.pk_Patient = a.fk_Patient AND p.Tenant_ID = a.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners pr ON pr.pk_Practitioner = a.fk_Practitioner
+        WHERE  ISNULL(a.Is_Cancelled, 0) = 0
+          AND  d.Full_Date > @Today
+        GROUP BY a.Tenant_ID, a.fk_Patient;
 
         -- ── The checks ───────────────────────────────────────────────────────
         -- One branch per Check_Code in Config.Data_Quality_Check. Counts only --
@@ -198,6 +273,36 @@ BEGIN
             WHERE p.pk_Patient > 0 AND p.Active = 1
               AND p.Last_Appointment_Date < DATEADD(MONTH, -@Dormant_Months, @Today)
               AND (p.Next_Appointment_Date IS NULL OR p.Next_Appointment_Date < @Today)
+            GROUP BY p.Tenant_ID
+
+            -- ==> BOTH PREDICATES MUST MATCH usp_Load_Fact_Data_Quality_Detail EXACTLY. <== (V216)
+            -- #pv is the same window and the same role literals the detail proc counts over.
+            UNION ALL
+            SELECT 'PLAN_INACTIVE', p.Tenant_ID, COUNT(*)
+            FROM Gold.Dim_Patients p
+            LEFT JOIN #plan_visit pv ON pv.Tenant_ID = p.Tenant_ID AND pv.fk_Patient = p.pk_Patient
+            WHERE p.pk_Patient > 0 AND p.Active = 1
+              AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                          WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID)
+              AND ISNULL(pv.Dentist_Visits, 0) = 0 AND ISNULL(pv.Hygienist_Visits, 0) = 0
+              AND NOT EXISTS (SELECT 1 FROM #plan_booked b
+                              WHERE b.Tenant_ID = p.Tenant_ID AND b.fk_Patient = p.pk_Patient)
+            GROUP BY p.Tenant_ID
+
+            UNION ALL
+            SELECT 'PLAN_MISALLOCATED', p.Tenant_ID, COUNT(*)
+            FROM Gold.Dim_Patients p
+            JOIN Gold.Dim_Practitioners alloc ON alloc.Tenant_ID       = p.Tenant_ID
+                                             AND alloc.Practitioner_ID = p.Dentist_Practitioner_ID
+            JOIN #plan_other_dentist od ON od.Tenant_ID = p.Tenant_ID AND od.fk_Patient = p.pk_Patient
+            WHERE p.pk_Patient > 0 AND p.Active = 1
+              AND EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate r
+                          WHERE r.Tenant_ID = p.Tenant_ID AND r.Payment_Plan_ID = p.Payment_Plan_ID)
+              AND (p.Last_Allocated_Dentist_Visit_Date IS NULL
+                   OR p.Last_Allocated_Dentist_Visit_Date < DATEADD(MONTH, -@Plan_Months, @Today))
+              AND NOT EXISTS (SELECT 1 FROM #plan_booked b
+                              WHERE b.Tenant_ID = p.Tenant_ID AND b.fk_Patient = p.pk_Patient
+                                AND b.With_Allocated_Dentist = 1)
             GROUP BY p.Tenant_ID
 
             UNION ALL
@@ -315,6 +420,7 @@ BEGIN
                         WHEN 'OVERDUE_RECALLS'      THEN pp.OVERDUE_RECALLS
                         WHEN 'ACTIVE_PRACTITIONERS' THEN pp.ACTIVE_PRACTITIONERS
                         WHEN 'TREATMENTS'           THEN pp.TREATMENTS
+                        WHEN 'PLAN_PATIENTS'        THEN pp.PLAN_PATIENTS
                    END AS Population
             FROM #tenants t
             CROSS JOIN Config.Data_Quality_Check c
@@ -326,6 +432,9 @@ BEGIN
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #hits;
+        DROP TABLE #plan_visit;
+        DROP TABLE #plan_other_dentist;
+        DROP TABLE #plan_booked;
         DROP TABLE #pop;
         DROP TABLE #appt;
         DROP TABLE #tenants;
