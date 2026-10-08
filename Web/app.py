@@ -1137,6 +1137,47 @@ def _send_email(to, subject, body, sender=None, reply_to=None):
     return False
 
 
+def _already_provisioned(practice_id):
+    """Is this Dentally practice ALREADY a live tenant? Returns its name, or None.
+
+    Silver.Practice holds one row per tenant carrying the Dentally practice UUID, written by the
+    ingest itself -- so a hit means we are already pulling this practice's data every night.
+
+    ==> FAILS OPEN. <== A warehouse we cannot reach returns None and the onboarding proceeds,
+    because provisioning is a manual step with a human reading the email: a duplicate request is
+    recoverable in a way that turning a real practice away at the door is not. The log line is
+    how you find out it happened.
+    """
+    if not practice_id:
+        return None
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT TOP 1 ISNULL(t.Tenant_Name, p.Practice_Name) "
+            "FROM Silver.Practice p "
+            "LEFT JOIN Audit.Tenants t ON t.Tenant_ID = p.Tenant_ID "
+            "WHERE p.Practice_ID = ?", str(practice_id))
+        row = cur.fetchone()
+        conn.close()
+        return (row[0] or 'your practice') if row else None
+    except Exception as e:
+        app.logger.warning(
+            "could not check whether practice %s is already provisioned (%s) -- "
+            "letting onboarding through; check for a duplicate before provisioning",
+            practice_id, type(e).__name__)
+        return None
+
+
+ALREADY_ONBOARDED = (
+    "{name} is already set up on Analytically, so there is no trial to start. Sign in at "
+    "https://app.analytically.info with your work email. If you cannot get in, whoever manages "
+    "the account at the practice can add you under Settings. And if you came here to update a "
+    "Dentally token that has changed, sign in first -- Settings has a Dentally connection page "
+    "that replaces it without starting anything new."
+)
+
+
 def _notify_owner_pending(key, entry):
     """Tell the operator a new onboarding is waiting so the (manual, throttled) provisioning run can be
     scheduled. Best-effort -- a notify failure must never fail the capture (the token is already stored)."""
@@ -1383,6 +1424,14 @@ def onboarding_callback():
         except Exception:
             pass
 
+        # ==> ALREADY A CUSTOMER? STOP HERE. <== Same guard as the manual path; the callback
+        # cannot return JSON, so it redirects and onboarding.html says the same thing.
+        existing = _already_provisioned(practice_id)
+        if existing:
+            app.logger.info("onboarding BOUNCED: practice=%s id=%s is already provisioned (%s)",
+                            practice_name, practice_id, existing)
+            return redirect('/onboarding?status=already')
+
         # Idempotent per Dentally practice; keep the full OAuth set + the trial's Paid_From.
         key = f'dentally:{practice_id}' if practice_id else f'email:{state["email"]}'
         paid_from = (datetime.utcnow().date() + timedelta(days=TRIAL_DAYS)).isoformat()
@@ -1459,6 +1508,16 @@ def onboarding_token():
                     practice_name = practices[0].get('name') or practice_name
         except requests.RequestException:
             pass  # name is nice-to-have; the preflight already confirmed readability
+
+        # ==> ALREADY A CUSTOMER? STOP HERE. <== Before V216's sibling fix this stored a pending
+        # trial and emailed the operator for a practice that already had a tenant. Checked after
+        # the preflight rather than before it so an invalid token still gets the token message.
+        existing = _already_provisioned(practice_id)
+        if existing:
+            app.logger.info("onboarding BOUNCED: practice=%s id=%s is already provisioned (%s)",
+                            practice_name, practice_id, existing)
+            return jsonify({'reason': 'already_onboarded',
+                            'error': ALREADY_ONBOARDED.format(name=existing)}), 409
 
         # Idempotent per Dentally practice (fall back to the verified email if practice id unknown).
         key = f'dentally:{practice_id}' if practice_id else f'email:{payload["email"]}'
