@@ -382,7 +382,18 @@ T11 = {
         'active_rate':             0.95,
         # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
         # for a list this size, which flatters every growth and acquisition number.
-        'new_patient_rate':        0.130,
+        #
+        # ==> BUT 0.130 MADE THE PRACTICE SHRINK. <== 222 new against 286 lapsing gave Net Patient
+        # Growth of -64, and a demo practice losing patients sells nothing. Most of that lapsing is
+        # an artefact of the window rather than behaviour: a patient goes dormant exactly 730 days
+        # after their last visit, the window is three years, so everyone whose last visit sat near
+        # its start crosses the line together inside the current year. 281 lapse in twelve months
+        # against the live practice's TOTAL standing stock of 314 dormant.
+        #
+        # Lifting intake is the honest lever -- a practice that recruits more than it loses is the
+        # ordinary case. At 1.5x the live practice's pro-rata intake it is a practice that is
+        # actively recruiting, which is what a demo should show, and still short of the 1.7x cut.
+        'new_patient_rate':        0.195,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
