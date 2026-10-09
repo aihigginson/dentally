@@ -3,7 +3,7 @@
   "name": "5347421b6dc03dbadc91",
   "position": {
     "x": 1023.8907849829351,
-    "y": 0.30988818401324958,
+    "y": 0.3098881840132496,
     "z": 4000,
     "height": 153.58361774744026,
     "width": 250.34129692832764,
@@ -566,6 +566,48 @@
           },
           "selector": {
             "id": "default"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.NHS UDA Contracted"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.NHS UDA Completed"
+          }
+        },
+        {
+          "properties": {
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.NHS UDA Completion Rate"
           }
         }
       ],

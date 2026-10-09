@@ -75,14 +75,30 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Revenue"
+                      "Entity": "_Measures"
                     }
                   },
-                  "Property": "Revenue"
+                  "Property": "Total Revenue"
                 }
               },
-              "queryRef": "_Revenue.Revenue",
-              "nativeQueryRef": "Revenue1"
+              "queryRef": "_Measures.Total Revenue",
+              "nativeQueryRef": "Total Revenue",
+              "displayName": "Revenue (Dentally)"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Total Revenue (PL)"
+                }
+              },
+              "queryRef": "_Measures.Total Revenue (PL)",
+              "nativeQueryRef": "Total Revenue (PL)",
+              "displayName": "Income (Xero)"
             }
           ]
         }
