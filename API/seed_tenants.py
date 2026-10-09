@@ -392,7 +392,11 @@ T11 = {
         #
         # If YEARS_BACK changes, change this with it or the practice silently starts shrinking
         # again: a longer window spreads the same intake thinner AND accumulates more drifters.
-        'new_patient_rate':        0.310,
+        # ==> NOT A RATE ANY MORE. <== n_patients is the list we END with and joiners are
+        # generated on top of it, so growth is expressed directly: joiners = n x (lapse_rate +
+        # annual_growth x years). new_patient_rate is left for the other tenants, which still use
+        # the old back-dating path.
+        'annual_growth':           0.03,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
