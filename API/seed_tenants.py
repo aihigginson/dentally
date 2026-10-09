@@ -77,10 +77,34 @@ def generate_xero_finance(tdef, data, load_ts):
         return accounts, [], org, tracking
     avg_rev = sum(rev_by_month.values()) / len(rev_by_month)
 
-    inc = {'200': 0.55, '201': 0.35, '202': 0.10} if tdef.get('nhs') \
-          else {'200': 0.05, '201': 0.85, '202': 0.10}
+    # ==> EACH INCOME ACCOUNT COMES FROM THE THING IT REPRESENTS. <== These used to be flat
+    # fractions of invoiced revenue, so Plan Income had no connection to how many members the
+    # practice had and NHS income had none to the contract. The warehouse computes all three
+    # from source, so the books and the practice system described different businesses -- 53%
+    # apart on this tenant, against 4.4% on the live practice.
+    #
+    # Monthly capitation: every ACTIVE member times their own plan's charge. The plan fee a
+    # patient sees is on the payment plan; Input.Plan_Capitation_Rate is what the warehouse
+    # bills from, and the owner keeps the two aligned.
+    _pp_charge = {pp['id']: float(pp.get('monthly_charge') or 0) for pp in tdef['payment_plans']}
+    plan_income_month = round(sum(_pp_charge.get(pt.get('payment_plan_id'), 0.0)
+                                  for pt in data['patients'] if pt.get('active')), 2)
+
+    # Monthly NHS income is DELIVERED UDAs times the contract rate -- not the patient's band
+    # charge, which is a slice of it and never income on top. Delivery is taken as the
+    # contract target, which is what a practice budgets to; the completion check below is what
+    # reports the shortfall.
+    _contracts = tdef.get('contracts') or []
+    nhs_income_month = 0.0
+    if _contracts and tdef.get('nhs'):
+        _c = _contracts[-1]
+        nhs_income_month = round(float(_c.get('target') or 0)
+                                 * float(_c.get('uda_value') or 0) / 12.0, 2)
     var_cost = {'320': 0.34, '300': 0.07, '310': 0.05, '400': 0.17,
                 '430': 0.018, '450': 0.02, '480': 0.01, '495': 0.012}
+    # avg_rev is the TOTAL monthly income, not just the invoiced part -- fixed costs sized
+    # off a third of the practice's income are what made rent and depreciation look trivial.
+    avg_rev = avg_rev + nhs_income_month + plan_income_month
     fixed_amt = {c: round(avg_rev * f, 2) for c, f in
                  {'410': 0.055, '420': 0.012, '440': 0.02, '460': 0.009,
                   '470': 0.011, '490': 0.006,
@@ -104,9 +128,15 @@ def generate_xero_finance(tdef, data, load_ts):
         })
 
     for month in sorted(rev_by_month):
-        rev = rev_by_month[month]
-        for code, frac in inc.items():
-            add(month, code, 'ACCREC', rev * frac)
+        # Invoiced treatment, less whatever the NHS band charges in it already represent --
+        # those are a slice of the UDA income counted on 200, not income on top of it.
+        private_income = rev_by_month[month]
+        add(month, '201', 'ACCREC', private_income)
+        add(month, '200', 'ACCREC', nhs_income_month)
+        add(month, '202', 'ACCREC', plan_income_month)
+        # Costs stay proportional to the practice's TOTAL income, which is why they used to
+        # tower over a revenue line drawn from a third of it.
+        rev = private_income + nhs_income_month + plan_income_month
         for code, frac in var_cost.items():
             add(month, code, 'ACCPAY', rev * frac * rng.uniform(0.92, 1.08))
         for code, amt in fixed_amt.items():
@@ -191,12 +221,12 @@ T11 = {
         _pp(11, 'Care Plan E',  monthly='65.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
     ],
     'contracts': [
-        _contract(11, 't11-cl', 'VDX01', 2021, 2000, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2022, 2050, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2023, 2100, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2024, 2100, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2025, 2100, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 2100, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2021, 3150, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2022, 3250, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2023, 3300, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2024, 3300, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2025, 3300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2026, 3300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
