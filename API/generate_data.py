@@ -9,12 +9,21 @@ from pathlib import Path
 
 random.seed(42)
 TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
-# Three years of history, not six. Nothing before 2024 is wanted: it halves the data, the seed
-# time and the weekly rebuild's load on the capacity, and three years is still two full prior
-# years for a year-on-year comparison and enough for the 24-month dormancy checks to mean
-# anything. Relative rather than a fixed 2024 floor so it does not silently grow back to six
-# years by 2030.
-YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '3'))
+# Four years of history, not six. Six halves nothing useful and doubles the seed time and the
+# weekly rebuild's load on the capacity. Relative rather than a fixed floor so it does not
+# silently grow back to six years by 2030.
+#
+# ==> FOUR, NOT THREE, AND IT COSTS INTAKE UNLESS YOU WATCH FOR IT. <== A fourth year was asked
+# for to give the 24-month dormancy rule room behind it. It does -- but new_patient_rate is a
+# fraction of the TOTAL patient count spread across the whole window, so lengthening the window
+# DILUTES annual intake: at 0.130 it fell from 222 new a year to 153, while a fourth year of
+# accumulated drifters pushed lapsing from 281 to 341. Net Patient Growth went from -64 to -190.
+#
+# The lapsing was never a window-edge artefact. It is steady attrition of about 5% a year, which
+# is ordinary; the practice shrank because intake at 3.9% sat below it. new_patient_rate is
+# scaled in seed_tenants to keep the ANNUAL intake above attrition -- so if this constant moves
+# again, that rate has to move with it.
+YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '4'))
 START   = TODAY.replace(year=TODAY.year - YEARS_BACK)
 FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
