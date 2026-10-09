@@ -1,0 +1,83 @@
+# =====================================================================
+# Release V217 -- the Home area weights, and two guidance strings that overran their column
+# =====================================================================
+# Preparing the Demonstration Practice for a demo turned up a list of issues. This is the warehouse
+# half of the first two: everything else in the batch is report, model or generator work.
+#
+# ==> 1. AREA_WEIGHT ON Config.Metric_Definitions. <==
+#
+# The Home page colours each category header from its metrics. Today that is a flat average capped
+# by the worst tile. It becomes a WEIGHTED average with no cap, because the owner's two steers pull
+# in opposite directions and only weighting reconciles them: Patients must go amber on Patient
+# Growth alone, while Clinical must stay light green despite a red Open Courses Value. Worst-tile
+# would force the first and forbid the second.
+#
+# The cap existed because "the average alone let six mild positives outvote one serious failure:
+# Private Revenue at -20% sat under a GREEN Revenue header". The owner overturned it on the grounds
+# that the metrics in an area are NOT independent -- the headline is composed of the ones beneath
+# it, so a real problem reinforces itself across several tiles and the weighted average finds it:
+# "It isn't really possible for everything to be dark green and the main metric red."
+#
+# The weights live in the warehouse rather than the model on his instruction -- "they are visible
+# there and if we want to do something else like alerting, we can access them". The csx receives
+# them by generation; the model's copy is derived.
+#
+# ==> 2. AND THE SCORED SET WAS NOT THE DISPLAYED SET. <== Found while writing the weights, and it
+# is the real reason item 6 was on the list at all:
+#
+#     Patients   scored New Patients + Lapsed Patients, and NOT Patient Growth
+#     Scheduling scored Chair Utilisation, and NOT Diary Fill or Rebooked %
+#
+# So the Patients header read GREEN with growth at -22 because the number on the screen was never
+# in the calculation, and Diary Fill -- the metric the owner says should carry the most weight in
+# Scheduling -- was not scored at all. Settled: "The display list should drive the weighting." Only
+# displayed metrics carry a weight here; everything else stays NULL and is not scored. The csx-side
+# membership change rides with the model work, not this release.
+#
+# ==> 3. TWO GUIDANCE STRINGS WROTE THEMSELVES OFF THE PAGE. <== "What to do" is truncated on the
+# Day Book scorecard. Every entry written before this week tops out at 122 characters; the two
+# added with V216 ran to 169 and 156. The column also gets 69px back from five columns sized for
+# headers much wider than their content, but the overrun was mine and it is fixed at source.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V217__area_weights_and_the_guidance_that_overran.manifest
+# =====================================================================
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Config' AND TABLE_NAME='Metric_Definitions' AND COLUMN_NAME='Area_Weight') ALTER TABLE [Config].[Metric_Definitions] ADD [Area_Weight] SMALLINT NULL;
+# Config.Metric_Definitions.Table.sql is deliberately NOT deployed. It opens with DROP TABLE, and
+# deploying it on dev removed FTE_Scaled -- a column V092 added by ALTER and never wrote back into
+# the file. The file is fixed in this release, but a config table is still altered, not recreated.
+
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Config.Data_Quality_Check.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Data_Quality @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Data_Quality_Detail @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# ── Verification ──────────────────────────────────────────────────────────────────────────
+# 1. ==> EVERY AREA SUMS TO 100. <== The whole scheme rests on it: an area summing to 90 or 110
+# scores on a different scale from its neighbours and the five headers stop being comparable, which
+# is invisible on screen because every colour still looks plausible.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM (SELECT m.Section, SUM(CAST(m.Area_Weight AS INT)) AS w FROM Config.Metric_Definitions m WHERE m.Area_Weight IS NOT NULL GROUP BY m.Section HAVING SUM(CAST(m.Area_Weight AS INT)) <> 100) x; IF @a <> 0 BEGIN SET @e = 'V217 FAILED: ' + CAST(@a AS VARCHAR(10)) + ' section(s) do not sum to 100.'; THROW 50490, @e, 1; END;
+
+# 2. Exactly the 28 displayed metrics carry a weight -- no more, no fewer. A weight on a metric the
+# page does not show scores something nobody can see; a missing one silently drops a tile out.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM Config.Metric_Definitions WHERE Area_Weight IS NOT NULL; IF @b <> 28 BEGIN SET @f = 'V217 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' metrics carry a weight, expected 28.'; THROW 50491, @f, 1; END;
+
+# 3. A weighted metric must be active. Weighting a retired metric is a silent no-op that leaves its
+# area summing to less than 100 without tripping guard 1, because guard 1 counts what is weighted.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM Config.Metric_Definitions WHERE Area_Weight IS NOT NULL AND ISNULL(Is_Active, 0) = 0; IF @c <> 0 BEGIN SET @g = 'V217 FAILED: ' + CAST(@c AS VARCHAR(10)) + ' weighted metric(s) are not active.'; THROW 50492, @g, 1; END;
+
+# 4. The owner's steers, asserted rather than trusted to a hand-typed number: the dominant metric in
+# each of the four multi-metric areas is the one he named, and it dominates.
+EXEC     DECLARE @d2 INT, @h VARCHAR(4000); SELECT @d2 = COUNT(*) FROM (SELECT Section, MAX(CAST(Area_Weight AS INT)) AS top_w FROM Config.Metric_Definitions WHERE Area_Weight IS NOT NULL GROUP BY Section) s JOIN Config.Metric_Definitions m ON m.Section = s.Section AND CAST(m.Area_Weight AS INT) = s.top_w WHERE (s.Section = 'revenue' AND m.Metric_Key <> 'total_revenue') OR (s.Section = 'patients' AND m.Metric_Key <> 'net_patient_growth') OR (s.Section = 'scheduling' AND m.Metric_Key <> 'diary_fill') OR (s.Section = 'clinical' AND m.Metric_Key <> 'revenue_per_clinical_hour'); IF @d2 <> 0 BEGIN SET @h = 'V217 FAILED: the heaviest metric in ' + CAST(@d2 AS VARCHAR(10)) + ' area(s) is not the one it should be.'; THROW 50493, @h, 1; END;
+
+# 5. No guidance string may exceed the length the scorecard column can show. 122 is the longest that
+# fitted before this week; the two added by V216 ran to 169 and 156 and were cut off mid-sentence in
+# front of the practice.
+EXEC     DECLARE @m INT, @n VARCHAR(4000); SELECT @m = COUNT(*) FROM Config.Data_Quality_Check WHERE Is_Active = 1 AND LEN(ISNULL(What_To_Do, '')) > 122; IF @m <> 0 BEGIN SET @n = 'V217 FAILED: ' + CAST(@m AS VARCHAR(10)) + ' check(s) have What_To_Do longer than the 122 characters the column can show.'; THROW 50494, @n, 1; END;
+
+# 6. The data-quality scorecard still reconciles to its drillthrough (carried from V216).
+EXEC     DECLARE @p INT, @q VARCHAR(4000); SELECT @p = COUNT(*) FROM (SELECT a.Tenant_Check_Key, a.Records_Affected, COUNT(d.pk_Data_Quality_Detail) AS detail_rows FROM Gold.Aggregate_Data_Quality a LEFT JOIN Gold.Fact_Data_Quality_Detail d ON d.Tenant_Check_Key = a.Tenant_Check_Key GROUP BY a.Tenant_Check_Key, a.Records_Affected HAVING a.Records_Affected <> COUNT(d.pk_Data_Quality_Detail)) x; IF @p <> 0 BEGIN SET @q = 'V217 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' check(s) where the detail row count does not match Records_Affected.'; THROW 50495, @q, 1; END;
+
+
+TEST

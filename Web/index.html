@@ -1730,14 +1730,14 @@
         revenue:    ['revenue'],
         patient:    ['patients'],
         scheduling: ['scheduling'],
-        clinical:   ['treatment'],
+        clinical:   ['clinical'],
         nhs:        ['nhs'],
     };
     const DEFN_GROUP_LABELS = {
-        revenue: 'Revenue', patients: 'Patient', treatment: 'Clinical',
+        revenue: 'Revenue', patients: 'Patient', clinical: 'Clinical',
         scheduling: 'Schedule', nhs: 'NHS',
     };
-    const DEFN_GROUP_ORDER = ['revenue', 'patients', 'treatment', 'scheduling', 'nhs'];
+    const DEFN_GROUP_ORDER = ['revenue', 'patients', 'clinical', 'scheduling', 'nhs'];
     const DEFN_FMT_BADGE   = { currency: '£', percent: '%', count: '#' };
     let _defsMetrics = null;
 

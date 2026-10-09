@@ -20,7 +20,7 @@ USING (VALUES
         'AN ESTIMATE, NOT OBSERVED INCOME. Membership fees are collected by your plan provider (Denplan, Tabeo or similar) and the authoritative figures are in the statements they send you - Dentally holds no invoice, payment or statement for them, so this warehouse has never seen a penny of it. The figure here is reconstructed: a completed free exam or hygiene visit is taken as evidence the patient was a member that month, priced at the plan rate you have entered in settings, and spread across the working days of the month. It is reliable for trend, plan mix and comparing patients, and is deliberately included in Total Revenue because ignoring it would understate a plan practice badly. Do not reconcile it to your bank or quote it to your accountant - use your provider''s statement for that.'),
     ('revenue_per_patient',        'Revenue per Patient',                'revenue',    'currency', 'Average revenue generated per active patient',                            1, 1, 1, 13, 'above', 'rate',
         'Total revenue in the period divided by the number of active patients — the average value each patient relationship produces. Lets you compare productivity independently of how big the patient base is.'),
-    ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'revenue',    'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',
+    ('revenue_per_clinical_hour',   'Revenue per Clinical Hour',          'clinical',   'currency', 'Revenue per hour of scheduled clinical time (dentists, hygienists, orthodontists, specialists, therapists)', 0, 1, 1, 14, 'above', 'rate',
         'Revenue earned for each hour of scheduled clinical chair time, counting all clinical roles (dentists, hygienists, therapists, orthodontists and specialists). Measures how productively clinical time is used. Revenue per Dentist Hour is the dentist-only equivalent.'),
     ('revenue_per_dentist_hour',   'Revenue per Dentist Hour',           'revenue',    'currency', 'Revenue per hour of scheduled dentist time only (Dentally role Dentist)',  0, 1, 1, 15, 'above', 'rate',
         'Revenue earned for each hour of scheduled dentist chair time only (practitioners whose Dentally role is Dentist), excluding hygiene and therapy time and revenue. A focused view of dentist productivity, complementing the all-clinician Revenue per Clinical Hour.'),
@@ -64,21 +64,21 @@ USING (VALUES
     ('phone_details_rate',         'Phone Details Rate',                 'patients',   'percent',  'Percentage of active patients with a valid phone number on file',         1, 0, 1, 29, 'above', 'point_in_time',
         'The percentage of active patients who have a valid phone number on file. Higher is better — it supports appointment reminders and contact. A data-quality and reachability measure.'),
 -- Treatment (section now called Clinical in the app)
-    ('acceptance_rate',            'Treatment Acceptance Rate',          'treatment',  'percent',  'Percentage of presented plans accepted by patients', 0, 1, 1, 30, 'above', 'rate',
+    ('acceptance_rate',            'Treatment Acceptance Rate',          'clinical',  'percent',  'Percentage of presented plans accepted by patients', 0, 1, 1, 30, 'above', 'rate',
         'The share of treatment presented to patients that they accepted — accepted plan value as a proportion of all plans presented in the period. A measure of treatment conversion and case acceptance. Higher is better.'),
-    ('open_courses',               'Open Courses',                       'treatment',  'count',    'Number of open courses of treatment', 0, 1, 1, 32, 'below', 'point_in_time',
+    ('open_courses',               'Open Courses',                       'clinical',  'count',    'Number of open courses of treatment', 0, 1, 1, 32, 'below', 'point_in_time',
         'The number of courses of treatment currently open (started but not completed) as at the reporting date. A point-in-time work-in-progress count; persistently high or rising figures can indicate stalled treatment. Lower is generally better.'),
-    ('open_courses_without_appt',  'Open Courses Without Appointment',   'treatment',  'count',    'Number of open courses with no future appointment booked', 0, 1, 1, 33, 'below', 'point_in_time',
+    ('open_courses_without_appt',  'Open Courses Without Appointment',   'clinical',  'count',    'Number of open courses with no future appointment booked', 0, 1, 1, 33, 'below', 'point_in_time',
         'Of the open courses of treatment, the number with no future appointment booked to continue them. These are at risk of stalling — the patient is mid-treatment with nothing scheduled. Lower is better.'),
-    ('open_courses_without_appt_value', 'Open Courses Without Appointment Value', 'treatment', 'currency', 'Total uncharged value of open courses with no future appointment booked', 0, 1, 1, 51, 'below', 'point_in_time',
+    ('open_courses_without_appt_value', 'Open Courses Without Appointment Value', 'clinical', 'currency', 'Total uncharged value of open courses with no future appointment booked', 0, 1, 1, 51, 'below', 'point_in_time',
         'The total price of work still to be charged on open courses of treatment that have no future appointment booked — money committed but not scheduled. The at-risk work-in-progress; lower is better, and converted by booking these patients back in.'),
-    ('exam_ratio',                 'Exam Ratio',                         'treatment',  'percent',  'Percentage of appointments that are examinations', 0, 1, 1, 34, 'within', 'rate',
+    ('exam_ratio',                 'Exam Ratio',                         'clinical',  'percent',  'Percentage of appointments that are examinations', 0, 1, 1, 34, 'within', 'rate',
         'The percentage of appointments that are examinations (check-ups) rather than treatment. Judged against a healthy band rather than simply higher or lower — too low may mean under-recall, too high may mean too little treatment delivered.'),
-    ('avg_plan_value',             'Average Plan Value',                 'treatment',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
+    ('avg_plan_value',             'Average Plan Value',                 'clinical',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
         'The average value of the treatment plans presented to patients in the period — total presented plan value divided by the number of plans. A measure of case size and treatment ambition. Higher generally means larger cases proposed.'),
-    ('avg_first_plan_value',       'Avg First Plan Value',               'treatment',  'currency', 'Average value of the plan created at a new patient''s first appointment', 0, 1, 1, 36, 'above', 'rate',
+    ('avg_first_plan_value',       'Avg First Plan Value',               'clinical',  'currency', 'Average value of the plan created at a new patient''s first appointment', 0, 1, 1, 36, 'above', 'rate',
         'The average value of the treatment plan created at a new patient''s first appointment — total first-appointment plan value divided by the number of new patients who received a plan there. A measure of how well first visits convert into planned treatment. Higher generally means larger first-visit cases.'),
-    ('new_patient_retention',      'New Patient Retention',              'treatment',  'percent',  'Percentage of new patients who return for a second examination', 0, 1, 1, 37, 'above', 'rate',
+    ('new_patient_retention',      'New Patient Retention',              'clinical',  'percent',  'Percentage of new patients who return for a second examination', 0, 1, 1, 37, 'above', 'rate',
         'Of new patients registered in the period, the percentage who have since returned for a second examination (any time after their first). A measure of how well the practice retains newly acquired patients. Higher is better.'),
 -- Scheduling
     ('diary_fill',                 'Diary Fill',                         'scheduling', 'percent',  'Percentage of worked time booked with appointments', 0, 1, 1, 39, 'above', 'rate',
@@ -104,7 +104,7 @@ USING (VALUES
     ('cancellation_rebook',        'Cancellations Rebooked',             'scheduling', 'percent',  'Percentage of cancelled appointments that were rebooked into a future slot', 0, 1, 1, 49, 'above', 'rate',
         'Of appointments cancelled in the period, the percentage that were successfully rebooked into a future slot -- recovering the chair time and revenue that a cancellation would otherwise lose. The counter-measure to Cancellation Frequency and Short Notice Cancellation Rate: cancellations happen, but how many do you win back? Higher is better.'),
 -- Home
-    ('open_courses_value',         'Open Courses Value',                 'treatment',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
+    ('open_courses_value',         'Open Courses Value',                 'clinical',       'currency', 'Total price of uncharged items on active treatment plans (open courses)', 1, 1, 1, 50, 'within', 'point_in_time',
         'The total price of work still to be charged on active (open) treatment plans as at the reporting date — the uncharged value sitting in work-in-progress. Revenue committed but not yet realised. Higher means more value in the pipeline.'),
  -- NHS
     ('nhs_uda_completion_rate',    'NHS UDA Completion Rate',            'nhs',        'percent',  'UDAs delivered as a percentage of the contracted UDA target',             1, 1, 1, 60, 'within', 'rate',
@@ -165,6 +165,52 @@ UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
 UPDATE [Config].[Metric_Definitions] SET [Target_Practitioner_Roles] = 'Dentist'
     WHERE [Metric_Key] = 'exam_ratio';
 GO
+-- ── Home-page area weights (2026-10-09) ────────────────────────────────────
+-- ==> THE DISPLAYED TILES DRIVE THE SCORING. <== Two areas used to score a different set than
+-- they showed: Patients scored New Patients and Lapsed Patients but NOT Patient Growth, and
+-- Scheduling scored Chair Utilisation but NOT Diary Fill. So the Patients header read green
+-- with growth at -22 -- the number on screen was not in the calculation. Weights are set ONLY
+-- for the metrics the page displays; everything else stays NULL and is not scored.
+--
+-- The owner's steers, in his words: total revenue "almost trumps everything" in Revenue,
+-- Patient Growth in Patients, Diary Fill in Scheduling "but not to the same extent as the
+-- others", and in Clinical "it is Revenue Per Clinical Hour that is the most important".
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = NULL;
+-- Revenue
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 45  WHERE [Metric_Key] = 'total_revenue';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'private_revenue';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'plan_capitation_revenue';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 5   WHERE [Metric_Key] = 'nhs_revenue';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'revenue_per_dentist_hour';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 5   WHERE [Metric_Key] = 'outstanding_invoices';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 5   WHERE [Metric_Key] = 'discounts';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 5   WHERE [Metric_Key] = 'deposit_ratio';
+-- Patients
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'active_patients';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'dentist_retention_outlook';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 45  WHERE [Metric_Key] = 'net_patient_growth';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'overdue_recalls';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 8   WHERE [Metric_Key] = 'email_details_rate';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 7   WHERE [Metric_Key] = 'phone_details_rate';
+-- Scheduling
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 30  WHERE [Metric_Key] = 'diary_fill';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'dna_rate';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'cancellation_frequency';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'short_notice_cancellation_rate';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 12  WHERE [Metric_Key] = 'book_before_you_leave';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 8   WHERE [Metric_Key] = 'days_until_30min_free';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'cancellation_rebook';
+-- Clinical
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 40  WHERE [Metric_Key] = 'revenue_per_clinical_hour';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 20  WHERE [Metric_Key] = 'avg_plan_value';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 5   WHERE [Metric_Key] = 'open_courses_value';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'open_courses';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 10  WHERE [Metric_Key] = 'open_courses_without_appt';
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 15  WHERE [Metric_Key] = 'exam_ratio';
+-- NHS
+UPDATE [Config].[Metric_Definitions] SET [Area_Weight] = 100 WHERE [Metric_Key] = 'nhs_uda_completion_rate';
+GO
+
 -- Per-metric sample value (a realistic example shown beside each target box).
 UPDATE Config.Metric_Definitions SET Sample_Value = CASE Metric_Key
     WHEN 'total_revenue' THEN '£600,000'

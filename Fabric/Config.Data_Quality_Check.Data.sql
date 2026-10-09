@@ -80,14 +80,14 @@ VALUES
      'Inactive Plan Patients',
      '1: High', 1,
      'These members pay every month, have not been through the door for a year, and have nothing booked. It is the plan fee the practice is least likely to keep: the patient notices the direct debit long before they notice the care they are not taking, and the cancellation arrives without warning. They are also invisible to the ordinary dormancy check, which only looks at two years.',
-     'Contact them for a plan review. If they have moved away or no longer want the plan, take them off it rather than leaving the fee running until they cancel it themselves.',
+     'Contact them for a plan review. If they no longer want the plan, take them off it rather than leaving the fee running.',
      'PLAN_PATIENTS', 1, 75),
 
     ('PLAN_MISALLOCATED', 'Patients',
      'Plan Patients Possibly Incorrectly Allocated',
      '2: Medium', 2,
      'They are coming in and have seen a different dentist who is still at the practice, but not the one whose list they are on. While that stands, recall runs, workload per dentist and the capitation credited to each dentist all point at the wrong person. A departed dentist''s reassigned list is NOT counted: those patients are correctly allocated to a successor who has not seen them yet. Nor is anyone already booked in with their own dentist.',
-     'The detail names who they are actually seeing. Where that is settled rather than holiday cover, change the allocated dentist on the patient record to match.',
+     'The detail names who they actually see. If that is settled rather than cover, change the allocated dentist to match.',
      'PLAN_PATIENTS', 1, 76),
 
     ('PAT_NO_DENTIST', 'Patients',
