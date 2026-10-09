@@ -791,6 +791,15 @@
                 <div class="defs-item">
                     <div class="defs-item-desc">The monthly membership fee for each plan, <strong>over time</strong> &mdash; add a row for each fee change (a fee applies from its date until the next one). Make the earliest date early enough to cover historical months. Pick one plan as the <strong>default</strong> &mdash; it values lapsed members whose original plan Dentally no longer records. Leave a plan with no rate to exclude it.</div>
                     <div class="settings-save-bar"><button id="plans-save-top" class="settings-save" style="margin-top:0">Save</button></div>
+                    <!-- ==> ONE DATE, EVERY ROW. <== Setting the same effective date on eight plans was
+                         eight separate acts of data entry for one decision. -->
+                    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:12px;color:#555">Set every rate&rsquo;s date to</span>
+                        <input type="text" id="plans-bulk-date" inputmode="numeric" placeholder="dd/mm/yyyy" maxlength="10"
+                               style="width:92px;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px">
+                        <button type="button" id="plans-bulk-apply" class="contact-switch" style="font-size:12px;padding:4px 10px">Apply to all</button>
+                        <span id="plans-bulk-msg" style="font-size:12px;color:#888"></span>
+                    </div>
                     <div id="plans-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="plans-save" class="settings-save" style="display:none">Save</button>
                     <span id="plans-msg" class="settings-msg"></span>
@@ -2884,9 +2893,39 @@
     // Each plan holds a collection of (effective-from, monthly fee, per-hygienist-visit value) rows
     // -- the fee-over-time history. Both values share the one effective date, so a rate change
     // moves them together and there is a single history rather than two to keep in step.
+    // ==> A DATE FIELD YOU CAN PASTE INTO. <== input[type=date] renders fixed segments: paste
+    // is refused and typing means landing on the right segment in the right order. These dates
+    // come off a spreadsheet and get applied to every plan at once, so that control fought the
+    // one job it had. Text in, dd/mm/yyyy shown, ISO sent -- the API contract is untouched.
+    function _ukToIso(s) {
+        s = (s || "").trim();
+        if (!s) { return ""; }
+        var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);          // 2021-01-31
+        if (m) { return _isoParts(m[1], m[2], m[3]); }
+        m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/);        // 31/01/2021
+        if (m) {
+            var y = m[3].length === 2 ? String(2000 + (+m[3])) : m[3];
+            return _isoParts(y, m[2], m[1]);
+        }
+        return "";                                   // unreadable: leave it to the caller
+    }
+    function _isoParts(y, mo, d) {
+        mo = +mo; d = +d;
+        if (mo < 1 || mo > 12 || d < 1 || d > 31) { return ""; }
+        var dt = new Date(Date.UTC(+y, mo - 1, d));
+        // Rejects 31/02 rather than rolling it into March, which is the kind of silent
+        // correction that puts a fee on the wrong month.
+        if (dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) { return ""; }
+        return y + "-" + ("0" + mo).slice(-2) + "-" + ("0" + d).slice(-2);
+    }
+    function _isoToUk(s) {
+        var m = (s || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? (m[3] + "/" + m[2] + "/" + m[1]) : (s || "");
+    }
+
     function _planRateRowHtml(eff, val, hyg) {
         return '<div class="plan-rate-row" style="display:flex;align-items:center;gap:6px;margin:3px 0">'
-            + '<input type="date" class="plan-eff" title="Fee applies from this month onward" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + (eff || '') + '">'
+            + '<input type="text" class="plan-eff" inputmode="numeric" placeholder="dd/mm/yyyy" maxlength="10" title="Fee applies from this month onward. Type or paste -- dd/mm/yyyy or yyyy-mm-dd." style="width:92px;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px" value="' + _isoToUk(eff || '') + '">'
             + '<span style="font-size:11px;color:#888">monthly</span>'
             + '£<input type="number" min="0" step="0.01" class="plan-val" style="width:70px;padding:4px 6px;text-align:right;border:1px solid #ccc;border-radius:4px;font-size:13px" value="' + (val != null && val !== '' ? val : '') + '">'
             + '<span style="font-size:11px;color:#888">hygienist cross-charge per visit</span>'
@@ -2930,7 +2969,9 @@
         document.querySelectorAll('#plans-list .plan-block').forEach(block => {
             const tid = +block.dataset.tid, pid = +block.dataset.pid;
             block.querySelectorAll('.plan-rate-row').forEach(row => {
-                const eff = row.querySelector('.plan-eff').value;
+                // Unreadable dates convert to '' and the row is skipped below, which is
+                // visible on screen. A guessed date would not be.
+                const eff = _ukToIso(row.querySelector('.plan-eff').value);
                 const val = row.querySelector('.plan-val').value;
                 const hyg = row.querySelector('.plan-hyg').value;
                 // A blank visit value is sent as null, not 0: "not decided yet" and "decided it is
@@ -2952,6 +2993,15 @@
     { const _pl = document.getElementById('plans-list');
       if (_pl) {
         _pl.addEventListener('input',  e => { if (e.target.matches('.plan-val,.plan-eff')) markDirty(); });
+        // Normalise on the way out so what is on screen is what will be sent. A date it could
+        // not read is left verbatim -- the reader can see it is wrong and fix it.
+        _pl.addEventListener('blur', e => {
+            if (e.target.matches('.plan-eff')) {
+                const iso = _ukToIso(e.target.value);
+                if (iso) { e.target.value = _isoToUk(iso); e.target.style.borderColor = '#ccc'; }
+                else if (e.target.value.trim()) { e.target.style.borderColor = '#b3261e'; }
+            }
+        }, true);
         _pl.addEventListener('change', e => { if (e.target.matches('.plan-def')) markDirty(); });
         _pl.addEventListener('click',  e => {
             if (e.target.matches('.plan-add-rate')) {
@@ -2964,7 +3014,28 @@
                 markDirty();
             }
         });
-      } }
+      }
+      const _bulk = document.getElementById('plans-bulk-apply');
+      if (_bulk) {
+        _bulk.addEventListener('click', () => {
+            const box = document.getElementById('plans-bulk-date');
+            const out = document.getElementById('plans-bulk-msg');
+            const iso = _ukToIso(box.value);
+            if (!iso) {
+                box.style.borderColor = '#b3261e';
+                out.style.color = '#b3261e'; out.textContent = 'Enter a date as dd/mm/yyyy.';
+                return;
+            }
+            box.style.borderColor = '#ccc'; box.value = _isoToUk(iso);
+            const fields = document.querySelectorAll('#plans-list .plan-eff');
+            fields.forEach(f => { f.value = _isoToUk(iso); f.style.borderColor = '#ccc'; });
+            out.style.color = '#1a7f4b';
+            out.textContent = 'Set on ' + fields.length + ' rate' + (fields.length === 1 ? '' : 's') + '. Not saved yet.';
+            if (fields.length) { markDirty(); }
+            setTimeout(() => { out.textContent = ''; }, 6000);
+        });
+      }
+    }
 
     // Targets grid -----------------------------------------------------------
     // Draft persistence: unsaved target edits are mirrored to localStorage on every keystroke, so a
