@@ -260,7 +260,11 @@ def _note_proc_ran(tgt):
 
 
 def _why_run_proc(tgt, changed, started):
-    """Reason to run Meta.usp_Sync_Access_From_AppDB, or None to skip it.
+    """(reason, last_merge_at): why to run Meta.usp_Sync_Access_From_AppDB, or None to skip it.
+
+    The timestamp comes back too because the AppDB mirror needs it and this function has already
+    paid for the read. Mirroring "now" instead would reset the self-heal clock on every skipped
+    run and the 60-minute backstop could never fire.
 
     ==> STAGING NOT CHANGING IS NOT QUITE ENOUGH TO SKIP THE MERGE. <== It would be if the only
     way Security.Application_Users could drift were through staging, but a failed proc run leaves
@@ -271,7 +275,7 @@ def _why_run_proc(tgt, changed, started):
     every ten minutes regardless -- about 49 statements and 1.15 CPU-seconds a run, ~165 a day.
     """
     if changed:
-        return 'staging changed: ' + ', '.join(sorted(changed))
+        return 'staging changed: ' + ', '.join(sorted(changed)), None
 
     # A previous failure must not be made permanent by a run that decides there is nothing to do.
     tgt.execute(
@@ -280,7 +284,7 @@ def _why_run_proc(tgt, changed, started):
         started)
     row = tgt.fetchone()
     if row and (row[0] or '').upper() != 'SUCCEEDED':
-        return f'previous run was {row[0]}'
+        return f'previous run was {row[0]}', None
 
     # Self-heal: run it occasionally whatever the fingerprints say, so no reasoning error here can
     # stop the merge for longer than this window.
@@ -289,11 +293,11 @@ def _why_run_proc(tgt, changed, started):
         PROC_SENTINEL)
     row = tgt.fetchone()
     if not row:
-        return 'no record of the proc having run'
+        return 'no record of the proc having run', None
     age_min = (datetime.now(timezone.utc).replace(tzinfo=None) - row[0]).total_seconds() / 60.0
     if age_min >= PROC_MAX_SKIP_MINUTES:
-        return f'last ran {age_min:.0f} min ago (self-heal at {PROC_MAX_SKIP_MINUTES:.0f})'
-    return None
+        return f'last ran {age_min:.0f} min ago (self-heal at {PROC_MAX_SKIP_MINUTES:.0f})', row[0]
+    return None, row[0]
 
 
 
@@ -321,7 +325,7 @@ def _save_local(src, item, row_count=None, fingerprint=None, payload=None):
         'VALUES (?, ?, ?, ?, SYSUTCDATETIME())', item, row_count, fingerprint, payload)
 
 
-def _mirror_local(src, fps, colmap, status, forced=False):
+def _mirror_local(src, fps, colmap, status, forced=False, proc_ran_at=None):
     """Write the cache in the same breath as the warehouse copy it mirrors.
 
     Called only after a run that actually reached the warehouse, so the cache can never claim a
@@ -336,6 +340,12 @@ def _mirror_local(src, fps, colmap, status, forced=False):
             _save_local(src, FORCE_SENTINEL, fingerprint='forced')
         _save_local(src, COLS_SENTINEL, payload=json.dumps(colmap, sort_keys=True))
         _save_local(src, STATUS_SENTINEL, fingerprint=status)
+        # ==> THE ROW THE WHOLE FAST PATH HANGS ON. <== Without it _fast_skip bailed on every
+        # run for weeks and the optimisation was dead without saying so. The value is the
+        # WAREHOUSE's last-merge time, carried in Payload because _save_local stamps Updated_At
+        # with now -- mirroring now would reset the self-heal clock on every skipped run.
+        if proc_ran_at is not None:
+            _save_local(src, PROC_SENTINEL, payload=proc_ran_at.isoformat())
     except Exception as e:
         # The cache is an optimisation. Failing to write it must never fail the sync -- the next
         # run simply takes the Fabric path, which is what happens today anyway.
@@ -389,9 +399,15 @@ def _fast_skip(src, started):
 
     # Self-heal: the merge must run at least this often whatever the fingerprints say.
     proc = state.get(PROC_SENTINEL)
-    if not proc or not proc[3]:
+    if not proc or not proc[2]:
         return None
-    age_min = (started - proc[3]).total_seconds() / 60.0
+    try:
+        # Payload, not Updated_At: see _mirror_local. Unparseable means the cache predates
+        # the fix, so take the Fabric path and let this run write a good one.
+        proc_at = datetime.fromisoformat(proc[2])
+    except Exception:
+        return None
+    age_min = (started - proc_at).total_seconds() / 60.0
     # ==> NEGATIVE MEANS THE SENTINEL IS IN THE FUTURE, AND THAT MUST NOT GRANT A SKIP. <== AppDB
     # stamps it with SYSUTCDATETIME() and this job runs on a different host; any clock skew the
     # wrong way would otherwise sail past the >= below and skip for as long as the skew lasts.
@@ -725,11 +741,12 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
     # errs towards running: it only stays quiet when staging is unchanged, the previous run
     # succeeded, and the proc has run recently enough.
     if mode == 'access':
-        why = _why_run_proc(tgt, changed, started)
+        why, last_merge_at = _why_run_proc(tgt, changed, started)
         if why is None:
             print(f'{proc}: skipped -- staging unchanged, last merge within '
                   f'{PROC_MAX_SKIP_MINUTES:.0f} min')
-            _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due)
+            _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due,
+                          proc_ran_at=last_merge_at)
             _log_run(tgt_cn, mode, started, 'SUCCEEDED', rows=sum(a for a, _ in counts.values()))
             _alert(tgt_cn, mode, started, 'SUCCEEDED')
             src_cn.close()
@@ -750,7 +767,9 @@ def _run(mode, tables, src, tgt, src_cn, tgt_cn, started):
         print(f'{proc}: done')
 
     # Mirror AFTER the proc returned, so the cache can never say "done" for a merge that threw.
-    _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due)
+    # The merge just ran, so the mirrored last-merge time is this run's start.
+    _mirror_local(src, fps, colmap, 'SUCCEEDED', forced=force_due,
+                  proc_ran_at=(started if mode == 'access' else None))
     _log_run(tgt_cn, mode, started, 'SUCCEEDED', rows=sum(a for a, _ in counts.values()))
     _alert(tgt_cn, mode, started, 'SUCCEEDED')
     src_cn.close()

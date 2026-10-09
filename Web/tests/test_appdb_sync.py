@@ -289,29 +289,37 @@ class _ProcCur:
 
 
 def test_a_changed_table_always_runs_the_merge():
-    why = js._why_run_proc(_ProcCur(), {'Application_Users'}, NOW)
+    why, at = js._why_run_proc(_ProcCur(), {'Application_Users'}, NOW)
     assert why and 'Application_Users' in why
+    assert at is None                      # staging changed -- no sentinel was read
 
 
 def test_a_failed_previous_run_forces_the_merge():
     # Staging is correct but the target may be half-written; skipping would make that permanent.
-    why = js._why_run_proc(_ProcCur(last_status='FAILED'), set(), NOW)
+    why, _ = js._why_run_proc(_ProcCur(last_status='FAILED'), set(), NOW)
     assert why and 'FAILED' in why
 
 
 def test_never_having_run_forces_the_merge():
-    why = js._why_run_proc(_ProcCur(sentinel=False), set(), NOW)
+    why, at = js._why_run_proc(_ProcCur(sentinel=False), set(), NOW)
     assert why and 'no record' in why
+    assert at is None
 
 
 def test_a_stale_merge_self_heals():
     # Whatever the fingerprints say, the merge runs at least this often.
-    why = js._why_run_proc(_ProcCur(sentinel_age_min=js.PROC_MAX_SKIP_MINUTES + 1), set(), NOW)
+    why, at = js._why_run_proc(_ProcCur(sentinel_age_min=js.PROC_MAX_SKIP_MINUTES + 1), set(), NOW)
     assert why and 'self-heal' in why
+    assert at is not None
 
 
 def test_nothing_changed_and_recently_merged_skips():
-    assert js._why_run_proc(_ProcCur(sentinel_age_min=5), set(), NOW) is None
+    why, at = js._why_run_proc(_ProcCur(sentinel_age_min=5), set(), NOW)
+    assert why is None
+    # ==> AND IT HANDS BACK THE TIMESTAMP. <== Without this the AppDB mirror has no
+    # last-merge time, _fast_skip bails on every run, and the fast path is dead while
+    # looking perfectly healthy -- which is exactly what happened for weeks.
+    assert at is not None
 
 
 def test_the_sentinel_cannot_collide_with_a_real_table():
@@ -376,7 +384,7 @@ def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=(), force_a
         out.append((t, len(rows[t]), js._fingerprint(rows[t]), None, when))
     out.append((js.COLS_SENTINEL, None, None, json.dumps(cols), when))
     out.append((js.STATUS_SENTINEL, None, status, None, when))
-    out.append((js.PROC_SENTINEL, 0, '0' * 64, None, when))
+    out.append((js.PROC_SENTINEL, 0, '0' * 64, when.isoformat(), when))
     out.append((js.FORCE_SENTINEL, None, 'forced', None,
                 NOW - timedelta(hours=force_age_h)))
     return [r for r in out if r[0] not in drop]
@@ -385,6 +393,67 @@ def _state(age_min=5, status='SUCCEEDED', rows=None, cols=None, drop=(), force_a
 def test_unchanged_everything_skips_without_touching_fabric():
     why = js._fast_skip(_LocalCur(_state()), NOW)
     assert why and 'no Fabric session opened' in why
+
+
+# ==> THE TEST THAT WOULD HAVE CAUGHT IT. <== Every _fast_skip test above builds the cache by
+# hand, so they all passed while the thing that WRITES the cache never wrote the row the skip
+# depends on. _mirror_local omitted PROC_SENTINEL and _fast_skip bailed on every run for weeks --
+# in production, silently, because falling through to Fabric is the safe direction and looks
+# exactly like working. A hand-built fixture can only test the half you remembered to build.
+#
+# So: write the cache the way the job writes it, then ask the skip to read it back.
+
+class _RoundTripCur:
+    """Captures _save_local writes, then serves them back to _fast_skip as Input.Sync_State."""
+
+    def __init__(self, rows):
+        self.saved = {}
+        self._rows = rows
+        self._next = None
+
+    def execute(self, sql, *args):
+        if sql.startswith('DELETE FROM [Input].[Sync_State]'):
+            self.saved.pop(args[0], None)
+        elif sql.startswith('INSERT INTO [Input].[Sync_State]'):
+            item, row_count, fingerprint, payload = args
+            self.saved[item] = (row_count, fingerprint, payload, NOW)
+        elif sql.startswith('SELECT Item, Row_Count'):
+            self._next = [(k,) + v for k, v in self.saved.items()]
+        elif sql.startswith('SELECT '):
+            table = sql.split('FROM [Input].[')[1].split(']')[0]
+            self._next = self._rows[table]
+        return self
+
+    def fetchall(self):
+        return self._next
+
+
+def test_what_the_job_writes_is_what_the_skip_can_read():
+    rows = _nonempty_rows()
+    cur = _RoundTripCur(rows)
+    fps = {t: (len(rows[t]), js._fingerprint(rows[t])) for t in js.FULL_TABLES}
+    colmap = {t: ['A'] for t in js.FULL_TABLES}
+
+    # Exactly the call the job makes on a run where the merge was skipped.
+    js._mirror_local(cur, fps, colmap, 'SUCCEEDED', forced=True,
+                     proc_ran_at=NOW - timedelta(minutes=5))
+
+    assert js.PROC_SENTINEL in cur.saved, 'the mirror must write the row the skip depends on'
+    why = js._fast_skip(cur, NOW)
+    assert why and 'no Fabric session opened' in why
+
+
+def test_the_mirrored_merge_time_is_the_warehouse_one_not_now():
+    # _save_local stamps Updated_At with now on every write, so mirroring "now" on a skipped run
+    # would reset the self-heal clock and the 60-minute backstop could never fire. The real
+    # timestamp travels in Payload; a merge older than the window must still fall through.
+    rows = _nonempty_rows()
+    cur = _RoundTripCur(rows)
+    fps = {t: (len(rows[t]), js._fingerprint(rows[t])) for t in js.FULL_TABLES}
+    js._mirror_local(cur, fps, {t: ['A'] for t in js.FULL_TABLES}, 'SUCCEEDED', forced=True,
+                     proc_ran_at=NOW - timedelta(minutes=js.PROC_MAX_SKIP_MINUTES + 1))
+
+    assert js._fast_skip(cur, NOW) is None, 'a stale merge must self-heal, not skip for ever'
 
 
 def test_a_missing_cache_falls_through_to_fabric():
