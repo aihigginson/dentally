@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "f90c483f6c1fa3ea6603",
   "position": {
     "x": 256,
@@ -1110,6 +1110,42 @@
           },
           "selector": {
             "id": "default"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Active Patients"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Dentist Retention Outlook"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Net Patient Growth"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Overdue Recalls"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Email Details Rate"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.Phone Details Rate"
           }
         }
       ],

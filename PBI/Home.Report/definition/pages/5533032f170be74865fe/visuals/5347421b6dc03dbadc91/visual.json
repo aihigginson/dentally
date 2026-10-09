@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "5347421b6dc03dbadc91",
   "position": {
     "x": 1023.8907849829351,
@@ -566,6 +566,24 @@
           },
           "selector": {
             "id": "default"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.NHS UDA Contracted"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.NHS UDA Completed"
+          }
+        },
+        {
+          "properties": {},
+          "selector": {
+            "metadata": "_Measures.NHS UDA Completion Rate"
           }
         }
       ],

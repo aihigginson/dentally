@@ -9,12 +9,21 @@ from pathlib import Path
 
 random.seed(42)
 TODAY   = date.fromisoformat(os.environ.get('GENERATE_AS_OF', '2026-07-01'))
-# Three years of history, not six. Nothing before 2024 is wanted: it halves the data, the seed
-# time and the weekly rebuild's load on the capacity, and three years is still two full prior
-# years for a year-on-year comparison and enough for the 24-month dormancy checks to mean
-# anything. Relative rather than a fixed 2024 floor so it does not silently grow back to six
-# years by 2030.
-YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '3'))
+# Four years of history, not six. Six halves nothing useful and doubles the seed time and the
+# weekly rebuild's load on the capacity. Relative rather than a fixed floor so it does not
+# silently grow back to six years by 2030.
+#
+# ==> FOUR, NOT THREE, AND IT COSTS INTAKE UNLESS YOU WATCH FOR IT. <== A fourth year was asked
+# for to give the 24-month dormancy rule room behind it. It does -- but new_patient_rate is a
+# fraction of the TOTAL patient count spread across the whole window, so lengthening the window
+# DILUTES annual intake: at 0.130 it fell from 222 new a year to 153, while a fourth year of
+# accumulated drifters pushed lapsing from 281 to 341. Net Patient Growth went from -64 to -190.
+#
+# The lapsing was never a window-edge artefact. It is steady attrition of about 5% a year, which
+# is ordinary; the practice shrank because intake at 3.9% sat below it. new_patient_rate is
+# scaled in seed_tenants to keep the ANNUAL intake above attrition -- so if this constant moves
+# again, that rate has to move with it.
+YEARS_BACK = int(os.environ.get('GENERATE_YEARS_BACK', '4'))
 START   = TODAY.replace(year=TODAY.year - YEARS_BACK)
 FWD_END = TODAY + timedelta(days=428)  # ~14 months forward
 NS      = _uuid.NAMESPACE_OID
@@ -108,6 +117,14 @@ _TX_TCO = [
 
 _LAB   = {1601,1602,1611,1701,1711,1721,1731,2102,2103,8111,8121}
 _BAND  = {1:27.90, 2:76.60, 3:332.10}
+# ==> A CAPITATION PLAN GETS ITS EXAM AND HYGIENE FREE, AND THAT IS NOT COSMETIC. <==
+# Gold.Fact_Plan_Spell reconstructs membership FROM attended free exams, so a membership tier
+# priced like private work generates no free exam, gets no spell, and therefore has no members,
+# no capitation and no cross-charge. Tenants 1-4 call their single tier "Care Plan"; tenant 11
+# has eight. Testing a SET rather than one name keeps the old tenants identical.
+_CAPITATION_PLANS = {"Care Plan", "Child Plan", "Essentials A", "Essentials B",
+                     "Care Plan A", "Care Plan B", "Care Plan C", "Care Plan D", "Care Plan E"}
+
 _PP_PRICE = {101:95, 111:145, 121:195}  # Premium Private exam price overrides
 _PP_DUR   = {101:40, 111:60,  121:75}   # Premium Private exam duration overrides
 _EXAM_CODES = {101, 111, 121}
@@ -729,7 +746,7 @@ def gen_fees(tdef, treatments, payment_plans):
             pp_name = pp["name"]
             if pp_name == "NHS":
                 price = 0.0; dur = priv_dur
-            elif pp_name == "Care Plan":
+            elif pp_name in _CAPITATION_PLANS:
                 price = 0.0 if code in {101,111,1001} else round(priv_price * mult, 2)
                 dur = priv_dur
             elif pp_name == "Premium Private":
@@ -2324,11 +2341,22 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             patient_charge = 0.0 if exempt else band_charge
             total_amount = patient_charge
             disc_rate = 0.0
+            disc_value = 0.0
         else:
             total_amount = sum(float(pi["price"]) for pi in plan_items)
-            # ~10% of private invoices get a discount (5–15%); invoice.amount stays gross
-            disc_rate = rng.uniform(0.05, 0.15) if rng.random() < 0.10 else 0.0
-            patient_charge = total_amount * (1 - disc_rate)
+            # ==> A DISCOUNT IS A NEGATIVE LINE, NOT A QUIET REDUCTION OF EVERY OTHER LINE. <==
+            # This used to shave each line and leave the header at gross, which is a HEADER GAP --
+            # the shape V215 stopped detecting, because a discount makes a header LESS than its
+            # lines and not more. It found nothing on the live practice and accounted for every
+            # row on this one, so the demo lost its discounts entirely the day that landed.
+            #
+            # 3%, not 10%: the live practice discounts 643 invoices of 50,934. Ten percent was a
+            # demo artefact. Rounded to the penny HERE so the header is exactly gross minus the
+            # discount line -- a float multiply left them a penny apart often enough to matter to
+            # a reconciliation guard.
+            disc_rate = rng.uniform(0.05, 0.15) if rng.random() < 0.03 else 0.0
+            disc_value = round(total_amount * disc_rate, 2) if disc_rate else 0.0
+            patient_charge = total_amount - disc_value
             band_num = None
 
         # ==> A DENTAL PRACTICE TAKES THE MONEY AT THE DESK. <== This marked EVERY invoice
@@ -2353,7 +2381,10 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             "payment_plan_id": plan["payment_plan_id"],
             "user_id": admin_user_id,
             "reference": inv_ref,
-            "amount": _fmt(total_amount),   # gross; items are reduced when disc_rate > 0
+            # NET -- gross less the Discount line below, so the header equals the sum of its
+            # lines. That is the shape the live practice emits and the one Gold.Invoice_Discount
+            # reconciles against.
+            "amount": _fmt(patient_charge),
             "amount_outstanding": _fmt(outstanding),
             "paid": is_paid,
             "paid_on": str(completed_date) if is_paid else None,
@@ -2367,9 +2398,11 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
             "updated_at": _iso(completed_date),
         })
 
-        # Invoice items
+        # Invoice items -- at FULL price. The discount is a line of its own, below.
+        by_prac = {}
         for pos, pi in enumerate(plan_items):
-            item_price = float(pi["price"]) * (1 - disc_rate)
+            item_price = float(pi["price"])
+            by_prac[pi["practitioner_id"]] = by_prac.get(pi["practitioner_id"], 0.0) + item_price
             iitem_id = _u5("ii", tid, inv_id, pos)
             items.append({
                 "id": iitem_id,
@@ -2388,6 +2421,30 @@ def gen_invoices_and_items(tdef, plans, plan_items_by_plan, patients_by_id, rng)
                 "updated_at": _iso(completed_date),
             })
             pi["invoice_id"] = inv_id  # mutate in-place; pibp holds references to plan_items dicts
+
+        # ==> THE DISCOUNT LINE, AND WHOSE IT IS. <== It carries the practitioner who did the
+        # most work on this invoice, which is NOT always the one heading it -- on the live
+        # practice they differ routinely, and line-level attribution (confirmed with the
+        # practice owner) is what the discount measures read. A demo where they never differ
+        # would not exercise the thing it is demonstrating.
+        if disc_value > 0:
+            items.append({
+                "id": _u5("ii", tid, inv_id, "disc"),
+                "invoice_id": inv_id,
+                "treatment_plan_id": plan_id,
+                "treatment_plan_item_id": None,
+                "practitioner_id": (max(by_prac, key=by_prac.get) if by_prac
+                                    else plan["practitioner_id"]),
+                "user_id": admin_user_id,
+                "sundry_id": None,
+                "name": "Discount",
+                "item_price": _fmt(-disc_value),
+                "nhs_charge": 0,
+                "quantity": 1,
+                "total_price": _fmt(-disc_value),
+                "created_at": _iso(completed_date),
+                "updated_at": _iso(completed_date),
+            })
 
         # NHS band charge line
         if is_nhs and patient_charge > 0:

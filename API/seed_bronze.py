@@ -86,11 +86,19 @@ FIELD_OVERRIDES = {
     'Payments':      {'id': 'Payment_ID'},
     'Fees':          {'id': 'Fee_ID'},
     'Practitioners': {'id': 'Practitioner_ID', 'site_id': 'Practitioner_Site_ID',
+                      'active': 'Practitioner_Active',
                       'gdc_number': 'Practitioner_GDC_Number',
                       'nhs_number': 'Practitioner_NHS_Number',
                       'default_contract_id': 'Practitioner_Default_Contract_ID',
                       'colour': 'Practitioner_Colour'},
+    # ==> A PREFIXED Active COLUMN IS SILENTLY DROPPED WITHOUT AN OVERRIDE. <== The generator
+    # emits 'active'; to_column() turns that into 'Active'; these two Bronze tables call it
+    # 'Payment_Plan_Active' and 'Practitioner_Active'. No match, no mapping, column left NULL --
+    # and Silver then resolves NULL to 0, so the next full build would mark EVERY demo
+    # practitioner and EVERY demo plan inactive. Sites and Treatments use a bare 'Active' and map
+    # fine, which is why this went unseen.
     'Payment_Plans': {'id': 'Payment_Plan_ID', 'name': 'Payment_Plan_Name',
+                      'active': 'Payment_Plan_Active',
                       'created_at': 'Payment_Plan_Created_At',
                       'colour': 'Payment_Plan_Colour',
                       'patient_friendly_name': 'Payment_Plan_Patient_Friendly_Name',

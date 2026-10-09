@@ -2457,52 +2457,71 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 //    metric's BG (already encodes direction/type/variance band + reacts to the filters), so the
 //    header colour recomputes live in the Period/Site/Role/Practitioner context. Built as a sum of
 //    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
-Action<string,string[]> areaRag = (name, bgs) => {
-    // ==> EVALUATE EACH CHILD MEASURE EXACTLY ONCE. <== The first version referenced every BG
-    // twice (score + ISBLANK) and the worst-tile cap took it to three. A BG measure is not
-    // cheap -- each resolves its target out of '_Daily Targets' (~243k rows) with a TREATAS
-    // join from List Date -- and the Home page carries five of these headers over ~35 child
-    // measures. At three references that is ~105 evaluations of the most expensive measures on
-    // the page, on top of the ~112 the tiles themselves already cost. Hoisted into VARs, which
-    // the engine computes once: same result, a third of the work.
-    string vars = "", scores = "", counted = "", worst = "";
+Action<string,string[],int[]> areaRag = (name, bgs, weights) => {
+    // ==> EVALUATE EACH CHILD MEASURE EXACTLY ONCE. <== A BG measure is not cheap -- each
+    // resolves its target out of '_Daily Targets' (~243k rows) with a TREATAS join from List
+    // Date -- and the Home page carries five of these headers over ~35 child measures. Hoisted
+    // into VARs, which the engine computes once. Dropping the worst-tile cap took this from
+    // three references per metric to one.
+    //
+    // ==> WEIGHTED, NOT COUNTED. <== Each metric contributes its Area_Weight from
+    // Config.Metric_Definitions. Patients must go amber on Patient Growth alone (45 of 100)
+    // while Clinical stays light green despite a red Open Courses Value (5 of 100); neither is
+    // reachable with equal votes, and the old worst-tile cap forced the first and forbade the
+    // second. The cap is gone: the metrics in an area are not independent -- the headline is
+    // composed of the ones beneath it, so a real problem reinforces itself across several tiles
+    // and the weighted average finds it without help.
+    //
+    // ==> AN UNSCORED TILE NEITHER VOTES NOR DILUTES. <== The old divisor counted any non-BLANK
+    // tile while the score SWITCH returned 0 for any colour it did not recognise, so a
+    // neutral-banded tile scored zero AND counted, dragging its area down for no reason. The
+    // denominator is now the sum of the weights that actually scored, so renormalisation falls
+    // out of the same SWITCH that scores.
+    if (bgs.Length != weights.Length) { throw new Exception(name + ": " + bgs.Length.ToString()
+        + " metrics but " + weights.Length.ToString() + " weights"); }
+    string vars = "", num = "", den = "";
     for (int k = 0; k < bgs.Length; k++) {
         string v = "v" + k.ToString();
-        vars    += "VAR " + v + " = " + bgs[k] + "\n";
-        if (scores  != "") { scores  += " + "; }
-        if (counted != "") { counted += " + "; }
-        if (worst   != "") { worst   += ", "; }
-        scores  += @"SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)";
-        counted += "IF(ISBLANK(" + v + "), 0, 1)";
-        worst   += @"IF(ISBLANK(" + v + @"), 99, SWITCH(" + v + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 99))";
+        string w = weights[k].ToString();
+        vars += "VAR " + v + " = SWITCH(" + bgs[k]
+              + @", ""#c0392b"", 1, ""#f4a261"", 2, ""#6abf7b"", 3, ""#1a7f3c"", 4, 0)" + "\n";
+        if (num != "") { num += " + "; den += " + "; }
+        num += v + " * " + w;
+        den += "IF(" + v + " > 0, " + w + ", 0)";
     }
-    add(name, vars + @"VAR n = " + counted + @"
-VAR scoreAvg = DIVIDE(" + scores + @", n)
-VAR worst = MINX( { " + worst + @" }, [Value] )
--- ==> A RAG HEADER IS PESSIMISTIC, OR IT IS DECORATION. <== The average alone let six mild
--- positives outvote one serious failure: Private Revenue at -20% sat under a GREEN Revenue
--- header. The average still sets the ceiling of optimism, but the WORST tile caps it -- an area
--- can never read better than one band above its weakest metric. One strong red therefore holds
--- the area at amber however much green surrounds it.
---
--- A tile with no band scores nothing and leaves the divisor: it neither votes nor caps, so a
--- metric the practice has no target for cannot prop an area up (it used to score 2.5, better
--- than amber) nor drag it down.
-VAR capped = MIN( scoreAvg, worst + 1 )
+    add(name, vars + @"VAR wTotal = " + den + @"
+VAR score = DIVIDE(" + num + @", wTotal)
 RETURN
-    -- n = 0 means every tile here is blank. Return BLANK, not a colour: DIVIDE would yield
-    -- BLANK, BLANK coerces to 0, and the header would paint STRONG RED for an area that simply
-    -- has no targets set.
-    IF ( n = 0, BLANK(),
-        SWITCH(TRUE(), capped < 2, ""#c0392b"", capped < 2.5, ""#f4a261"", capped <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
+    -- wTotal = 0 means not one tile in this area carries a band. Return BLANK, not a colour:
+    -- DIVIDE would yield BLANK, BLANK coerces to 0, and the header would paint STRONG RED for
+    -- an area that simply has no targets set.
+    IF ( wTotal = 0, BLANK(),
+        SWITCH(TRUE(), score < 2, ""#c0392b"", score < 2.5, ""#f4a261"", score <= 3, ""#6abf7b"", ""#1a7f3c"") )", "");
 };
-areaRag("Revenue Area RAG",    new string[]{ "[Total Revenue BG]", "[Private Revenue BG]", "[Plan Capitation Revenue BG]", "[NHS Revenue BG]", "[Revenue Per Dentist Hour BG]", "[Outstanding Invoices BG]", "[Discounts BG]", "[Deposit Value BG]" });
-areaRag("Patients Area RAG",   new string[]{ "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[New Patients BG]", "[Lapsed Patients BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" });
-areaRag("Scheduling Area RAG", new string[]{ "[Chair Utilisation BG]", "[DNA Rate BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Book Before You Leave BG]", "[Days Until Next 30 Minute Free BG]" });
-areaRag("Clinical Area RAG",   new string[]{ "[Revenue Per Clinical Hour BG]", "[Average Plan Value BG]", "[Open Courses Value BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]" });
-// NHS: only Completion Rate carries a target/band (Contracted/Completed are raw UDA counts), so
-// the NHS area score rides on that single metric.
-areaRag("NHS Area RAG",        new string[]{ "[NHS UDA Completion Rate BG]" });
+
+// ==> GENERATED -- DO NOT EDIT BY HAND. <== Area membership and weights come from
+// Config.Metric_Definitions in the warehouse, written here by Scripts/Generate_Area_Weights.py.
+// They used to be hand-maintained lists, which is exactly how Patients came to score New
+// Patients and Lapsed Patients while DISPLAYING Patient Growth, and Scheduling came to score
+// Chair Utilisation while displaying Diary Fill. Nobody could see the drift because the lists
+// lived nowhere near the page they coloured.
+// BEGIN AREA WEIGHTS
+areaRag("Revenue Area RAG",
+    new string[]{ "[Total Revenue BG]", "[NHS Revenue BG]", "[Private Revenue BG]", "[Plan Capitation Revenue BG]", "[Revenue Per Dentist Hour BG]", "[Deposit Value BG]", "[Discounts BG]", "[Outstanding Invoices BG]" },
+    new int[]{ 45, 5, 15, 10, 10, 5, 5, 5 });
+areaRag("Patients Area RAG",
+    new string[]{ "[Net Patient Growth BG]", "[Active Patients BG]", "[Dentist Retention Outlook BG]", "[Overdue Recalls BG]", "[Email Details Rate BG]", "[Phone Details Rate BG]" },
+    new int[]{ 45, 15, 15, 10, 8, 7 });
+areaRag("Scheduling Area RAG",
+    new string[]{ "[Diary Fill BG]", "[DNA Rate BG]", "[Days Until Next 30 Minute Free BG]", "[Book Before You Leave BG]", "[Cancellation Frequency BG]", "[Short Notice Cancellation Rate BG]", "[Cancellations Rebooked BG]" },
+    new int[]{ 30, 15, 8, 12, 15, 10, 10 });
+areaRag("Clinical Area RAG",
+    new string[]{ "[Revenue Per Clinical Hour BG]", "[Open Courses BG]", "[Open Courses Without Appointment BG]", "[Exam Ratio BG]", "[Average Plan Value BG]", "[Open Courses Value BG]" },
+    new int[]{ 40, 10, 10, 15, 20, 5 });
+areaRag("NHS Area RAG",
+    new string[]{ "[NHS UDA Completion Rate BG]" },
+    new int[]{ 100 });
+// END AREA WEIGHTS
 
 add("_Period Run Rate",
     @"VAR period_key = [_FY Period Key]

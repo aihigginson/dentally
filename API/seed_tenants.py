@@ -77,10 +77,34 @@ def generate_xero_finance(tdef, data, load_ts):
         return accounts, [], org, tracking
     avg_rev = sum(rev_by_month.values()) / len(rev_by_month)
 
-    inc = {'200': 0.55, '201': 0.35, '202': 0.10} if tdef.get('nhs') \
-          else {'200': 0.05, '201': 0.85, '202': 0.10}
+    # ==> EACH INCOME ACCOUNT COMES FROM THE THING IT REPRESENTS. <== These used to be flat
+    # fractions of invoiced revenue, so Plan Income had no connection to how many members the
+    # practice had and NHS income had none to the contract. The warehouse computes all three
+    # from source, so the books and the practice system described different businesses -- 53%
+    # apart on this tenant, against 4.4% on the live practice.
+    #
+    # Monthly capitation: every ACTIVE member times their own plan's charge. The plan fee a
+    # patient sees is on the payment plan; Input.Plan_Capitation_Rate is what the warehouse
+    # bills from, and the owner keeps the two aligned.
+    _pp_charge = {pp['id']: float(pp.get('monthly_charge') or 0) for pp in tdef['payment_plans']}
+    plan_income_month = round(sum(_pp_charge.get(pt.get('payment_plan_id'), 0.0)
+                                  for pt in data['patients'] if pt.get('active')), 2)
+
+    # Monthly NHS income is DELIVERED UDAs times the contract rate -- not the patient's band
+    # charge, which is a slice of it and never income on top. Delivery is taken as the
+    # contract target, which is what a practice budgets to; the completion check below is what
+    # reports the shortfall.
+    _contracts = tdef.get('contracts') or []
+    nhs_income_month = 0.0
+    if _contracts and tdef.get('nhs'):
+        _c = _contracts[-1]
+        nhs_income_month = round(float(_c.get('target') or 0)
+                                 * float(_c.get('uda_value') or 0) / 12.0, 2)
     var_cost = {'320': 0.34, '300': 0.07, '310': 0.05, '400': 0.17,
                 '430': 0.018, '450': 0.02, '480': 0.01, '495': 0.012}
+    # avg_rev is the TOTAL monthly income, not just the invoiced part -- fixed costs sized
+    # off a third of the practice's income are what made rent and depreciation look trivial.
+    avg_rev = avg_rev + nhs_income_month + plan_income_month
     fixed_amt = {c: round(avg_rev * f, 2) for c, f in
                  {'410': 0.055, '420': 0.012, '440': 0.02, '460': 0.009,
                   '470': 0.011, '490': 0.006,
@@ -104,9 +128,15 @@ def generate_xero_finance(tdef, data, load_ts):
         })
 
     for month in sorted(rev_by_month):
-        rev = rev_by_month[month]
-        for code, frac in inc.items():
-            add(month, code, 'ACCREC', rev * frac)
+        # Invoiced treatment, less whatever the NHS band charges in it already represent --
+        # those are a slice of the UDA income counted on 200, not income on top of it.
+        private_income = rev_by_month[month]
+        add(month, '201', 'ACCREC', private_income)
+        add(month, '200', 'ACCREC', nhs_income_month)
+        add(month, '202', 'ACCREC', plan_income_month)
+        # Costs stay proportional to the practice's TOTAL income, which is why they used to
+        # tower over a revenue line drawn from a third of it.
+        rev = private_income + nhs_income_month + plan_income_month
         for code, frac in var_cost.items():
             add(month, code, 'ACCPAY', rev * frac * rng.uniform(0.92, 1.08))
         for code, amt in fixed_amt.items():
@@ -173,16 +203,30 @@ T11 = {
         # Denplan tiers run 8 to 65 with a 35.77 default, so a 29.99 core plan and a 44.99
         # premium tier bracket it properly. Input.Plan_Capitation_Rate carries the same
         # figures -- that table, not this one, is what the revenue is actually computed from.
-        _pp(3, 'Care Plan',  monthly='29.99', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(4, 'Premium Private', monthly='44.99', dr=6, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
+        # Premium Private is NOT a membership plan -- it is a higher-priced private tariff, and
+        # it carried capitation it should never have had. Monthly 0.00 keeps it out of
+        # Input.Plan_Capitation_Rate's shape and off the capitation report.
+        _pp(3, 'Premium Private', dr=6, hr=3, exam_dur=40, sp_dur=45, emg_dur=20),
+        # ==> THE MEMBERSHIP TIERS. <== Modelled on the live practice's eight, with the values
+        # rounded and the names changed so the demo never shows a real customer's pricing.
+        # Input.Plan_Capitation_Rate is what the revenue is actually computed from; these
+        # monthly figures are what a patient would see.
+        _pp(4,  'Child Plan',   monthly='8.00',  dr=6, hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
+        _pp(5,  'Essentials A', monthly='22.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(6,  'Care Plan A',  monthly='24.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(7,  'Care Plan B',  monthly='34.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(8,  'Essentials B', monthly='36.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(9,  'Care Plan C',  monthly='44.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(10, 'Care Plan D',  monthly='55.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(11, 'Care Plan E',  monthly='65.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
     ],
     'contracts': [
-        _contract(11, 't11-cl', 'VDX01', 2021, 2000, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2022, 2050, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2023, 2100, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2024, 2100, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2025, 2100, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 2100, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2021, 3150, 26.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2022, 3250, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2023, 3300, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2024, 3300, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2025, 3300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2026, 3300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
@@ -235,49 +279,49 @@ T11 = {
          'custom_role': 'Principal', 'fte': 0.85,
          'site_id': 't11-cl', 'gdc_number': '1110001', 'nhs_pct': 0.22,
          'work_days': [0, 1, 2, 3], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [1], 'late_end': '19:30', 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [1], 'late_end': '19:30', 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 2, 'first_name': 'Amara', 'last_name': 'Singh', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Principal', 'fte': 0.60,
          'site_id': 't11-cl', 'gdc_number': '1110002', 'nhs_pct': 0.15,
          'work_days': [0, 1, 2], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 4, 'first_name': 'Zoe', 'last_name': 'Crawford', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110004', 'nhs_pct': 0.18,
          'work_days': [3, 4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 5, 'first_name': 'Kwame', 'last_name': 'Asante', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate', 'fte': 0.20,
          'site_id': 't11-cl', 'gdc_number': '1110005', 'nhs_pct': 0.20,
          'work_days': [4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         # The high-yield part-timer. Private only -- implant work is private by definition,
         # which is why nhs_pct is 0 and performs_nhs is False.
         {'id': 6, 'first_name': 'Rohan', 'last_name': 'Mistry', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Implantologist', 'fte': 0.10,
          'site_id': 't11-cl', 'gdc_number': '1110006', 'nhs_pct': 0.0,
          'work_days': [2], 'start_time': '09:00', 'end_time': '14:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [2, 4], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': False, 'active': True},
         {'id': 3, 'first_name': 'Patrick', 'last_name': 'Ryan', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate Specialist', 'fte': 0.10,
          'site_id': 't11-cl', 'gdc_number': '1110003', 'nhs_pct': 0.0,
          'work_days': [1], 'start_time': '09:00', 'end_time': '13:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [2, 4], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': False, 'active': True},
         {'id': 9, 'first_name': 'Claire', 'last_name': 'Hughes', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.55,
          'site_id': 't11-cl', 'gdc_number': '1110009', 'nhs_pct': 0.15,
          'work_days': [0, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 10, 'first_name': 'Rita', 'last_name': 'Osei', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110010', 'nhs_pct': 0.1,
          'work_days': [1, 3], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 11, 'first_name': 'Dev', 'last_name': 'Patel', 'title': 'Mr', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110011', 'nhs_pct': 0.12,
          'work_days': [0, 3], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         # ==> SIZE THE CHAIRS TO THE DEMAND, NOT TO THE PATIENT COUNT. <== Two corrections
         # are baked into these hours. Definition hours run ~35% above the measured figure
         # because holiday absence blocks take roughly a quarter of the year out, and measured
@@ -290,22 +334,22 @@ T11 = {
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110007', 'nhs_pct': 0.18,
          'work_days': [0, 1], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 8, 'first_name': 'Tom', 'last_name': 'Bradshaw', 'title': 'Dr', 'role': 'dentist',
          'custom_role': 'Associate', 'fte': 0.40,
          'site_id': 't11-cl', 'gdc_number': '1110008', 'nhs_pct': 0.24,
          'work_days': [2, 3], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 13, 'first_name': 'Priya', 'last_name': 'Raman', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.55,
          'site_id': 't11-cl', 'gdc_number': '1110013', 'nhs_pct': 0.12,
          'work_days': [1, 2, 4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
         {'id': 12, 'first_name': 'Maya', 'last_name': 'Lindqvist', 'title': 'Ms', 'role': 'hygienist',
          'custom_role': 'Hygienist', 'fte': 0.30,
          'site_id': 't11-cl', 'gdc_number': '1110012', 'nhs_pct': 0.1,
          'work_days': [3, 4], 'start_time': '09:00', 'end_time': '16:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4], 'performs_nhs': True, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'performs_nhs': True, 'active': True},
     ],
     # ==> THE CARE PLAN HAD NO PATIENTS ON IT AT ALL. <== A patient's plan is drawn from
     # their DENTIST'S pp_ids, and plan 3 was listed only against the hygienists -- so a plan
@@ -316,13 +360,39 @@ T11 = {
     # because it was listed against only two of the six general dentists and the draw is made
     # from the patient's own dentist's plans. With it offered practice-wide these land plan
     # patients at ~20% overall, as the live practice runs, averaging ~35/month.
-    '_pp_weights': {2: 0.75, 3: 0.16, 4: 0.09},
+    # Relative weights among the NON-NHS plans (NHS is drawn first, per dentist). Taken from
+    # the live practice's own book: of 5,459 non-NHS actives, 73.4% are Private, 25.8% are on a
+    # membership tier and 0.8% sit on something else. The tier split is Maple's -- C-heavy at a
+    # third, Essentials A a quarter -- because an even spread across eight tiers is the first
+    # thing that reads as generated on a plan report.
+    '_pp_weights': {
+        2: 73.4,      # Private
+        3:  0.8,      # Premium Private (non-capitation)
+        4:  0.21,     # Child Plan
+        5:  6.73,     # Essentials A
+        6:  1.32,     # Care Plan A
+        7:  4.13,     # Care Plan B
+        8:  1.85,     # Essentials B
+        9:  8.90,     # Care Plan C
+        10: 2.35,     # Care Plan D
+        11: 0.33,     # Care Plan E
+    },
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
         'active_rate':             0.95,
         # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
         # for a list this size, which flatters every growth and acquisition number.
-        'new_patient_rate':        0.130,
+        #
+        # ==> THIS IS A FRACTION OF THE LIST SPREAD OVER THE WHOLE WINDOW, NOT A YEARLY RATE. <==
+        # So it has to be read against YEARS_BACK: at 4 years, 0.310 is ~465 new patients a year on
+        # a 6,000 list. That has to clear attrition, which runs about 5% -- 340 a year lapse at the
+        # 24-month dormancy mark, and a practice recruiting below that shrinks. 0.130 over a
+        # three-year window was 222 a year against 286 lapsing, which is why Net Patient Growth
+        # read negative on a demo that is supposed to look like a going concern.
+        #
+        # If YEARS_BACK changes, change this with it or the practice silently starts shrinking
+        # again: a longer window spreads the same intake thinner AND accumulates more drifters.
+        'new_patient_rate':        0.310,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
