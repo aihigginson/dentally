@@ -225,8 +225,11 @@ T11 = {
         _contract(11, 't11-cl', 'VDX01', 2022, 3250, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
         _contract(11, 't11-cl', 'VDX01', 2023, 3300, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
         _contract(11, 't11-cl', 'VDX01', 2024, 3300, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2025, 3300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 3300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        # The last two years carry a 4,300 UDA target. The pool that delivers against it grew by
+        # a third at the 2026-10-10 reseed, which took completion to 116% -- over-delivery the NHS
+        # does not pay for. 4,300 puts it near 89%, which is the shape of a real contract year.
+        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2026, 4300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
