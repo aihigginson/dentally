@@ -1014,8 +1014,26 @@ def gen_patients(tdef, rng):
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pp_weights = tdef.get("_pp_weights", {})
 
+    # ==> n_patients IS THE LIST WE END WITH; JOINERS ARE GENERATED ON TOP OF IT. <==
+    # It used to be the total ever generated, with new_patient_rate merely choosing WHEN an
+    # existing member of that pool was created -- so a "new patient" was never an extra
+    # patient. With lapse_rate retiring 22% of the list permanently and nothing replacing
+    # them, the attending population could only decay, and every rate built on it decayed too:
+    # Diary Fill 77.1 -> 71.9, Dentist Retention 74.2 -> 62.8, Open (No Appt) from a third of
+    # open courses to 92% of them, Net Patient Growth -147.
+    #
+    # Joiners replace the lapsed AND add the year-on-year growth, so the roster at the start of
+    # the window is smaller than today's and grows through it.
+    _lapse_rate   = params.get("lapse_rate", 0.22)
+    _growth       = params.get("annual_growth", 0.03)
+    _years        = max(1.0, (TODAY - START).days / 365.0)
+    _joiners      = int(round(n * (_lapse_rate + _growth * _years)))
+    n_total       = n + _joiners
+    # Joiner INDEXES, so the decision is made once and the creation date below just follows it.
+    _joiner_ix    = set(rng.sample(range(1, n_total + 1), _joiners)) if _joiners else set()
+
     patients = []
-    for i in range(1, n+1):
+    for i in range(1, n_total+1):
         # Assign site
         r = rng.random()
         cum = 0.0
@@ -1104,11 +1122,15 @@ def gen_patients(tdef, rng):
         pc_area = postcode_map.get(site_id, "SW1")
         postcode = f"{pc_area} {rng.randint(1,9)}{rng.choice('ABCDEFGH')}{rng.choice('ABCDEFGHJKLMNPQRSTUVWXY')}"
 
-        # Created date: legacy patients joined before START; new patients (new_patient_rate)
-        # joined during the data window so their first exam falls within it
-        if new_patient_rate > 0 and rng.random() < new_patient_rate:
-            max_days = max(1, (TODAY - START - timedelta(days=90)).days)
-            created = START + timedelta(days=rng.randint(1, max_days))
+        # Created date: the roster joined before START, joiners during the window.
+        #
+        # ==> AND JOINERS REACH TODAY. <== This stopped 90 days short, so the trailing-twelve-
+        # month new-patient count was a quarter light for no reason -- a practice does not stop
+        # registering patients three months before you look at it. Weighted towards the recent
+        # end (sqrt) because a growing list recruits more each year than it did the year before.
+        if i in _joiner_ix:
+            _span = max(1, (TODAY - START).days)
+            created = START + timedelta(days=int(_span * (rng.random() ** 0.5)))
         else:
             created_offset = rng.randint(0, 365*5)
             created = START - timedelta(days=created_offset)

@@ -225,8 +225,11 @@ T11 = {
         _contract(11, 't11-cl', 'VDX01', 2022, 3250, 26.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
         _contract(11, 't11-cl', 'VDX01', 2023, 3300, 27.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
         _contract(11, 't11-cl', 'VDX01', 2024, 3300, 27.50, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2025, 3300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 3300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        # The last two years carry a 4,300 UDA target. The pool that delivers against it grew by
+        # a third at the 2026-10-10 reseed, which took completion to 116% -- over-delivery the NHS
+        # does not pay for. 4,300 puts it near 89%, which is the shape of a real contract year.
+        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        _contract(11, 't11-cl', 'VDX01', 2026, 4300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
@@ -392,7 +395,11 @@ T11 = {
         #
         # If YEARS_BACK changes, change this with it or the practice silently starts shrinking
         # again: a longer window spreads the same intake thinner AND accumulates more drifters.
-        'new_patient_rate':        0.310,
+        # ==> NOT A RATE ANY MORE. <== n_patients is the list we END with and joiners are
+        # generated on top of it, so growth is expressed directly: joiners = n x (lapse_rate +
+        # annual_growth x years). new_patient_rate is left for the other tenants, which still use
+        # the old back-dating path.
+        'annual_growth':           0.03,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
