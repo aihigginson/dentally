@@ -1450,6 +1450,51 @@
           "selector": {
             "metadata": "_Measures.Total Revenue"
           }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Plan Capitation Revenue",
+            "id": "field-3c0e3e51-26a0-4691-8365-725c41a16bcc"
+          }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Private Revenue",
+            "id": "field-91e47509-a346-966c-d7c3-694567367ad5"
+          }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Total Revenue",
+            "id": "field-24530124-89a9-6611-723f-aa825c1bb4ab"
+          }
         }
       ],
       "border": [

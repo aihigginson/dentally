@@ -1210,6 +1210,21 @@
           "selector": {
             "metadata": "_Measures.Active Patients"
           }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Active Patients",
+            "id": "field-b4c35f82-b01f-a5d6-4ce1-1583dcbb244a"
+          }
         }
       ],
       "border": [
