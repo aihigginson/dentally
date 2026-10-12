@@ -62,20 +62,6 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Lapsed Patients"
-                    }
-                  },
-                  "Property": "Lapsed Reason"
-                }
-              },
-              "queryRef": "_Lapsed Patients.Lapsed Reason",
-              "nativeQueryRef": "Lapsed Reason"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
                       "Entity": "List Patients"
                     }
                   },
