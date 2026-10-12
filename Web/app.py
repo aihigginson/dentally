@@ -1257,7 +1257,7 @@ def api_pricing():
     Cached in-process for 10 minutes so a public page never hammers / cold-starts the warehouse."""
     try:
         if _pricing_cache['data'] is not None and time.time() - _pricing_cache['ts'] < 600:
-            return jsonify({'profiles': _pricing_cache['data']})
+            return jsonify(_pricing_cache['data'])
         conn = _fabric_conn(); cur = conn.cursor()
         cur.execute("SELECT p.Profile_Key, p.Monthly_Price FROM Billing.Profile_Pricing p "
                     "JOIN (SELECT Profile_Key, MAX(Valid_From) vf FROM Billing.Profile_Pricing "
@@ -1265,10 +1265,18 @@ def api_pricing():
                     "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
         prices = {r[0]: float(r[1]) for r in cur.fetchall()}
         conn.close()
-        data = [{'key': k, 'name': _PROFILES[k]['label'], 'desc': _PROFILES[k].get('desc', ''), 'price': prices.get(k, 0.0)}
-                for k in ('full', 'clinician', 'front_office') if k in _PROFILES]
+        # lead_price rides ALONGSIDE the packages, never inside them -- the same separation
+        # /api/team makes. A practice's FIRST account is the primary and costs the lead rate, so a
+        # price list showing only the packages understates what anyone actually pays to start. But
+        # it is not a package: nobody can be put on it, and a consumer that rendered it as a fourth
+        # card would be offering something that cannot be bought.
+        data = {'profiles': [{'key': k, 'name': _PROFILES[k]['label'],
+                              'desc': _PROFILES[k].get('desc', ''), 'price': prices.get(k, 0.0)}
+                             for k in ('full', 'clinician', 'front_office') if k in _PROFILES],
+                'lead_price': prices.get('lead', 0.0)}
+        # The whole payload is cached, not just the list, so the two can never be served out of step.
         _pricing_cache.update(ts=time.time(), data=data)
-        return jsonify({'profiles': data})
+        return jsonify(data)
     except Exception as e:
         return _server_error(e, 'pricing')
 
