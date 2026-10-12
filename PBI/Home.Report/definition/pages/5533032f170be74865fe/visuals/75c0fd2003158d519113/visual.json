@@ -1513,6 +1513,51 @@
           "selector": {
             "metadata": "_Measures.Deposit Value"
           }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Total Revenue",
+            "id": "field-28b88d63-8dc5-fb05-1f60-342f26fa6710"
+          }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Private Revenue",
+            "id": "field-91e47509-a346-966c-d7c3-694567367ad5"
+          }
+        },
+        {
+          "properties": {
+            "valuePrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "1L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Measures.Plan Capitation Revenue",
+            "id": "field-c947661c-a65f-4c65-86de-082fe0ae2930"
+          }
         }
       ],
       "border": [
