@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Date"
+                      "Entity": "_Lapsed Patients"
                     }
                   },
-                  "Property": "Month Commencing Date"
+                  "Property": "Lapsed Date"
                 }
               },
-              "queryRef": "List Date.Month Commencing Date",
-              "nativeQueryRef": "Month Commencing Date"
+              "queryRef": "_Lapsed Patients.Lapsed Date",
+              "nativeQueryRef": "Lapsed Date"
             }
           ]
         },
