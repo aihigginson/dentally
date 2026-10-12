@@ -75,3 +75,4 @@
 - [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.
 - [Capitation rates have one generation](capitation-rates-have-one-generation.md) — Maple history is priced at 2026 rates; the real Xero gap after that is ~1.5% non-paying members.
 - [A silent except froze patient_stats](a-silent-except-froze-patient-stats.md) — an unlogged NameError stopped the feed for 3 months behind a job reporting Completed.
+- [Financial years differ per tenant](financial-years-differ-per-tenant.md) — Maple is calendar-year, the demo is April-March; a group view can only offer rolling windows.
