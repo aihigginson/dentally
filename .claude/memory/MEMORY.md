@@ -74,3 +74,4 @@
 - [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.
 - [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.
 - [Capitation rates have one generation](capitation-rates-have-one-generation.md) — Maple history is priced at 2026 rates; the real Xero gap after that is ~1.5% non-paying members.
+- [A silent except froze patient_stats](a-silent-except-froze-patient-stats.md) — an unlogged NameError stopped the feed for 3 months behind a job reporting Completed.
