@@ -42,3 +42,6 @@ Scripts/_*
 # Runtime lock for the scheduler (machine-local state, not shareable)
 .claude/scheduled_tasks.lock
 Web/.venv/
+
+# Artifact build staging (screenshots + page source for the published walkthrough)
+.artifact-build/

@@ -71,3 +71,4 @@
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
 - [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
+- [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.

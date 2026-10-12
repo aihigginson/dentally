@@ -2266,6 +2266,11 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                         _en = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
                         appointments.append({
                             "id": _next_apt_id, "patient_id": pat_id,
+                            # ==> THE SITE, WHICH THIS PATH USED TO DROP. <== Every other
+                            # appointments.append carries it; this one (the forward rebook)
+                            # did not, so those rows resolved to fk_Practice_Site = -1 and
+                            # vanished the moment a user picked a site rather than "All".
+                            "site_id": pat_site_id,
                             "practitioner_id": _pr, "user_id": _pr,
                             "payment_plan_id": pp_id, "room_id": None,
                             "start_time": _iso(_d, _st), "finish_time": _iso(_d, _en),
