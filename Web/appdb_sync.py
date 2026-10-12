@@ -67,8 +67,12 @@ ALERT_TO      = [a.strip() for a in os.environ.get(
 # never again, which is the behaviour that loses you a whole weekend if the one email goes astray.
 ALERT_REPEAT_HOURS = float(os.environ.get('ALERT_REPEAT_HOURS', '6'))
 
-FULL_TABLES = ['Application_Users', 'Access_Log', 'Metric_Variance', 'Plan_Capitation_Rate',
-               'Practice_Config', 'Practitioner_Pay', 'Practitioner_Role', 'Targets']
+# Billing_Contact is here because the LEAD SEAT is priced separately and the lead is whoever
+# Input.Billing_Contact.Primary_Email names -- Billing.usp_Generate_Invoice_Lines runs in the
+# warehouse, so it cannot see a table that lives only in the AppDB.
+FULL_TABLES = ['Application_Users', 'Access_Log', 'Billing_Contact', 'Metric_Variance',
+               'Plan_Capitation_Rate', 'Practice_Config', 'Practitioner_Pay',
+               'Practitioner_Role', 'Targets']
 
 # Sentinel row in Input_Stage.Sync_Fingerprint recording when the access proc last actually ran.
 # Not a table name, so it can never collide with one of FULL_TABLES.

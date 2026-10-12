@@ -107,6 +107,13 @@
                      background: rgba(255,255,255,0.25); color: white; padding: 2px 7px;
                      border-radius: 10px; margin-left: 8px; vertical-align: middle; }
         body.dev-mode .dev-badge { display: inline; }
+        /* The demo host: live chrome, no pickers, no "acting as" bar. The practice is pinned on the
+           SERVER, so a picker here would be a control that cannot control anything -- and the cyan
+           bar exists to warn you that you are inside someone else's practice, which on the demo is
+           the whole point rather than a hazard. !important because the JS sets display inline.
+           The DEV badge needs no rule: it is display:none until body.dev-mode, which demo omits. */
+        body.demo-mode .staff-picker { display: none !important; }
+        body.demo-mode .app-header { box-shadow: 0 1px 4px rgba(0,0,0,0.18) !important; }
         #dev-log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99999;
                    max-height: 30vh; overflow-y: auto; margin: 0; padding: 6px 10px;
                    background: rgba(20,0,40,0.88); color: #d6b3ff; font-family: monospace;
@@ -339,6 +346,19 @@
         .tgrid input { width: 84px; padding: 4px 6px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; }
         .tgrid td.na { background: repeating-linear-gradient(45deg, #f2f2f2, #f2f2f2 6px, #ececec 6px, #ececec 12px); color: #bbb; }
         .roles-row { display: grid; grid-template-columns: minmax(180px, 300px) auto; gap: 16px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.06); max-width: 560px; }
+        /* Subscriptions rows get their OWN columns. They reuse .roles-row for the rule and padding,
+           but that grid is "name | everything else", and everything else was one nowrap run of
+           select + My Data note + price + two ticks. The note is the longest and most variable part
+           of it, so every row pushed the price and the ticks to a different place and nothing lined
+           up down the page. Real columns fix it, and My Data moves to the END because it is an
+           explanatory aside about the row, not another control in the sequence. */
+        .team-row { grid-template-columns: minmax(190px, 1fr) 148px 62px 72px 82px minmax(0, 1.1fr);
+                    gap: 10px; max-width: 920px; }
+        .team-row > * { min-width: 0; }
+        .team-row .team-profile { width: 100%; font-size: 13px; padding: 4px 6px; }
+        .team-row .team-price { font-size: 11px; color: #0b3d5c; text-align: right; white-space: nowrap; }
+        .team-row .team-tick { font-size: 11px; color: #666; white-space: nowrap; }
+        .team-row .team-prac-note { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .role-input { width: 230px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
         .role-manage { max-width: 640px; margin: 4px 0 14px; }
         .role-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2f6; border: 1px solid #d7dee5; border-radius: 14px; padding: 3px 6px 3px 11px; margin: 3px 6px 3px 0; font-size: 12px; }
@@ -813,6 +833,18 @@
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
                     <span id="team-msg" class="settings-msg"></span>
+                    <!-- Site licence enquiry. Deliberately a mailto rather than a form: the price
+                         depends on the size of the organisation, so it is a conversation, not a
+                         self-serve option. Sits under the per-seat list because that is where
+                         someone counting up a large team will be when the question occurs to them. -->
+                    <div style="margin-top:18px;padding:10px 12px;background:#f5f8fa;border:1px solid #e3eaee;
+                                border-radius:6px;font-size:12px;color:#4a5b66;max-width:560px">
+                        <strong style="color:#0b3d5c">Larger organisation?</strong>
+                        A site licence charges one fixed monthly price for the whole organisation
+                        instead of a price per person, set according to its size.
+                        <a href="mailto:sales@analytically.info?subject=Site%20licence%20enquiry"
+                           style="color:#0b6ea8">Ask us for a price</a>.
+                    </div>
                     <!-- Lead account only. Hidden by default and revealed by loadTeam() when the
                          signed-in user is the recorded primary, so it never flashes for anyone else.
                          The API enforces the same rule -- this is presentation, not the control. -->
@@ -1384,7 +1416,11 @@
             };
         }
         if (o && data.practice_name) o.textContent = data.practice_name;
-        if (data.env === 'dev') document.body.classList.add('dev-mode');
+        // The demo host wears the LIVE chrome on purpose: no purple, no DEV badge, no pickers, so a
+        // demo shows what a practice actually sees. It is still the dev back end in every other
+        // respect -- the server pins the practice; this only dresses the page.
+        if (data.env === 'dev' && !data.demo) document.body.classList.add('dev-mode');
+        if (data.demo) document.body.classList.add('demo-mode');
 
         // ── The staff practice picker ────────────────────────────────────────
         // Switching reloads the app rather than re-fetching in place. Half the screen is Power BI
@@ -2208,6 +2244,7 @@
     // Subscriptions -----------------------------------------------------------
     let _teamProfiles = [];
     let _teamBilling = { primary_email: '', invoice_email: '' };
+    let _teamLead = 0;   // the lead rate, charged to the Primary row in place of its package price
     const _STD_PROFILES = ['full', 'clinician', 'front_office', 'no_access'];
     function _pracNote(profile, prac) {
         if (profile !== 'clinician') return '';
@@ -2219,8 +2256,9 @@
         try {
             const res = await authFetch('/api/team');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { people, profiles, billing } = await res.json();
+            const { people, profiles, billing, lead_price } = await res.json();
             _teamProfiles = profiles || [];
+            _teamLead = Number(lead_price) || 0;
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
             // Ending the subscription cuts off everyone, so it is the billing owner's call alone --
             // not every practice admin.
@@ -2244,27 +2282,41 @@
             if (!people.length) { list.textContent = 'No active staff found.'; return; }
             const profOpts = cur => _teamProfiles.map(o => '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + escHtml(o.name) + '</option>').join('')
                 + (_STD_PROFILES.includes(cur) ? '' : '<option value="' + escHtml(cur) + '" selected>' + escHtml(cur) + ' (custom)</option>');
-            const _priceOf = k => { const o = _teamProfiles.find(x => x.key === k); return o ? (o.price || 0) : 0; };
+            // The LEAD seat is charged the lead rate instead of its own package rate, so the price
+            // shown against a row depends on whether that person is the primary. It is not a
+            // package: it never appears in the dropdown, only in the price.
+            const _leadPrice = Number(_teamLead) || 0;
+            const _rawPrice = k => { const o = _teamProfiles.find(x => x.key === k); return o ? (o.price || 0) : 0; };
+            const _priceOf = (k, isPrimary) =>
+                (isPrimary && _leadPrice && _rawPrice(k) > 0) ? _leadPrice : _rawPrice(k);
             list.innerHTML =
                 '<div style="background:#f4f7f9;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.55">'
                 + _teamProfiles.filter(o => o.key !== 'no_access').map(o =>
                     '<div><strong>' + escHtml(o.name) + '</strong> — ' + escHtml(o.desc || '')
                     + ' <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£' + (o.price || 0).toFixed(2) + '/mo <span style="font-weight:400;color:#5b6b78">inc. VAT</span></span></div>').join('')
+                + (_leadPrice
+                    ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e3eaee"><strong>Primary account</strong> — '
+                      + 'whoever is marked Primary below owns the subscription and is the only person who can end it. '
+                      + 'That one account is charged <span style="color:#0b3d5c;font-weight:600;white-space:nowrap">£'
+                      + _leadPrice.toFixed(2) + '/mo <span style="font-weight:400;color:#5b6b78">inc. VAT</span></span> '
+                      + 'whichever package they hold, in place of the package price.</div>'
+                    : '')
                 + '<div style="margin-top:6px;color:#888">Admin (the Settings tab) is a separate tick at no extra cost — at least one person needs it, and that’s always you.</div>'
                 + '</div>'
                 + people.map(p =>
-                '<div class="roles-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
+                '<div class="roles-row team-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
                 + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
-                + '<span style="white-space:nowrap">'
                 + (p.is_self
-                    ? '<span style="color:#999;font-size:12px">You &mdash; All reports + Admin</span>'
-                    : '<select class="team-profile">' + profOpts(p.profile) + '</select>'
-                      + '<span class="team-prac-note" style="font-size:11px;margin-left:8px;color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + _pracNote(p.profile, p.practitioner) + '</span>')
-                + '<span class="team-price" style="font-size:11px;color:#0b3d5c;margin-left:10px">£' + _priceOf(p.profile).toFixed(2) + '</span>'
-                + (p.is_self ? '' : '<label style="margin-left:12px;font-size:11px;color:#666" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
-                + '<label style="margin-left:12px;font-size:11px;color:#666" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
-                + '</span></div>').join('')
+                    ? '<span style="color:#999;font-size:12px;white-space:nowrap">You &mdash; All reports</span>'
+                    : '<select class="team-profile">' + profOpts(p.profile) + '</select>')
+                + '<span class="team-price">£' + _priceOf(p.profile, p.is_primary).toFixed(2) + '</span>'
+                + (p.is_self
+                    ? '<span class="team-tick" style="color:#999">Admin</span>'
+                    : '<label class="team-tick" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
+                + '<label class="team-tick" title="The billing owner / primary account"><input type="radio" name="team-primary" class="team-primary" value="' + escHtml(p.email) + '"' + (p.is_primary ? ' checked' : '') + '> Primary</label>'
+                + '<span class="team-prac-note" style="color:' + (p.practitioner ? '#888' : '#b3261e') + '">' + (p.is_self ? '' : _pracNote(p.profile, p.practitioner)) + '</span>'
+                + '</div>').join('')
                 + '<div id="team-total" style="margin-top:12px;font-size:13px;font-weight:700;color:#0b3d5c"></div>'
                 + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee">'
                 + '<div style="font-size:13px;font-weight:600;margin-bottom:3px">Invoice email</div>'
@@ -2276,12 +2328,20 @@
                 list.querySelectorAll('.roles-row').forEach(row => {
                     const sel = row.querySelector('.team-profile');
                     const key = sel ? sel.value : row.dataset.profile;
-                    t += _priceOf(key);
-                    const ps = row.querySelector('.team-price'); if (ps) ps.textContent = '£' + _priceOf(key).toFixed(2);
+                    // Read Primary off the radio, not off the loaded data: moving it is one of the
+                    // things that changes the bill, so the figure has to follow the control.
+                    const prim = row.querySelector('.team-primary');
+                    const v = _priceOf(key, !!(prim && prim.checked));
+                    t += v;
+                    const ps = row.querySelector('.team-price'); if (ps) ps.textContent = '£' + v.toFixed(2);
                 });
                 const el = document.getElementById('team-total');
                 if (el) el.textContent = 'Estimated monthly charge: £' + t.toFixed(2);
             };
+            // Changing who is Primary moves the lead rate from one row to another, so both prices
+            // and the total have to be redrawn -- a radio fires change only on the one being set.
+            list.querySelectorAll('.team-primary').forEach(r =>
+                r.addEventListener('change', () => { _recalcCharges(); markDirty(); }));
             list.querySelectorAll('.team-profile').forEach(s => s.addEventListener('change', () => {
                 const row = s.closest('.roles-row'), note = row.querySelector('.team-prac-note'), prac = row.dataset.prac;
                 if (note) { note.innerHTML = _pracNote(s.value, prac); note.style.color = prac ? '#888' : '#b3261e'; }

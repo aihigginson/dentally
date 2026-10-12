@@ -1940,3 +1940,103 @@ def test_the_authz_cache_does_not_serve_one_practice_answer_for_another(client, 
 
     # And the two scopes are held separately rather than overwriting each other.
     assert ('u@x.com', None, None) in appmod._authz_cache
+
+
+# ── The demo skin ────────────────────────────────────────────────────────────
+# A second hostname on the dev container, not a second environment: live chrome, no DEV badge, no
+# pickers, pinned to the Demonstration Practice. The pin lives on the SERVER because a picker hidden
+# in the browser still leaves the header honoured.
+
+def _demo_ctx(appmod, host, headers=None):
+    return appmod.app.test_request_context(
+        '/api/me', headers=headers or {}, base_url='https://' + host)
+
+
+def test_demo_host_detection_ignores_port_and_case(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'DEMO.Analytically.info:443'):
+        assert appmod._is_demo()
+    with _demo_ctx(appmod, 'app.analytically.info'):
+        assert not appmod._is_demo()
+
+
+def test_demo_host_unset_changes_nothing(appmod, monkeypatch):
+    # Every environment that does not set DEMO_HOST must behave exactly as before.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', '')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert not appmod._is_demo()
+        assert appmod._acting_tenant_id('someone@analytically.info') is None
+
+
+def test_demo_pins_the_practice(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
+    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert appmod._acting_client_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+
+
+def test_demo_pin_beats_a_supplied_header(appmod, monkeypatch):
+    # ==> THE WHOLE POINT. <== Hiding the picker in the browser leaves the header working; the pin
+    # has to win on the server or a demo session could be steered onto a live practice.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
+    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    hdrs = {'X-Acting-Client': '100', 'X-Acting-Tenant': '100'}
+    with _demo_ctx(appmod, 'demo.analytically.info', hdrs):
+        assert appmod._acting_client_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+
+
+def test_demo_does_not_make_a_non_staff_user_staff(appmod, monkeypatch):
+    # The pin says WHICH practice, never WHETHER you may see it: _is_staff is untouched, and the
+    # tenant is still validated downstream against the caller's own permitted set.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert not appmod._is_staff('practice.admin@somedentist.co.uk')
+
+
+def test_demo_leaves_app_env_alone(appmod, monkeypatch):
+    # APP_ENV gates real email, Stripe, Xero and Dentally. The skin must not touch it.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert appmod.APP_ENV != 'prod'
+
+
+# ── The lead account can be handed over, never removed ───────────────────────
+# The lead is the only login that may cancel, and since the lead seat is priced separately it is
+# also the seat the invoice charges at the lead rate. An account with no lead has nobody who can
+# end it and no seat to charge.
+
+def test_saving_only_the_invoice_address_keeps_the_lead(client, appmod, monkeypatch):
+    # ==> THE SILENT WIPE. <== Billing_Contact is written DELETE + INSERT, and primary_email came
+    # straight off the payload -- so a client saving just the invoice address sent no primary_email
+    # and the INSERT wrote NULL. The lead vanished from a save that had nothing to do with it.
+    ap, sent = _team_env(appmod, monkeypatch, 'boss@practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'invoice_email': 'accounts@practice.co.uk'})
+    assert r.status_code == 200
+    ins = [a for s, a in ap.sql if 'INSERT INTO Input.Billing_Contact' in s]
+    assert ins, 'the contact row should have been rewritten'
+    assert ins[0][1] == 'boss@practice.co.uk', 'the existing lead must survive'
+    assert ins[0][2] == 'accounts@practice.co.uk'
+    assert not sent, 'keeping the same lead is not a handover'
+
+
+def test_clearing_the_lead_is_refused(client, appmod, monkeypatch):
+    ap, sent = _team_env(appmod, monkeypatch, 'boss@practice.co.uk')
+    ap.answers['SELECT COUNT(*) FROM Input.Billing_Contact'] = [(1,)]
+    r = client.post('/api/team', json={'rows': [], 'primary_email': '', 'invoice_email': ''})
+    assert r.status_code == 400
+    assert 'lead account cannot be removed' in r.get_json()['error']
+    assert not ap.ran('DELETE FROM Input.Billing_Contact'), 'must refuse before writing'
+
+
+def test_a_tenant_with_no_lead_yet_can_still_be_saved(client, appmod, monkeypatch):
+    # Bootstrap must not be deadlocked by the rule: a tenant that has never had a lead (dev today)
+    # can still have its invoice address saved.
+    ap, sent = _team_env(appmod, monkeypatch, None)
+    ap.answers['SELECT COUNT(*) FROM Input.Billing_Contact'] = [(0,)]
+    r = client.post('/api/team', json={'rows': [], 'primary_email': '',
+                                       'invoice_email': 'accounts@practice.co.uk'})
+    assert r.status_code == 200

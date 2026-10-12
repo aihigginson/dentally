@@ -1,0 +1,75 @@
+# =====================================================================
+# Release V218 -- the lead seat is priced separately, and an organisation can buy a site licence
+# =====================================================================
+# ==> 1. THE LEAD SEAT. <== Every subscription has exactly one lead account: the named owner who
+# alone may cancel, recorded as Input.Billing_Contact.Primary_Email. That seat is now charged a
+# 'lead' rate of 120.00 rather than the rate of whatever profile the person holds, so an account
+# always carries one line at 120.00 -- twice a full seat, because the lead gets the whole product
+# plus the billing relationship.
+#
+# 'lead' is a PRICE, not a profile anyone can be assigned. The Subscriptions screen still offers
+# full / clinician / front_office and nothing else; the generator substitutes the rate for whichever
+# of those seats belongs to the lead, and labels that line 'lead' so it is not read as a second full
+# seat.
+#
+# ==> 2. Billing_Contact HAD TO REACH THE WAREHOUSE FIRST. <== It lived only in the AppDB, so
+# Billing.usp_Generate_Invoice_Lines -- a warehouse proc -- could not see who the lead was. It now
+# mirrors like every other Input.* table: the appdb-sync job lands Input_Stage.Billing_Contact and
+# Meta.usp_Sync_Input_From_AppDB refreshes Input.Billing_Contact from it.
+#
+# ==> 3. THE SITE LICENCE. <== A flat monthly price for a whole ORGANISATION, replacing per-seat
+# charging entirely. Billing.Site_Licence is keyed on Client_ID -- the one place billing is not
+# keyed on Tenant_ID -- because a group running several practices buys one licence covering all of
+# them. Every practice of a licensed client loses its seat lines, including the lead, and a single
+# flat line is charged to the lowest eligible Tenant_ID. Priced on application, so rows are entered
+# by hand; the Subscriptions screen invites the enquiry rather than quoting a figure.
+#
+# NOTHING HAS EVER BEEN INVOICED -- Billing.Invoice_Line is empty and the only account is a partner
+# on Paid_From = 2100-01-01, free forever. So these prices are set outright rather than layered
+# behind a new Valid_From: there is no history to preserve, and a dated row would imply a price
+# change that never happened.
+#
+# Input.Billing_Contact IS deployed here, against the usual rule, because this release CREATES it:
+# it is a mirror whose system of record is the AppDB, not owner-curated warehouse data, and the
+# sync refills it. The rule stands for every Input.* table that holds the owner's own figures.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V218__the_lead_seat_and_the_site_licence.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Input_Stage.Billing_Contact.Table.sql
+DEPLOY   Fabric\Input.Billing_Contact.Table.sql
+DEPLOY   Fabric\Billing.Site_Licence.Table.sql
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Billing.Profile_Pricing.Data.sql
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+
+# ── Verification ──────────────────────────────────────────────────────────────────────────
+# 1. The lead rate exists, is exactly twice a full seat, and is current. The doubling is the stated
+# intent, so assert it rather than trusting a hand-typed figure -- a lead at 12.00 or 1200.00 both
+# look plausible in a data file and neither would be noticed until an invoice went out.
+EXEC     DECLARE @l DECIMAL(9,2), @f DECIMAL(9,2), @e VARCHAR(4000); SELECT @l = MAX(CASE WHEN Profile_Key='lead' THEN Monthly_Price END), @f = MAX(CASE WHEN Profile_Key='full' THEN Monthly_Price END) FROM Billing.Profile_Pricing WHERE Valid_To IS NULL; IF @l IS NULL OR @f IS NULL OR @l <> @f * 2 BEGIN SET @e = 'V218 FAILED: lead=' + ISNULL(CAST(@l AS VARCHAR(20)),'(none)') + ' is not twice full=' + ISNULL(CAST(@f AS VARCHAR(20)),'(none)') + '.'; THROW 50500, @e, 1; END;
+
+# 2. Exactly one current price per profile key. A second open row for the same key makes the
+# generator's "latest Valid_From wins" pick arbitrary between them, and the wrong one bills silently.
+EXEC     DECLARE @d INT, @f2 VARCHAR(4000); SELECT @d = COUNT(*) FROM (SELECT Profile_Key FROM Billing.Profile_Pricing WHERE Valid_To IS NULL GROUP BY Profile_Key HAVING COUNT(*) > 1) x; IF @d <> 0 BEGIN SET @f2 = 'V218 FAILED: ' + CAST(@d AS VARCHAR(10)) + ' profile key(s) have more than one open price row.'; THROW 50501, @f2, 1; END;
+
+# 3. The mirror exists at BOTH layers. A missing Input_Stage table makes the appdb-sync job fail on
+# its next run; a missing Input table makes the sync proc fail instead. Either way the lead price
+# silently stops being applied, because the generator's LEFT JOIN finds nothing and every seat falls
+# back to its own profile rate -- an invoice that is wrong but looks entirely normal.
+EXEC     DECLARE @m INT, @f3 VARCHAR(4000); SELECT @m = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE (TABLE_SCHEMA='Input' AND TABLE_NAME='Billing_Contact') OR (TABLE_SCHEMA='Input_Stage' AND TABLE_NAME='Billing_Contact') OR (TABLE_SCHEMA='Billing' AND TABLE_NAME='Site_Licence'); IF @m <> 3 BEGIN SET @f3 = 'V218 FAILED: expected 3 new tables, found ' + CAST(@m AS VARCHAR(10)) + '.'; THROW 50502, @f3, 1; END;
+
+# 4. Site_Licence is VAT-inclusive and date-ranged like Profile_Pricing, so the same two faults must
+# be impossible: a zero/negative price, and two open rows for one client.
+EXEC     DECLARE @s INT, @f4 VARCHAR(4000); SELECT @s = (SELECT COUNT(*) FROM Billing.Site_Licence WHERE Monthly_Price <= 0) + (SELECT COUNT(*) FROM (SELECT Client_ID FROM Billing.Site_Licence WHERE Valid_To IS NULL GROUP BY Client_ID HAVING COUNT(*) > 1) y); IF @s <> 0 BEGIN SET @f4 = 'V218 FAILED: ' + CAST(@s AS VARCHAR(10)) + ' site licence row(s) are non-positive or duplicate an open row.'; THROW 50503, @f4, 1; END;
+
+# 5. ==> SEATS OR A LICENCE, NEVER BOTH. <== The whole point of a licence is that it replaces the
+# seats; a tenant billed for both would be charged twice over. Asserted against whatever
+# Invoice_Line holds, so it keeps holding after any future regeneration.
+EXEC     DECLARE @b INT, @f5 VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT Tenant_ID, Year_Month FROM Billing.Invoice_Line GROUP BY Tenant_ID, Year_Month HAVING SUM(CASE WHEN Profile_Key = 'site_licence' THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN Profile_Key <> 'site_licence' THEN 1 ELSE 0 END) > 0) z; IF @b <> 0 BEGIN SET @f5 = 'V218 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' tenant-month(s) carry BOTH a site licence and seat lines.'; THROW 50504, @f5, 1; END;
+
+# 6. At most one lead line per tenant-month. Two would mean two people are recorded as the single
+# named owner, which the contact table cannot express and the cancel route could not resolve.
+EXEC     DECLARE @p INT, @f6 VARCHAR(4000); SELECT @p = COUNT(*) FROM (SELECT Tenant_ID, Year_Month FROM Billing.Invoice_Line WHERE Profile_Key = 'lead' GROUP BY Tenant_ID, Year_Month HAVING COUNT(*) > 1) w; IF @p <> 0 BEGIN SET @f6 = 'V218 FAILED: ' + CAST(@p AS VARCHAR(10)) + ' tenant-month(s) have more than one lead line.'; THROW 50505, @f6, 1; END;
+
+TEST
