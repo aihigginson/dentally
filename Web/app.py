@@ -2430,6 +2430,10 @@ def get_team():
                     "GROUP BY Profile_Key) m ON m.Profile_Key = p.Profile_Key AND m.vf = p.Valid_From")
         _prices = {r[0]: float(r[1]) for r in cur.fetchall()}
         profiles = [{'key': k, 'name': v['label'], 'desc': v.get('desc', ''), 'price': _prices.get(k, 0.0)} for k, v in _PROFILES.items()]
+        # The lead rate rides ALONGSIDE the profiles, never inside them: 'lead' is a price applied to
+        # whichever seat belongs to the primary, not a package anyone can be assigned. Putting it in
+        # `profiles` would put it in the dropdown.
+        lead_price = _prices.get('lead', 0.0)
         people = []
         billing = {'primary_email': '', 'invoice_email': ''}
         if tids:
@@ -2495,7 +2499,8 @@ def get_team():
                 people.append(m)
         else:
             conn.close()
-        return jsonify({'people': people, 'profiles': profiles, 'billing': billing})
+        return jsonify({'people': people, 'profiles': profiles, 'billing': billing,
+                        'lead_price': lead_price})
     except Exception as e:
         return _server_error(e, 'get_team')
 
