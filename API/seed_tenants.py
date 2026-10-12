@@ -435,7 +435,9 @@ T11 = {
 }
 
 T12 = {
-    'tenant_id': 12, 'nhs': False, 'has_ortho': False, 'price_mult': 1.25, 'n_patients': 7500,
+    # Sized to match T11: a second practice that dwarfs the first makes the group view read as
+    # one practice plus a rounding error.
+    'tenant_id': 12, 'nhs': False, 'has_ortho': False, 'price_mult': 1.25, 'n_patients': 6000,
     'domain': 'elaradental.co.uk',
     'practice': {
         'id': _u5('practice', 12), 'name': 'Elara Dental', 'nhs': False,
@@ -465,6 +467,16 @@ T12 = {
          'thursday_open': '09:00', 'thursday_close': '17:30',
          'friday_open': '09:00', 'friday_close': '17:30',
          'saturday_open': '09:00', 'saturday_close': '13:00'},
+        # ==> THE SECOND SITE IS THE POINT OF THIS TENANT. <== The site filter only appears when a
+        # practice has more than one, so without this there is nothing to demonstrate.
+        {'id': 't12-sb', 'name': 'Stockbridge', 'active': True,
+         'address_line_1': '41 Raeburn Place', 'town': 'Edinburgh', 'postcode': 'EH4 1HU',
+         'phone_number': '0131 100 1002', 'email': 'stockbridge@elaradental.co.uk',
+         'monday_open': '08:30', 'monday_close': '17:00',
+         'tuesday_open': '08:30', 'tuesday_close': '17:00',
+         'wednesday_open': '08:30', 'wednesday_close': '17:00',
+         'thursday_open': '08:30', 'thursday_close': '19:00',
+         'friday_open': '08:30', 'friday_close': '16:00'},
     ],
     'payment_plans': [
         _pp(1, 'Private',   dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
@@ -495,12 +507,17 @@ T12 = {
          'site_id': 't12-gt', 'gdc_number': '1220001', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
          'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
-        {'id': 2, 'first_name': 'Ross',    'last_name': 'Cameron',   'title': 'Dr', 'role': 'dentist',
-         'site_id': 't12-gt', 'gdc_number': '1220002', 'nhs_pct': 0.0,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
+        # ==> SHARED WITH T11, BY NAME ONLY. <== Zoe Crawford is a 0.40 FTE associate at the
+    # Demonstration Practice working Thursdays and Fridays; here she takes Mondays and Tuesdays.
+    # The two records are separate practitioners that happen to share a name -- which is what a
+    # real associate splitting a week across two of the owner's practices looks like, and all the
+    # demo needs.
+    {'id': 2, 'first_name': 'Zoe',     'last_name': 'Crawford',  'title': 'Dr', 'role': 'dentist',
+         'site_id': 't12-sb', 'gdc_number': '1220002', 'nhs_pct': 0.0,
+         'work_days': [0,1], 'start_time': '09:00', 'end_time': '17:30',
          'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
         {'id': 3, 'first_name': 'Preethi', 'last_name': 'Nair',      'title': 'Dr', 'role': 'dentist',
-         'site_id': 't12-gt', 'gdc_number': '1220003', 'nhs_pct': 0.0,
+         'site_id': 't12-sb', 'gdc_number': '1220003', 'nhs_pct': 0.0,
          'work_days': [0,2,3,4,5], 'start_time': '09:00', 'end_time': '17:30',
          'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
         {'id': 4, 'first_name': 'Josh',    'last_name': 'Elliott',   'title': 'Dr', 'role': 'specialist',
@@ -528,7 +545,7 @@ T12 = {
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
          'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
     ],
-    '_site_patient_split': {'t12-gt': 1.0},
+    '_site_patient_split': {'t12-gt': 0.62, 't12-sb': 0.38},
 }
 
 SEED_TENANTS = {11: T11, 12: T12}
