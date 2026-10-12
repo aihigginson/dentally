@@ -34,9 +34,13 @@
         <p class="sub">Pay only for the people who need each view. Every plan is billed monthly, per person.</p>
         <div class="cards" id="cards">Loading…</div>
         <div class="note">
+            <span id="lead-note"></span>
             <strong>Admin is free.</strong> The Settings/admin tab is a separate tick at no extra cost — a practice
             manager can have every report without it, and at least one person on your team always has it.<br><br>
-            <strong>30 days free.</strong> Start a trial with no card needed; you only pay from day&nbsp;31.
+            <strong>30 days free.</strong> Start a trial with no card needed; you only pay from day&nbsp;31.<br><br>
+            <strong>Larger organisation?</strong> A site licence charges one fixed monthly price for the whole
+            organisation instead of a price per person, set according to its size —
+            <a href="mailto:sales@analytically.info?subject=Site%20licence%20enquiry">ask us for a price</a>.
         </div>
         <div class="cta-wrap"><a class="cta" href="/onboarding">Start your 30-day trial &rarr;</a></div>
         <div class="foot">Questions about pricing? <a href="mailto:sales@analytically.info">sales@analytically.info</a></div>
@@ -48,12 +52,22 @@
             try {
                 const res = await fetch('/api/pricing');
                 if (!res.ok) throw new Error('status ' + res.status);
-                const { profiles } = await res.json();
+                const { profiles, lead_price } = await res.json();
                 if (!profiles || !profiles.length) { el.textContent = 'Pricing is unavailable right now — please contact sales.'; return; }
                 el.innerHTML = profiles.map(p =>
                     '<div class="card"><h2>' + esc(p.name) + '</h2>'
                     + '<div class="desc">' + esc(p.desc || '') + '</div>'
                     + '<div class="price">£' + (p.price || 0).toFixed(2) + '<span> /person /mo</span></div></div>').join('');
+                // The primary account is the FIRST thing a practice buys, so leaving it off a price
+                // list understates the entry cost. It is deliberately not a fourth card: it cannot
+                // be bought as a package, only held by whoever owns the subscription.
+                const ln = document.getElementById('lead-note');
+                if (ln && lead_price) {
+                    ln.innerHTML = '<strong>One primary account, £' + Number(lead_price).toFixed(2)
+                        + '/month.</strong> The person who owns the subscription and the only one who can '
+                        + 'end it. They get full access, and this stands in place of the package price '
+                        + 'above — everyone added after them pays the package price.<br><br>';
+                }
             } catch (e) { el.textContent = 'Pricing is unavailable right now — please contact sales.'; }
         })();
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }

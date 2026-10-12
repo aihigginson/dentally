@@ -2040,3 +2040,35 @@ def test_a_tenant_with_no_lead_yet_can_still_be_saved(client, appmod, monkeypatc
     r = client.post('/api/team', json={'rows': [], 'primary_email': '',
                                        'invoice_email': 'accounts@practice.co.uk'})
     assert r.status_code == 200
+
+
+# ── /api/pricing carries the lead rate alongside the packages ────────────────
+# A practice's FIRST account is the primary and costs the lead rate, so a price list showing only
+# the packages understates what it costs to start. It is not a fourth package: nobody can be put on
+# it, and a consumer rendering it as a card would offer something that cannot be bought.
+
+def _pricing_env(appmod, monkeypatch, prices):
+    appmod._pricing_cache.update(ts=0.0, data=None)      # never serve another test's payload
+    monkeypatch.setattr(appmod, '_fabric_conn',
+                        lambda *a, **k: _RecConn(_RecCursor({'Profile_Pricing': list(prices.items())})))
+
+
+def test_pricing_returns_lead_alongside_the_packages(client, appmod, monkeypatch):
+    _pricing_env(appmod, monkeypatch, {'full': 60.0, 'clinician': 24.0,
+                                       'front_office': 6.0, 'lead': 120.0})
+    j = client.get('/api/pricing').get_json()
+    assert j['lead_price'] == 120.0
+    assert [p['key'] for p in j['profiles']] == ['full', 'clinician', 'front_office']
+    assert 'lead' not in [p['key'] for p in j['profiles']], 'lead must never be a selectable package'
+
+
+def test_pricing_cache_serves_the_whole_payload(client, appmod, monkeypatch):
+    # The cache used to hold only the list, and the handler rewrapped it. Holding the whole payload
+    # is what stops the lead rate and the packages being served out of step -- so a cached hit must
+    # still carry lead_price.
+    _pricing_env(appmod, monkeypatch, {'full': 60.0, 'lead': 120.0})
+    first = client.get('/api/pricing').get_json()
+    monkeypatch.setattr(appmod, '_fabric_conn',
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError('should be cached')))
+    second = client.get('/api/pricing').get_json()
+    assert second == first and second['lead_price'] == 120.0
