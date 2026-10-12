@@ -1958,12 +1958,14 @@ def _acting_tenant_id(upn):
     permitted set in _get_user_info, so it asserts WHICH practice, never WHETHER they may see
     it -- a header naming one they are not entitled to buys them nothing.
 
-    On the demo host this is pinned to the Demonstration Practice, for the reason given in
-    _acting_client_id. It is still validated downstream like any other value, so the pin asserts
-    WHICH practice and grants nothing: a caller with no right to the demo tenant gets nothing.
+    On the demo host this DEFAULTS to the Demonstration Practice but still honours a header, so a
+    demo client owning several practices can be shown switching between them. That is safe for the
+    same reason the ordinary path is: the value is validated downstream against the caller's
+    permitted set, and on the demo host the CLIENT is pinned (see _acting_client_id) -- so the only
+    practices reachable are the demo client's own. The pin that matters is the client one.
     """
     if _is_demo():
-        return DEMO_TENANT_ID
+        return (request.headers.get('X-Acting-Tenant') or '').strip() or DEMO_TENANT_ID
     if not has_request_context():
         return None
     return (request.headers.get('X-Acting-Tenant') or '').strip() or None

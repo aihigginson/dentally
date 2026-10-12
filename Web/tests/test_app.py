@@ -1977,16 +1977,29 @@ def test_demo_pins_the_practice(appmod, monkeypatch):
         assert appmod._acting_tenant_id('grace@analytically.info') == '11'
 
 
-def test_demo_pin_beats_a_supplied_header(appmod, monkeypatch):
-    # ==> THE WHOLE POINT. <== Hiding the picker in the browser leaves the header working; the pin
-    # has to win on the server or a demo session could be steered onto a live practice.
+def test_demo_client_pin_beats_a_supplied_header(appmod, monkeypatch):
+    # ==> THE CLIENT PIN IS THE ONE THAT MATTERS. <== Hiding the picker in the browser leaves the
+    # header working, so the client has to be fixed on the server or a demo session could be
+    # steered into a live practice.
     monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
     monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
     monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
     hdrs = {'X-Acting-Client': '100', 'X-Acting-Tenant': '100'}
     with _demo_ctx(appmod, 'demo.analytically.info', hdrs):
         assert appmod._acting_client_id('grace@analytically.info') == '11'
-        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+
+
+def test_demo_tenant_pin_is_a_default_a_header_may_move(appmod, monkeypatch):
+    # The tenant is a DEFAULT, not a cage: a demo client owning several practices has to be
+    # shown switching between them. Safe because the CLIENT is pinned above and the tenant is
+    # validated downstream against the caller's permitted set -- so the only practices reachable
+    # are the demo client's own.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert appmod._acting_tenant_id('grace@analytically.info') == '11'   # default
+    with _demo_ctx(appmod, 'demo.analytically.info', {'X-Acting-Tenant': '12'}):
+        assert appmod._acting_tenant_id('grace@analytically.info') == '12'   # moved
 
 
 def test_demo_does_not_make_a_non_staff_user_staff(appmod, monkeypatch):
