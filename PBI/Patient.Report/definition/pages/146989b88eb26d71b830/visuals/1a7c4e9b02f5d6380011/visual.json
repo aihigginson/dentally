@@ -20,14 +20,14 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Lapsed Patients"
+                      "Entity": "List Date"
                     }
                   },
-                  "Property": "Lapsed Date"
+                  "Property": "Month Commencing Date"
                 }
               },
-              "queryRef": "_Lapsed Patients.Lapsed Date",
-              "nativeQueryRef": "Lapsed Date"
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date"
             }
           ]
         },
@@ -53,17 +53,22 @@
           "projections": [
             {
               "field": {
-                "Column": {
+                "Aggregation": {
                   "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Lapsed Patients"
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "_Lapsed Patients"
+                        }
+                      },
+                      "Property": "Lapsed Patient Count"
                     }
                   },
-                  "Property": "Lapsed Patient Count"
+                  "Function": 0
                 }
               },
-              "queryRef": "_Lapsed Patients.Lapsed Patient Count",
-              "nativeQueryRef": "Lapsed Patient Count"
+              "queryRef": "Sum(_Lapsed Patients.Lapsed Patient Count)",
+              "nativeQueryRef": "Sum of Lapsed Patient Count"
             }
           ]
         }
