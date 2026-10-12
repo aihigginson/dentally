@@ -108,6 +108,24 @@ def _security_headers(response):
 # real practices, since dev carries prod's Graph config and a copy of a live practice's addresses.
 # Prod now sets APP_ENV=prod explicitly on the container app rather than relying on the default.
 APP_ENV        = os.environ.get('APP_ENV', 'dev')
+
+# ── The demo skin ────────────────────────────────────────────────────────────────────────────────
+# A second HOSTNAME on the dev container, not a second environment. Reached through DEMO_HOST, the
+# app drops the purple chrome and the DEV badge, hides the practice pickers, and pins the session to
+# the Demonstration Practice -- so a demo looks exactly like what a live practice sees, without the
+# tiny inconsistencies that invite questions mid-pitch.
+#
+# ==> IT MUST NEVER BE DONE BY SETTING APP_ENV=prod ON DEV. <== Read the note above: APP_ENV gates
+# whether real customer email is sent, and it also selects the Stripe, Xero and Dentally token
+# stores. Dressing dev as prod that way would have it emailing real practices against prod Stripe.
+# APP_ENV stays 'dev' here; only the chrome and the acting practice change.
+#
+# Empty DEMO_HOST disables the skin entirely, so every environment that does not set it behaves
+# exactly as before.
+DEMO_HOST      = os.environ.get('DEMO_HOST', '').strip().lower()
+DEMO_CLIENT_ID = os.environ.get('DEMO_CLIENT_ID', '11')
+DEMO_TENANT_ID = os.environ.get('DEMO_TENANT_ID', '11')
+
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
 CLIENT_SECRET  = os.environ['CLIENT_SECRET']
@@ -543,6 +561,10 @@ def me():
             'access':               access,
             'practitioner_full_name': practitioner_name,
             'env':                  APP_ENV,
+            # Presentation only, and deliberately SEPARATE from env: the front end dresses the page
+            # from this, while everything functional keeps reading env. Collapsing the two is how
+            # dev would end up behaving like prod.
+            'demo':                 _is_demo(),
             'trial':                trial,
             'is_staff':             _is_staff(upn),
             'practices':            practices,
@@ -1875,13 +1897,45 @@ def _is_staff(upn):
     return (upn or '').lower().endswith('@analytically.info')
 
 
+def _is_demo():
+    """Is this request arriving on the demo hostname?
+
+    Host-based, so the SAME container serves the ordinary dev app and the demo skin and there is
+    no second deployment to keep in step. Compared without the port, lower-cased, and False
+    whenever DEMO_HOST is unset.
+    """
+    if not DEMO_HOST or not has_request_context():
+        return False
+    return (request.host or '').split(':')[0].strip().lower() == DEMO_HOST
+
+
 def _acting_client_id(upn):
     """The practice a support login has picked, or None.
 
     STAFF ONLY, and re-checked on every request rather than trusted from a previous one -- the
     header is client-supplied, so it is an assertion of intent, never of permission. A practice
     admin sending the same header gets None and stays in their own practice.
+
+    ==> ON THE DEMO HOST THE ANSWER IS FIXED. <== Pinned HERE rather than by hiding the picker,
+    because a control hidden in the browser is not a control: the header would still be honoured.
+    Pinning at the one function every route resolves identity through means the whole app moves
+    together, and _authz_cache -- keyed on (upn, acting_client, acting_tenant) -- separates a demo
+    session from the same person's ordinary dev session for free.
+
+    ==> AND IT DELIBERATELY BYPASSES THE STAFF GATE. <== _get_user_info resolves an acting client
+    by checking it EXISTS with an active tenant, not that the caller is entitled to it -- the
+    entitlement check was this staff test. So on the demo host ANY signed-in user is placed in
+    DEMO_CLIENT_ID. That is the feature: a prospect can be handed a login and see the demonstration
+    practice. It is also the whole risk, and it reduces to one rule:
+
+        DEMO_CLIENT_ID AND DEMO_TENANT_ID MUST ONLY EVER NAME DEMONSTRATION DATA.
+
+    Point either at a real client and every signed-in user on that hostname is inside a live
+    practice. The tenant pin is validated downstream against the caller's permitted set; the client
+    pin is not, which is why it is called out here.
     """
+    if _is_demo():
+        return DEMO_CLIENT_ID
     if not _is_staff(upn) or not has_request_context():
         return None
     return (request.headers.get('X-Acting-Client') or '').strip() or None
@@ -1895,7 +1949,13 @@ def _acting_tenant_id(upn):
     this every bit as much as a support login does. It is validated against the caller's own
     permitted set in _get_user_info, so it asserts WHICH practice, never WHETHER they may see
     it -- a header naming one they are not entitled to buys them nothing.
+
+    On the demo host this is pinned to the Demonstration Practice, for the reason given in
+    _acting_client_id. It is still validated downstream like any other value, so the pin asserts
+    WHICH practice and grants nothing: a caller with no right to the demo tenant gets nothing.
     """
+    if _is_demo():
+        return DEMO_TENANT_ID
     if not has_request_context():
         return None
     return (request.headers.get('X-Acting-Tenant') or '').strip() or None

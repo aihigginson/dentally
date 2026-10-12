@@ -1940,3 +1940,65 @@ def test_the_authz_cache_does_not_serve_one_practice_answer_for_another(client, 
 
     # And the two scopes are held separately rather than overwriting each other.
     assert ('u@x.com', None, None) in appmod._authz_cache
+
+
+# ── The demo skin ────────────────────────────────────────────────────────────
+# A second hostname on the dev container, not a second environment: live chrome, no DEV badge, no
+# pickers, pinned to the Demonstration Practice. The pin lives on the SERVER because a picker hidden
+# in the browser still leaves the header honoured.
+
+def _demo_ctx(appmod, host, headers=None):
+    return appmod.app.test_request_context(
+        '/api/me', headers=headers or {}, base_url='https://' + host)
+
+
+def test_demo_host_detection_ignores_port_and_case(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'DEMO.Analytically.info:443'):
+        assert appmod._is_demo()
+    with _demo_ctx(appmod, 'app.analytically.info'):
+        assert not appmod._is_demo()
+
+
+def test_demo_host_unset_changes_nothing(appmod, monkeypatch):
+    # Every environment that does not set DEMO_HOST must behave exactly as before.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', '')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert not appmod._is_demo()
+        assert appmod._acting_tenant_id('someone@analytically.info') is None
+
+
+def test_demo_pins_the_practice(appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
+    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert appmod._acting_client_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+
+
+def test_demo_pin_beats_a_supplied_header(appmod, monkeypatch):
+    # ==> THE WHOLE POINT. <== Hiding the picker in the browser leaves the header working; the pin
+    # has to win on the server or a demo session could be steered onto a live practice.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
+    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    hdrs = {'X-Acting-Client': '100', 'X-Acting-Tenant': '100'}
+    with _demo_ctx(appmod, 'demo.analytically.info', hdrs):
+        assert appmod._acting_client_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+
+
+def test_demo_does_not_make_a_non_staff_user_staff(appmod, monkeypatch):
+    # The pin says WHICH practice, never WHETHER you may see it: _is_staff is untouched, and the
+    # tenant is still validated downstream against the caller's own permitted set.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert not appmod._is_staff('practice.admin@somedentist.co.uk')
+
+
+def test_demo_leaves_app_env_alone(appmod, monkeypatch):
+    # APP_ENV gates real email, Stripe, Xero and Dentally. The skin must not touch it.
+    monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
+    with _demo_ctx(appmod, 'demo.analytically.info'):
+        assert appmod.APP_ENV != 'prod'
