@@ -70,3 +70,4 @@
 - [A vw_ override silently drops new columns](a-vw-override-silently-drops-new-columns.md) — vw_Dim_Patients lists columns by hand; a new one reaches Gold and never PBI.
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
+- [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
