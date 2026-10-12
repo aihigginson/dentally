@@ -444,15 +444,19 @@ T12 = {
     # Sized to match T11: a second practice that dwarfs the first makes the group view read as
     # one practice plus a rounding error.
     'tenant_id': 12, 'nhs': False, 'has_ortho': False, 'price_mult': 1.25, 'n_patients': 6000,
-    'domain': 'elaradental.co.uk',
+    'domain': 'demo2.analytically.info',
     'practice': {
-        'id': _u5('practice', 12), 'name': 'Elara Dental', 'nhs': False,
+        # ==> NAMED LIKE THE FIRST ONE, AND FOR THE SAME REASON. <== Not a plausible practice
+        # name, and not a plausible domain either: a prospect walking through the demo must never
+        # be able to conclude they are being shown another customer's data. A realistic name with
+        # a realistic domain attached is exactly that conclusion.
+        'id': _u5('practice', 12), 'name': 'Demo Practice 2', 'nhs': False,
         'address_line_1': '14 George Street', 'address_line_2': None,
         'town': 'Edinburgh', 'postcode': 'EH2 2PF',
-        'phone_number': '0131 100 0001', 'email_address': 'info@elaradental.co.uk',
-        'patient_email_address': 'patients@elaradental.co.uk',
-        'website': 'https://elaradental.co.uk', 'logo_url': None,
-        'slug': 'elara-dental', 'time_zone': 'Europe/London',
+        'phone_number': '0131 100 0001', 'email_address': 'info@demo2.analytically.info',
+        'patient_email_address': 'patients@demo2.analytically.info',
+        'website': 'https://demo2.analytically.info', 'logo_url': None,
+        'slug': 'demo-practice-2', 'time_zone': 'Europe/London',
         'medical_history_expiry_days': 365,
         'custom_patient_field_label_1': None, 'custom_patient_field_label_2': None,
         'oh_mon_open': '09:00', 'oh_mon_close': '17:30',
@@ -466,7 +470,7 @@ T12 = {
     'sites': [
         {'id': 't12-gt', 'name': 'George Street', 'active': True,
          'address_line_1': '14 George Street', 'town': 'Edinburgh', 'postcode': 'EH2 2PF',
-         'phone_number': '0131 100 1001', 'email': 'info@elaradental.co.uk',
+         'phone_number': '0131 100 1001', 'email': 'georgestreet@demo2.analytically.info',
          'monday_open': '09:00', 'monday_close': '17:30',
          'tuesday_open': '09:00', 'tuesday_close': '17:30',
          'wednesday_open': '09:00', 'wednesday_close': '17:30',
@@ -477,7 +481,7 @@ T12 = {
         # practice has more than one, so without this there is nothing to demonstrate.
         {'id': 't12-sb', 'name': 'Stockbridge', 'active': True,
          'address_line_1': '41 Raeburn Place', 'town': 'Edinburgh', 'postcode': 'EH4 1HU',
-         'phone_number': '0131 100 1002', 'email': 'stockbridge@elaradental.co.uk',
+         'phone_number': '0131 100 1002', 'email': 'stockbridge@demo2.analytically.info',
          'monday_open': '08:30', 'monday_close': '17:00',
          'tuesday_open': '08:30', 'tuesday_close': '17:00',
          'wednesday_open': '08:30', 'wednesday_close': '17:00',
