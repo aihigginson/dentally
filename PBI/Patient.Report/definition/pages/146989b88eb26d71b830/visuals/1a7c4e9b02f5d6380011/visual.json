@@ -53,21 +53,16 @@
           "projections": [
             {
               "field": {
-                "Aggregation": {
+                "Column": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Lapsed Patients"
-                        }
-                      },
-                      "Property": "Lapsed Patient Count"
+                    "SourceRef": {
+                      "Entity": "_Lapsed Patients"
                     }
                   },
-                  "Function": 0
+                  "Property": "Lapsed Patient Count"
                 }
               },
-              "queryRef": "Sum(_Lapsed Patients.Lapsed Patient Count)",
+              "queryRef": "_Lapsed Patients.Lapsed Patient Count",
               "nativeQueryRef": "Lapsed Patient Count"
             }
           ]

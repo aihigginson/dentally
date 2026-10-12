@@ -132,22 +132,6 @@
       }
     },
     "objects": {
-      "columnWidth": [
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "112.14617014364549D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "List Date Unconstrained.Full Date"
-          }
-        }
-      ],
       "columnHeaders": [
         {
           "properties": {}
@@ -224,8 +208,7 @@
               }
             }
           ]
-        },
-        "howCreated": 1
+        }
       }
     ]
   },
