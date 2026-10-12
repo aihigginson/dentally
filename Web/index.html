@@ -820,6 +820,18 @@
                     <div id="team-list" style="margin-top:10px">Loading&hellip;</div>
                     <button id="team-save" class="settings-save" style="display:none">Save</button>
                     <span id="team-msg" class="settings-msg"></span>
+                    <!-- Site licence enquiry. Deliberately a mailto rather than a form: the price
+                         depends on the size of the organisation, so it is a conversation, not a
+                         self-serve option. Sits under the per-seat list because that is where
+                         someone counting up a large team will be when the question occurs to them. -->
+                    <div style="margin-top:18px;padding:10px 12px;background:#f5f8fa;border:1px solid #e3eaee;
+                                border-radius:6px;font-size:12px;color:#4a5b66;max-width:560px">
+                        <strong style="color:#0b3d5c">Larger organisation?</strong>
+                        A site licence charges one fixed monthly price for the whole organisation
+                        instead of a price per person, set according to its size.
+                        <a href="mailto:sales@analytically.info?subject=Site%20licence%20enquiry"
+                           style="color:#0b6ea8">Ask us for a price</a>.
+                    </div>
                     <!-- Lead account only. Hidden by default and revealed by loadTeam() when the
                          signed-in user is the recorded primary, so it never flashes for anyone else.
                          The API enforces the same rule -- this is presentation, not the control. -->

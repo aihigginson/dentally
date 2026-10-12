@@ -2002,3 +2002,41 @@ def test_demo_leaves_app_env_alone(appmod, monkeypatch):
     monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
     with _demo_ctx(appmod, 'demo.analytically.info'):
         assert appmod.APP_ENV != 'prod'
+
+
+# ── The lead account can be handed over, never removed ───────────────────────
+# The lead is the only login that may cancel, and since the lead seat is priced separately it is
+# also the seat the invoice charges at the lead rate. An account with no lead has nobody who can
+# end it and no seat to charge.
+
+def test_saving_only_the_invoice_address_keeps_the_lead(client, appmod, monkeypatch):
+    # ==> THE SILENT WIPE. <== Billing_Contact is written DELETE + INSERT, and primary_email came
+    # straight off the payload -- so a client saving just the invoice address sent no primary_email
+    # and the INSERT wrote NULL. The lead vanished from a save that had nothing to do with it.
+    ap, sent = _team_env(appmod, monkeypatch, 'boss@practice.co.uk')
+    r = client.post('/api/team', json={'rows': [], 'invoice_email': 'accounts@practice.co.uk'})
+    assert r.status_code == 200
+    ins = [a for s, a in ap.sql if 'INSERT INTO Input.Billing_Contact' in s]
+    assert ins, 'the contact row should have been rewritten'
+    assert ins[0][1] == 'boss@practice.co.uk', 'the existing lead must survive'
+    assert ins[0][2] == 'accounts@practice.co.uk'
+    assert not sent, 'keeping the same lead is not a handover'
+
+
+def test_clearing_the_lead_is_refused(client, appmod, monkeypatch):
+    ap, sent = _team_env(appmod, monkeypatch, 'boss@practice.co.uk')
+    ap.answers['SELECT COUNT(*) FROM Input.Billing_Contact'] = [(1,)]
+    r = client.post('/api/team', json={'rows': [], 'primary_email': '', 'invoice_email': ''})
+    assert r.status_code == 400
+    assert 'lead account cannot be removed' in r.get_json()['error']
+    assert not ap.ran('DELETE FROM Input.Billing_Contact'), 'must refuse before writing'
+
+
+def test_a_tenant_with_no_lead_yet_can_still_be_saved(client, appmod, monkeypatch):
+    # Bootstrap must not be deadlocked by the rule: a tenant that has never had a lead (dev today)
+    # can still have its invoice address saved.
+    ap, sent = _team_env(appmod, monkeypatch, None)
+    ap.answers['SELECT COUNT(*) FROM Input.Billing_Contact'] = [(0,)]
+    r = client.post('/api/team', json={'rows': [], 'primary_email': '',
+                                       'invoice_email': 'accounts@practice.co.uk'})
+    assert r.status_code == 200

@@ -3108,13 +3108,37 @@ def save_team():
         # person losing it and to Sales@, so it can never happen quietly. Updated_By records who did
         # it. Without this, an admin could self-appoint and immediately terminate unnoticed.
         if isinstance(payload, dict) and ('primary_email' in payload or 'invoice_email' in payload):
-            primary_email = (payload.get('primary_email') or '').strip() or None
+            sent_primary  = 'primary_email' in payload
+            new_primary   = (payload.get('primary_email') or '').strip() or None
             invoice_email = (payload.get('invoice_email') or '').strip() or None
+
+            # ==> AN ACCOUNT CAN NEVER BE LEFT WITHOUT A LEAD. <== The lead is the only login that
+            # may end the subscription, and since the lead seat is priced separately it is also the
+            # seat the invoice charges at the lead rate. An account with no lead therefore has
+            # nobody who can cancel it and no seat to charge -- so the lead may be HANDED OVER, but
+            # never cleared.
+            #
+            # This closed a hole rather than merely adding a rule: the row is written DELETE +
+            # INSERT, and primary_email was read straight from the payload. A client saving only
+            # the invoice address sent no primary_email at all, so the INSERT wrote NULL and the
+            # lead was silently wiped by a save that had nothing to do with it.
+            if sent_primary and not new_primary:
+                acur.execute(
+                    "SELECT COUNT(*) FROM Input.Billing_Contact "
+                    "WHERE Tenant_ID IN (%s) AND ISNULL(LTRIM(RTRIM(Primary_Email)), '') <> ''"
+                    % ",".join("?" * len(allowed)), list(allowed))
+                if (acur.fetchone() or [0])[0]:
+                    return jsonify({'error': 'The lead account cannot be removed. Name a different '
+                                             'person as the lead instead.'}), 400
+
             takeovers = []
             for tid in allowed:
                 acur.execute("SELECT Primary_Email FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
                 prev_row  = acur.fetchone()
                 prev      = ((prev_row[0] if prev_row else None) or '').strip()
+                # Keep the existing lead when this save does not name one, so an invoice-address
+                # change leaves it alone.
+                primary_email = new_primary or (prev or None)
                 acur.execute("DELETE FROM Input.Billing_Contact WHERE Tenant_ID = ?", tid)
                 acur.execute("INSERT INTO Input.Billing_Contact (Tenant_ID, Primary_Email, Invoice_Email, Updated_By) VALUES (?, ?, ?, ?)",
                              [tid, primary_email, invoice_email, upn])
