@@ -68,9 +68,15 @@ def generate_xero_finance(tdef, data, load_ts):
     }]
 
     # Monthly Dentally revenue (YYYY-MM -> total invoiced)
+    # ==> NET OF THE NHS BAND CHARGE. <== The patient's band charge is invoiced like anything
+    # else, but it is a SLICE of the UDA income posted to account 200, never income on top of
+    # it. Counting the gross invoice here booked it twice and put private income about 16%
+    # above the warehouse's own private revenue -- the one real gap between the books and the
+    # practice system on this tenant. inv['nhs_amount'] carries the band charge.
     rev_by_month = defaultdict(float)
     for inv in data['invoices']:
-        d, amt = inv.get('dated_on'), float(inv.get('amount') or 0)
+        d = inv.get('dated_on')
+        amt = float(inv.get('amount') or 0) - float(inv.get('nhs_amount') or 0)
         if d and amt > 0:
             rev_by_month[str(d)[:7]] += amt
     if not rev_by_month:

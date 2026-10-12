@@ -72,3 +72,5 @@
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
 - [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
 - [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.
+- [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.
+- [Capitation rates have one generation](capitation-rates-have-one-generation.md) — Maple history is priced at 2026 rates; the real Xero gap after that is ~1.5% non-paying members.
