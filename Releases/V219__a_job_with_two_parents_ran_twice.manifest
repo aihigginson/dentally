@@ -1,0 +1,55 @@
+# =====================================================================
+# Release V219 -- usp_Run_Downstream ran a job once per parent, not once
+# =====================================================================
+# Found by using the proc's own @Preview mode before executing anything, which is the whole
+# argument for having a preview: the plan was wrong and nothing had run yet.
+#
+# ==> THE NOT IN CANNOT SEE THE INSERT'S OWN ROWS. <== Step 2 walks the dependency graph a level
+# at a time and guards against re-adding a job with
+#
+#     AND pd.Next_Process_Code NOT IN (SELECT Process_Code FROM #plan)
+#
+# which is evaluated against #plan as it stood BEFORE the statement. So a job with TWO active
+# parents at the same level matched twice in one INSERT, was added twice, and was then executed
+# twice. The plan downstream of BRONZE_PATIENT_STATS came to 32 steps of which 6 were duplicates:
+#
+#     GOLD_AGG_METRIC_ACTUALS          GOLD_AGG_DATA_QUALITY
+#     GOLD_AGG_KPI_SNAPSHOT            GOLD_AGG_DATA_QUALITY_DETAIL
+#     GOLD_AGG_PATIENT_AT_RISK         GOLD_AGG_SITE_PATIENT
+#
+# Every one of those is a DROP/CREATE aggregate or a hash-gated fact, so running it twice is
+# idempotent -- the ANSWER was never wrong. What was wrong is the bill: six extra full aggregate
+# rebuilds per invocation on a capacity that also serves the live practice, and Metric Actuals and
+# the daily aggregate are among the heaviest jobs there are.
+#
+# DISTINCT is the whole fix. Process_Name, Process_Category_Code and Is_Per_Tenant are all
+# functionally dependent on Process_Code, and Run_Level is the loop variable, so DISTINCT collapses
+# exactly the twins and nothing else.
+#
+# ==> WHY THIS IS NOT JUST A DEV CONVENIENCE ANY MORE. <== The proc's header calls itself exactly
+# that. It is about to run against PROD for the first time, to push a patient_stats repair through
+# to Gold after the ingest fix for the missing-new-patients bug. Deploying it with a known
+# duplicate-work defect, on the shared F4, during the working day, is not a thing to do.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V219__a_job_with_two_parents_ran_twice.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Audit.usp_Run_Downstream.StoredProcedure.sql
+
+# ── Verification ──────────────────────────────────────────────────────────────────────────
+# 1. The deployed body actually carries the fix. Cheap, and it is the thing being deployed --
+# a manifest that deploys a file without asserting what landed proves nothing.
+EXEC     DECLARE @a INT, @e VARCHAR(4000); SELECT @a = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Audit' AND o.name = 'usp_Run_Downstream' AND m.definition LIKE '%SELECT  DISTINCT pc.Process_Code%'; IF @a <> 1 BEGIN SET @e = 'V219 FAILED: usp_Run_Downstream is deployed without the DISTINCT.'; THROW 50496, @e, 1; END;
+
+# 2. ==> THE CONDITION THAT TRIGGERED IT STILL EXISTS, SO THE FIX IS LOAD-BEARING. <== If no job
+# had two active parents the duplicate could not arise and this release would be a no-op -- which
+# would mean the duplicates seen in the preview came from somewhere else and were not fixed. Assert
+# the graph really does fan in, so guard 1 is guarding something real.
+EXEC     DECLARE @b INT, @f VARCHAR(4000); SELECT @b = COUNT(*) FROM (SELECT Next_Process_Code FROM Audit.Process_Dependency WHERE Is_Active = 1 GROUP BY Next_Process_Code HAVING COUNT(DISTINCT Prev_Process_Code) > 1) x; IF @b = 0 BEGIN SET @f = 'V219 FAILED: no job has more than one active parent, so the duplicate this release fixes could not have occurred -- the diagnosis is wrong.'; THROW 50497, @f, 1; END;
+
+# 3. The proc still resolves and its parameters are unchanged -- a DROP/CREATE that silently lost
+# @Preview would take the safety net off the first prod run with it.
+EXEC     DECLARE @c INT, @g VARCHAR(4000); SELECT @c = COUNT(*) FROM sys.parameters p JOIN sys.objects o ON o.object_id = p.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Audit' AND o.name = 'usp_Run_Downstream' AND p.name IN ('@Process_Code', '@Include_Self', '@Full_Refresh', '@Preview', '@Parent_Run_UUID'); IF @c <> 5 BEGIN SET @g = 'V219 FAILED: usp_Run_Downstream has ' + CAST(@c AS VARCHAR(10)) + ' of its 5 expected parameters.'; THROW 50498, @g, 1; END;
+
+
+TEST
