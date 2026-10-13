@@ -1,84 +1,117 @@
-"""Does the generated data tell the story? Generates tenant 11 IN MEMORY and writes nothing.
+"""Read the demo's three revenue lines from generated data, IN MEMORY, writing nothing.
 
-Reads the three revenue lines the walkthrough opens on, as rolling twelve-month totals:
-  private   invoiced treatment, net of the NHS band charge
-  plan      capitation -- live members that month times their tier's monthly fee
-  nhs       delivered UDA value
-A story that holds needs plan climbing, private easing, and the TOTAL slightly up. If the total
-falls the narrative is wrong whatever the beats say, which is the whole problem being fixed.
+The walkthrough opens on revenue, so the generator has to produce the shape the story claims:
+plan climbing, private easing, total slightly UP. This reads those lines as rolling twelve-month
+totals so the shape can be checked before a reseed is spent on it -- a reseed plus build is about
+an hour, and tuning by reseed is how the story kept drifting in the first place.
+
+==> IT MIRRORS THE WAREHOUSE'S CAPITATION RULE, NOT A SIMPLER ONE. <== The first version credited
+every plan member from the month they registered, and over-read plan growth by five points
+(+29.8% against the warehouse's +24.7%) because that is not what Gold.usp_Load_Fact_Revenue does.
+There, capitation comes from a SPELL: it starts at the member's first free exam and runs to today
+while they are still on a rated plan, so a member who never attends is worth nothing and one who
+joined in January but first attended in June pays from June. Registration is not the trigger;
+attendance is.
+
+NHS is likewise taken from delivered UDA claims rather than assumed flat at the contract value --
+the first version assumed flat and missed a 6% decline.
+
+    python Scripts/Check_Demo_Story.py
+    TAKEUP_NOW=0.80 GROWTH=0.06 python Scripts/Check_Demo_Story.py     # sweep without editing
 """
 import collections
-import datetime
 import os
 import sys
 
-sys.path.insert(0, r"C:\Users\aihig\OneDrive\Dentally\Code\API")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "API"))
 os.environ.setdefault("GENERATE_AS_OF", "2026-10-13")
 
 from generate_data import generate_tenant, TODAY, START          # noqa: E402
 from seed_tenants import SEED_TENANTS                            # noqa: E402
 
-tdef = SEED_TENANTS[11]
+tdef = dict(SEED_TENANTS[11])
+params = dict(tdef.get("_params", {}))
+for env, key in (("TAKEUP_NOW", "plan_takeup_now"), ("TAKEUP_START", "plan_takeup_start"),
+                 ("GROWTH", "annual_growth"), ("LAPSE", "lapse_rate")):
+    if os.environ.get(env):
+        params[key] = float(os.environ[env])
+        print("   override %-18s = %s" % (key, params[key]))
+tdef["_params"] = params
+
 print("generating tenant 11 (%s patients, %s .. %s) ..."
       % (tdef["n_patients"], START, TODAY), flush=True)
 data = generate_tenant(tdef)
 
-# ── private: invoiced, less the NHS band charge (that is a slice of the UDA value) ────────
+CUT = str(TODAY)[:7]            # drop the partial current month; it drags private down
+
+# ── private: invoiced treatment, less the NHS band charge (a slice of the UDA value) ──────
 priv = collections.Counter()
 for inv in data["invoices"]:
     d = inv.get("dated_on")
     amt = float(inv.get("amount") or 0) - float(inv.get("nhs_amount") or 0)
-    if d and amt > 0:
+    if d and amt > 0 and str(d)[:7] < CUT:
         priv[str(d)[:7]] += amt
 
-# ── plan: who was a member that month, times their tier's fee ────────────────────────────
+# ── plan: a spell from the member's FIRST EXAM to today, exactly as the warehouse builds it ──
 charge = {pp["id"]: float(pp.get("monthly_charge") or 0) for pp in tdef["payment_plans"]}
-cap_ids = {pid for pid, c in charge.items() if c > 0}
-joined = {}
+cap_ids = {pid for pid, fee in charge.items() if fee > 0}
+first_exam = {str(s.get("patient_id")): str(s.get("first_exam_date") or "")[:7]
+              for s in data.get("patient_stats", [])}
+spells = []
 for p in data["patients"]:
-    if p.get("payment_plan_id") in cap_ids:
-        joined[p["id"]] = (str(p.get("created_at"))[:7], charge[p["payment_plan_id"]])
+    if p.get("payment_plan_id") not in cap_ids:
+        continue
+    fx = first_exam.get(str(p["id"]), "")
+    if not fx:                   # never attended -> no spell -> worth nothing
+        continue
+    # A spell runs to today only while the member is STILL on a rated plan AND active;
+    # otherwise it stops at their last evidence of membership. Crediting inactive members
+    # through to today is what left this reading 12% above the warehouse.
+    if not p.get("active"):
+        continue
+    spells.append((max(fx, str(p.get("created_at"))[:7]), charge[p["payment_plan_id"]]))
 
-# ==> DROP THE PARTIAL MONTH. <== TODAY lands mid-month, so the final bucket holds a fraction
-# of its invoices and drags private down. Comparing against it reported the total FALLING 3%
-# when complete-month to complete-month it rises 2.6% -- the check, not the data, was wrong.
-months = [m for m in sorted(priv) if m < str(TODAY)[:7]]
+months = sorted(priv)
 plan = collections.Counter()
 for m in months:
-    for pid, (since, fee) in joined.items():
+    for since, fee in spells:
         if since <= m:
             plan[m] += fee
 
-# ── nhs: delivered UDA value, flat by contract ───────────────────────────────────────────
-nhs_month = 0.0
-if tdef.get("nhs") and tdef.get("contracts"):
-    c = tdef["contracts"][-1]
-    nhs_month = float(c.get("target") or 0) * float(c.get("uda_value") or 0) / 12.0
+# ── nhs: delivered UDA value from the claims themselves ──────────────────────────────────
+nhs = collections.Counter()
+uda_val = 0.0
+if tdef.get("contracts"):
+    uda_val = float(tdef["contracts"][-1].get("uda_value") or 0)
+for cl in data.get("nhs_claims", []):
+    # awarded_uda, not expected: NHS income is what the contract actually pays for delivered
+    # activity. Dated by created_at, which the generator sets to the course completion date.
+    d = str(cl.get("created_at") or "")[:7]
+    if d and d < CUT:
+        nhs[d] += float(cl.get("awarded_uda") or 0) * uda_val
 
 
-def roll(series, m_list, i):
-    w = m_list[max(0, i - 11):i + 1]
-    return sum(series[m] for m in w)
+def roll(series, i):
+    return sum(series[m] for m in months[max(0, i - 11):i + 1])
 
 
 print("\n   month    private12m      plan12m       nhs12m     TOTAL12m")
-out = []
+rows = []
 for i, m in enumerate(months):
     if i < 11:
         continue
-    p12 = roll(priv, months, i)
-    c12 = roll(plan, months, i)
-    n12 = nhs_month * 12
-    out.append((m, p12, c12, n12, p12 + c12 + n12))
-for m, p12, c12, n12, tot in out[::3]:
-    print("   %s  %11.0f  %11.0f  %11.0f  %11.0f" % (m, p12, c12, n12, tot))
+    p12, c12, n12 = roll(priv, i), roll(plan, i), roll(nhs, i)
+    rows.append((m, p12, c12, n12, p12 + c12 + n12))
+for r in rows[::3]:
+    print("   %s  %11.0f  %11.0f  %11.0f  %11.0f" % r)
 
-if len(out) >= 13:
-    a, b = out[-13], out[-1]          # a year apart
-    print("\n   over the last 12 months of the window:")
+if len(rows) >= 13:
+    a, b = rows[-13], rows[-1]
+    print("\n   %s -> %s" % (a[0], b[0]))
     for lbl, i in (("private", 1), ("plan", 2), ("nhs", 3), ("TOTAL", 4)):
         was, now = a[i], b[i]
         pct = (now - was) / was * 100 if was else 0
-        print("      %-8s %11.0f -> %11.0f   %+6.1f%%" % (lbl, was, now, pct))
-    print("\n   plan share of total: %.1f%% -> %.1f%%"
-          % (a[2] / a[4] * 100, b[2] / b[4] * 100))
+        flag = ""
+        if lbl == "TOTAL":
+            flag = "   <== must be positive for the story to hold" if pct <= 0 else "   <== good"
+        print("      %-8s %11.0f -> %11.0f   %+6.1f%%%s" % (lbl, was, now, pct, flag))
