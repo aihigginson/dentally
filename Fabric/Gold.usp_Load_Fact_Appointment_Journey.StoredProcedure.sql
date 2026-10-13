@@ -63,53 +63,56 @@ BEGIN
         -- bk_Appointment_ID, has its "1 FOLLOWING" strictly later). Verified 0-diff vs the
         -- OUTER APPLY output on 246,520 dev rows; ~2s vs ~13 min (the APPLYs were O(n^2) on a
         -- columnstore work table Fabric can't index).
-        ;WITH src AS (
-            SELECT
-                Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
-                fk_Date_Start, Start_Time, Booking, Appointment_Reason,
-                ISNULL(Is_Cancelled, 0) AS Is_Cancelled,
-                ISNULL(Is_DNA, 0)       AS Is_DNA,
-                ISNULL(Is_Completed, 0) AS Is_Completed,
-                CASE WHEN ISNULL(Is_Cancelled, 0) = 0 AND ISNULL(Is_DNA, 0) = 0 THEN 1 ELSE 0 END AS Is_Valid_Target
-            FROM Gold.Fact_Appointments
-            WHERE Start_Time IS NOT NULL
-        ),
-        cand AS (
-            SELECT
-                Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
-                fk_Date_Start, Start_Time, Booking, Appointment_Reason, Is_Cancelled, Is_DNA, Is_Completed,
-                FIRST_VALUE(CASE WHEN Is_Valid_Target = 1
-                                 THEN bk_Appointment_ID END) IGNORE NULLS
-                    OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
-                          ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_next,
-                FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason = 'Exam'
-                                 THEN bk_Appointment_ID END) IGNORE NULLS
-                    OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
-                          ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_exam,
-                FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason = 'Hygiene'
-                                 THEN bk_Appointment_ID END) IGNORE NULLS
-                    OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
-                          ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_hygiene,
-                FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason <> 'Hygiene'
-                                 THEN bk_Appointment_ID END) IGNORE NULLS
-                    OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
-                          ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_not_hygiene
-            FROM src
-        ),
-        newj AS (
-            SELECT
-                Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
-                fk_Date_Start, Start_Time, Booking, Appointment_Reason, Is_Cancelled, Is_DNA, Is_Completed,
-                LAST_VALUE(c_next)        OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
-                                               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Next,
-                LAST_VALUE(c_exam)        OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
-                                               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Exam,
-                LAST_VALUE(c_hygiene)     OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
-                                               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Hygiene,
-                LAST_VALUE(c_not_hygiene) OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
-                                               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Not_Hygiene
-            FROM cand
-        )
+        DROP TABLE IF EXISTS #src;
+        SELECT
+            Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
+            fk_Date_Start, Start_Time, Booking, Appointment_Reason,
+            ISNULL(Is_Cancelled, 0) AS Is_Cancelled,
+            ISNULL(Is_DNA, 0)       AS Is_DNA,
+            ISNULL(Is_Completed, 0) AS Is_Completed,
+            CASE WHEN ISNULL(Is_Cancelled, 0) = 0 AND ISNULL(Is_DNA, 0) = 0 THEN 1 ELSE 0 END AS Is_Valid_Target
+        INTO    #src
+        FROM Gold.Fact_Appointments
+        WHERE Start_Time IS NOT NULL;
+
+        DROP TABLE IF EXISTS #cand;
+        SELECT
+            Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
+            fk_Date_Start, Start_Time, Booking, Appointment_Reason, Is_Cancelled, Is_DNA, Is_Completed,
+            FIRST_VALUE(CASE WHEN Is_Valid_Target = 1
+                             THEN bk_Appointment_ID END) IGNORE NULLS
+                OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
+                      ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_next,
+            FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason = 'Exam'
+                             THEN bk_Appointment_ID END) IGNORE NULLS
+                OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
+                      ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_exam,
+            FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason = 'Hygiene'
+                             THEN bk_Appointment_ID END) IGNORE NULLS
+                OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
+                      ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_hygiene,
+            FIRST_VALUE(CASE WHEN Is_Valid_Target = 1 AND Appointment_Reason <> 'Hygiene'
+                             THEN bk_Appointment_ID END) IGNORE NULLS
+                OVER (PARTITION BY Tenant_ID, fk_Patient ORDER BY Start_Time, bk_Appointment_ID
+                      ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) AS c_not_hygiene
+        INTO    #cand
+        FROM #src;
+
+        DROP TABLE IF EXISTS #newj;
+        SELECT
+            Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
+            fk_Date_Start, Start_Time, Booking, Appointment_Reason, Is_Cancelled, Is_DNA, Is_Completed,
+            LAST_VALUE(c_next)        OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
+                                           ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Next,
+            LAST_VALUE(c_exam)        OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
+                                           ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Exam,
+            LAST_VALUE(c_hygiene)     OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
+                                           ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Hygiene,
+            LAST_VALUE(c_not_hygiene) OVER (PARTITION BY Tenant_ID, fk_Patient, Start_Time ORDER BY bk_Appointment_ID
+                                           ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fk_Appointment_Not_Hygiene
+        INTO    #newj
+        FROM #cand;
+
         INSERT INTO Gold.Fact_Appointment_Journey
         (
             Tenant_ID, bk_Appointment_ID, fk_Patient, fk_Practitioner,
@@ -124,9 +127,13 @@ BEGIN
             Is_Cancelled, Is_DNA, Is_Completed,
             fk_Appointment_Next, fk_Appointment_Exam, fk_Appointment_Hygiene,
             fk_Appointment_Not_Hygiene, SYSUTCDATETIME(), SYSUTCDATETIME()
-        FROM newj;
+        FROM #newj;
 
         SET @My_Inserts = @@ROWCOUNT;
+
+        DROP TABLE #newj;
+        DROP TABLE #cand;
+        DROP TABLE #src;
 
         --*********************************
         --**** Procedure logic ends    ****
