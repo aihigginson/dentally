@@ -2858,7 +2858,30 @@ RETURN
     roll12("New Patients",             "New Patients",       false, "#,##0.0");
     roll12("Lapsed Patients",          "Lapsed Patients",    false, "#,##0.0");
     roll12("Net Patient Growth",       "Net Patient Growth", false, "#,##0.0");
-    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+
+    // ==> TRAILING THREE MONTHS, FOR THE 100% STACKED MIX CHART. <== Measured against both
+    // tenants: plan share over the last year moves +7.2pp on 3M against +4.4pp on 12M, with
+    // month-to-month jitter of 1.15pp against monthly raw's 6.33pp -- where the noise is
+    // larger than the whole year's signal and inverts Maple's direction outright. 3M beats 12M
+    // because the take-up curve ACCELERATES, so a twelve-month average dilutes the recent
+    // months that carry the story. On Maple the same measure reads +1.0pp, honestly flat.
+    //
+    // No divisor: a 100% stacked normalises its own columns, so a trailing sum is enough.
+    // REMOVEFILTERS stays, as in roll12 -- the axis follows the selected period but each
+    // column must reach back three months or the first two of any window are partial.
+    Action<string,string> roll3 = (name, baseM) => {
+        var m3 = t.AddMeasure(name + " Rolling 3M",
+            "VAR _hi = MAX ( 'List Date'[Full Date] )" + Environment.NewLine +
+            "VAR _lo = EDATE ( _hi, -3 )" + Environment.NewLine +
+            "VAR _win = FILTER ( ALL ( 'List Date' ), 'List Date'[Full Date] > _lo && 'List Date'[Full Date] <= _hi )" + Environment.NewLine +
+            "RETURN CALCULATE ( [" + baseM + "], REMOVEFILTERS ( 'List Date' ), REMOVEFILTERS ( 'List Date Grouping' ), _win )");
+        m3.DisplayFolder = g;
+        m3.FormatString = "£#,##0";
+    };
+    roll3("Private Revenue",         "Private Revenue");
+    roll3("Plan Capitation Revenue", "Plan Capitation Revenue");
+    roll3("NHS Revenue",             "NHS Revenue");
 
 
     // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
