@@ -1,0 +1,99 @@
+# =====================================================================
+# Release V220 -- the last CTEs out of the warehouse
+# =====================================================================
+# Standing preference, swept in one pass rather than fixed one procedure at a time. In Fabric a
+# CTE is not materialised, so a CTE referenced N times re-evaluates its source N times and carries
+# no statistics into the plan. Two in this release were doing exactly that:
+#
+#     Billing.usp_Generate_Invoice_Lines   #price read 3x (by #fb, by #held, and as the lead
+#                                          rate in #lines); #intervals read 2x
+#     Gold.usp_Load_Fact_New_Patients      #np_key read 3x (by #first_prac, by #first_plans,
+#                                          and by the final INSERT) -- so Dim_Patients was
+#                                          scanned and date-joined three times for one load
+#
+# Billing already made the argument itself, above its own #lic temp table: "A TEMP TABLE rather
+# than a CTE because it is read twice below -- in Fabric a re-referenced CTE re-evaluates its
+# source and loses its statistics." The chain beneath that comment was ignoring it.
+#
+# ==> ONE THING HERE CHANGES A JOIN, AND IT IS THE THING TO WATCH. <== Gold.usp_Load_Fact_KPI_Snapshot
+# kept its inv_agg CTE deliberately, and said so: "CTE avoids a second temp table (Fabric rejects
+# CROSS JOIN temp-to-temp)". That restriction is real -- there is not one CROSS JOIN onto a #temp
+# in 458 SQL files, against ~145 temp-to-temp INNER/LEFT joins that work. So materialising inv_agg
+# alone would have reproduced exactly the error its author hit. The CROSS JOIN went with it: the
+# two snapshot predicates move out of WHERE and into an ON clause, which is the same relation --
+# a CROSS JOIN filtered by WHERE is an INNER JOIN on those predicates -- and leaves a join form
+# this warehouse uses everywhere. Everything else in this release only changes where a result
+# lands, not what it contains.
+#
+# ==> A VIEW CANNOT REFERENCE A TEMP TABLE AT ALL. <== Not a style point, a SQL Server/Fabric rule,
+# so the conversion is unavailable inside a view. Where a view's CTE is read ONCE as a relation a
+# derived table is exactly equivalent, and that covers vw_Dim_Date and vw_Fact_Appointment_Journey.
+#
+# NOT IN THIS RELEASE, deliberately:
+#   Gold.Dim_Patient_Data_Quality  keeps its `pat` CTE. It is read as a relation THREE times, once
+#     per UNION ALL branch, and a view cannot take a temp table -- so inlining would copy a 37-line
+#     block three times AND still evaluate it three times. It wants to be a materialised table
+#     loaded by a procedure; that changes what Meta.usp_Create_Gold_Views surfaces and when it is
+#     built, so it is a design decision, not a tidy-up. Its file carries a note saying so. The only
+#     repo change to it is that comment, so there is nothing to deploy.
+#   Meta.usp_Create_Gold_Views  does not need re-running. The two view bodies changed but their
+#     COLUMN SETS did not, so the generated PBI views are unaffected.
+#
+# BEFORE THIS IS TRUSTED ON PROD -- what the manifest cannot assert on its own. These are
+# equivalence claims about DATA, and the guards below only prove the right CODE landed:
+#   1. On DEV, note the row count of each affected target, then run the loads and compare:
+#        Gold.Fact_Invoices, Gold.Dim_NHS_Contracts, Gold.Fact_Appointment_Journey,
+#        Gold.Fact_KPI_Snapshot (outstanding_invoices especially -- the join change),
+#        Gold.Fact_New_Patients, Gold.Fact_Revenue_Capitation, Gold.Fact_Plan_Spell,
+#        Silver.Xero_Finance_Lines, Billing.Invoice_Line.
+#      Counts AND a SUM of the money column. A refactor that is right is right to the penny.
+#   2. outstanding_invoices is the one to read closely: SUM(Value) per fk_Date for that metric
+#      should be identical before and after. If the ON-clause rewrite were wrong it would show as
+#      a changed total, not an error.
+#   3. Billing.usp_Generate_Invoice_Lines regenerates a month idempotently, so run it for a month
+#      that already has rows and diff Billing.Invoice_Line against the previous generation.
+#
+# Run: .\Scripts\Deploy.ps1 -Manifest Releases\V220__ctes_out_temp_tables_in.manifest
+# =====================================================================
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Invoices.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_NHS_Contracts.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Appointment_Journey.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_KPI_Snapshot.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_New_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Revenue.StoredProcedure.sql
+DEPLOY   Fabric\Silver.usp_Load_Xero_Finance_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
+DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
+DEPLOY   Fabric\Gold.vw_Fact_Appointment_Journey.View.sql
+
+# -- Verification -------------------------------------------------------------------------------
+# 1. ==> THE CONVERTED BODY IS THE ONE THAT LANDED. <== Each object must carry its new temp table
+# (or, for the two views, its derived table). A manifest that deploys ten files and asserts nothing
+# proves only that ten statements did not throw. Note the collation is BIN2 -- LIKE is
+# CASE-SENSITIVE here, so these patterns are lower-case to match the source.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%#inv_lines%'), ('Gold','usp_Load_Dim_NHS_Contracts','%#claim_yr%'), ('Gold','usp_Load_Fact_Appointment_Journey','%#cand%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%#inv_agg%'), ('Gold','usp_Load_Fact_New_Patients','%#np_key%'), ('Gold','usp_Load_Fact_Revenue','%#plan_course%'), ('Silver','usp_Load_Xero_Finance_Lines','%#src%'), ('Billing','usp_Generate_Invoice_Lines','%#intervals%'), ('Gold','vw_Dim_Date','%CROSS JOIN (%'), ('Gold','vw_Fact_Appointment_Journey','%Terminal_Label%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 10 BEGIN SET @e = 'V220 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of 10 objects carry their converted body.'; THROW 50500, @e, 1; END;
+
+# 2. ==> AND THE CTE IS ACTUALLY GONE FROM EACH ONE. <== Guard 1 would still pass if an old CTE
+# were left behind beside the new temp table, which is precisely the mistake made once during this
+# refactor (a view rewrite that kept the original CTE body AND wrote a copy into the FROM). Assert
+# the absence by name: each object must no longer DECLARE its old CTE.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%inv_lines AS (%'), ('Gold','usp_Load_Dim_NHS_Contracts','%claim_yr AS (%'), ('Gold','usp_Load_Fact_Appointment_Journey','%cand AS (%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%inv_agg AS (%'), ('Gold','usp_Load_Fact_New_Patients','%np_key AS (%'), ('Gold','usp_Load_Fact_Revenue','%plan_course AS (%'), ('Silver','usp_Load_Xero_Finance_Lines','%src AS (%'), ('Billing','usp_Generate_Invoice_Lines','%intervals AS (%'), ('Gold','vw_Dim_Date','%ten AS (%'), ('Gold','vw_Fact_Appointment_Journey','%expanded AS (%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 0 BEGIN SET @e = 'V220 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' object(s) still declare their old CTE.'; THROW 50501, @e, 1; END;
+
+# 3. ==> NO CROSS JOIN ONTO A TEMP TABLE SURVIVED IN THE KPI SNAPSHOT. <== This is the one object
+# whose join changed, and the one restriction that would make it fail at RUN time rather than
+# deploy time -- a deployed body with CROSS JOIN #inv_agg in it would pass guards 1 and 2 and then
+# throw on the next nightly build. Assert the INNER JOIN form is what landed.
+EXEC     DECLARE @c INT, @x INT, @e VARCHAR(4000); SELECT @c = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name = 'usp_Load_Fact_KPI_Snapshot' AND m.definition LIKE '%INNER JOIN #inv_agg%'; SELECT @x = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name = 'usp_Load_Fact_KPI_Snapshot' AND m.definition LIKE '%CROSS JOIN #%'; IF @c <> 1 OR @x <> 0 BEGIN SET @e = 'V220 FAILED: KPI snapshot has ' + CAST(@c AS VARCHAR(10)) + ' INNER JOIN #inv_agg and ' + CAST(@x AS VARCHAR(10)) + ' CROSS JOIN onto a temp table (want 1 and 0).'; THROW 50502, @e, 1; END;
+
+# 4. Every converted procedure still resolves and kept its signature. These are DROP/CREATE files,
+# so a body that lost a parameter would deploy cleanly and then fail when the orchestrator calls it
+# with @Run_Inserts OUT. Eight procedures, each with its OUT trio.
+EXEC     DECLARE @p INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM sys.parameters prm JOIN sys.objects o ON o.object_id = prm.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE prm.name IN ('@Run_Inserts','@Run_Updates','@Run_Deletes') AND ((s.name = 'Gold' AND o.name IN ('usp_Load_Fact_Invoices','usp_Load_Dim_NHS_Contracts','usp_Load_Fact_Appointment_Journey','usp_Load_Fact_KPI_Snapshot','usp_Load_Fact_New_Patients','usp_Load_Fact_Revenue')) OR (s.name = 'Silver' AND o.name = 'usp_Load_Xero_Finance_Lines')); IF @p <> 21 BEGIN SET @e = 'V220 FAILED: expected 21 OUT parameters across the 7 load procedures, found ' + CAST(@p AS VARCHAR(10)) + '.'; THROW 50503, @e, 1; END;
+
+# 5. The two views are selectable. A derived-table rewrite that mis-nested would parse, deploy, and
+# only fail when something read it -- so read them, cheaply, with a row count of zero rows.
+EXEC     DECLARE @e VARCHAR(4000); BEGIN TRY SELECT TOP 0 1 AS probe FROM [Gold].[vw_Dim_Date]; SELECT TOP 0 1 AS probe FROM [Gold].[vw_Fact_Appointment_Journey]; END TRY BEGIN CATCH SET @e = 'V220 FAILED: a rewritten view is not selectable -- ' + ERROR_MESSAGE(); THROW 50504, @e, 1; END CATCH;
+
+
+TEST
