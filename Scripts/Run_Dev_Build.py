@@ -22,6 +22,31 @@ PIPELINE = "19eb0118-6767-4640-96fd-77b460ccb69a"
 BASE = "https://api.fabric.microsoft.com/v1/workspaces/%s/items/%s" % (WORKSPACE, PIPELINE)
 
 
+
+# ==> HTTP GOES THROUGH CURL, NOT URLLIB. <== On this machine Python cannot reach
+# api.fabric.microsoft.com or api.powerbi.com at all -- urllib and the Azure CLI's own urllib3
+# both time out with WinError 10060 while curl answers in 0.13s, which is an IPv6-first hang in
+# the Python stack rather than a Fabric outage. It cost a build trigger that silently never
+# landed: the script reported a timeout, and the pipeline had no new run.
+_NL = chr(10)          # written this way so no backslash escape can be mangled in transit
+
+
+def _curl(url, method="GET", tok=None, payload=None):
+    cmd = ["curl", "-s", "--max-time", "120", "-X", method,
+           "-H", "Authorization: Bearer %s" % tok, "-w", _NL + "%{http_code}"]
+    if payload is not None:
+        cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
+    else:
+        cmd += ["-H", "Content-Length: 0"]
+    cmd.append(url)
+    r = subprocess.run(cmd, capture_output=True, text=True, shell=False)
+    body, _, code = r.stdout.rpartition(_NL)
+    try:
+        return int(code.strip() or 0), (json.loads(body) if body.strip() else {})
+    except ValueError:
+        return int(code.strip() or 0), {"raw": body[:400]}
+
+
 def token():
     return subprocess.run(
         ["az", "account", "get-access-token", "--resource",
@@ -30,15 +55,11 @@ def token():
 
 
 def call(url, method="GET", tok=None):
-    req = urllib.request.Request(url, method=method)
-    req.add_header("Authorization", "Bearer %s" % tok)
-    req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req) as r:
-            body = r.read().decode("utf-8")
-            return r.status, (json.loads(body) if body.strip() else {}), dict(r.headers)
-    except urllib.error.HTTPError as e:
-        return e.code, {"error": e.read().decode("utf-8", "replace")[:400]}, dict(e.headers)
+    # Third element was the response headers, which this no longer reads: the trigger's instance
+    # id came from the Location header and is now simply not printed. latest() polls by start
+    # time, so nothing depends on it.
+    st, data = _curl(url, method=method, tok=tok)
+    return st, data, {}
 
 
 def latest(tok):
