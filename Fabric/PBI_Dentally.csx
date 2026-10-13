@@ -2858,7 +2858,15 @@ RETURN
     roll12("New Patients",             "New Patients",       false, "#,##0.0");
     roll12("Lapsed Patients",          "Lapsed Patients",    false, "#,##0.0");
     roll12("Net Patient Growth",       "Net Patient Growth", false, "#,##0.0");
-    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+    // ==> THE THREE REVENUE LINES THE WALKTHROUGH OPENS ON. <== The total alone cannot carry
+    // the argument: the practice is roughly flat BECAUSE plan income is climbing while private
+    // eases underneath it, and that is invisible until the components are drawn separately.
+    // Same trailing-sum/52 as the total so all four overlay the weekly bars on one scale, and
+    // the same REMOVEFILTERS pair so a Period selection cannot truncate the trailing year.
+    roll12("Private Revenue",          "Private Revenue",         false, "£#,##0");
+    roll12("Plan Capitation Revenue",  "Plan Capitation Revenue", false, "£#,##0");
+    roll12("NHS Revenue",              "NHS Revenue",             false, "£#,##0");
 
     // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
     roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
