@@ -143,22 +143,30 @@ def pick_year(cur, tenant):
 
 def read_actuals(cur, tenant, fy):
     """Practice-grain actuals for one financial year, aggregated per Target_Type."""
+    # A temp table rather than a CTE, as everywhere else in the warehouse. The connection is
+    # autocommit and long-lived, so #base survives between these calls.
+    #
+    # ==> ONE STATEMENT PER execute(). <== pyodbc returns quietly from a semicolon batch whose
+    # later statement failed -- the error only appears when the result sets are drained -- so a
+    # batch here could report success having created nothing.
+    cur.execute("DROP TABLE IF EXISTS #base")
     cur.execute("""
-        WITH base AS (
-            SELECT a.Metric, a.fk_Date, a.Numerator, a.Denominator,
-                   md.Target_Type, md.Format_Type,
-                   ROW_NUMBER() OVER (PARTITION BY a.Metric ORDER BY a.fk_Date DESC) AS rn
-            FROM   Gold.Fact_Metric_Actuals a
-            JOIN   Gold.vw_Dim_Date d
-                   ON d.pk_Date = a.fk_Date AND d.Tenant_ID = a.Tenant_ID
-            JOIN   Config.Metric_Definitions md ON md.Metric_Key = a.Metric
-            WHERE  a.Tenant_ID = ?
-              AND  d.Financial_Year = ?
-              AND  a.fk_Practice_Site = -1      -- practice grain: not a site
-              AND  a.fk_Practitioner  = -1      -- practice grain: not a practitioner
-              AND  md.Is_Active = 1
-              AND  md.Target_Type IS NOT NULL
-        )
+        SELECT a.Metric, a.fk_Date, a.Numerator, a.Denominator,
+               md.Target_Type, md.Format_Type,
+               ROW_NUMBER() OVER (PARTITION BY a.Metric ORDER BY a.fk_Date DESC) AS rn
+        INTO   #base
+        FROM   Gold.Fact_Metric_Actuals a
+        JOIN   Gold.vw_Dim_Date d
+               ON d.pk_Date = a.fk_Date AND d.Tenant_ID = a.Tenant_ID
+        JOIN   Config.Metric_Definitions md ON md.Metric_Key = a.Metric
+        WHERE  a.Tenant_ID = ?
+          AND  d.Financial_Year = ?
+          AND  a.fk_Practice_Site = -1      -- practice grain: not a site
+          AND  a.fk_Practitioner  = -1      -- practice grain: not a practitioner
+          AND  md.Is_Active = 1
+          AND  md.Target_Type IS NOT NULL
+    """, tenant, fy)
+    cur.execute("""
         SELECT Metric,
                MAX(Target_Type),
                CASE
@@ -168,16 +176,18 @@ def read_actuals(cur, tenant, fy):
                    WHEN MAX(Target_Type) = 'cumulative' THEN SUM(Numerator)
                    ELSE MAX(CASE WHEN rn = 1 THEN Numerator END)
                END AS Target_Value
-        FROM   base
+        FROM   #base
         GROUP  BY Metric
-    """, tenant, fy)
+    """)
+    rows = cur.fetchall()        # drained before the drop: another execute discards pending rows
+    cur.execute("DROP TABLE #base")
     # ==> A ZERO TARGET IS WORSE THAN A BLANK ONE. <== Blank reads as "no target set"; zero reads
     # as a target that is met forever, and every tile scored against it sits at 100%+ looking
     # healthy. Prod's tenant 100 produced nhs_revenue = 0 from a year with real NHS income, which
     # is exactly the shape of a wrong number that looks authoritative. Same rule as the
     # no-complete-year one: say nothing rather than something false.
     return {r[0]: (r[1], float(r[2]))
-            for r in cur.fetchall() if r[2] is not None and float(r[2]) != 0.0}
+            for r in rows if r[2] is not None and float(r[2]) != 0.0}
 
 
 def main():
