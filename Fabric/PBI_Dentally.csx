@@ -2858,34 +2858,8 @@ RETURN
     roll12("New Patients",             "New Patients",       false, "#,##0.0");
     roll12("Lapsed Patients",          "Lapsed Patients",    false, "#,##0.0");
     roll12("Net Patient Growth",       "Net Patient Growth", false, "#,##0.0");
-    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
-    // ==> THE THREE REVENUE LINES THE WALKTHROUGH OPENS ON. <== The total alone cannot carry
-    // the argument: the practice is roughly flat BECAUSE plan income is climbing while private
-    // eases underneath it, and that is invisible until the components are drawn separately.
-    // Same trailing-sum/52 as the total so all four overlay the weekly bars on one scale, and
-    // the same REMOVEFILTERS pair so a Period selection cannot truncate the trailing year.
-    roll12("Private Revenue",          "Private Revenue",         false, "£#,##0");
-    roll12("Plan Capitation Revenue",  "Plan Capitation Revenue", false, "£#,##0");
-    roll12("NHS Revenue",              "NHS Revenue",             false, "£#,##0");
-
-    // ==> INDEXED TO 100 AT THE FIRST VISIBLE POINT. <== The absolute rolling lines could not
-    // show the story and never could: a rolling-12M series is a smoother, so over a twelve-month
-    // window it can only express the year-on-year change -- a 7% drift on a 1.3m axis. Worse, the
-    // three sat at different heights on one axis (total ~35k a week, private ~23k, NHS ~2.4k), so
-    // each read as horizontal. Indexing starts them together and lets them diverge by RELATIVE
-    // movement, which is what the argument is about. Reseeding would not have helped; this is
-    // axis arithmetic, not data.
-    Action<string,string> idx100 = (name, baseM) => {
-        var mi = t.AddMeasure(name + " Indexed",
-            "VAR _lo = MINX ( ALLSELECTED ( 'List Date' ), 'List Date'[Full Date] )" + Environment.NewLine +
-            "VAR _base = CALCULATE ( [" + baseM + "], FILTER ( ALLSELECTED ( 'List Date' ), 'List Date'[Full Date] = _lo ) )" + Environment.NewLine +
-            "RETURN DIVIDE ( [" + baseM + "], _base ) * 100");
-        mi.DisplayFolder = g;
-        mi.FormatString = "#,##0.0";
-    };
-    idx100("Total Revenue",           "Total Revenue Rolling 12M");
-    idx100("Private Revenue",         "Private Revenue Rolling 12M");
-    idx100("Plan Capitation Revenue", "Plan Capitation Revenue Rolling 12M");
+    roll12("NHS UDAs",                 "NHS UDAs",           false, "#,##0.0");
+
 
     // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
     roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
