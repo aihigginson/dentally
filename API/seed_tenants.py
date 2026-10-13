@@ -411,6 +411,17 @@ T11 = {
         # annual_growth x years). new_patient_rate is left for the other tenants, which still use
         # the old back-dating path.
         'annual_growth':           0.03,
+        # ==> MEASURED AGAINST THE LIVE PRACTICE, NOT GUESSED. <== Left to the generator's
+        # 0.22 default this demo carried 555 'Calculated as inactive' patients out of 8,040
+        # -- 6.9% of the list, against Maple's 931 of 27,850, or 3.3%. Twice the real rate,
+        # on the one page whose whole point is that these are people you can still ring.
+        #
+        # It is NOT a free dial. lapse_rate also sizes the joiner pool
+        # (joiners = n x (lapse_rate + annual_growth x years)), so lowering it starves the
+        # engine that drives the plan story: at 0.19 the plan line still climbs clearly but
+        # by +22.6% over the trailing year instead of +28.8%. 0.19 is as far as it goes
+        # before the story starts paying for the realism.
+        'lapse_rate':              0.19,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
