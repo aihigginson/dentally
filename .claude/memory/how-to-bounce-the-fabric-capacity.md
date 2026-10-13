@@ -29,7 +29,7 @@ page firing 30-80 queries reads as "hung" and why a trivial query can look slowe
 one. Do not attribute that floor to model reload, RLS or DAX -- on 2026-09-28 a cold model load
 measured 1.0s once the throttle was gone, having looked like 161s while it was there.
 
-**Why it matters:** `properties.state` passes through `Pausing` → `Paused` → `Resuming` →
+**The state field differs by route.** The `az fabric` extension puts it at the TOP level (`--query state`); `properties.state` is the raw ARM shape, and querying that path through the extension returns null rather than an error. State passes through `Pausing` → `Paused` → `Resuming` →
 `Active`, and a suspend takes a minute or two. Poll for `Paused` before resuming rather than
 firing both straight after each other. Verified 2026-09-26: warehouse data survives a bounce
 untouched on both environments. `state` reported `Active` while the capacity was in fact
@@ -48,3 +48,17 @@ same moment -- eight times the ~20s floor seen earlier the same day. Two workspa
 together is the signature: a single model's reload cannot do that. Expect it after any
 release whose manifest re-runs whole-table loads, and either sequence the remaining heavy
 work (promotion, refresh) BEFORE one bounce, or accept bouncing twice.
+
+**Verified 2026-10-13:** the whole bounce took about 45 SECONDS, not the ten minutes seen on
+09-28 -- and `az fabric capacity suspend` blocked until the pause had completed, so the poll
+found `Paused` on its first read. Do not assume the call returns immediately; it may or may not.
+
+**F8 is blocked by an Azure quota, not by willingness to pay.** Tried 2026-10-13: the regional
+quota for Microsoft.Fabric in UK West is 4 CU for the whole subscription, which the F4 already
+consumes, so a resize to F8 fails with `BadRequest ... TotalCapacityUnits: 4, RegionalQuota: 4`.
+Deleting the F4 first would not help -- an F8 exceeds 4 on its own. The only route is a quota
+increase (Azure portal -> Quotas, or a "Service and subscription limits (quotas)" support
+request naming the region), which is free but not instant. So when the capacity is throttled,
+the bounce above is the available remedy; scaling up is not, until that request has been made.
+Quota is per region, so an F8 elsewhere has its own allowance -- but that means moving the
+workspaces, and UK West is where the data sits.
