@@ -83,48 +83,6 @@
               },
               "queryRef": "_Measures.Total Revenue Rolling 12M",
               "nativeQueryRef": "Total Revenue Rolling 12M"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Private Revenue Rolling 12M"
-                }
-              },
-              "queryRef": "_Measures.Private Revenue Rolling 12M",
-              "nativeQueryRef": "Private Revenue Rolling 12M"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Plan Capitation Revenue Rolling 12M"
-                }
-              },
-              "queryRef": "_Measures.Plan Capitation Revenue Rolling 12M",
-              "nativeQueryRef": "Plan Capitation Revenue Rolling 12M"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "NHS Revenue Rolling 12M"
-                }
-              },
-              "queryRef": "_Measures.NHS Revenue Rolling 12M",
-              "nativeQueryRef": "NHS Revenue Rolling 12M"
             }
           ]
         }

@@ -2866,7 +2866,26 @@ RETURN
     // the same REMOVEFILTERS pair so a Period selection cannot truncate the trailing year.
     roll12("Private Revenue",          "Private Revenue",         false, "£#,##0");
     roll12("Plan Capitation Revenue",  "Plan Capitation Revenue", false, "£#,##0");
-    roll12("NHS Revenue",              "NHS Revenue",             false, "£#,##0");
+    roll12("NHS Revenue",              "NHS Revenue",             false, "£#,##0");
+
+    // ==> INDEXED TO 100 AT THE FIRST VISIBLE POINT. <== The absolute rolling lines could not
+    // show the story and never could: a rolling-12M series is a smoother, so over a twelve-month
+    // window it can only express the year-on-year change -- a 7% drift on a 1.3m axis. Worse, the
+    // three sat at different heights on one axis (total ~35k a week, private ~23k, NHS ~2.4k), so
+    // each read as horizontal. Indexing starts them together and lets them diverge by RELATIVE
+    // movement, which is what the argument is about. Reseeding would not have helped; this is
+    // axis arithmetic, not data.
+    Action<string,string> idx100 = (name, baseM) => {
+        var mi = t.AddMeasure(name + " Indexed",
+            "VAR _lo = MINX ( ALLSELECTED ( 'List Date' ), 'List Date'[Full Date] )" + Environment.NewLine +
+            "VAR _base = CALCULATE ( [" + baseM + "], FILTER ( ALLSELECTED ( 'List Date' ), 'List Date'[Full Date] = _lo ) )" + Environment.NewLine +
+            "RETURN DIVIDE ( [" + baseM + "], _base ) * 100");
+        mi.DisplayFolder = g;
+        mi.FormatString = "#,##0.0";
+    };
+    idx100("Total Revenue",           "Total Revenue Rolling 12M");
+    idx100("Private Revenue",         "Private Revenue Rolling 12M");
+    idx100("Plan Capitation Revenue", "Plan Capitation Revenue Rolling 12M");
 
     // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
     roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
