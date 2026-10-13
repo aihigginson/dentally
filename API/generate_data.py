@@ -1013,6 +1013,10 @@ def gen_patients(tdef, rng):
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pp_weights = tdef.get("_pp_weights", {})
+    # Capitation = a plan that bills a monthly fee. Premium Private is a tariff, not a
+    # membership, and carries no monthly charge -- it must not count as plan take-up.
+    _cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
+                   if pp["name"] in _CAPITATION_PLANS and float(pp.get("monthly_charge") or 0) > 0}
 
     # ==> n_patients IS THE LIST WE END WITH; JOINERS ARE GENERATED ON TOP OF IT. <==
     # It used to be the total ever generated, with new_patient_rate merely choosing WHEN an
@@ -1024,6 +1028,14 @@ def gen_patients(tdef, rng):
     #
     # Joiners replace the lapsed AND add the year-on-year growth, so the roster at the start of
     # the window is smaller than today's and grows through it.
+    # ==> THE REVENUE STORY LIVES HERE. <== The share of new private patients who register
+    # ONTO a monthly plan, then and now. Everything the walkthrough claims about the revenue
+    # mix is produced by this curve and nothing else: plan income rises because the plan book
+    # grows faster than the list, and private invoicing flattens because the same people stop
+    # being billed per item. Set both to the same value and the story disappears, which is
+    # exactly the state this replaces.
+    _takeup_then  = params.get("plan_takeup_start", 0.20)
+    _takeup_now   = params.get("plan_takeup_now",   0.70)
     _lapse_rate   = params.get("lapse_rate", 0.22)
     _growth       = params.get("annual_growth", 0.03)
     _years        = max(1.0, (TODAY - START).days / 365.0)
@@ -1034,6 +1046,19 @@ def gen_patients(tdef, rng):
 
     patients = []
     for i in range(1, n_total+1):
+        # ==> WHEN THEY JOINED IS DECIDED FIRST, BECAUSE THE PLAN DEPENDS ON IT. <==
+        # The roster joined before START, joiners during the window. Weighted towards the
+        # recent end (sqrt) because a growing list recruits more each year than the year before.
+        if i in _joiner_ix:
+            _span = max(1, (TODAY - START).days)
+            created = START + timedelta(days=int(_span * (rng.random() ** 0.5)))
+            _cohort = (created - START).days / float(_span)      # 0.0 at START, 1.0 today
+        else:
+            created_offset = rng.randint(0, 365*5)
+            created = START - timedelta(days=created_offset)
+            _cohort = 0.0                                        # the historic mix
+        _takeup = _takeup_then + (_takeup_now - _takeup_then) * _cohort
+
         # Assign site
         r = rng.random()
         cum = 0.0
@@ -1070,10 +1095,17 @@ def gen_patients(tdef, rng):
             # ratio is the recurring-revenue story the plan reporting exists to tell.
             private_pps = [pid for pid in dentist["pp_ids"] if pid != nhs_pp_id]
             if private_pps:
-                _w = [pp_weights.get(pid, 1.0) for pid in private_pps]
+                # Capitation or not, by the cohort's take-up rate; then the TIER by the usual
+                # weights within whichever group won. Splitting it this way keeps the relative
+                # mix of tiers (and of Private vs Premium Private) exactly as configured while
+                # letting the capitation SHARE move with the join date.
+                _cap  = [pid for pid in private_pps if pid in _cap_pp_ids]
+                _rest = [pid for pid in private_pps if pid not in _cap_pp_ids]
+                _pool = _cap if (_cap and _rest and rng.random() < _takeup) else (_rest or _cap)
+                _w = [pp_weights.get(pid, 1.0) for pid in _pool]
                 _r = rng.random() * sum(_w)
-                pp_id = private_pps[-1]
-                for _pid, _wi in zip(private_pps, _w):
+                pp_id = _pool[-1]
+                for _pid, _wi in zip(_pool, _w):
                     _r -= _wi
                     if _r <= 0:
                         pp_id = _pid
@@ -1121,19 +1153,6 @@ def gen_patients(tdef, rng):
                         "site-ma":"M1","site-mb":"M2","site-bm":"B1"}
         pc_area = postcode_map.get(site_id, "SW1")
         postcode = f"{pc_area} {rng.randint(1,9)}{rng.choice('ABCDEFGH')}{rng.choice('ABCDEFGHJKLMNPQRSTUVWXY')}"
-
-        # Created date: the roster joined before START, joiners during the window.
-        #
-        # ==> AND JOINERS REACH TODAY. <== This stopped 90 days short, so the trailing-twelve-
-        # month new-patient count was a quarter light for no reason -- a practice does not stop
-        # registering patients three months before you look at it. Weighted towards the recent
-        # end (sqrt) because a growing list recruits more each year than it did the year before.
-        if i in _joiner_ix:
-            _span = max(1, (TODAY - START).days)
-            created = START + timedelta(days=int(_span * (rng.random() ** 0.5)))
-        else:
-            created_offset = rng.randint(0, 365*5)
-            created = START - timedelta(days=created_offset)
 
         # Ethnicity
         ethnicity = rng.choice(_ET)

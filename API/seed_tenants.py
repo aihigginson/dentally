@@ -388,6 +388,11 @@ T11 = {
     },
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
+        # The revenue story, as data. 20% of new private patients took a monthly plan at
+        # the start of the window and 70% do today -- so the plan book outgrows the list,
+        # capitation income climbs, and per-item private billing flattens underneath it.
+        'plan_takeup_start':       0.20,
+        'plan_takeup_now':         0.70,
         'active_rate':             0.95,
         # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
         # for a list this size, which flatters every growth and acquisition number.
