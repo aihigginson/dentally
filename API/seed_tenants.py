@@ -529,7 +529,31 @@ T12 = {
     ],
     'payment_plans': [
         _pp(1, 'Private',   dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(2, 'Care Plan', monthly='17.99', dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        # ==> THE SAME EIGHT TIERS AS TENANT 11, AND THAT IS THE POINT. <== A group buys its care
+        # plan from ONE provider, so the product -- the tier names and the monthly fees -- is the
+        # same at every practice it owns. The single bespoke 'Care Plan' at 17.99 that used to sit
+        # here described a practice that had gone out and bought its own scheme, which is not what
+        # a multi-practice group looks like.
+        #
+        # The ids deliberately start at 4 and skip 2-3, matching tenant 11's numbering, so the
+        # rate rows in Input.Plan_Capitation_Rate are identical in shape across the two practices
+        # and the group view compares like with like.
+        #
+        # ==> THE FEES ARE NOT MARKED UP, EVEN THOUGH THIS PRACTICE IS. <== price_mult 1.25 raises
+        # the per-ITEM private fees, which is this practice's own tariff. The plan fee belongs to
+        # the provider, so it is the same 8-65 as tenant 11. A member here pays the same monthly
+        # amount and more for restorative work, which is exactly how it works in life.
+        #
+        # Six-monthly recalls on the tiers against twelve on Private: the included check-ups are
+        # what the monthly fee buys, so the plan drives the recall frequency, not the practice.
+        _pp(4,  'Child Plan',   monthly='8.00',  dr=6, hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
+        _pp(5,  'Essentials A', monthly='22.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(6,  'Care Plan A',  monthly='24.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(7,  'Care Plan B',  monthly='34.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(8,  'Essentials B', monthly='36.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(9,  'Care Plan C',  monthly='44.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(10, 'Care Plan D',  monthly='55.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(11, 'Care Plan E',  monthly='65.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
     ],
     'contracts': [],
     'acquisition_sources': [
@@ -555,7 +579,7 @@ T12 = {
         {'id': 1, 'first_name': 'Fiona',   'last_name': 'MacDonald', 'title': 'Dr', 'role': 'dentist',
          'site_id': 't12-gt', 'gdc_number': '1220001', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         # ==> SHARED WITH T11, BY NAME ONLY. <== Zoe Crawford is a 0.40 FTE associate at the
     # Demonstration Practice working Thursdays and Fridays; here she takes Mondays and Tuesdays.
     # The two records are separate practitioners that happen to share a name -- which is what a
@@ -564,11 +588,11 @@ T12 = {
     {'id': 2, 'first_name': 'Zoe',     'last_name': 'Crawford',  'title': 'Dr', 'role': 'dentist',
          'site_id': 't12-sb', 'gdc_number': '1220002', 'nhs_pct': 0.0,
          'work_days': [0,1], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 3, 'first_name': 'Preethi', 'last_name': 'Nair',      'title': 'Dr', 'role': 'dentist',
          'site_id': 't12-sb', 'gdc_number': '1220003', 'nhs_pct': 0.0,
          'work_days': [0,2,3,4,5], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 4, 'first_name': 'Josh',    'last_name': 'Elliott',   'title': 'Dr', 'role': 'specialist',
          'site_id': 't12-gt', 'gdc_number': '1220004', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3], 'start_time': '09:00', 'end_time': '17:00',
@@ -576,24 +600,54 @@ T12 = {
         {'id': 5, 'first_name': 'Hannah',  'last_name': 'Wu',        'title': 'Dr', 'role': 'specialist',
          'site_id': 't12-gt', 'gdc_number': '1220005', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 6, 'first_name': 'Kate',    'last_name': "O'Brien",   'title': 'Ms', 'role': 'hygienist',
          'site_id': 't12-gt', 'gdc_number': '1220006', 'nhs_pct': 0.0,
          'work_days': [0,1,3,4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 7, 'first_name': 'Anna',    'last_name': 'Johansson', 'title': 'Ms', 'role': 'hygienist',
          'site_id': 't12-gt', 'gdc_number': '1220007', 'nhs_pct': 0.0,
          'work_days': [1,2,4,5], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 8, 'first_name': 'Mel',     'last_name': 'Peters',    'title': 'Ms', 'role': 'tco',
          'site_id': 't12-gt', 'gdc_number': None, 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 9, 'first_name': 'Simon',   'last_name': 'Brooks',    'title': 'Mr', 'role': 'tco',
          'site_id': 't12-gt', 'gdc_number': None, 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
     ],
+    # Relative weights among the plans this practice offers. The TIER mix mirrors tenant 11's --
+    # same provider, same book shape, C-heavy with Essentials A second -- so the group view is
+    # comparing like with like. Private carries the rest: there is no NHS plan here, so every
+    # patient is drawn from this one set.
+    '_pp_weights': {
+        1: 73.4,      # Private
+        4:  0.21,     # Child Plan
+        5:  6.73,     # Essentials A
+        6:  1.32,     # Care Plan A
+        7:  4.13,     # Care Plan B
+        8:  1.85,     # Essentials B
+        9:  8.90,     # Care Plan C
+        10: 2.35,     # Care Plan D
+        11: 0.33,     # Care Plan E
+    },
+    '_params': {
+        # ==> A YOUNGER PLAN BOOK THAN TENANT 11, ON PURPOSE. <== Tenant 11 runs 20% -> 70%
+        # take-up, which is the practice that has been converting patients for years and is the
+        # story the walkthrough opens on. If this practice matched it, the group view would show
+        # two identical businesses and prove nothing.
+        #
+        # Half those rates: a group that has rolled the plan out to its second practice more
+        # recently. The combined mix then sits BETWEEN the two rather than being dragged to one of
+        # them, which is what makes the All-practices view worth looking at.
+        'plan_takeup_start':       0.10,
+        'plan_takeup_now':         0.35,
+        # No leavers modelled here. Tenant 11 carries the estimated-spell case (plan_leaver_rate
+        # 0.06) and one tenant exercising it is enough for the regression suite; a second only
+        # muddies the group comparison.
+    },
     '_site_patient_split': {'t12-gt': 0.62, 't12-sb': 0.38},
 }
 
