@@ -35,5 +35,22 @@ the gate cannot fail usefully either. Do not read `Run_Tests.ps1` as validation 
 -- capture before/after figures and difference them instead, which is what actually caught nothing
 and proved everything for V220.
 
-`-Promote` re-greens it by moving Current to Baseline; only worth doing once the current T11 data
-is the intended state.
+**FIXED the same day.** 31 metrics and 8 reconcile rules were added for the uncovered objects, and
+the baseline was promoted to the current capture (tag `V220-ctes-out-2026-10-14`). The gate now
+runs **141 metrics / 49 reconcile rules, all green, exit 0** -- so from here a red run means
+something actually broke. Two things worth carrying forward:
+
+* **Bound anything time-varying rather than skipping it.** Capitation accrues daily (an open spell
+  runs to today), the KPI snapshot window rolls three years, and billing bills a month at a time.
+  Each is captured over a CLOSED window -- a fixed cut-off date, one fixed month-end, one fixed
+  Year_Month -- which keeps the coverage without the drift. The file header's older rule was to
+  exclude them outright; bounding is better.
+* **Check which tenant actually has rows before scoping a metric to 11.** `Billing.Invoice_Line`
+  and `Dim_Patient_Data_Quality` have NO tenant-11 rows on dev (both are tenant 100), so a `_T11`
+  metric on either reads zero forever and can never fail. Those are covered by a pinned month and
+  by invariants instead.
+
+**Still uncovered, and it is a generator gap not a test gap:** rolled-forward NHS contracts and
+estimated plan spells exist only on tenant 100, so the roll-forward logic in
+`usp_Load_Dim_NHS_Contracts` has no deterministic test. The demo generator would need to produce a
+lapsed plan member and a claim year with no contract. See [[prefer-temp-tables-over-ctes]].
