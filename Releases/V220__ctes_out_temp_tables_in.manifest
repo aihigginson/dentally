@@ -1,5 +1,5 @@
 # =====================================================================
-# Release V220 -- the last CTEs out of the warehouse
+# Release V220 -- the last CTEs out of the warehouse (all of them)
 # =====================================================================
 # Standing preference, swept in one pass rather than fixed one procedure at a time. In Fabric a
 # CTE is not materialised, so a CTE referenced N times re-evaluates its source N times and carries
@@ -29,14 +29,29 @@
 # so the conversion is unavailable inside a view. Where a view's CTE is read ONCE as a relation a
 # derived table is exactly equivalent, and that covers vw_Dim_Date and vw_Fact_Appointment_Journey.
 #
+# ==> Gold.Dim_Patient_Data_Quality DID NOT NEED A PROCEDURE AFTER ALL. <== It was the last CTE
+# and looked like it had to become a materialised table, because `pat` was read as a relation three
+# times -- once per branch -- and a view cannot hold a temp table. That was true of the SHAPE, not
+# of the problem. The three branches differed only in WHICH assigned practitioner they tested, so
+# the role is now pivoted by a VALUES constructor and the practitioner picked per role in the join:
+# one pass, same rows, no CTE. That is a better outcome than materialising would have been -- the
+# triple evaluation is gone AND the view stays a view, which is what keeps it out of the dimension
+# load order while still reading facts, exactly as its header always asked for. No new table, no
+# new job, no new RLS surface.
+#
+#   Equivalence, case by case:
+#     active dentist, nothing else     the join wants Active=0 so it misses, and the none-assigned
+#                                      arm needs a NULL id -> no row, as before.
+#     dentist id absent from the Dim   join misses, id is not NULL -> no row. The old INNER JOIN
+#                                      did the same and the third branch required NULL.
+#     null dentist + inactive hygienist   two rows, as before.
+#     hygienist null                   nothing: the none-assigned arm is dentist-only, which is the
+#                                      deliberate "a hygienist is optional" rule.
+#   Column names, ORDER and types are unchanged (role VARCHAR(20), id int, name VARCHAR(255)), which
+#   is what keeps PBI.[List Patient Data Quality] identical.
+#
 # NOT IN THIS RELEASE, deliberately:
-#   Gold.Dim_Patient_Data_Quality  keeps its `pat` CTE. It is read as a relation THREE times, once
-#     per UNION ALL branch, and a view cannot take a temp table -- so inlining would copy a 37-line
-#     block three times AND still evaluate it three times. It wants to be a materialised table
-#     loaded by a procedure; that changes what Meta.usp_Create_Gold_Views surfaces and when it is
-#     built, so it is a design decision, not a tidy-up. Its file carries a note saying so. The only
-#     repo change to it is that comment, so there is nothing to deploy.
-#   Meta.usp_Create_Gold_Views  does not need re-running. The two view bodies changed but their
+#   Meta.usp_Create_Gold_Views  does not need re-running. Three view bodies changed but their
 #     COLUMN SETS did not, so the generated PBI views are unaffected.
 #
 # BEFORE THIS IS TRUSTED ON PROD -- what the manifest cannot assert on its own. These are
@@ -66,19 +81,20 @@ DEPLOY   Fabric\Silver.usp_Load_Xero_Finance_Lines.StoredProcedure.sql
 DEPLOY   Fabric\Billing.usp_Generate_Invoice_Lines.StoredProcedure.sql
 DEPLOY   Fabric\Gold.vw_Dim_Date.View.sql
 DEPLOY   Fabric\Gold.vw_Fact_Appointment_Journey.View.sql
+DEPLOY   Fabric\Gold.Dim_Patient_Data_Quality.View.sql
 
 # -- Verification -------------------------------------------------------------------------------
 # 1. ==> THE CONVERTED BODY IS THE ONE THAT LANDED. <== Each object must carry its new temp table
 # (or, for the two views, its derived table). A manifest that deploys ten files and asserts nothing
 # proves only that ten statements did not throw. Note the collation is BIN2 -- LIKE is
 # CASE-SENSITIVE here, so these patterns are lower-case to match the source.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%#inv_lines%'), ('Gold','usp_Load_Dim_NHS_Contracts','%#claim_yr%'), ('Gold','usp_Load_Fact_Appointment_Journey','%#cand%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%#inv_agg%'), ('Gold','usp_Load_Fact_New_Patients','%#np_key%'), ('Gold','usp_Load_Fact_Revenue','%#plan_course%'), ('Silver','usp_Load_Xero_Finance_Lines','%#src%'), ('Billing','usp_Generate_Invoice_Lines','%#intervals%'), ('Gold','vw_Dim_Date','%CROSS JOIN (%'), ('Gold','vw_Fact_Appointment_Journey','%Terminal_Label%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 10 BEGIN SET @e = 'V220 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of 10 objects carry their converted body.'; THROW 50500, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%#inv_lines%'), ('Gold','usp_Load_Dim_NHS_Contracts','%#claim_yr%'), ('Gold','usp_Load_Fact_Appointment_Journey','%#cand%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%#inv_agg%'), ('Gold','usp_Load_Fact_New_Patients','%#np_key%'), ('Gold','usp_Load_Fact_Revenue','%#plan_course%'), ('Silver','usp_Load_Xero_Finance_Lines','%#src%'), ('Billing','usp_Generate_Invoice_Lines','%#intervals%'), ('Gold','vw_Dim_Date','%CROSS JOIN (%'), ('Gold','vw_Fact_Appointment_Journey','%Terminal_Label%'), ('Gold','Dim_Patient_Data_Quality','%VALUES (''Dentist''), (''Hygienist'')%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 11 BEGIN SET @e = 'V220 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of 11 objects carry their converted body.'; THROW 50500, @e, 1; END;
 
 # 2. ==> AND THE CTE IS ACTUALLY GONE FROM EACH ONE. <== Guard 1 would still pass if an old CTE
 # were left behind beside the new temp table, which is precisely the mistake made once during this
 # refactor (a view rewrite that kept the original CTE body AND wrote a copy into the FROM). Assert
 # the absence by name: each object must no longer DECLARE its old CTE.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%inv_lines AS (%'), ('Gold','usp_Load_Dim_NHS_Contracts','%claim_yr AS (%'), ('Gold','usp_Load_Fact_Appointment_Journey','%cand AS (%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%inv_agg AS (%'), ('Gold','usp_Load_Fact_New_Patients','%np_key AS (%'), ('Gold','usp_Load_Fact_Revenue','%plan_course AS (%'), ('Silver','usp_Load_Xero_Finance_Lines','%src AS (%'), ('Billing','usp_Generate_Invoice_Lines','%intervals AS (%'), ('Gold','vw_Dim_Date','%ten AS (%'), ('Gold','vw_Fact_Appointment_Journey','%expanded AS (%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 0 BEGIN SET @e = 'V220 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' object(s) still declare their old CTE.'; THROW 50501, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Fact_Invoices','%inv_lines AS (%'), ('Gold','usp_Load_Dim_NHS_Contracts','%claim_yr AS (%'), ('Gold','usp_Load_Fact_Appointment_Journey','%cand AS (%'), ('Gold','usp_Load_Fact_KPI_Snapshot','%inv_agg AS (%'), ('Gold','usp_Load_Fact_New_Patients','%np_key AS (%'), ('Gold','usp_Load_Fact_Revenue','%plan_course AS (%'), ('Silver','usp_Load_Xero_Finance_Lines','%src AS (%'), ('Billing','usp_Generate_Invoice_Lines','%intervals AS (%'), ('Gold','vw_Dim_Date','%ten AS (%'), ('Gold','vw_Fact_Appointment_Journey','%expanded AS (%'), ('Gold','Dim_Patient_Data_Quality','%pat AS (%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 0 BEGIN SET @e = 'V220 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' object(s) still declare their old CTE.'; THROW 50501, @e, 1; END;
 
 # 3. ==> NO CROSS JOIN ONTO A TEMP TABLE SURVIVED IN THE KPI SNAPSHOT. <== This is the one object
 # whose join changed, and the one restriction that would make it fail at RUN time rather than
@@ -93,7 +109,7 @@ EXEC     DECLARE @p INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM sys.paramet
 
 # 5. The two views are selectable. A derived-table rewrite that mis-nested would parse, deploy, and
 # only fail when something read it -- so read them, cheaply, with a row count of zero rows.
-EXEC     DECLARE @e VARCHAR(4000); BEGIN TRY SELECT TOP 0 1 AS probe FROM [Gold].[vw_Dim_Date]; SELECT TOP 0 1 AS probe FROM [Gold].[vw_Fact_Appointment_Journey]; END TRY BEGIN CATCH SET @e = 'V220 FAILED: a rewritten view is not selectable -- ' + ERROR_MESSAGE(); THROW 50504, @e, 1; END CATCH;
+EXEC     DECLARE @e VARCHAR(4000); BEGIN TRY SELECT TOP 0 1 AS probe FROM [Gold].[vw_Dim_Date]; SELECT TOP 0 1 AS probe FROM [Gold].[vw_Fact_Appointment_Journey]; SELECT TOP 0 1 AS probe FROM [Gold].[Dim_Patient_Data_Quality]; END TRY BEGIN CATCH SET @e = 'V220 FAILED: a rewritten view is not selectable -- ' + ERROR_MESSAGE(); THROW 50504, @e, 1; END CATCH;
 
 
 TEST
