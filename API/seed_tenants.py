@@ -234,8 +234,21 @@ T11 = {
         # The last two years carry a 4,300 UDA target. The pool that delivers against it grew by
         # a third at the 2026-10-10 reseed, which took completion to 116% -- over-delivery the NHS
         # does not pay for. 4,300 puts it near 89%, which is the shape of a real contract year.
-        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 4300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        #
+        # ==> THE CURRENT YEAR'S CONTRACT IS DELIBERATELY MISSING. <== There is no 2026/27 row, so
+        # the claims being submitted since 1 April 2026 belong to a financial year no contract
+        # covers -- and Gold.usp_Load_Dim_NHS_Contracts synthesises one, dated to the missing year
+        # and flagged Is_Rolled_Forward = 1. That roll-forward is the only part of V220's converted
+        # SQL (#latest / #ny / #claim_yr / #covered) that the demo did not exercise at all: on
+        # 2026-10-14 the five rolled-forward rows in the warehouse existed ONLY on tenant 100, so
+        # the regression suite could not guard the logic and it had to be checked by hand on PROD.
+        #
+        # It is also the honest shape. A practice mid-year whose new contract has not been entered
+        # into Dentally yet is ordinary, and 2025/26 stays flagged active exactly as it would in
+        # real life -- nobody closed it because nobody opened its replacement. The demo gains a
+        # genuine talking point: the UDA tracking keeps working and says where the figure came from.
+        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ',
+                  contract_number='16C/VDX01/D', active=True),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
@@ -393,6 +406,16 @@ T11 = {
         # capitation income climbs, and per-item private billing flattens underneath it.
         'plan_takeup_start':       0.20,
         'plan_takeup_now':         0.70,
+        # ==> AND SOME OF THEM LEFT. <== A take-up story with no leavers means every patient with
+        # membership evidence is still ON a rated plan, so Fact_Plan_Spell's Is_Estimated_Plan
+        # branch -- a FORMER member, priced at the default rate -- has no data at all. It was
+        # tenant 100 only until this was added, which is why that half of the capitation code had
+        # to be verified by hand on PROD rather than by the regression suite.
+        #
+        # 6% of the non-capitation private list, which lands near 120 estimated spells against
+        # the live practice's 195. Leavers do not dent the climbing plan line: take-up applies to
+        # JOINERS, and these come off the patients who are already not on a plan today.
+        'plan_leaver_rate':        0.06,
         'active_rate':             0.95,
         # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
         # for a list this size, which flatters every growth and acquisition number.

@@ -134,9 +134,14 @@ _EMERGENCY_CODES = {9001, 9002}
 # ─── TENANT DEFINITIONS ───────────────────────────────────────────────────────
 
 def _contract(tid, site_id, site_code, year, target, uda_val, uoa_target=0, uoa_val=0,
-              loc_id="", contract_number="", is_ortho=False):
+              loc_id="", contract_number="", is_ortho=False, active=None):
     y0, y1 = year, year+1
-    active = (y0 == 2026)
+    # ==> active IS A FLAG SOMEBODY SETS, NOT A DATE COMPARISON. <== It defaults to "the current
+    # year's contract", which is the tidy case. A real practice leaves LAST year's contract
+    # flagged active when nobody has loaded the new one yet -- and that is precisely the state
+    # Gold.usp_Load_Dim_NHS_Contracts synthesises a roll-forward for, so the demo needs to be
+    # able to reproduce it. Pass active=True on an expired year to do that.
+    active = (y0 == 2026) if active is None else active
     suffix = "/O" if is_ortho else "/D"
     cn = contract_number or f"16C/{site_code}{suffix}/{y0-2022:02d}"
     return {
@@ -2037,6 +2042,38 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
                   if str(pp.get("monthly_charge") or "0").replace(".", "").strip("0")}
 
+    # ==> SOMEBODY HAS TO HAVE *LEFT* A PLAN, OR HALF THE CAPITATION CODE IS NEVER RUN. <==
+    # Gold.usp_Load_Fact_Revenue prices a spell two ways. A member still on a rated plan is
+    # priced at their own tier (Is_Estimated_Plan = 0). A patient with membership evidence whose
+    # CURRENT plan is not rated is a FORMER member: their spell is estimated at the default rate
+    # and flagged Is_Estimated_Plan = 1, which is the whole reason that flag exists.
+    #
+    # The generator gave every patient one plan for life, so that second branch had no data
+    # anywhere in the demo -- on 2026-10-14 all 195 estimated spells in the warehouse belonged to
+    # tenant 100. Nothing reproducible exercised it.
+    #
+    # A leaver is modelled where it actually shows: their exams and hygiene were COVERED while
+    # they were a member and charged afterwards, and their plan today is the private tariff. The
+    # cut-off is the leaving date. Keyed on the course START date because that is what the
+    # warehouse reads -- plan_course groups on tp.Start_Date, not on when the course finished.
+    #
+    # Deterministic from the patient id via _u5 rather than drawn from rng: this must not shift
+    # every later random draw in the generator just by being switched on for one tenant.
+    _leaver_rate = tdef.get("_params", {}).get("plan_leaver_rate", 0.0)
+    _ex_until = {}
+    if cap_pp_ids and _leaver_rate > 0:
+        _span_days = max(1, (TODAY - START).days)
+        for _p in patients:
+            if _p["payment_plan_id"] in cap_pp_ids:
+                continue                      # still a member -- priced, not estimated
+            _h = int(_u5("exmember", tid, _p["id"]).replace("-", "")[:8], 16)
+            if (_h % 100000) / 100000.0 < _leaver_rate:
+                # Left between 30% and 75% of the way through the window, so there is room for
+                # several six-monthly exams before it (the estimated branch needs >= 2 evidence
+                # months) and a visible stretch of charged visits after it.
+                _ex_until[_p["id"]] = START + timedelta(
+                    days=int(_span_days * (0.30 + 0.45 * (((_h >> 12) % 1000) / 1000.0))))
+
     # Practitioners available as referrers (dentists/orthodontists/specialists only)
     all_prac_ids = [p["id"] for p in tdef["_prac_defs"]
                     if p["role"] in ("dentist", "orthodontist", "specialist")]
@@ -2148,7 +2185,9 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nhs_cat = tx.get("nhs_treatment_cat") or 0
                 uda_b = tx.get("uda_band") or 0
 
-                covered = (pp_id in cap_pp_ids
+                # A former member's exams were covered up to the day they left (see _ex_until).
+                _was_member = (pat_id in _ex_until and first_date < _ex_until[pat_id])
+                covered = ((pp_id in cap_pp_ids or _was_member)
                            and (code in _EXAM_CODES or code == _HYGIENE_CODE))
                 if is_nhs or covered:
                     price = 0.0
