@@ -30,6 +30,7 @@
 - [Get Data bakes a literal endpoint into the model](get-data-bakes-a-literal-endpoint-into-the-model.md) — a table added that way ignores pServer and does not repoint on promotion.
 - [A detail table needs a column, not a measure](a-detail-table-needs-a-column-not-a-measure.md) — a measure kills auto-exist and multiplies the rows out.
 - [Never deploy an Input.* table in a release](never-deploy-an-input-table-in-a-release.md) — those files start with DROP TABLE and Input.* is owner-curated data.
+- [Input.* rows live in the AppDB, now Azure SQL](input-rows-live-in-the-appdb-now-azure-sql.md) — the sync full-refreshes the warehouse copy; .env.example points at a dead host.
 - [Capitation is an estimate, not observed income](capitation-is-an-estimate-not-observed-income.md) — reconstructed from free exams; the real figures are the plan provider's spreadsheets.
 - [Fabric collation is case-sensitive](fabric-collation-is-case-sensitive.md) — Latin1_General_100_BIN2_UTF8; LIKE and = do not ignore case.
 - [Releases touching one file cannot replay individually](releases-touching-one-file-cannot-replay-individually.md) — a manifest deploys the file's current state; write a combined one for environments behind.
