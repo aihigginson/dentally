@@ -18,3 +18,39 @@ calibration fixes, each of which shifts the stream and invalidates any stored ba
 preserve rng-draw counts in `generate_data.py` to protect them. If regression testing is
 revived, give it its own tenant number first. See
 [[calibrate-the-demo-tenant-against-live]].
+
+**Measured 2026-10-14, running the gate after V220.** The baseline was captured **16/09/2026**, so
+every reseed since then shows as a failure: 56 of 110 regression checks CHANGED, and ALL 56 are
+tenant 11 (including `GOLD_PATIENTS_T11_INC_SENTINEL`, which does not end in `_T11` and so escapes
+a naive filter). Bronze counts moved -- 7,860 patients to 4,000 -- which is upstream of anything a
+warehouse refactor touches, so that is the reseed and nothing else. The 41 RECONCILE checks all
+PASS, which says the reseeded data is internally consistent Bronze-to-Gold.
+
+**The gate is nearly blind to the Gold load procedures.** Matching each metric's SQL_Text against
+the objects V220 changed: `Fact_Invoices` has 3 checks and `Dim_NHS_Contracts` 1. `Fact_Revenue`,
+`Fact_KPI_Snapshot`, `Fact_New_Patients`, `Fact_Appointment_Journey`, `Xero_Finance_Lines`,
+`Billing.Invoice_Line`, `Dim_Patient_Data_Quality` and `vw_Dim_Date` have **none at all**. So a
+green run is not evidence that a change to those is correct, and 56 permanently-red checks mean
+the gate cannot fail usefully either. Do not read `Run_Tests.ps1` as validation of a Gold refactor
+-- capture before/after figures and difference them instead, which is what actually caught nothing
+and proved everything for V220.
+
+**FIXED the same day.** 31 metrics and 8 reconcile rules were added for the uncovered objects, and
+the baseline was promoted to the current capture (tag `V220-ctes-out-2026-10-14`). The gate now
+runs **141 metrics / 49 reconcile rules, all green, exit 0** -- so from here a red run means
+something actually broke. Two things worth carrying forward:
+
+* **Bound anything time-varying rather than skipping it.** Capitation accrues daily (an open spell
+  runs to today), the KPI snapshot window rolls three years, and billing bills a month at a time.
+  Each is captured over a CLOSED window -- a fixed cut-off date, one fixed month-end, one fixed
+  Year_Month -- which keeps the coverage without the drift. The file header's older rule was to
+  exclude them outright; bounding is better.
+* **Check which tenant actually has rows before scoping a metric to 11.** `Billing.Invoice_Line`
+  and `Dim_Patient_Data_Quality` have NO tenant-11 rows on dev (both are tenant 100), so a `_T11`
+  metric on either reads zero forever and can never fail. Those are covered by a pinned month and
+  by invariants instead.
+
+**Still uncovered, and it is a generator gap not a test gap:** rolled-forward NHS contracts and
+estimated plan spells exist only on tenant 100, so the roll-forward logic in
+`usp_Load_Dim_NHS_Contracts` has no deterministic test. The demo generator would need to produce a
+lapsed plan member and a claim year with no contract. See [[prefer-temp-tables-over-ctes]].

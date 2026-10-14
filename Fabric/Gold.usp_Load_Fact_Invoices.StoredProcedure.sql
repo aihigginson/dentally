@@ -58,19 +58,21 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM Gold.Fact_Invoices)
             SET @Watermark = CONVERT(datetime2(3), '1900-01-01');
 
-        ;WITH inv_lines AS (
-            -- Per-invoice line roll-up: representative clinician (prefer dentist/ortho/
-            -- specialist, else any line practitioner) + total of line Total Price.
-            SELECT  ii.Invoice_ID, ii.Tenant_ID,
-                    COALESCE(
-                        MAX(CASE WHEN dp.Role IN ('dentist','orthodontist','specialist') THEN dp.pk_Practitioner END),
-                        MAX(dp.pk_Practitioner)
-                    )                                AS fk_Practitioner,
-                    SUM(ISNULL(ii.Total_Price, 0))   AS Line_Total
-            FROM Silver.Invoice_Items ii
-            LEFT JOIN Gold.Dim_Practitioners dp ON dp.Practitioner_ID = ii.Practitioner_ID AND dp.Tenant_ID = ii.Tenant_ID
-            GROUP BY ii.Invoice_ID, ii.Tenant_ID
-        )
+        -- Per-invoice line roll-up: representative clinician (prefer dentist/ortho/
+        -- specialist, else any line practitioner) + total of line Total Price.
+        DROP TABLE IF EXISTS #inv_lines;
+        SELECT  ii.Invoice_ID, ii.Tenant_ID,
+                COALESCE(
+                    MAX(CASE WHEN dp.Role IN ('dentist','orthodontist','specialist') THEN dp.pk_Practitioner END),
+                    MAX(dp.pk_Practitioner)
+                )                                AS fk_Practitioner,
+                SUM(ISNULL(ii.Total_Price, 0))   AS Line_Total
+        INTO    #inv_lines
+        FROM Silver.Invoice_Items ii
+        LEFT JOIN Gold.Dim_Practitioners dp ON dp.Practitioner_ID = ii.Practitioner_ID AND dp.Tenant_ID = ii.Tenant_ID
+        GROUP BY ii.Invoice_ID, ii.Tenant_ID;
+
+        DROP TABLE IF EXISTS #src;
         SELECT
             inv.Tenant_ID                                              AS Tenant_ID,
             CAST(inv.Id AS INT)                                        AS bk_Invoice_ID,
@@ -91,7 +93,7 @@ BEGIN
             CASE WHEN CAST(ISNULL(inv.Amount_Outstanding,0) AS DECIMAL(12,2)) > 0 THEN 1 ELSE 0 END AS Is_Invoice_Outstanding
         INTO #src
         FROM Silver.Invoices inv
-        LEFT JOIN inv_lines il                ON il.Invoice_ID       = inv.Id                       AND il.Tenant_ID = inv.Tenant_ID
+        LEFT JOIN #inv_lines il               ON il.Invoice_ID       = inv.Id                       AND il.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Invoices dinv      ON dinv.bk_Invoice_ID  = CAST(inv.Id AS INT)         AND dinv.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat      ON dpat.Patient_ID     = CAST(inv.Patient_ID AS INT) AND dpat.Tenant_ID = inv.Tenant_ID
         LEFT JOIN Gold.Dim_Practice_Sites dps ON dps.Site_ID         = NULLIF(TRIM(inv.Site_ID),'') AND dps.Tenant_ID = inv.Tenant_ID
@@ -188,6 +190,7 @@ BEGIN
             VALUES ('Fact_Invoices', @Run_Start, SYSUTCDATETIME());
 
         DROP TABLE #src;
+        DROP TABLE #inv_lines;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

@@ -90,3 +90,25 @@ VALUES
 ,('CMP_FKNULL_AGGPRACCUR_SITE','GOLD_FKNULL_AGGPRACCUR_SITE_T11','GOLD_ZERO',0,'fk_Site in Gold.Aggregate_Site_Practitioner_Current must have no NULLs',1)
 ,('CMP_FKNULL_AGGPRACCUR_PRACTITIONER','GOLD_FKNULL_AGGPRACCUR_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Aggregate_Site_Practitioner_Current must have no NULLs',1)
 GO
+
+-- =====================================================================
+-- V220 invariants: each must be 0. Paired with GOLD_ZERO so a breach is a
+-- FAILURE, not merely a CHANGED row against a baseline -- which matters,
+-- because a stale baseline makes CHANGED easy to scroll past and these are
+-- the checks that should stop a release.
+-- =====================================================================
+INSERT INTO [Test].[Comparison_Definition]
+    ([Comparison_Name], [Metric_A], [Metric_B], [Expected_Difference], [Description], [Is_Active])
+VALUES
+ ('CMP_DQ_BAD_ROLE','GOLD_DQ_BAD_ROLE','GOLD_ZERO',0,'Data-quality view emits only Dentist and Hygienist',1)
+,('CMP_DQ_NULL_NAME','GOLD_DQ_NULL_NAME','GOLD_ZERO',0,'Every data-quality row names a practitioner or says None assigned',1)
+,('CMP_DQ_HYGIENIST_NONE_ASSIGNED','GOLD_DQ_HYGIENIST_NONE_ASSIGNED','GOLD_ZERO',0,'None-assigned is dentist-only; a hygienist is optional by design',1)
+,('CMP_DQ_NAMED_PRACTITIONER_ACTIVE','GOLD_DQ_NAMED_PRACTITIONER_ACTIVE','GOLD_ZERO',0,'A practitioner named by the data-quality view must be inactive',1)
+,('CMP_VW_DIM_DATE_NULL_FY_NAME','GOLD_VW_DIM_DATE_NULL_FY_NAME','GOLD_ZERO',0,'Every per-tenant date carries a financial-year label',1)
+,('CMP_VW_JOURNEY_BAD_MODE','GOLD_VW_JOURNEY_BAD_MODE_T11','GOLD_ZERO',0,'The journey view emits only its four modes',1)
+,('CMP_VW_JOURNEY_NULL_DELAY','GOLD_VW_JOURNEY_NULL_DELAY_T11','GOLD_ZERO',0,'Journey Delay is always a band or a terminal label',1)
+-- The cross-charge is a debit leg and a credit leg of equal magnitude, so the pair nets to zero by
+-- construction -- verified 2026-10-14: exactly half the tenant-11 legs (3,692 of 7,384) are
+-- positive. A non-zero net means a leg lost its partner or the signs stopped matching.
+,('CMP_REVENUE_CROSS_CHARGE_NETS_TO_ZERO','GOLD_REVENUE_CROSS_CHARGE_NET_T11','GOLD_ZERO',0,'The hygienist cross-charge debit and credit legs must offset exactly',1)
+GO

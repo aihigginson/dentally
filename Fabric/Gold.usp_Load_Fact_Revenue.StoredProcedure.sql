@@ -285,39 +285,47 @@ BEGIN
         -- rather than dividing weeks. Days are filtered to <= today before they are counted, so
         -- the current segment carries only the days actually elapsed and the current month
         -- accrues exactly as it did at day grain -- a Monday does not book the whole week.
-        ;WITH plan_course AS (
-            -- membership-evidence months: completed, non-NHS, non-charged Exam/Hygiene courses.
-            SELECT tp.Tenant_ID, dp.pk_Patient AS fk_Patient,
-                   DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month,
-                   CAST(tp.Start_Date AS DATE)                                 AS course_date
-            FROM   [Silver].[Treatment_Plans] tp
-            JOIN   [Gold].[Dim_Patients] dp ON dp.Patient_ID = tp.Patient_ID AND dp.Tenant_ID = tp.Tenant_ID
-            WHERE  tp.Completed = 1
-              AND  tp.Start_Date IS NOT NULL
-              AND  ISNULL(TRY_CAST(tp.NHS_UDA_Value AS DECIMAL(18,4)), 0)           = 0
-              AND  ISNULL(TRY_CAST(tp.Private_Treatment_Value AS DECIMAL(18,4)), 0) = 0
-              AND  EXISTS (SELECT 1 FROM [Silver].[Treatment_Plan_Items] i
-                           WHERE TRY_CAST(i.Treatment_Plan_ID AS BIGINT) = TRY_CAST(tp.Id AS BIGINT) AND i.Tenant_ID = tp.Tenant_ID
-                             AND i.Nomenclature IN ('Exam','Hygiene 20','Hygiene 30','Routine Hygiene')
-                             AND i.Charged = 0)
-        ),
-        tenure AS (
-            -- First to last evidence month. Gaps are bridged deliberately: missing an exam does
-            -- not cancel a membership, so this is ONE spell per patient, not one per unbroken
-            -- run. Evidence_Months on the spell table keeps the gaps visible rather than hidden.
-            SELECT Tenant_ID, fk_Patient,
-                   MIN(course_month)            AS start_m,
-                   MAX(course_month)            AS last_m,
-                   MAX(course_date)             AS last_evidence_date,
-                   COUNT(DISTINCT course_month) AS course_months
-            FROM   plan_course GROUP BY Tenant_ID, fk_Patient
-        ),
-        rated_plans AS (
-            SELECT DISTINCT Tenant_ID, Payment_Plan_ID FROM [Input].[Plan_Capitation_Rate]
-        ),
-        default_plan AS (
-            SELECT DISTINCT Tenant_ID, Payment_Plan_ID FROM [Input].[Plan_Capitation_Rate] WHERE Is_Default = 1
-        )
+        -- membership-evidence months: completed, non-NHS, non-charged Exam/Hygiene courses.
+        DROP TABLE IF EXISTS #plan_course;
+        SELECT tp.Tenant_ID, dp.pk_Patient AS fk_Patient,
+               DATEFROMPARTS(YEAR(tp.Start_Date), MONTH(tp.Start_Date), 1) AS course_month,
+               CAST(tp.Start_Date AS DATE)                                 AS course_date
+        INTO   #plan_course
+        FROM   [Silver].[Treatment_Plans] tp
+        JOIN   [Gold].[Dim_Patients] dp ON dp.Patient_ID = tp.Patient_ID AND dp.Tenant_ID = tp.Tenant_ID
+        WHERE  tp.Completed = 1
+          AND  tp.Start_Date IS NOT NULL
+          AND  ISNULL(TRY_CAST(tp.NHS_UDA_Value AS DECIMAL(18,4)), 0)           = 0
+          AND  ISNULL(TRY_CAST(tp.Private_Treatment_Value AS DECIMAL(18,4)), 0) = 0
+          AND  EXISTS (SELECT 1 FROM [Silver].[Treatment_Plan_Items] i
+                       WHERE TRY_CAST(i.Treatment_Plan_ID AS BIGINT) = TRY_CAST(tp.Id AS BIGINT) AND i.Tenant_ID = tp.Tenant_ID
+                         AND i.Nomenclature IN ('Exam','Hygiene 20','Hygiene 30','Routine Hygiene')
+                         AND i.Charged = 0);
+
+        -- First to last evidence month. Gaps are bridged deliberately: missing an exam does
+        -- not cancel a membership, so this is ONE spell per patient, not one per unbroken
+        -- run. Evidence_Months on the spell table keeps the gaps visible rather than hidden.
+        DROP TABLE IF EXISTS #tenure;
+        SELECT Tenant_ID, fk_Patient,
+               MIN(course_month)            AS start_m,
+               MAX(course_month)            AS last_m,
+               MAX(course_date)             AS last_evidence_date,
+               COUNT(DISTINCT course_month) AS course_months
+        INTO   #tenure
+        FROM   #plan_course
+        GROUP BY Tenant_ID, fk_Patient;
+
+        DROP TABLE IF EXISTS #rated_plans;
+        SELECT DISTINCT Tenant_ID, Payment_Plan_ID
+        INTO   #rated_plans
+        FROM   [Input].[Plan_Capitation_Rate];
+
+        DROP TABLE IF EXISTS #default_plan;
+        SELECT DISTINCT Tenant_ID, Payment_Plan_ID
+        INTO   #default_plan
+        FROM   [Input].[Plan_Capitation_Rate]
+        WHERE  Is_Default = 1;
+
         -- Materialised, not left as a CTE: the spell is written to Gold.Fact_Plan_Spell further
         -- down, and computing it twice is how a stored spell and the revenue derived from it
         -- drift apart.
@@ -354,59 +362,71 @@ BEGIN
                     1) AS end_m,
                pat.Dentist_Practitioner_ID, pat.Site_ID
         INTO   #spell
-        FROM   tenure t
+        FROM   #tenure t
         JOIN   [Gold].[Dim_Patients] pat ON pat.pk_Patient = t.fk_Patient
-        LEFT JOIN rated_plans  own ON own.Tenant_ID = t.Tenant_ID AND own.Payment_Plan_ID = pat.Payment_Plan_ID
-        LEFT JOIN default_plan def ON def.Tenant_ID = t.Tenant_ID
+        LEFT JOIN #rated_plans  own ON own.Tenant_ID = t.Tenant_ID AND own.Payment_Plan_ID = pat.Payment_Plan_ID
+        LEFT JOIN #default_plan def ON def.Tenant_ID = t.Tenant_ID
         WHERE  COALESCE(own.Payment_Plan_ID, def.Payment_Plan_ID) IS NOT NULL
           AND  (own.Payment_Plan_ID IS NOT NULL OR t.course_months >= 2);
 
-        ;WITH months AS (
-            SELECT r.Tenant_ID, r.fk_Patient, r.attributed_plan_id, r.is_estimated,
-                   r.Dentist_Practitioner_ID, r.Site_ID, r.end_date, d.Month_Commencing_Date
-            FROM   #spell r
-            JOIN   [Gold].[Dim_Date] d ON d.Day_Of_Month = 1
-                                      AND d.Month_Commencing_Date BETWEEN r.start_m AND r.end_m
-        ),
-        priced AS (
-            -- Latest rate effective on or before the month wins. Unchanged.
-            SELECT m.Tenant_ID, m.fk_Patient, m.attributed_plan_id, m.is_estimated,
-                   m.Dentist_Practitioner_ID, m.Site_ID, m.end_date, m.Month_Commencing_Date, rr.Monthly_Value,
-                   ROW_NUMBER() OVER (PARTITION BY m.Tenant_ID, m.fk_Patient, m.Month_Commencing_Date
-                                      ORDER BY rr.Effective_From_Date DESC) AS rn
-            FROM   months m
-            JOIN   [Input].[Plan_Capitation_Rate] rr
-                   ON rr.Tenant_ID = m.Tenant_ID AND rr.Payment_Plan_ID = m.attributed_plan_id
-                  AND rr.Effective_From_Date <= m.Month_Commencing_Date
-        ),
-        wdays AS (   -- working days per calendar month (England) -- the denominator, unbounded
-            SELECT Month_Commencing_Date, COUNT(*) AS wd
-            FROM   [Gold].[Dim_Date] WHERE Is_Working_Day_England = 1
-            GROUP BY Month_Commencing_Date
-        ),
-        seg AS (
-            -- The numerator: working days in this week-within-month that are actually billable.
-            -- Clipping the week to the month start is what splits a boundary-crossing week in two.
-            SELECT p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
-                   p.Dentist_Practitioner_ID, p.Site_ID,
-                   p.Month_Commencing_Date, p.Monthly_Value,
-                   CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
-                        THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END AS seg_start,
-                   COUNT(*) AS wd_seg
-            FROM   priced p
-            JOIN   [Audit].[Tenants] tn ON tn.Tenant_ID = p.Tenant_ID
-            JOIN   [Gold].[Dim_Date] d
-                   ON d.Month_Commencing_Date = p.Month_Commencing_Date
-                  AND d.Is_Working_Day_England = 1
-                  AND d.Full_Date <= p.end_date          -- the spell's own end, never beyond today
-                  AND d.Full_Date >= tn.Cutover_Date    -- from the tenant's Dentally go-live only
-            WHERE  p.rn = 1
-            GROUP BY p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
-                     p.Dentist_Practitioner_ID, p.Site_ID,
-                     p.Month_Commencing_Date, p.Monthly_Value,
-                     CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
-                          THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END
-        )
+        -- #spell is built; the inputs to it are no longer needed.
+        DROP TABLE #default_plan;
+        DROP TABLE #rated_plans;
+        DROP TABLE #tenure;
+        DROP TABLE #plan_course;
+
+        DROP TABLE IF EXISTS #months;
+        SELECT r.Tenant_ID, r.fk_Patient, r.attributed_plan_id, r.is_estimated,
+               r.Dentist_Practitioner_ID, r.Site_ID, r.end_date, d.Month_Commencing_Date
+        INTO   #months
+        FROM   #spell r
+        JOIN   [Gold].[Dim_Date] d ON d.Day_Of_Month = 1
+                                  AND d.Month_Commencing_Date BETWEEN r.start_m AND r.end_m;
+
+        -- Latest rate effective on or before the month wins. Unchanged.
+        DROP TABLE IF EXISTS #priced;
+        SELECT m.Tenant_ID, m.fk_Patient, m.attributed_plan_id, m.is_estimated,
+               m.Dentist_Practitioner_ID, m.Site_ID, m.end_date, m.Month_Commencing_Date, rr.Monthly_Value,
+               ROW_NUMBER() OVER (PARTITION BY m.Tenant_ID, m.fk_Patient, m.Month_Commencing_Date
+                                  ORDER BY rr.Effective_From_Date DESC) AS rn
+        INTO   #priced
+        FROM   #months m
+        JOIN   [Input].[Plan_Capitation_Rate] rr
+               ON rr.Tenant_ID = m.Tenant_ID AND rr.Payment_Plan_ID = m.attributed_plan_id
+              AND rr.Effective_From_Date <= m.Month_Commencing_Date;
+
+        -- working days per calendar month (England) -- the denominator, unbounded
+        DROP TABLE IF EXISTS #wdays;
+        SELECT Month_Commencing_Date, COUNT(*) AS wd
+        INTO   #wdays
+        FROM   [Gold].[Dim_Date]
+        WHERE  Is_Working_Day_England = 1
+        GROUP BY Month_Commencing_Date;
+
+        -- The numerator: working days in this week-within-month that are actually billable.
+        -- Clipping the week to the month start is what splits a boundary-crossing week in two.
+        DROP TABLE IF EXISTS #seg;
+        SELECT p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
+               p.Dentist_Practitioner_ID, p.Site_ID,
+               p.Month_Commencing_Date, p.Monthly_Value,
+               CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
+                    THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END AS seg_start,
+               COUNT(*) AS wd_seg
+        INTO   #seg
+        FROM   #priced p
+        JOIN   [Audit].[Tenants] tn ON tn.Tenant_ID = p.Tenant_ID
+        JOIN   [Gold].[Dim_Date] d
+               ON d.Month_Commencing_Date = p.Month_Commencing_Date
+              AND d.Is_Working_Day_England = 1
+              AND d.Full_Date <= p.end_date          -- the spell's own end, never beyond today
+              AND d.Full_Date >= tn.Cutover_Date    -- from the tenant's Dentally go-live only
+        WHERE  p.rn = 1
+        GROUP BY p.Tenant_ID, p.fk_Patient, p.attributed_plan_id, p.is_estimated,
+                 p.Dentist_Practitioner_ID, p.Site_ID,
+                 p.Month_Commencing_Date, p.Monthly_Value,
+                 CASE WHEN d.Week_Commencing_Date < p.Month_Commencing_Date
+                      THEN p.Month_Commencing_Date ELSE d.Week_Commencing_Date END;
+
         INSERT INTO [Gold].[Fact_Revenue_Capitation]
             (Tenant_ID, fk_Patient, fk_Practitioner, fk_Practice_Site, fk_Payment_Plan,
              fk_Date, Amount, Is_Estimated_Plan, DW_Created_At)
@@ -420,13 +440,18 @@ BEGIN
                dseg.pk_Date,
                s.Monthly_Value / wd.wd * s.wd_seg,
                s.is_estimated, SYSUTCDATETIME()
-        FROM   seg s
+        FROM   #seg s
         LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = s.Tenant_ID AND dpp.Payment_Plan_ID = s.attributed_plan_id
         LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = s.Tenant_ID AND dpr.Practitioner_ID = s.Dentist_Practitioner_ID
         LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = s.Tenant_ID AND dps.Site_ID = s.Site_ID
-        JOIN      wdays wd  ON wd.Month_Commencing_Date = s.Month_Commencing_Date
+        JOIN      #wdays wd ON wd.Month_Commencing_Date = s.Month_Commencing_Date
         JOIN      [Gold].[Dim_Date] dseg ON dseg.Full_Date = s.seg_start;
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
+
+        DROP TABLE #seg;
+        DROP TABLE #wdays;
+        DROP TABLE #priced;
+        DROP TABLE #months;
 
         -- ===== Hygienist cross-charge: a matched pair per completed plan hygienist visit ======
         --

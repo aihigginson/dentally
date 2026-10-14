@@ -21,7 +21,7 @@
 - [Calibrate the demo tenant against live](calibrate-the-demo-tenant-against-live.md) — query tenant 100 for the real figure; invented rates were wrong by factors of 30.
 - [T11 is both demo and regression fixture](t11-is-both-demo-and-regression-fixture.md) — the baselines are stale; don't preserve rng draws to protect them.
 - [Batch generator changes before reseeding](batch-generator-changes-before-reseeding.md) — one reseed+chain per fix throttled the shared capacity; verify offline first.
-- [How to bounce the Fabric capacity](how-to-bounce-the-fabric-capacity.md) — az fabric capacity suspend/resume; poll for Paused before resuming.
+- [How to bounce the Fabric capacity](how-to-bounce-the-fabric-capacity.md) — az fabric capacity suspend/resume clears the throttle; F8 is blocked by a 4 CU regional quota.
 - [Publishing from Desktop overwrites a service refresh](publishing-from-desktop-overwrites-a-service-refresh.md) — a .pbix publish ships its cached data; check partition RefreshedTime before blaming RLS.
 - [Never infer a write succeeded from a wrapper](piping-to-tail-hides-the-exit-code.md) — tail and timeout have each hidden a half-written Bronze; count rows after.
 - [Manifest not found on D:\a\dentally](manifest-not-found-on-d-a-dentally-means-unpushed.md) — that path is the Actions runner; the commit was never pushed.
