@@ -68,6 +68,45 @@
 #   3. Billing.usp_Generate_Invoice_Lines regenerates a month idempotently, so run it for a month
 #      that already has rows and diff Billing.Invoice_Line against the previous generation.
 #
+# ==> VALIDATED ON DEV 2026-10-14. <== Deployed clean, all five guards passed, referential
+# integrity clean, and every one of the eight procedures ran. Baselines were taken BEFORE the
+# deploy and compared after re-running the loads:
+#
+#   IDENTICAL, to the row and to the penny:
+#     Gold.Fact_Invoices             150,017 / 17,108,051.81
+#     Gold.Dim_NHS_Contracts              14 /     46,824.00
+#     Gold.Fact_Appointment_Journey  379,194
+#     Gold.Fact_New_Patients          38,649 /  3,406,137.35
+#     Gold.Fact_Plan_Spell             3,023
+#     Silver.Xero_Finance_Lines        1,813 / 28,139,871.28
+#     Gold.Dim_Patient_Data_Quality      174
+#
+#   The data-quality view was proved SEPARATELY and more strongly, before the deploy: the new
+#   definition was run beside the deployed old one and the two sets differenced both ways.
+#   old EXCEPT new = 0, new EXCEPT old = 0, 174 = 174. Row-for-row identical on real data.
+#
+#   MOVED, and each movement accounted for:
+#     Fact_Revenue_Capitation  same 651,339 rows, +GBP4,013.16 (+0.1%). Capitation accrues daily --
+#       an open spell runs to CAST(SYSUTCDATETIME() AS DATE) -- so a build a day later is MEANT to
+#       be larger. Confirmed deterministic: a second run the same day reproduced 4,182,429.01
+#       exactly, and October stands at GBP40,135 part-month against ~GBP86,000 full months, i.e.
+#       ~GBP4,088 per working day against the GBP4,013 observed.
+#     KPI snapshot  6,500 -> 6,475 outstanding_invoices rows. The snapshot window is the last three
+#       years, so it sheds old dates and gains new ones as it rolls; comparing it with its own
+#       earlier output is not a like-for-like test.
+#     Billing.Invoice_Line  29 -> 44 rows. The two months that already existed are UNTOUCHED
+#       (202608: 15 rows / 213.72, 202609: 14 rows / 446.80 -- exactly the baseline). The extra 15
+#       are 202610, which the proc generated because it bills the month containing yesterday.
+#
+#   THE ONE CHANGED JOIN WAS TESTED AGAINST AN INDEPENDENT ORACLE, not against its own history:
+#   outstanding_invoices was recomputed from Fact_Invoices with a correlated subquery -- a
+#   different execution shape entirely -- for the oldest and newest snapshot dates. Stored and
+#   recomputed agree to the penny: 3,972.63 = 3,972.63 at 20/10/2023, and 26,235.96 = 26,235.96 at
+#   14/10/2026 on both grains. The CROSS JOIN -> INNER JOIN rewrite is sound.
+#
+#   NOT run: the TEST regression gate (-RunTests), which deploys the 11-file test framework and is
+#   a real slice of a shared F4. Worth running before PROD if the capacity is quiet.
+#
 # Run: .\Scripts\Deploy.ps1 -Manifest Releases\V220__ctes_out_temp_tables_in.manifest
 # =====================================================================
 
