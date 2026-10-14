@@ -10,10 +10,25 @@ metadata:
 
 **Write owner-curated `Input.*` rows to the AppDB, never to the warehouse.**
 `Meta.usp_Sync_Input_From_AppDB` does a FULL REFRESH per table -- `DELETE FROM Input.<T>` then
-re-`INSERT` from `Input_Stage.<T>` -- so a row written warehouse-side works until the next sync
-(every 10 minutes on `caj-appdb-sync-dev`) and then vanishes with no error. `Migrations/V*.sql` is
-the wrong vehicle for this: `Scripts/Migrate.ps1` defaults to `WH_Dentally`, so a guarded INSERT
-there would be silently undone. Related: [[never-deploy-an-input-table-in-a-release]].
+re-`INSERT` from `Input_Stage.<T>` -- so a row written warehouse-side is overwritten the next time
+the sync runs, with no error.
+
+==> ON DEV THE SYNC IS DISABLED, AND MUST BE RUN BY HAND BEFORE A REBUILD. <== Owner, 2026-10-14.
+`AppDB/MIGRATION.md` advertises `caj-appdb-sync-dev on */10` and that is NOT live on dev -- do not
+assume a rate or target set in the AppDB has reached the warehouse. Run it first or capitation and
+targets silently compute against stale Input tables:
+
+```
+python Web/appdb_sync.py check   # report both sides, copies nothing
+python Web/appdb_sync.py full    # stage all 8 tables, then Meta.usp_Sync_Input_From_AppDB
+```
+
+`full` is the pre-rebuild mode; `access` is the 10-minute one and runs a different proc.
+`Web/.env` has no `APPDB_*` keys, so supply `APPDB_SERVER` / `APPDB_DB` when running it locally.
+
+`Migrations/V*.sql` is the wrong vehicle for setting these rows: `Scripts/Migrate.ps1` defaults to
+`WH_Dentally`, so a guarded INSERT there lands warehouse-side and the next sync undoes it.
+Related: [[never-deploy-an-input-table-in-a-release]].
 
 **The AppDB is AZURE SQL, not Fabric SQL DB** -- migrated 2026-09-17 (`AppDB/MIGRATION.md`):
 
