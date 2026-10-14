@@ -1,8 +1,11 @@
 ---
 name: t11-is-both-demo-and-regression-fixture
 description: Tenant 11 serves two conflicting purposes; changing it for one breaks the other.
-metadata:
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: 421e1bb0-9c87-4cc3-8b8f-dd6c97f09bdd
+  modified: 2026-10-14T11:28:23.592Z
 ---
 
 Tenant 11 is both the **demo practice** ("look around" data, dev only, rebuilt weekly) and
@@ -54,3 +57,8 @@ something actually broke. Two things worth carrying forward:
 estimated plan spells exist only on tenant 100, so the roll-forward logic in
 `usp_Load_Dim_NHS_Contracts` has no deterministic test. The demo generator would need to produce a
 lapsed plan member and a claim year with no contract. See [[prefer-temp-tables-over-ctes]].
+
+That path WAS verified by hand once, on PROD, 2026-10-14 after V220: running the dim returned
+ins/upd/del all 0, the five `RF-…` contracts held their `pk_NHS_Contract` 19-23, and both
+`fk_NHS_Contract` fact tables stayed orphan-free. So the converted logic is known good against real
+roll-forward data -- it is simply unguarded, and nothing would catch a future regression in it.
