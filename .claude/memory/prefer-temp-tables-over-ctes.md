@@ -59,7 +59,19 @@ read with ITS OWN encoding. That caught a malformed view rewrite (orphaned CTE b
 while a copy was also written into the FROM) with no capacity spent at all. A refactor of this
 shape is reviewable without a single query.
 
-**From Python**, a temp table survives between `cur.execute()` calls because the connection is
-autocommit and long-lived — but use one statement per execute, not a semicolon batch
-([[pyodbc-hides-a-throw-until-nextset]]), and `fetchall()` BEFORE dropping the table, since
-issuing another statement discards pending rows.
+==> **FROM A CLIENT, A TEMP TABLE DOES NOT SURVIVE BETWEEN `cur.execute()` CALLS.** <== I wrote
+the opposite here on 2026-10-14 -- "survives because the connection is autocommit and
+long-lived" -- and it is FALSE. `Scripts/Seed_Targets_From_Actuals.py` failed outright the first
+time it was run:
+
+```
+pyodbc.ProgrammingError 42S02 -- Invalid object name '#base'
+```
+
+A temp table inside a stored PROCEDURE is fine, because the body is ONE batch -- which is what
+all 222 working `SELECT ... INTO #t` cases in this warehouse are. Spreading one across separate
+round-trips from Python is a different thing and does not work.
+
+**So from a client, convert a single-reference CTE to a DERIVED TABLE, not a temp table** -- the
+same answer the views needed, and for the same reason. Nothing caught this for a day because the
+script is not in the regression suite, so it would have broken the next onboarding.
