@@ -3788,9 +3788,18 @@ def get_target_grid():
             # Base = Dentally role per active practitioner; overlaid below with the LIVE AppDB override
             # (same as the Roles screen) so reassigned/removed roles show immediately, not after the
             # nightly Dim_Practitioners.Custom_Role refresh.
+            # ==> NON-CLINICAL ROLES ARE NEVER A TARGET LEVEL. <== Same exclusion /api/filters
+            # applies "always (even when showing inactive)", and it was missing here. The grid
+            # builds a cell per (level x metric) from these roles and the client posts the whole
+            # grid back with defaults filled in -- so an invalid level does not just display, it
+            # WRITES targets. Tenant 12 gained 24 receptionist targets that way (12 per FY),
+            # against two practitioners with no appointments and no revenue, so every one of them
+            # would have read 0% achieved. Live data hid the gap because its receptionists and
+            # administrators are all Active = 0.
             cur.execute(
                 f"SELECT Tenant_ID, Practitioner_ID, Role FROM Gold.Dim_Practitioners "
-                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0", tids)
+                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
+                f"AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager')", tids)
             prac_roles = {(r[0], r[1]): r[2] for r in cur.fetchall()}
         conn.close()
 

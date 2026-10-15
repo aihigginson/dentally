@@ -867,9 +867,21 @@ def gen_users_and_practitioners(tdef):
             "last_login": _iso(START),
         }
 
+        # ==> A NON-CLINICAL PRACTITIONER IS NEVER ACTIVE. <== Measured against the live practice
+        # on 2026-10-15: it carries 6 Receptionist and 13 Administrator rows plus a Practice
+        # Manager, and every single one is Active = 0. The demo made its two TCO -> Receptionist
+        # rows ACTIVE, which is a state the real data never reaches -- they had no appointments and
+        # no revenue, so they were inert everywhere except a role list, and the target grid duly
+        # offered 'Receptionist' as a target LEVEL and auto-wrote 24 default targets against it.
+        #
+        # Forced here rather than in each tenant's _prac_defs, so it cannot come back for a tenant
+        # somebody adds later. The rows still exist, because the real practice has them -- they are
+        # just inactive, as there.
+        _non_clinical = _API_ROLE.get(p["role"], p["role"]) in (
+            "Administrator", "Receptionist", "Practice Manager", "Nurse", "Technician")
         practitioners.append({
             "id": uid, "user_id": uid,
-            "site_id": p["site_id"], "active": p["active"],
+            "site_id": p["site_id"], "active": False if _non_clinical else p["active"],
             "gdc_number": p.get("gdc_number"),
             "nhs_number": nhs_number,
             "default_contract_id": default_contract_id,
