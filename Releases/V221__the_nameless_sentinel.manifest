@@ -1,0 +1,56 @@
+# =====================================================================
+# Release V221 -- the -1 sentinel rows had no name, so they drew as (Blank)
+# =====================================================================
+# A (Blank) member sat among the named practitioners on every by-practitioner visual -- most
+# visibly on Clinical > Revenue, "Average Plan Value", where it ranked alongside real people.
+#
+# ==> IT WAS NEVER AN RLS PROBLEM. <== The first diagnosis was that RLS hid the shared sentinel
+# from tenant 11. That is wrong. The RLS rule is "Tenant_ID = -1 OR it matches the profile", so
+# the -1 row is SHARED and every tenant resolves it -- and both of these loaders already say so
+# in a comment sitting directly above the insert being changed here:
+#
+#     -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
+#
+# The key resolved perfectly well. The only reason the member rendered blank is that the seed
+# INSERT never set a NAME: it listed six columns and Full_Name was not among them, so the row
+# carried NULL. Gold.Fact_Metric_Actuals writes its practice-grain rows at fk_Practitioner = -1
+# -- 1,011 of them for avg_plan_value on tenant 11 alone -- and every one of those pointed at a
+# row with nothing to display.
+#
+# Gold.Dim_Practice_Sites carries the identical shape and the identical latent fault:
+# Fact_Metric_Actuals writes fk_Practice_Site = -1 too, so any by-site visual would have blanked
+# the same way as soon as one existed. Both are fixed together rather than waiting for the second
+# one to be noticed in a demo.
+#
+# ==> EACH PROC ALSO NEEDS A BACKFILL, NOT JUST A BETTER INSERT. <== The insert only fires
+# WHERE NOT EXISTS, and the row is explicitly protected from the MERGE's DELETE
+# (AND tgt.pk_Practitioner <> -1). So on any warehouse that already holds a nameless sentinel --
+# which is all of them -- a corrected INSERT alone would change nothing, for ever. Each
+# procedure now carries an idempotent UPDATE guarded on the name being absent, so it repairs the
+# existing row once and is a no-op on every run after that.
+#
+# No data shape changes: one column gains a value on one row per dimension. Nothing is deleted,
+# no key moves, and no measure is touched.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practitioners.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql
+
+# Both procedures must carry the name literal AND the backfill, or the release has shipped the
+# half that cannot repair an existing warehouse.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (VALUES ('Gold','usp_Load_Dim_Practitioners','%Practice (all practitioners)%'), ('Gold','usp_Load_Dim_Practice_Sites','%Practice (all sites)%'), ('Gold','usp_Load_Dim_Practitioners','%UPDATE Gold.Dim_Practitioners%'), ('Gold','usp_Load_Dim_Practice_Sites','%UPDATE Gold.Dim_Practice_Sites%')) v(sch, obj, pat) WHERE EXISTS (SELECT 1 FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = v.sch AND o.name = v.obj AND m.definition LIKE v.pat); IF @n <> 4 BEGIN SET @e = 'V221 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of 4 expected name/backfill fragments are present.'; THROW 50510, @e, 1; END;
+
+# Run the two loaders so the backfill actually lands, rather than waiting for the next build.
+# ==> @Mode DEFAULTS TO 'TEST'. <== Omit it and the procedure runs without writing, so the
+# release would pass its body guard and change nothing in the warehouse. OUT params are BIGINT.
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC [Gold].[usp_Load_Dim_Practitioners] @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC [Gold].[usp_Load_Dim_Practice_Sites] @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# And prove the rows are actually named now. This is the thing the user sees, so it is the thing
+# the release gates on -- not merely that the text is in the procedure body.
+EXEC     DECLARE @b INT, @e VARCHAR(4000); SELECT @b = (SELECT COUNT(*) FROM Gold.Dim_Practitioners WHERE pk_Practitioner = -1 AND (Full_Name IS NULL OR LTRIM(RTRIM(Full_Name)) = '')) + (SELECT COUNT(*) FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1 AND (Site_Name IS NULL OR LTRIM(RTRIM(Site_Name)) = '')); IF @b <> 0 BEGIN SET @e = 'V221 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' sentinel row(s) still have no name.'; THROW 50511, @e, 1; END;
+
+# Exactly one sentinel per dimension, still at Tenant_ID = -1 so it stays shared across tenants.
+EXEC     DECLARE @p INT, @s INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Dim_Practitioners WHERE pk_Practitioner = -1 AND Tenant_ID = -1; SELECT @s = COUNT(*) FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1 AND Tenant_ID = -1; IF @p <> 1 OR @s <> 1 BEGIN SET @e = 'V221 FAILED: expected one shared sentinel per dimension, found ' + CAST(@p AS VARCHAR(10)) + ' and ' + CAST(@s AS VARCHAR(10)) + '.'; THROW 50512, @e, 1; END;
+
+TEST
