@@ -260,7 +260,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Data Quality — select a row, then Detail'"
+                  "Value": "'Data Quality'"
                 }
               }
             },
