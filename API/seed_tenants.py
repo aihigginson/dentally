@@ -268,6 +268,7 @@ T11 = {
         _cr(8,  'Treatment no longer required'),
         _cr(9,  'Patient request'),
         _cr(10, 'System error / admin'),
+        _cr(11, 'Practice cancelled - practitioner requested'),
     ],
     'sundries': (
         [_sundry(11, 't11-cl', n, p) for n, p in [
@@ -464,7 +465,18 @@ T11 = {
         'bbyl_rate_tx':            0.78,
         'bbyl_rate_hyg':           0.78,
         'recall_booking_rate':     0.78,
+        # ==> CURRENTLY INERT, AND DELIBERATELY SO. <== A plan may only lack a start date
+        # while nothing has happened on it, and every plan here is built from a cluster of
+        # appointments that has already begun -- so the roll never fires and 0 of 59,903
+        # plans come out unaccepted. That is the point: it used to blank the start date on
+        # plans that were COMPLETE, which is what put GBP28,445 of open-course value into an
+        # unlabelled (Blank) age band. Modelling non-acceptance properly needs proposal-only
+        # plans that carry no treatment appointments; until then this does nothing.
         'plan_acceptance_rate':    0.65,
+        # Share of patients whose recall interval was never set on the record. Without
+        # this, "No Recall Date" and "Never Attended" are the same 725 patients and the
+        # scorecard shows one finding twice. No Recall Date must be the SUPERSET.
+        'no_recall_rate':          0.05,
         # Hygiene compliance per exam cycle. Was 0.4 while the cadence bug meant only one
         # visit was ever generated per exam; with the cadence honoured this is what lands
         # hygiene on the live practice's pro-rata 44.9 hours a week.
@@ -568,6 +580,7 @@ T12 = {
         _cr(3, 'Patient DNA'),
         _cr(4, 'Practice cancelled - practitioner unwell'),
         _cr(5, 'Treatment no longer required'),
+        _cr(6, 'Practice cancelled - practitioner requested'),
     ],
     'sundries': [_sundry(12, 't12-gt', n, p) for n, p in [
         ('Premium Electric Toothbrush', 89.99), ('Air Flosser', 49.99),
@@ -647,6 +660,11 @@ T12 = {
         # No leavers modelled here. Tenant 11 carries the estimated-spell case (plan_leaver_rate
         # 0.06) and one tenant exercising it is enough for the regression suite; a second only
         # muddies the group comparison.
+        #
+        # A SMALLER recall gap than tenant 11's 0.05. This practice has only 20 never-attended
+        # patients against tenant 11's 986, so the same rate would make its scorecard read as the
+        # messier of the two, which is the opposite of the story: t12 is the newer, tidier book.
+        'no_recall_rate':          0.02,
     },
     '_site_patient_split': {'t12-gt': 0.62, 't12-sb': 0.38},
 }

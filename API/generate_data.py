@@ -255,6 +255,122 @@ def _cr(id_, reason, archived=False):
         "updated_at": _iso(START),
     }
 
+def _easter(year):
+    """Easter Sunday for a year -- anonymous Gregorian algorithm (Meeus/Jones/Butcher).
+
+    Needed because practice-side cancellations are not spread evenly through the year:
+    they cluster on the school holidays, when the clinicians take their leave.
+    """
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    m = (32 + 2 * e + 2 * i - h - k) % 7
+    n = (a + 11 * h + 22 * m) // 451
+    month, day = divmod(h + m - 7 * n + 114, 31)
+    return date(year, month, day + 1)
+
+
+# ==> WHY THE PRACTITIONER CANCELS, AND WHEN. <== The practice books the patient months
+# ahead and the dentist books their leave afterwards, so the practice is the one that rings
+# to cancel. Push Book-Before-You-Leave up and this goes up with it -- the two metrics pull
+# against each other instead of both simply improving, which is the whole argument for
+# reading a board rather than a single number.
+_PR_REQ_PEAK = 0.66          # the Easter fortnight either side, and the whole of August
+_PR_REQ_BASE = 0.265         # the rest of the year
+# Those two windows are ~16% of the year, so the blended share over NON-DNA cancellations is
+#   0.162 * 0.66 + 0.838 * 0.265 = 0.329
+# A DNA short-circuits this roll (a no-show cannot be practitioner-requested) and DNAs run at
+# roughly a tenth of all reason rows, so the share ON THE CHART -- which bands DNA alongside
+# the cancellations -- comes out at about 0.329 * 0.9 = 30%, which is what was asked for.
+
+
+def _practitioner_requested_share(d):
+    if d.month == 8:                                   # August, the long summer leave
+        return _PR_REQ_PEAK
+    if abs((d - _easter(d.year)).days) <= 14:          # the Easter fortnight either side
+        return _PR_REQ_PEAK
+    return _PR_REQ_BASE
+
+
+# Relative weights for everything that is NOT a DNA and NOT practitioner-requested. They
+# only have to be sensible against each other; the practitioner-requested share is applied
+# first and these then divide what is left.
+_CR_WEIGHTS = {
+    "in_advance":          16,
+    "short_notice":        14,
+    "patient_unwell":      10,
+    "patient_request":      9,
+    "work_completed":       6,
+    "not_required":         5,
+    "practitioner_unwell":  5,
+    "practice_emergency":   3,
+    "admin":                2,
+    "other":                3,
+}
+
+
+def _cr_kind(reason):
+    """Classify a tenant's reason TEXT, because each tenant writes its own list.
+
+    t11 carries ten reasons and t12 five, spelled differently ("Patient DNA (did not
+    attend)" against "Patient DNA"), so the weights cannot be keyed on an id.
+    Order matters: practitioner-requested before request, practitioner-unwell before unwell.
+    """
+    r = reason.lower()
+    if "did not attend" in r or "dna" in r:      return "dna"
+    if "practitioner requested" in r:            return "practitioner_requested"
+    if "short notice" in r:                      return "short_notice"
+    if "in advance" in r:                        return "in_advance"
+    if "practitioner" in r and "unwell" in r:    return "practitioner_unwell"
+    if "emergency" in r:                         return "practice_emergency"
+    if "unwell" in r:                            return "patient_unwell"
+    if "work completed" in r:                    return "work_completed"
+    if "no longer required" in r:                return "not_required"
+    if "request" in r:                           return "patient_request"
+    if "system error" in r or "admin" in r:      return "admin"
+    return "other"
+
+
+def _cancel_reason_picker(tdef):
+    """Build one weighted, date-aware, state-aware picker for a tenant.
+
+    Replaces rng.choice(cr_ids). Returns pick(cd, state, rng) -> reason id.
+    A tenant missing a kind simply never draws it; a tenant with no practitioner-requested
+    reason falls through to the weighted pool, so this is safe for any reason list.
+    """
+    by_kind = {}
+    for c in tdef["cancellation_reasons"]:
+        by_kind.setdefault(_cr_kind(c["reason"]), c["id"])
+
+    dna_id = by_kind.get("dna")
+    pr_id = by_kind.get("practitioner_requested")
+    pool = [(cid, _CR_WEIGHTS.get(k, 3))
+            for k, cid in by_kind.items()
+            if k not in ("dna", "practitioner_requested")]
+    total = sum(w for _, w in pool)
+
+    def pick(cd, state, rng):
+        # A patient who did not turn up did not give a reason, and the practice did not
+        # cancel on them. There is exactly one honest answer.
+        if state == "did_not_attend" and dna_id is not None:
+            return dna_id
+        if pr_id is not None and rng.random() < _practitioner_requested_share(cd):
+            return pr_id
+        if not pool:
+            return dna_id if dna_id is not None else tdef["cancellation_reasons"][0]["id"]
+        r = rng.random() * total
+        for cid, w in pool:
+            r -= w
+            if r < 0:
+                return cid
+        return pool[-1][0]
+
+    return pick
+
 # ── T1 Smile Group ────────────────────────────────────────────────────────────
 T1 = {
     "api_key": "dev-mock-key-abc123",
@@ -333,6 +449,7 @@ T1 = {
         _cr(5,"Practice cancelled - practitioner unwell"),_cr(6,"Practice cancelled - emergency"),
         _cr(7,"Work completed at previous visit"),_cr(8,"Treatment no longer required"),
         _cr(9,"Patient request"),_cr(10,"System error / admin"),
+        _cr(11,"Practice cancelled - practitioner requested"),
     ],
     "sundries": (
         [_sundry(1,"site-hs",n,p) for n,p in [
@@ -1846,6 +1963,7 @@ def _add_disruption(tdef, appointments, rng):
     # unrebooked DNAs at all, against 2,203 and 454 on the live practice.
     stranded_rate = params.get("stranded_rate", 0.9)
     cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
+    _pick_cr    = _cancel_reason_picker(tdef)
     tid         = tdef["tenant_id"]
     if not cr_ids:
         return
@@ -1900,7 +2018,7 @@ def _add_disruption(tdef, appointments, rng):
                 "start_time":         _iso(cd, a["start_time"][11:19]),
                 "finish_time":        _iso(cd, a["finish_time"][11:19]),
                 "state":              st,
-                "appointment_cancellation_reason_id": rng.choice(cr_ids),
+                "appointment_cancellation_reason_id": _pick_cr(cd, st, rng),
                 # Booked 7-41 days ahead of the slot it was booked into, exactly as
                 # _booked_on does for the appointment this one was cloned from.
                 "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
@@ -1977,7 +2095,7 @@ def _add_disruption(tdef, appointments, rng):
             "start_time":         _iso(cd, a["start_time"][11:19]),
             "finish_time":        _iso(cd, a["finish_time"][11:19]),
             "state":              st_term,
-            "appointment_cancellation_reason_id": rng.choice(cr_ids),
+            "appointment_cancellation_reason_id": _pick_cr(cd, st_term, rng),
             "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
             "arrived_at":         None,
             "completed_at":       None,
@@ -2232,7 +2350,22 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nickname = f"{tx0.get('description','Treatment')} - {month_str}"
 
             # plan_acceptance_rate: non-hygiene plans have a chance of no start_date (not accepted)
-            if not is_hygiene_plan and plan_acceptance_rate < 1.0 and rng.random() > plan_acceptance_rate:
+            #
+            # ==> A PLAN THAT HAS BEEN CARRIED OUT CANNOT BE ONE THE PATIENT NEVER ACCEPTED. <==
+            # This used to blank start_date on any non-hygiene plan the roll picked, leaving
+            # 13,407 plans in t11 marked Complete with NO START DATE -- treatment that was done,
+            # on a plan nobody agreed to -- plus 84 In Progress and 56 Open - No Appointment.
+            # Those 140 open ones were the entire (Blank) column in "Open Plan Value by Age":
+            # GBP28,445 of outstanding value in a bucket with no label, because the model's
+            # Course Age Bucket returns BLANK() when [Start Date] is blank.
+            #
+            # A plan may only be unaccepted while nothing has happened on it: not completed, not
+            # in progress, and with its first appointment still in the future. Every started or
+            # finished course now carries the start date it plainly had, so the open-course
+            # charts have no blank band left at all.
+            _plan_started = completed or in_progress or first_date < TODAY
+            if (not is_hygiene_plan and not _plan_started
+                    and plan_acceptance_rate < 1.0 and rng.random() > plan_acceptance_rate):
                 start_date_val = None
             else:
                 start_date_val = _iso(first_date)
@@ -3014,7 +3147,20 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
 # Called after appointments are generated; backfills dentist_recall_date and
 # hygienist_recall_date onto patient dicts based on actual last attended exams.
 
-def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id):
+def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id,
+                                rng=None, no_recall_rate=0.0):
+    """Backfill recall dates from attendance, and leave a real gap where reception never set one.
+
+    ==> A RECALL DATE DERIVED PURELY FROM ATTENDANCE MAKES TWO DATA-QUALITY CHECKS IDENTICAL. <==
+    This used to give every patient with a completed exam a recall date and every patient
+    without one None, so "No Recall Date" and "Never Attended" returned the SAME 725 records.
+    They are meant to be different findings, and No Recall Date should always be the larger:
+    it is a superset, because a patient who never attended obviously has no recall either.
+
+    no_recall_rate is the share of patients whose recall interval was simply never set on the
+    record. Those are the ones the check is really for -- they attend, they look healthy on
+    every list, nothing ever flags them as overdue, and they quietly stop coming.
+    """
     exam_tx_ids  = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
     hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
     for pat in patients:
@@ -3025,6 +3171,14 @@ def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id):
                         if a["state"] == "completed"]
         exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
         hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
+
+        # Nobody ever set an interval on this record. BOTH have to be absent for the check to
+        # fire, which is also the honest case: a record created at the desk and never finished.
+        if rng is not None and no_recall_rate and rng.random() < no_recall_rate:
+            pat["dentist_recall_date"]   = None
+            pat["hygienist_recall_date"] = None
+            continue
+
         if exams:
             last_exam_d = date.fromisoformat(max(a["start_time"][:10] for a in exams))
             pat["dentist_recall_date"]   = str(_add_months(last_exam_d, dr_interval))
@@ -3150,7 +3304,9 @@ def generate_tenant(tdef):
     for a in appointments:
         _apts_by_pat_tmp.setdefault(a["patient_id"], []).append(a)
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
-    enrich_patient_recall_dates(patients, _apts_by_pat_tmp, tx_by_code, pp_by_id)
+    enrich_patient_recall_dates(
+        patients, _apts_by_pat_tmp, tx_by_code, pp_by_id, rng,
+        tdef.get("_params", {}).get("no_recall_rate", 0.0))
 
     plans, plan_items, treatment_appts = gen_treatment_plans_and_items(
         tdef, patients, appointments, tx_by_id, fee_map, rng)
