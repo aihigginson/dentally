@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Cookie consent + Google Analytics, same as every other page on the site -->
+    <script src="/consent.js"></script>
+    <script src="/attribution.js"></script>
+    <title>The blind spot in dental practice accounts &mdash; Analytically</title>
+    <meta name="description" content="Five screens from one dental practice's own figures, and why numbers that are individually correct routinely point the wrong way.">
+    <link rel="canonical" href="https://analytically.info/blind-spot.html">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://analytically.info/blind-spot.html">
+    <meta property="og:title" content="The blind spot in dental practice accounts">
+    <meta property="og:description" content="Five screens from one practice's own figures.">
+    <meta property="og:site_name" content="Analytically">
+    <meta name="twitter:card" content="summary">
+    <!-- Partner material rather than a search entry point, same call as partners.html. -->
+    <meta name="robots" content="noindex, follow">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="preload" href="/fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
+    <style>
+    /* Self-hosted, because the site's CSP is font-src 'self'. Source Serif 4 stands in for
+       Newsreader, which is what the rest of the site sets display type in anyway. */
+    @font-face{font-family:'Source Serif 4';font-style:normal;font-weight:400 700;font-display:swap;
+      src:url('/fonts/source-serif-4.woff2') format('woff2')}
+    @font-face{font-family:'Source Serif 4';font-style:italic;font-weight:400 700;font-display:swap;
+      src:url('/fonts/source-serif-4-italic.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400 600;font-display:swap;
+      src:url('/fonts/ibm-plex-sans.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+      src:url('/fonts/ibm-plex-mono-400.woff2') format('woff2')}
+    @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;
+      src:url('/fonts/ibm-plex-mono-600.woff2') format('woff2')}
+    </style>
+<style>
+  /* Palette taken from the product's own chrome -- the navy is the app header, the teal the mark,
+     and amber/rust are the exact semantics of the RAG tiles in the screenshots. Neutrals carry a
+     blue bias so they sit with the navy rather than against it. */
+  :root {
+    --navy:      #0b3d5c;
+    --navy-deep: #06293e;
+    --teal:      #11777d;
+    --teal-lift: #d6ebec;
+    --amber:     #b9752a;
+    --rust:      #a8392f;
+    --ink:       #10242f;
+    --ink-2:     #3d5665;
+    --ink-3:     #6b8494;
+    --paper:     #f3f5f6;
+    --panel:     #ffffff;
+    --rule:      #dde4e8;
+    --rule-firm: #c3d0d7;
+    --shadow:    0 1px 2px rgba(16,36,47,.06), 0 8px 24px rgba(16,36,47,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --navy:      #8ec5e0;
+      --navy-deep: #bcdcee;
+      --teal:      #6fc7cb;
+      --teal-lift: #10353a;
+      --amber:     #e0a05c;
+      --rust:      #e08b80;
+      --ink:       #e8eef1;
+      --ink-2:     #adc0cb;
+      --ink-3:     #7b929f;
+      --paper:     #0d1a21;
+      --panel:     #13242d;
+      --rule:      #223640;
+      --rule-firm: #31505e;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --navy:      #8ec5e0;
+    --navy-deep: #bcdcee;
+    --teal:      #6fc7cb;
+    --teal-lift: #10353a;
+    --amber:     #e0a05c;
+    --rust:      #e08b80;
+    --ink:       #e8eef1;
+    --ink-2:     #adc0cb;
+    --ink-3:     #7b929f;
+    --paper:     #0d1a21;
+    --panel:     #13242d;
+    --rule:      #223640;
+    --rule-firm: #31505e;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 96px; }
+  .col  { max-width: 68ch; }
+
+  /* ── masthead ───────────────────────────────────────────────────────────── */
+  header.top { border-bottom: 1px solid var(--rule-firm); padding: 56px 0 30px; margin-bottom: 44px; }
+  .kicker {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--teal); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: 'Source Serif 4', Georgia, "Times New Roman", serif;
+    font-weight: 600; font-size: clamp(34px, 5.2vw, 52px); line-height: 1.08;
+    letter-spacing: -.012em; margin: 0 0 18px; text-wrap: balance; color: var(--ink);
+  }
+  .standfirst { font-size: 19px; line-height: 1.58; color: var(--ink-2); margin: 0 0 26px; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 0; padding: 0; list-style: none; }
+  .facts li {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px;
+    color: var(--ink-3); letter-spacing: .02em;
+  }
+  .facts b { color: var(--ink-2); font-weight: 500; }
+
+  /* ── setup panel ────────────────────────────────────────────────────────── */
+  .setup {
+    background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--teal);
+    padding: 22px 26px; margin: 0 0 64px; box-shadow: var(--shadow);
+  }
+  .setup h2 {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--teal); margin: 0 0 12px; font-weight: 600;
+  }
+  .setup ul { margin: 0; padding-left: 20px; }
+  .setup li { margin-bottom: 7px; color: var(--ink-2); }
+  .setup li:last-child { margin-bottom: 0; }
+  .setup strong { color: var(--ink); font-weight: 600; }
+
+  /* ── beats ──────────────────────────────────────────────────────────────── */
+  .beat { margin-bottom: 78px; }
+  .beat-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
+  .step {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--teal); letter-spacing: .08em; flex: none; padding-top: 6px;
+  }
+  h2.beat-title {
+    font-family: 'Source Serif 4', Georgia, serif; font-weight: 600;
+    font-size: clamp(23px, 3vw, 30px); line-height: 1.2; letter-spacing: -.008em;
+    margin: 0; color: var(--ink); text-wrap: balance;
+  }
+  .beat p { margin: 0 0 14px; color: var(--ink-2); }
+  .beat p.lead { color: var(--ink); }
+  .beat p strong { color: var(--ink); font-weight: 600; }
+
+  .say {
+    border-left: 2px solid var(--rule-firm); padding: 4px 0 4px 18px; margin: 20px 0 26px;
+    font-family: 'Source Serif 4', Georgia, serif; font-size: 19px; line-height: 1.5;
+    font-style: italic; color: var(--navy);
+  }
+  .say::before {
+    content: "Say"; display: block; font-family: "IBM Plex Mono", monospace; font-style: normal;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 7px;
+  }
+
+  /* ── annotated figure ───────────────────────────────────────────────────── */
+  figure { margin: 0; }
+  .shot {
+    position: relative; display: block; line-height: 0;
+    border: 1px solid var(--rule-firm); background: var(--panel);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+  /* ==> THE MARKER MUST NOT SIT ON THE THING IT POINTS AT. <== Centring it on the
+     coordinate covered the very figure the note was about. It now sits ABOVE the point,
+     smaller, so the number underneath stays readable. */
+  .pin {
+    position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -165%);
+    width: 19px; height: 19px; border-radius: 50%;
+    background: var(--rust); color: #fff;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.92), 0 1px 5px rgba(16,36,47,.45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pin { box-shadow: 0 0 0 3px rgba(19,36,45,.92), 0 2px 7px rgba(0,0,0,.6); }
+  }
+  :root[data-theme="dark"] .pin { box-shadow: 0 0 0 3px rgba(19,36,45,.92), 0 2px 7px rgba(0,0,0,.6); }
+
+  figcaption { margin-top: 20px; }
+  .notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+  @media (min-width: 860px) { .notes { grid-template-columns: 1fr 1fr; gap: 13px 34px; } }
+  .notes li { display: flex; gap: 12px; align-items: flex-start; }
+  .notes .n {
+    flex: none; width: 21px; height: 21px; border-radius: 50%;
+    background: var(--rust); color: #fff; font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+    margin-top: 2px; line-height: 1;
+  }
+  .notes .t { font-size: 14.5px; line-height: 1.52; color: var(--ink-2); }
+  .notes .t b { color: var(--ink); font-weight: 600; }
+  .fig { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+         font-size: .94em; color: var(--navy); }
+
+  /* ── close ──────────────────────────────────────────────────────────────── */
+  .close { border-top: 1px solid var(--rule-firm); padding-top: 40px; margin-top: 16px; }
+  .close h2 {
+    font-family: 'Source Serif 4', Georgia, serif; font-weight: 600; font-size: 28px;
+    margin: 0 0 16px; color: var(--ink);
+  }
+  .close p { color: var(--ink-2); margin: 0 0 14px; }
+  .close p strong { color: var(--ink); font-weight: 600; }
+
+  .avoid { margin-top: 42px; background: var(--panel); border: 1px solid var(--rule);
+           border-left: 3px solid var(--amber); padding: 22px 26px; box-shadow: var(--shadow); }
+  .avoid h3 {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--amber); margin: 0 0 12px; font-weight: 600;
+  }
+  .avoid ul { margin: 0; padding-left: 20px; }
+  .avoid li { margin-bottom: 7px; color: var(--ink-2); }
+  .avoid li:last-child { margin-bottom: 0; }
+  .avoid strong { color: var(--ink); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ── the through-line ─────────────────────────────────────────────────────
+     Every beat carries the same device: what the number LOOKS like, then what it
+     IS. Twelve repetitions of one idea is the argument; a reader who skims only
+     these pairs still leaves with the whole case. */
+  .thesis {
+    margin: 0 0 42px; padding: 26px 30px;
+    background: var(--navy); color: #fff; border-radius: 3px;
+  }
+  :root:not([data-theme="light"]) .thesis,
+  :root[data-theme="dark"] .thesis { background: var(--panel); border: 1px solid var(--rule-firm); color: var(--ink); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .thesis { background: var(--navy); color: #fff; } }
+  .thesis h2 { margin: 0 0 14px; font-size: 1.12rem; letter-spacing: -.01em; color: inherit; }
+  .thesis p  { margin: 0 0 16px; color: inherit; opacity: .93; max-width: 68ch; }
+  .thesis ol { margin: 0; padding-left: 0; list-style: none; counter-reset: th; }
+  .thesis li {
+    counter-increment: th; position: relative; padding-left: 34px;
+    margin-bottom: 11px; color: inherit; opacity: .95;
+  }
+  .thesis li:last-child { margin-bottom: 0; }
+  .thesis li::before {
+    content: counter(th); position: absolute; left: 0; top: 1px;
+    font: 600 .72rem/1.5 "IBM Plex Mono", monospace; opacity: .6;
+    border: 1px solid currentColor; border-radius: 2px; width: 22px; text-align: center;
+  }
+  .thesis b { font-weight: 600; }
+
+  .verdict { margin: 0 0 18px; display: grid; gap: 7px; }
+  .verdict div { display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: baseline; }
+  .verdict span.k {
+    font: 600 .66rem/1.6 "IBM Plex Mono", monospace; text-transform: uppercase;
+    letter-spacing: .07em; text-align: right; padding-top: 2px;
+  }
+  .verdict .r span.k { color: var(--rust); }
+  .verdict .a span.k { color: var(--teal); }
+  .verdict span.v { color: var(--ink-2); }
+  .verdict .a span.v { color: var(--ink); font-weight: 500; }
+  .beat { margin-bottom: 86px; }
+  .thesis ul { margin: 0; padding-left: 0; list-style: none; }
+  .thesis li { padding-left: 22px; }
+  .thesis li::before { content: ''; border: 0; border-radius: 50%; width: 6px;
+      height: 6px; background: currentColor; opacity: .45; top: .62em; }
+
+  .site-head { border-bottom: 1px solid var(--rule-firm); background: var(--panel); }
+  .site-head .site-wrap { max-width: 1180px; margin: 0 auto; padding: 14px 28px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .site-head .brand { font-family: 'Source Serif 4', Georgia, serif; font-size: 20px; font-weight: 600;
+    color: var(--ink); text-decoration: none; margin-right: auto; }
+  .site-head .brand span { color: var(--teal); }
+  .site-head a.nav-link { font-size: 14px; color: var(--ink-2); text-decoration: none; }
+  .site-head a.nav-link:hover { color: var(--ink); }
+  .site-foot { border-top: 1px solid var(--rule-firm); background: var(--panel);
+    font-size: 13px; line-height: 1.7; color: var(--ink-3); }
+  .site-foot .site-wrap { max-width: 1180px; margin: 0 auto; padding: 26px 28px; }
+  .site-foot a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<header class="site-head">
+  <div class="site-wrap">
+    <a class="brand" href="/">Analytic<span>ally</span></a>
+    <a class="nav-link" href="/">The product</a>
+    <a class="nav-link" href="/partners.html">Partners</a>
+    <a class="nav-link" href="/documents.html">Trust &amp; documents</a>
+  </div>
+</header>
+<div class="wrap">
+  <header class="top">
+    <p class="kicker">For dental-specialist accountants</p>
+    <h1>Your client runs a multi-million-pound business between patients</h1>
+    <p class="standfirst">They trained as a clinician. Nobody trained them to run this, and nobody gave them the instruments, so they run it on whatever numbers they happen to be handed, between appointments. The difficulty is not that those numbers are wrong. It is that <strong>they are individually correct and routinely point the wrong way</strong>.</p>
+    <ul class="facts"><li><b>Figures from</b> one live practice, 12 months to October 2026</li><li><b>Five screens</b></li></ul>
+  </header>
+
+  <section class="thesis">
+    <h2>The argument, in four lines</h2>
+    <ul>
+      <li><b>Private billing is down 7%</b> (but the practice is fine).</li>
+      <li><b>The diary is under-filled</b> (but filling it fully would block the ability to do timely treatments).</li>
+      <li><b>Rebooking at the desk is improving</b> (but expect more cancellations, especially when clinicians take leave).</li>
+      <li><b>The best associate in the practice in terms of revenue</b> could also be the one giving the worst patient experience.</li>
+    </ul>
+    <p style="margin-top:16px">Every one of those is correct. Every one read on its own could be acted on in the wrong way. That is not a reporting failure; it is what running a dental practice is. You need to see where you are hurting and, as you fix it, anticipate the knock-on effects.</p>
+    <p>If your clients run Dentally, <strong>a practice can be reading its own figures within 24 hours</strong>. Nothing to pay to look, no card and no commitment. A subscription after that costs about twenty minutes of chair time a month.</p>
+  </section>
+
+  <article class="beat">
+    <div class="beat-head">
+      <span class="step">01</span>
+      <h2 class="beat-title">Half the income isn’t in the system they are reading</h2>
+    </div>
+    <div class="col">
+      <p class="lead">This practice’s private revenue is <strong>£1,178K, down 7.6%</strong> against target. In Dentally, that is the whole story.</p>
+      <p>In reality this is offset by plan income being <strong>up 25.0%</strong>, and Dentally does not record it at all, because the plan provider collects it. So a practice that has been converting patients onto monthly plans appears in its own clinical system as a business in decline. Total revenue is <strong>up 4.1%</strong>. The income has changed shape rather than shrunk, and a year-end set of accounts shows that nine months late.</p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img src="/img/blind-spot/01-revenue-by-category.jpg" alt="Revenue page: KPI strip with total, private and plan revenue against target, weekly revenue stacked by treatment category, and a rolling revenue mix chart.">
+        <span class="pin" style="--x:13.4%; --y:20.7%">1</span>
+        <span class="pin" style="--x:25.5%; --y:20.7%">2</span>
+        <span class="pin" style="--x:1.4%; --y:20.7%">3</span>
+        <span class="pin" style="--x:83.6%; --y:52.0%">4</span>
+      </div>
+      <figcaption>
+        <ul class="notes">
+          <li><span class="n">1</span><span class="t"><b>What the practice sees.</b> Private revenue <span class='fig'>£1,178K</span>, <span class='fig'>−7.6%</span>.</span></li>
+          <li><span class="n">2</span><span class="t"><b>What it doesn’t.</b> Plan capitation <span class='fig'>£523K</span>, <span class='fig'>+25.0%</span>.</span></li>
+          <li><span class="n">3</span><span class="t">Together: <span class='fig'>£1,810K</span>, <span class='fig'>+4.1%</span>.</span></li>
+          <li><span class="n">4</span><span class="t">The mix column is the point in one picture, private falling from roughly <span class='fig'>70%</span> of revenue to <span class='fig'>60%</span> while plan income rises to meet it. Thirteen months, one direction.</span></li>
+        </ul>
+      </figcaption>
+    </figure>
+  </article>
+
+  <article class="beat">
+    <div class="beat-head">
+      <span class="step">02</span>
+      <h2 class="beat-title">So where does that plan number come from?</h2>
+    </div>
+    <div class="col">
+      <p class="lead">Membership is recorded in Dentally, by tier. Analytically holds the fee each tier earns, and whether there is a cross-charge between an associate and a hygienist for every hygiene plan visit.</p>
+      <p>Plan providers are generally low-tech; often the only thing they send is a monthly spreadsheet. Analytically reads the same money out of the clinical record instead, reconstructed from the patients holding plans in Dentally rather than from an invoice, and it reconciles to the provider’s remittance the following month. Having it early gives not only a true total revenue figure but <strong>a realistic revenue per clinical hour at clinician level</strong>.</p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img src="/img/blind-spot/02-capitation-plans-and-cross-charge.jpg" alt="Capitation page: plan membership and monthly fee by tier for a complete month, with cross-charge columns and a per-practitioner breakdown.">
+        <span class="pin" style="--x:20.3%; --y:35.0%">1</span>
+        <span class="pin" style="--x:38.5%; --y:35.0%">2</span>
+        <span class="pin" style="--x:72.1%; --y:39.0%">3</span>
+      </div>
+      <figcaption>
+        <ul class="notes">
+          <li><span class="n">1</span><span class="t">A complete month. <span class='fig'>1,356</span> members, <span class='fig'>£48,352</span>. About <span class='fig'>£35.66</span> each, which can be checked against the plan contract remittance.</span></li>
+          <li><span class="n">2</span><span class="t">The <b>cross-charge</b> moves <span class='fig'>£30</span> a visit from dentist to hygienist. Without it the whole plan fee lands on the dentist and a hygienist’s revenue per hour cannot be calculated at all.</span></li>
+          <li><span class="n">3</span><span class="t">The same money again by practitioner, which is what makes per-clinician profitability possible on plan patients, not only on fee-per-item work.</span></li>
+        </ul>
+      </figcaption>
+    </figure>
+  </article>
+
+  <article class="beat">
+    <div class="beat-head">
+      <span class="step">03</span>
+      <h2 class="beat-title">The whole practice on one screen</h2>
+    </div>
+    <div class="col">
+      <p class="lead">We jumped to revenue because that is often seen as THE key metric. But it is important to see the health of all areas at a glance. Analytically has a range of KPIs covering every aspect of the practice’s performance.</p>
+      <p>Start with the one number an owner would act on: <strong>Dentist Retention </strong><strong><span class='fig'>84.1%</span></strong><strong> against a </strong><strong><span class='fig'>90%</span></strong><strong> target</strong>. The standard remedy is to book the next appointment before the patient leaves the building, and that tile is on the same screen: <strong>Book Before Leave, </strong><strong><span class='fig'>49.6%</span></strong><strong> against </strong><strong><span class='fig'>65%</span></strong>. In the same column, <strong>cancellations are already over target</strong>, and booking further ahead is what drives that number up. The next screen shows it happening. The clinical column reads the same way in money: <strong>Exam Ratio </strong><strong><span class='fig'>69.0%</span></strong><strong>, ahead of target</strong>, and <strong><span class='fig'>172</span></strong><strong> courses of treatment with no next appointment booked</strong>.</p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img src="/img/blind-spot/03-home-board-12-months.jpg" alt="Home board: five columns of metric tiles for Revenue, Patients, Scheduling, Clinical and NHS, each with value, variance and target.">
+        <span class="pin" style="--x:20.8%; --y:34.4%">1</span>
+        <span class="pin" style="--x:40.2%; --y:53.9%">2</span>
+        <span class="pin" style="--x:40.2%; --y:40.9%">3</span>
+        <span class="pin" style="--x:59.8%; --y:60.4%">4</span>
+        <span class="pin" style="--x:59.8%; --y:53.9%">5</span>
+      </div>
+      <figcaption>
+        <ul class="notes">
+          <li><span class="n">1</span><span class="t"><b>Dentist Retention </b><b><span class='fig'>84.1%</span></b><b> against </b><b><span class='fig'>90%</span></b><b>.</b> The number that starts the conversation.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Book Before Leave </b><b><span class='fig'>49.6%</span></b><b> against </b><b><span class='fig'>65%</span></b><b>.</b> Half of patients walk out with no next appointment. This is the remedy, and it is the thing not happening.</span></li>
+          <li><span class="n">3</span><span class="t"><b>Cancellations </b><b><span class='fig'>37.1%</span></b><b> against </b><b><span class='fig'>31%</span></b><b>.</b> Fix the tile below and this one gets worse before it gets better. The next screen is why.</span></li>
+          <li><span class="n">4</span><span class="t"><b>Exam Ratio </b><b><span class='fig'>69.0%</span></b><b>, ahead.</b> The board is not uniformly bad. The diagnosis is being done.</span></li>
+          <li><span class="n">5</span><span class="t"><b><span class='fig'>172</span></b><b> courses with no next appointment.</b> Diagnosed, started, and nobody booked to finish it.</span></li>
+        </ul>
+      </figcaption>
+    </figure>
+  </article>
+
+  <article class="beat">
+    <div class="beat-head">
+      <span class="step">04</span>
+      <h2 class="beat-title">Pull one lever, and another bites back</h2>
+    </div>
+    <div class="col">
+      <p class="lead">Half of this practice’s patients leave without booking a next appointment. The obvious remedy is to book them before they go, which means booking them six months out, <strong>before the clinician has booked their own leave</strong>.</p>
+      <p>Here is the consequence, in their data. The largest single cancellation reason is the practitioner, at <strong>about a third of all cancellations</strong>, and it is not evenly spread: roughly a quarter in most months, rising to <strong>66% in August and 53% around Easter</strong>. That is school-holiday leave colliding with a diary booked months earlier. <strong>The improvement is causing part of the problem, and neither number is wrong.</strong> A rising cancellation rate here may be evidence that the booking discipline is working, which is not a conclusion any single metric can reach.</p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img src="/img/blind-spot/12-cancellations-by-reason.jpg" alt="Cancellations by reason stacked weekly across thirteen months, with a legend of patient and practice-side reasons, beside short-notice and DNA trends.">
+        <span class="pin" style="--x:19.6%; --y:45.0%">1</span>
+        <span class="pin" style="--x:35.7%; --y:34.4%">2</span>
+        <span class="pin" style="--x:28.9%; --y:34.2%">3</span>
+      </div>
+      <figcaption>
+        <ul class="notes">
+          <li><span class="n">1</span><span class="t">The broad pale band running through every week is <b>practice-cancelled</b>, not patient-cancelled.</span></li>
+          <li><span class="n">2</span><span class="t">The reasons separate <b>who cancelled</b>. That split is the finding; the headline rate on its own supports no action at all.</span></li>
+          <li><span class="n">3</span><span class="t"><b>August and Easter.</b> The practitioner share doubles at Easter and more than doubles in August.</span></li>
+        </ul>
+      </figcaption>
+    </figure>
+  </article>
+
+  <article class="beat">
+    <div class="beat-head">
+      <span class="step">05</span>
+      <h2 class="beat-title">Associates are given freedom, but sometimes they need direction</h2>
+    </div>
+    <div class="col">
+      <p>Principals have a hard job coaching associates. They can set targets and explain how the practice likes things done, but the conversation still needs both people reading the same figures.</p>
+      <p class="lead"><strong>A subscription set up for an associate shows them their own figures and nothing else.</strong> There is no practice page behind this one, no finance page, no route through to a colleague’s numbers. The navigation is not hidden, it is not there.</p>
+      <p>By the measure most owners reach for first she is the strongest clinician in the practice: <strong>£267 an hour against a £180 target</strong>. The rest of the row is why that is not the whole story. Her diary is running at <strong>106% of the hours she actually works</strong>, booked past the end of the day, most days. The next half-hour a patient can be offered with her is <strong>five days out</strong>. And <strong>63 courses of treatment she has started have no next appointment booked</strong>, £12K of work begun and not finished.</p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img src="/img/blind-spot/09-mydata-associate.jpg" alt="A single associate's page and nothing else: revenue, revenue per clinical hour, chair utilisation, diary fill, days to the next half-hour slot, and open courses with and without a booked appointment, each against that practitioner's target.">
+        <span class="pin" style="--x:17.4%; --y:16.6%">1</span>
+        <span class="pin" style="--x:82.0%; --y:16.6%">2</span>
+        <span class="pin" style="--x:1.3%; --y:23.0%">3</span>
+        <span class="pin" style="--x:65.9%; --y:23.0%">4</span>
+      </div>
+      <figcaption>
+        <ul class="notes">
+          <li><span class="n">1</span><span class="t"><b><span class='fig'>£267</span></b><b> an hour against </b><b><span class='fig'>£180</span></b><b>.</b> On production she is the best in the practice, and she knows it.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Diary fill </b><b><span class='fig'>106%</span></b><b>.</b> Booked beyond the hours she works, the overrun everyone feels and nobody had measured.</span></li>
+          <li><span class="n">3</span><span class="t"><b><span class='fig'>Five days</span></b><b> to her next half-hour slot.</b> A patient who rings on Monday with something wrong is seen the following week.</span></li>
+          <li><span class="n">4</span><span class="t"><b><span class='fig'>63</span></b><b> started courses with no next appointment.</b> The work is half done and has no date on it, which is also £12K not yet invoiced.</span></li>
+        </ul>
+      </figcaption>
+    </figure>
+  </article>
+
+  <section class="close col">
+    <h2>What this means for the practice</h2>
+    <p>The case is not that this practice is badly run. It is that <strong>it is run blind</strong>, by a clinician who was never given the instruments, on figures that are individually correct and collectively misleading.</p>
+    <p>Which puts the accountant in an odd position. <strong>You are the only business adviser most of these clients have</strong>, and you see them infrequently, on figures that are out of date, after every decision that mattered has already been taken. Not through anyone’s negligence, because that is the only cadence the information has ever allowed.</p>
+    <p>Analytically is not just a dashboard. It is <strong>a second opinion on your client’s own numbers, updated daily rather than annually</strong>: they get something they can act on between your meetings, and you get a client who arrives having already read them, and probably with informed questions.</p>
+    <p>Alongside the reporting there is a <strong>Day Book</strong>: named lists the practice can work from the same morning. Patients who failed to attend, cancellations waiting to be rebooked, recalls now due, and courses of treatment left open. Each one is a list of people to contact, not a number to interpret.</p>
+    <p>Setting it up takes a Dentally connection, optionally a Xero one, and about twenty minutes to enter the targets you would have recommended anyway.</p>
+  </section>
+
+  <section class="close col">
+    <h2>What this means for you</h2>
+    <p>There is a <strong>free month’s trial</strong>. At the end of it they can let it lapse or subscribe from <strong>£120 a month</strong>, which is twenty to thirty minutes of one clinician’s time.</p>
+    <p>On any practice you introduce we pay <strong>20% of lifetime value as commission</strong>. The single-user version is £120 a month and we expect an average above £200, so twenty clients is roughly <strong>£8,000 to £10,000 a year</strong> to the firm.</p>
+    <p>If you would like to see it working, contact <strong>partners@analytically.info</strong>.</p>
+  </section>
+</div>
+<footer class="site-foot">
+  <div class="site-wrap">
+    <a href="mailto:partners@analytically.info">partners@analytically.info</a>
+    &nbsp;&middot;&nbsp;<a href="/partners.html">Partner programme</a>
+    &nbsp;&middot;&nbsp;<a href="/documents.html">Trust &amp; documents</a><br>
+    Analytically is operated by Analytically Limited (company no.&nbsp;16242443).<br>
+    &copy; <span id="year">2026</span> Analytically Limited. All rights reserved.<br>
+    <a href="/doc.html?doc=COOKIE_POLICY">Cookie policy</a>
+    &nbsp;&middot;&nbsp;<a href="#" onclick="anlyCookieSettings();return false;">Cookie settings</a>
+  </div>
+</footer>
+<script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
