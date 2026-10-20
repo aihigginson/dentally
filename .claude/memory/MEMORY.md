@@ -81,3 +81,4 @@
 - [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
 - [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
 - [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.
+- [sys.* cannot join a user table in Fabric](sys-views-cannot-join-user-tables-in-fabric.md) — and SELECT INTO #temp FROM sys.* fails too; the RI check is the control, do not duplicate it.
