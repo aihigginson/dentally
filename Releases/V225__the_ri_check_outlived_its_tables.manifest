@@ -23,7 +23,12 @@ DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
 
 # No row may name a table that does not exist -- the general form of the fault, not just
 # the two from V224. This is what should have caught it before the RI check did.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config c WHERE NOT EXISTS (SELECT 1 FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name = CAST(c.Fact_Table AS VARCHAR(128))) OR NOT EXISTS (SELECT 1 FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name = CAST(c.Dim_Table AS VARCHAR(128))); IF @n <> 0 BEGIN SET @e = 'V225 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' RI_Check_Config row(s) name a table that does not exist.'; THROW 50550, @e, 1; END;
+# ==> sys.* CANNOT BE CORRELATED WITH A USER TABLE IN FABRIC. <== The first version of this
+# guard used NOT EXISTS (SELECT 1 FROM sys.objects ... WHERE o.name = c.Fact_Table) and the
+# warehouse rejected it: "The query references an object that is not supported in distributed
+# processing mode." Materialise the Gold names into a temp table first, then join -- which is
+# the house rule anyway (see V220: temp tables, not CTEs).
+EXEC     DROP TABLE IF EXISTS #gold_tables; SELECT CAST(o.name AS VARCHAR(128)) AS nm INTO #gold_tables FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.type IN ('U','V'); DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config c LEFT JOIN #gold_tables f ON f.nm = CAST(c.Fact_Table AS VARCHAR(128)) LEFT JOIN #gold_tables d ON d.nm = CAST(c.Dim_Table  AS VARCHAR(128)) WHERE f.nm IS NULL OR d.nm IS NULL; DROP TABLE #gold_tables; IF @n <> 0 BEGIN SET @e = 'V225 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' RI_Check_Config row(s) name a Gold table that does not exist.'; THROW 50550, @e, 1; END;
 
 # And the seed landed rather than emptying the table.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config; IF @n < 50 BEGIN SET @e = 'V225 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' RI config rows after the reseed.'; THROW 50551, @e, 1; END;
