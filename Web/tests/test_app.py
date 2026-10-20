@@ -1968,38 +1968,46 @@ def test_demo_host_unset_changes_nothing(appmod, monkeypatch):
         assert appmod._acting_tenant_id('someone@analytically.info') is None
 
 
-def test_demo_pins_the_practice(appmod, monkeypatch):
+def test_demo_pins_the_client_and_not_the_practice(appmod, monkeypatch):
+    # ==> THE CLIENT IS THE ONLY PIN. <== These three tests used to monkeypatch a
+    # DEMO_TENANT_ID that 96c65c0 deliberately deleted, so they failed on every run from
+    # 12 Oct onwards -- asserting behaviour the app had stopped having.
+    #
+    # Absent header must be None, not the demo tenant. "All practices" IS the absent header,
+    # so defaulting it made the two indistinguishable and collapsed a group demo to one
+    # practice. That is the regression these now guard.
     monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
     monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
-    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
     with _demo_ctx(appmod, 'demo.analytically.info'):
         assert appmod._acting_client_id('grace@analytically.info') == '11'
-        assert appmod._acting_tenant_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') is None
 
 
 def test_demo_client_pin_beats_a_supplied_header(appmod, monkeypatch):
     # ==> THE CLIENT PIN IS THE ONE THAT MATTERS. <== Hiding the picker in the browser leaves the
     # header working, so the client has to be fixed on the server or a demo session could be
     # steered into a live practice.
+    #
+    # The TENANT header is honoured, and that is safe: every practice the demo can resolve
+    # belongs to the pinned client, and _get_user_info validates it against the caller's own
+    # permitted set.
     monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
     monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
-    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
     hdrs = {'X-Acting-Client': '100', 'X-Acting-Tenant': '100'}
     with _demo_ctx(appmod, 'demo.analytically.info', hdrs):
         assert appmod._acting_client_id('grace@analytically.info') == '11'
+        assert appmod._acting_tenant_id('grace@analytically.info') == '100'
 
 
-def test_demo_tenant_pin_is_a_default_a_header_may_move(appmod, monkeypatch):
-    # The tenant is a DEFAULT, not a cage: a demo client owning several practices has to be
-    # shown switching between them. Safe because the CLIENT is pinned above and the tenant is
-    # validated downstream against the caller's permitted set -- so the only practices reachable
-    # are the demo client's own.
+def test_demo_does_not_pin_the_tenant_so_a_group_can_switch(appmod, monkeypatch):
+    # A demo client owning several practices has to be shown switching between them, and has
+    # to be able to sit on "All practices". No header means exactly that, so it must stay None.
     monkeypatch.setattr(appmod, 'DEMO_HOST', 'demo.analytically.info')
-    monkeypatch.setattr(appmod, 'DEMO_TENANT_ID', '11')
+    monkeypatch.setattr(appmod, 'DEMO_CLIENT_ID', '11')
     with _demo_ctx(appmod, 'demo.analytically.info'):
-        assert appmod._acting_tenant_id('grace@analytically.info') == '11'   # default
+        assert appmod._acting_tenant_id('grace@analytically.info') is None   # All practices
     with _demo_ctx(appmod, 'demo.analytically.info', {'X-Acting-Tenant': '12'}):
-        assert appmod._acting_tenant_id('grace@analytically.info') == '12'   # moved
+        assert appmod._acting_tenant_id('grace@analytically.info') == '12'   # one practice
 
 
 def test_demo_does_not_make_a_non_staff_user_staff(appmod, monkeypatch):
