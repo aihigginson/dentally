@@ -17,7 +17,8 @@
       "6af642ed5ff4439ab1e1",
       "a1b2c3d4e5f600112233",
       "a1b2c3d4e5f600112244",
-      "a1b2c3d4e5f600112255"
+      "a1b2c3d4e5f600112255",
+      "3f7a21c6089b4e5d0031"
     ],
     "suppressData": true
   },
@@ -135,6 +136,15 @@
           "a1b2c3d4e5f600112255": {
             "singleVisual": {
               "visualType": "tableEx",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "3f7a21c6089b4e5d0031": {
+            "singleVisual": {
+              "visualType": "hundredPercentStackedColumnChart",
               "objects": {},
               "display": {
                 "mode": "hidden"

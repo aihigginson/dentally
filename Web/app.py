@@ -123,8 +123,12 @@ APP_ENV        = os.environ.get('APP_ENV', 'dev')
 # Empty DEMO_HOST disables the skin entirely, so every environment that does not set it behaves
 # exactly as before.
 DEMO_HOST      = os.environ.get('DEMO_HOST', '').strip().lower()
+# ==> THE CLIENT IS PINNED; THE PRACTICE IS NOT. <== There was a DEMO_TENANT_ID here too. It
+# defaulted the acting practice whenever no header arrived, and "All practices" is exactly that --
+# an absent header -- so the demo could only ever show one practice. The client pin already bounds
+# what a demo session can reach, since every practice it resolves belongs to that client.
+# The deployment may still set DEMO_TENANT_ID; it is simply ignored.
 DEMO_CLIENT_ID = os.environ.get('DEMO_CLIENT_ID', '11')
-DEMO_TENANT_ID = os.environ.get('DEMO_TENANT_ID', '11')
 
 TENANT_ID      = os.environ['TENANT_ID']
 CLIENT_ID      = os.environ['CLIENT_ID']
@@ -1934,13 +1938,19 @@ def _acting_client_id(upn):
     by checking it EXISTS with an active tenant, not that the caller is entitled to it -- the
     entitlement check was this staff test. So on the demo host ANY signed-in user is placed in
     DEMO_CLIENT_ID. That is the feature: a prospect can be handed a login and see the demonstration
-    practice. It is also the whole risk, and it reduces to one rule:
+    practices. It is also the whole risk, and it reduces to one rule:
 
-        DEMO_CLIENT_ID AND DEMO_TENANT_ID MUST ONLY EVER NAME DEMONSTRATION DATA.
+        DEMO_CLIENT_ID MUST ONLY EVER NAME DEMONSTRATION DATA.
 
-    Point either at a real client and every signed-in user on that hostname is inside a live
-    practice. The tenant pin is validated downstream against the caller's permitted set; the client
-    pin is not, which is why it is called out here.
+    Point it at a real client and every signed-in user on that hostname is inside a live practice.
+
+    ==> THE CLIENT IS THE ONLY PIN, AND THAT IS SUFFICIENT. <== The demo host used to default the
+    TENANT as well. It could not distinguish "no practice chosen" from "All practices", because
+    both arrive as an absent header -- so All practices silently collapsed to the one demonstration
+    tenant, and a demo client holding two practices could never show its own group view: targets and
+    actuals came from one practice, and the site picker saw one site and hid itself. Pinning the
+    client already bounds what is reachable, because every practice the demo can resolve belongs to
+    it. Nothing is gained by pinning the tenant too.
     """
     if _is_demo():
         return DEMO_CLIENT_ID
@@ -1958,12 +1968,13 @@ def _acting_tenant_id(upn):
     permitted set in _get_user_info, so it asserts WHICH practice, never WHETHER they may see
     it -- a header naming one they are not entitled to buys them nothing.
 
-    On the demo host this is pinned to the Demonstration Practice, for the reason given in
-    _acting_client_id. It is still validated downstream like any other value, so the pin asserts
-    WHICH practice and grants nothing: a caller with no right to the demo tenant gets nothing.
+    ==> THE DEMO HOST IS NOT SPECIAL HERE. <== It once defaulted to DEMO_TENANT_ID when no header
+    arrived, which looked harmless and was not: "All practices" IS the absent header, so the two
+    cases are indistinguishable and the demo could never show more than one practice at a time.
+    With a demo client holding two practices that meant targets and actuals from one of them and a
+    site picker that hid itself because it could only see that practice's single site. The client
+    pin in _acting_client_id already bounds what is reachable; this needs no pin of its own.
     """
-    if _is_demo():
-        return DEMO_TENANT_ID
     if not has_request_context():
         return None
     return (request.headers.get('X-Acting-Tenant') or '').strip() or None
@@ -3777,9 +3788,18 @@ def get_target_grid():
             # Base = Dentally role per active practitioner; overlaid below with the LIVE AppDB override
             # (same as the Roles screen) so reassigned/removed roles show immediately, not after the
             # nightly Dim_Practitioners.Custom_Role refresh.
+            # ==> NON-CLINICAL ROLES ARE NEVER A TARGET LEVEL. <== Same exclusion /api/filters
+            # applies "always (even when showing inactive)", and it was missing here. The grid
+            # builds a cell per (level x metric) from these roles and the client posts the whole
+            # grid back with defaults filled in -- so an invalid level does not just display, it
+            # WRITES targets. Tenant 12 gained 24 receptionist targets that way (12 per FY),
+            # against two practitioners with no appointments and no revenue, so every one of them
+            # would have read 0% achieved. Live data hid the gap because its receptionists and
+            # administrators are all Active = 0.
             cur.execute(
                 f"SELECT Tenant_ID, Practitioner_ID, Role FROM Gold.Dim_Practitioners "
-                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0", tids)
+                f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
+                f"AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager')", tids)
             prac_roles = {(r[0], r[1]): r[2] for r in cur.fetchall()}
         conn.close()
 

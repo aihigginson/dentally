@@ -28,6 +28,12 @@
 --    *10     09/06/2026  AIH  A1/A2/A3/A4: store at practitioner grain (fk_Practitioner) instead of -1.
 --                             A2 CTE joins Dim_Practitioners on Role to prioritise dentists over
 --                             hygienists/therapists when an invoice spans multiple practitioners.
+--    *11     13/10/2026  AIH  A2: inv_agg CTE -> #inv_agg temp table (no CTEs in the solution).
+--                             The CROSS JOIN to #snap_dates had to become an INNER JOIN at the
+--                             same time -- Fabric rejects CROSS JOIN temp-to-temp (*02) -- with
+--                             the two snapshot predicates moved from WHERE into ON. Same
+--                             relation, same rows: a CROSS JOIN filtered by WHERE is an INNER
+--                             JOIN on those predicates.
 --
 --  Purpose:
 --    Populates Gold.Fact_KPI_Snapshot with point-in-time metric values
@@ -266,26 +272,30 @@ BEGIN
         -- Aggregated at invoice level to avoid double-counting items.
         -- Multi-practitioner invoices attributed to the dentist (dentist/orthodontist/
         -- specialist takes priority); falls back to MAX(fk_Practitioner) if no dentist.
-        -- CTE avoids a second temp table (Fabric rejects CROSS JOIN temp-to-temp).
         -- Grouped by Tenant x Site x Practitioner.
         -- Outstanding amounts come from the invoice-grain fact (1/invoice -> no double
         -- count); the line fact is joined only to attribute each invoice to a practitioner
         -- (prefer a clinician on the invoice's lines).
-        ;WITH inv_agg AS (
-            SELECT
-                fi.[bk_Invoice_ID]                            AS Invoice_ID,
-                fi.[Tenant_ID],
-                ISNULL(fi.[fk_Practice_Site], -1)             AS fk_Practice_Site,
-                MAX(fi.[fk_Practitioner])                                              AS fk_Practitioner,
-                MAX(fi.[Invoice_Amount_Outstanding])           AS Invoice_Outstanding,
-                MIN(dd_i.[Full_Date])                          AS Invoice_Date,
-                MAX(dd_p.[Full_Date])                          AS Paid_Date
-            FROM [Gold].[Fact_Invoices] fi
-            INNER JOIN [Gold].[Dim_Date] dd_i ON dd_i.pk_Date = fi.[fk_Date_Invoice]
-            LEFT  JOIN [Gold].[Dim_Date] dd_p ON dd_p.pk_Date = fi.[fk_Date_Paid]
-            WHERE fi.[Invoice_Amount] > 0
-            GROUP BY fi.[bk_Invoice_ID], fi.[Tenant_ID], fi.[fk_Practice_Site]
-        )
+        DROP TABLE IF EXISTS #inv_agg;
+        SELECT
+            fi.[bk_Invoice_ID]                            AS Invoice_ID,
+            fi.[Tenant_ID],
+            ISNULL(fi.[fk_Practice_Site], -1)             AS fk_Practice_Site,
+            MAX(fi.[fk_Practitioner])                                              AS fk_Practitioner,
+            MAX(fi.[Invoice_Amount_Outstanding])           AS Invoice_Outstanding,
+            MIN(dd_i.[Full_Date])                          AS Invoice_Date,
+            MAX(dd_p.[Full_Date])                          AS Paid_Date
+        INTO    #inv_agg
+        FROM [Gold].[Fact_Invoices] fi
+        INNER JOIN [Gold].[Dim_Date] dd_i ON dd_i.pk_Date = fi.[fk_Date_Invoice]
+        LEFT  JOIN [Gold].[Dim_Date] dd_p ON dd_p.pk_Date = fi.[fk_Date_Paid]
+        WHERE fi.[Invoice_Amount] > 0
+        GROUP BY fi.[bk_Invoice_ID], fi.[Tenant_ID], fi.[fk_Practice_Site];
+
+        -- ==> AN INNER JOIN, DELIBERATELY NOT A CROSS JOIN. <== Both sides are temp tables now
+        -- and Fabric rejects CROSS JOIN temp-to-temp (history *02). The two snapshot predicates
+        -- therefore sit in the ON clause rather than a WHERE: a CROSS JOIN filtered by WHERE is
+        -- the same relation as an INNER JOIN on those predicates, so the rows are unchanged.
         INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
         SELECT
             DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
@@ -296,9 +306,9 @@ BEGIN
             CAST('outstanding_invoices' AS VARCHAR(100))       AS Metric,
             SUM(inv.[Invoice_Outstanding])                     AS Value
         FROM #snap_dates sd
-        CROSS JOIN inv_agg inv
-        WHERE inv.[Invoice_Date] <= sd.Snapshot_Date
-          AND (inv.[Paid_Date] IS NULL OR inv.[Paid_Date] > sd.Snapshot_Date)
+        INNER JOIN #inv_agg inv
+            ON  inv.[Invoice_Date] <= sd.Snapshot_Date
+            AND (inv.[Paid_Date] IS NULL OR inv.[Paid_Date] > sd.Snapshot_Date)
         GROUP BY
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
@@ -457,6 +467,7 @@ BEGIN
         DROP TABLE #snap_dates;
         DROP TABLE #charged;
         DROP TABLE #results;
+        DROP TABLE #inv_agg;
 
         -- ── A7: Accumulating current-state snapshots ─────────────────────────
         -- These metrics cannot be reconstructed historically from Gold tables.

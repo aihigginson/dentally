@@ -1,0 +1,57 @@
+# =====================================================================
+# Release V222 -- a recall Dentally has closed is not work
+# =====================================================================
+# Adam Thompson attended on 28/08/2026 and still appeared on his clinician's Day Book
+# "Recalls To Action" list, against a Dentist recall due 2025-12-05 that Dentally had
+# already marked Completed -- 318 days overdue and counted every day since.
+#
+# Retention_Outlook_In_Scope tests only two things: the due date falling in a 24-month
+# window, and the patient being active. Is_Booked means "has a FUTURE non-cancelled
+# appointment". Neither reads r.Status, so ATTENDING could never clear a recall and a
+# closed one stayed on the worklist for ever.
+#
+# On Maple that is 441 Completed + 4 Booked out of 2,044 -- 19% of every clinician's
+# recall list was work already done.
+#
+# ==> THE GRID RENDERS A STORED COLUMN, NOT THE DAX MEASURE. <== The first fix went into
+# _Measures[Recalls To Action] in PBI_Dentally.csx and moved nothing, because the Day Book
+# summary grid binds to Aggregate_Site_Practitioner_Current.Recalls_To_Action -- a COLUMN
+# on List Practitioners, built by the #rc block in this procedure. The measure and the
+# column are two independent definitions of the same thing; the csx one is already fixed
+# on dev (e73516d) and is left alone here.
+#
+# ==> FILTERED HERE, NOT IN Is_In_Scope. <== That flag also feeds the Retention Outlook
+# denominators in usp_Load_Fact_KPI_Snapshot. Narrowing a denominator to flatter a
+# conversion rate is the V197 mistake, so the status test lives in the worklist query only.
+#
+# Terminal statuses are EXCLUDED rather than the actionable ones being listed, so a status
+# Dentally adds later turns up on the worklist instead of silently vanishing from it.
+# Status values observed on Maple today: Unbooked, Completed, Missed, Booked.
+#
+# The other three Day Book columns were checked for the same oversight and are clean:
+# Cancellations_To_Rebook and DNAs_To_Rebook both key on Rebooked_Status, which already
+# clears on booked-since, ATTENDED-since or a future appointment; Open_Plans keys on
+# Course_Status, which is derived from item-level evidence rather than a copied string.
+#
+# No schema change. One aggregate row set gets smaller.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+
+# The procedure must actually carry the status test, or the release has shipped nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name = 'usp_Load_Aggregate_Site_Practitioner_Current' AND m.definition LIKE '%NOT IN (''completed'',''booked'')%'; IF @n <> 1 BEGIN SET @e = 'V222 FAILED: the status exclusion is not in the procedure body.'; THROW 50520, @e, 1; END;
+
+# ==> @Mode DEFAULTS TO 'TEST'. <== Omit it and the procedure runs without writing, so the
+# release would pass its body guard and change nothing in the warehouse. OUT params are BIGINT.
+EXEC     DECLARE @i BIGINT, @u BIGINT, @d BIGINT; EXEC [Gold].[usp_Load_Aggregate_Site_Practitioner_Current] @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# Gate on the NUMBER the clinician sees, not merely on the text being in the procedure.
+# No stored Recalls_To_Action may now count a recall whose status is Completed or Booked:
+# rebuild the figure from source and require the stored column to equal it.
+EXEC     DECLARE @bad INT, @e VARCHAR(4000); WITH src AS (SELECT r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1) AS fk_Site, r.fk_Practitioner, COUNT(1) AS cnt FROM Gold.Fact_Recalls r JOIN Gold.vw_Effectively_Active_Patients ap ON ap.pk_Patient = r.fk_Patient WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0 AND LOWER(LTRIM(RTRIM(ISNULL(r.Status,'')))) NOT IN ('completed','booked') GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner) SELECT @bad = COUNT(*) FROM Gold.Aggregate_Site_Practitioner_Current c LEFT JOIN src ON src.Tenant_ID = c.Tenant_ID AND src.fk_Site = c.fk_Site AND src.fk_Practitioner = c.fk_Practitioner WHERE TRY_CAST(c.Recalls_To_Action AS INT) <> ISNULL(src.cnt, 0); IF @bad <> 0 BEGIN SET @e = 'V222 FAILED: ' + CAST(@bad AS VARCHAR(10)) + ' site/practitioner row(s) disagree with the corrected recall rule.'; THROW 50521, @e, 1; END;
+
+# And prove the list actually shrank rather than emptied: Maple should fall from 2,044 to
+# 1,599. A zero here would mean the status test matched everything.
+EXEC     DECLARE @t INT, @e VARCHAR(4000); SELECT @t = SUM(TRY_CAST(Recalls_To_Action AS INT)) FROM Gold.Aggregate_Site_Practitioner_Current WHERE Tenant_ID = 100; IF @t IS NULL OR @t = 0 BEGIN SET @e = 'V222 FAILED: Maple now shows ' + ISNULL(CAST(@t AS VARCHAR(10)),'NULL') + ' recalls to action -- the filter removed everything.'; THROW 50522, @e, 1; END;
+
+TEST

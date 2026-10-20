@@ -19,39 +19,9 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 CREATE OR ALTER VIEW [Gold].[vw_Fact_Appointment_Journey] AS
-WITH expanded AS (
-    SELECT
-        j.Tenant_ID, j.bk_Appointment_ID, j.fk_Patient, j.fk_Practitioner,
-        j.fk_Practice_Site, j.fk_Date_Start, j.Start_Time, j.Booking, j.Appointment_Reason,
-        j.Is_Cancelled, j.Is_DNA, j.Is_Completed, j.fk_Appointment_Next,
-        m.Mode,
-        CASE m.Mode
-            WHEN 'All Appointments' THEN j.fk_Appointment_Next
-            WHEN 'Exclude Hygiene'  THEN j.fk_Appointment_Not_Hygiene
-            WHEN 'Exams Only'       THEN j.fk_Appointment_Exam
-            WHEN 'Hygiene Only'     THEN j.fk_Appointment_Hygiene
-        END AS Mode_Next
-    FROM Gold.Fact_Appointment_Journey j
-    CROSS JOIN (VALUES ('All Appointments'), ('Exclude Hygiene'), ('Exams Only'), ('Hygiene Only')) m(Mode)
-    WHERE m.Mode = 'All Appointments'
-       OR (m.Mode = 'Exclude Hygiene' AND j.Appointment_Reason <> 'Hygiene')
-       OR (m.Mode = 'Exams Only'      AND j.Appointment_Reason =  'Exam')
-       OR (m.Mode = 'Hygiene Only'    AND j.Appointment_Reason =  'Hygiene')
-),
-keyed AS (
-    SELECT e.*,
-        -- Non-null only when this mode has no next of its own type. Distinguishes
-        -- "nothing booked" from "something of another type booked".
-        CASE
-            WHEN e.Mode_Next IS NOT NULL THEN NULL
-            WHEN e.fk_Appointment_Next IS NULL THEN 'Not Booked'
-            WHEN e.Mode = 'Exams Only'      THEN 'Non-Exam Booked'
-            WHEN e.Mode = 'Hygiene Only'    THEN 'Non-Hygiene Booked'
-            WHEN e.Mode = 'Exclude Hygiene' THEN 'Hygiene Booked'
-            ELSE 'Not Booked'
-        END AS Terminal_Label
-    FROM expanded e
-)
+-- Derived tables rather than CTEs: a view cannot reference a temp table at all, so a #temp
+-- is not available here. Each stage is read exactly once as a relation, so the nesting below
+-- is the same relation -- and the same plan -- that the CTE chain described.
 SELECT
     e.Tenant_ID, e.bk_Appointment_ID, e.fk_Patient, e.fk_Practitioner,
     e.fk_Practice_Site, e.fk_Date_Start, e.Start_Time, e.Booking, e.Appointment_Reason,
@@ -84,7 +54,38 @@ SELECT
         WHEN p.Active = 0                                                  THEN 'Will Not See Again'
         ELSE 'In Recall Process'
     END AS [Current State]
-FROM keyed e
+FROM (
+    SELECT e.*,
+        -- Non-null only when this mode has no next of its own type. Distinguishes
+        -- "nothing booked" from "something of another type booked".
+        CASE
+            WHEN e.Mode_Next IS NOT NULL THEN NULL
+            WHEN e.fk_Appointment_Next IS NULL THEN 'Not Booked'
+            WHEN e.Mode = 'Exams Only'      THEN 'Non-Exam Booked'
+            WHEN e.Mode = 'Hygiene Only'    THEN 'Non-Hygiene Booked'
+            WHEN e.Mode = 'Exclude Hygiene' THEN 'Hygiene Booked'
+            ELSE 'Not Booked'
+        END AS Terminal_Label
+    FROM (
+        SELECT
+            j.Tenant_ID, j.bk_Appointment_ID, j.fk_Patient, j.fk_Practitioner,
+            j.fk_Practice_Site, j.fk_Date_Start, j.Start_Time, j.Booking, j.Appointment_Reason,
+            j.Is_Cancelled, j.Is_DNA, j.Is_Completed, j.fk_Appointment_Next,
+            m.Mode,
+            CASE m.Mode
+                WHEN 'All Appointments' THEN j.fk_Appointment_Next
+                WHEN 'Exclude Hygiene'  THEN j.fk_Appointment_Not_Hygiene
+                WHEN 'Exams Only'       THEN j.fk_Appointment_Exam
+                WHEN 'Hygiene Only'     THEN j.fk_Appointment_Hygiene
+            END AS Mode_Next
+        FROM Gold.Fact_Appointment_Journey j
+        CROSS JOIN (VALUES ('All Appointments'), ('Exclude Hygiene'), ('Exams Only'), ('Hygiene Only')) m(Mode)
+        WHERE m.Mode = 'All Appointments'
+           OR (m.Mode = 'Exclude Hygiene' AND j.Appointment_Reason <> 'Hygiene')
+           OR (m.Mode = 'Exams Only'      AND j.Appointment_Reason =  'Exam')
+           OR (m.Mode = 'Hygiene Only'    AND j.Appointment_Reason =  'Hygiene')
+    ) e
+) e
 LEFT JOIN Gold.Fact_Appointment_Journey mn
     ON mn.Tenant_ID = e.Tenant_ID AND mn.bk_Appointment_ID = e.Mode_Next
 LEFT JOIN Gold.Fact_Appointment_Journey an

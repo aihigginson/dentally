@@ -64,34 +64,43 @@ BEGIN
         DECLARE @Current_NHS_Year INT =
             (SELECT MAX(Financial_Year) FROM Gold.Dim_Date WHERE Full_Date <= CAST(SYSUTCDATETIME() AS DATE));
 
-        ;WITH latest AS (
-            SELECT s.Tenant_ID, s.Site_ID, s.bk_Contract_ID, s.Contract_Number, s.Contract_Name,
-                   s.Active, s.PDS_Plus, s.NHS_Location_ID, s.NHS_Site_ID,
-                   s.UDA_Target, s.UDA_Value, s.UOA_Target, s.UOA_Value, s.End_Date,
-                   ROW_NUMBER() OVER (PARTITION BY s.Tenant_ID, s.Site_ID ORDER BY s.End_Date DESC) AS rn
-            FROM   #src s
-            WHERE  s.End_Date IS NOT NULL AND ISNULL(s.UDA_Target, 0) > 0
-        ),
-        ny AS (
-            SELECT Financial_Year, MIN(Full_Date) AS FY_Start, MAX(Full_Date) AS FY_End
-            FROM   Gold.Dim_Date GROUP BY Financial_Year
-        ),
-        claim_yr AS (
-            -- V146: source submission years from Silver (loaded before ALL Gold) instead of
-            -- Gold.Fact_NHS_Claims. A GOLD_DIM must not read a Gold FACT (ordered after it) --
-            -- on a fresh build the fact is empty when this Dim runs, so the roll-forward would
-            -- silently miss years. Silver.NHS_Claims carries the same submission dates + Site_ID.
-            SELECT DISTINCT cl.Tenant_ID, cl.Site_ID, d.Financial_Year
-            FROM   Silver.NHS_Claims cl
-            JOIN   Gold.Dim_Date d ON d.Full_Date = cl.Submitted_Date
-            WHERE  cl.Submitted_Date IS NOT NULL
-        ),
-        covered AS (
-            SELECT DISTINCT s.Tenant_ID, s.Site_ID, d.Financial_Year
-            FROM   #src s
-            JOIN   Gold.Dim_Date d ON d.Full_Date BETWEEN s.Start_Date AND s.End_Date
-            WHERE  s.Start_Date IS NOT NULL AND s.End_Date IS NOT NULL
-        )
+        -- Each site's latest real contract, by end date.
+        DROP TABLE IF EXISTS #latest;
+        SELECT s.Tenant_ID, s.Site_ID, s.bk_Contract_ID, s.Contract_Number, s.Contract_Name,
+               s.Active, s.PDS_Plus, s.NHS_Location_ID, s.NHS_Site_ID,
+               s.UDA_Target, s.UDA_Value, s.UOA_Target, s.UOA_Value, s.End_Date,
+               ROW_NUMBER() OVER (PARTITION BY s.Tenant_ID, s.Site_ID ORDER BY s.End_Date DESC) AS rn
+        INTO   #latest
+        FROM   #src s
+        WHERE  s.End_Date IS NOT NULL AND ISNULL(s.UDA_Target, 0) > 0;
+
+        -- The Apr-Mar bounds of every financial year.
+        DROP TABLE IF EXISTS #ny;
+        SELECT Financial_Year, MIN(Full_Date) AS FY_Start, MAX(Full_Date) AS FY_End
+        INTO   #ny
+        FROM   Gold.Dim_Date
+        GROUP BY Financial_Year;
+
+        -- V146: source submission years from Silver (loaded before ALL Gold) instead of
+        -- Gold.Fact_NHS_Claims. A GOLD_DIM must not read a Gold FACT (ordered after it) --
+        -- on a fresh build the fact is empty when this Dim runs, so the roll-forward would
+        -- silently miss years. Silver.NHS_Claims carries the same submission dates + Site_ID.
+        DROP TABLE IF EXISTS #claim_yr;
+        SELECT DISTINCT cl.Tenant_ID, cl.Site_ID, d.Financial_Year
+        INTO   #claim_yr
+        FROM   Silver.NHS_Claims cl
+        JOIN   Gold.Dim_Date d ON d.Full_Date = cl.Submitted_Date
+        WHERE  cl.Submitted_Date IS NOT NULL;
+
+        -- Years a real contract already spans, so a roll-forward never overwrites one.
+        DROP TABLE IF EXISTS #covered;
+        SELECT DISTINCT s.Tenant_ID, s.Site_ID, d.Financial_Year
+        INTO   #covered
+        FROM   #src s
+        JOIN   Gold.Dim_Date d ON d.Full_Date BETWEEN s.Start_Date AND s.End_Date
+        WHERE  s.Start_Date IS NOT NULL AND s.End_Date IS NOT NULL;
+
+        DROP TABLE IF EXISTS #rollfwd;
         SELECT
             l.Tenant_ID,
             'RF-' + l.bk_Contract_ID + '-' + CAST(ny.Financial_Year AS VARCHAR(10)) AS bk_Contract_ID,
@@ -102,13 +111,13 @@ BEGIN
             l.UDA_Target, l.UDA_Value, l.UOA_Target, l.UOA_Value,
             CAST(1 AS BIT) AS Is_Rolled_Forward
         INTO   #rollfwd
-        FROM   latest l
-        JOIN   claim_yr cy ON cy.Tenant_ID = l.Tenant_ID AND cy.Site_ID = l.Site_ID
-        JOIN   ny          ON ny.Financial_Year = cy.Financial_Year
+        FROM   #latest l
+        JOIN   #claim_yr cy ON cy.Tenant_ID = l.Tenant_ID AND cy.Site_ID = l.Site_ID
+        JOIN   #ny ny       ON ny.Financial_Year = cy.Financial_Year
         WHERE  l.rn = 1
           AND  ny.FY_Start > l.End_Date
           AND  ny.Financial_Year <= @Current_NHS_Year
-          AND  NOT EXISTS (SELECT 1 FROM covered cv
+          AND  NOT EXISTS (SELECT 1 FROM #covered cv
                            WHERE cv.Tenant_ID = l.Tenant_ID AND cv.Site_ID = l.Site_ID
                              AND cv.Financial_Year = ny.Financial_Year);
 
@@ -121,6 +130,10 @@ BEGIN
         FROM   #rollfwd;
 
         DROP TABLE #rollfwd;
+        DROP TABLE #latest;
+        DROP TABLE #ny;
+        DROP TABLE #claim_yr;
+        DROP TABLE #covered;
 
         -- Remove rows no longer in source
         DELETE tgt

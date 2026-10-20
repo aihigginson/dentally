@@ -112,7 +112,7 @@
            bar exists to warn you that you are inside someone else's practice, which on the demo is
            the whole point rather than a hazard. !important because the JS sets display inline.
            The DEV badge needs no rule: it is display:none until body.dev-mode, which demo omits. */
-        body.demo-mode .staff-picker { display: none !important; }
+        body.demo-mode #staff-practice { display: none !important; }
         body.demo-mode .app-header { box-shadow: 0 1px 4px rgba(0,0,0,0.18) !important; }
         #dev-log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99999;
                    max-height: 30vh; overflow-y: auto; margin: 0; padding: 6px 10px;
@@ -3984,17 +3984,22 @@
                         selSite.appendChild(o);
                     });
                     // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
-                    // control can only ever be a no-op or a lie, and it is currently the
-                    // second: several facts carry no site key at all -- Fact_Practitioner_
-                    // Diaries has no site COLUMN, and treatment plans and (on the demo
-                    // tenant) appointments are all fk_Practice_Site = -1 -- so picking the
-                    // one site excludes every one of their rows and Diary Fill, Rev/Hour,
-                    // Avg Plan and the appointment ratios go blank. "All sites" includes the
-                    // -1 rows, which is why it looks right and selecting looks broken.
+                    // control can only ever be a no-op, so hiding it costs nothing.
                     //
-                    // Hiding it is not the fix for those missing keys, which still matter to
-                    // a genuine multi-site group. It is the fix for offering a filter that
-                    // cannot do anything useful and can do something harmful.
+                    // The reason first written here -- that several facts carried no site key
+                    // -- was re-measured on 2026-10-12 and is now WRONG. Every transactional
+                    // fact resolves its site: appointments, treatment plans, revenue,
+                    // invoices, payments, recalls, plan spells and Fact_Practitioner_Diaries
+                    // (which does have a site column) all show ZERO fk_Practice_Site = -1 on
+                    // both tenants. Do not repeat the old claim.
+                    //
+                    // What IS still open is one layer up: Gold.Fact_Metric_Actuals writes -1
+                    // for every one of its 15 practice-level metrics (diary fill, chair
+                    // utilisation, DNA and cancellation rates, rev/hour, exam ratio, BBYL...)
+                    // because they are computed for the practice, not per site. So a site
+                    // selection narrows the transactional pages correctly while the scorecard
+                    // metrics built on that table cannot follow it. That is the thing to fix
+                    // before claiming site-level KPIs; it is not a reason to hide the filter.
                     const oneSite = (data.sites || []).length <= 1;
                     const siteField = selSite.closest('.filter-field');
                     if (siteField) {

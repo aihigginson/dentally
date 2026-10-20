@@ -197,7 +197,17 @@ BEGIN
         INTO #rc
         FROM Gold.Fact_Recalls r
         JOIN #act ap ON ap.pk_Patient = r.fk_Patient
+        -- ==> A RECALL DENTALLY HAS CLOSED IS NOT WORK. <== Retention_Outlook_In_Scope
+        -- tests only the due date and the patient being active, and Is_Booked means
+        -- "has a FUTURE appointment" -- so attending could never clear a recall. Adam
+        -- Thompson attended 28/08/2026 and still sat on his clinician's list against a
+        -- Dentist recall Dentally marked Completed 318 days earlier. Maple carried 441
+        -- Completed and 4 Booked out of 2,044, the oldest 729 days overdue.
+        --
+        -- Excludes the TERMINAL statuses rather than listing the actionable ones, so a
+        -- status Dentally adds later appears on the worklist instead of vanishing from it.
         WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0
+          AND LOWER(LTRIM(RTRIM(ISNULL(r.Status,'')))) NOT IN ('completed','booked')
         GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner;
 
         -- ── Site × practitioner spine ────────────────────────────────────────

@@ -11,6 +11,7 @@
 - [List Date Unconstrained is deliberate](list-date-unconstrained-is-deliberate.md) — Day Book is the one report the period filter is not forced on; do not merge the date tables.
 - [Container Apps staticIp is ingress, not egress](container-apps-staticip-is-ingress.md) — no stable outbound IP; an IP firewall cannot allow it.
 - [Prod warehouse deploys can run from the laptop](prod-warehouse-deploy-from-the-laptop.md) — delegated token, not a bypass; do not hand them back.
+- [Prod write blocks are auto mode, not permissions](prod-write-blocks-are-auto-mode-not-permissions.md) — Bash/PowerShell already blanket-allowed; Shift+Tab is the fix, and `! cmd` never ran.
 - [Warehouse writes from the app need autocommit](fabric-writes-from-the-app-need-autocommit.md) — without it a write rolls back while the response reports success.
 - [Local app tests can't read Key Vault](local-app-tests-cant-read-key-vault.md) — load_dotenv puts AZURE_* back; pop them after importing app.
 - [Don't re-raise settled decisions](dont-re-raise-settled-decisions.md) — flag a risk once; stop listing it as "remaining" every turn.
@@ -21,7 +22,7 @@
 - [Calibrate the demo tenant against live](calibrate-the-demo-tenant-against-live.md) — query tenant 100 for the real figure; invented rates were wrong by factors of 30.
 - [T11 is both demo and regression fixture](t11-is-both-demo-and-regression-fixture.md) — the baselines are stale; don't preserve rng draws to protect them.
 - [Batch generator changes before reseeding](batch-generator-changes-before-reseeding.md) — one reseed+chain per fix throttled the shared capacity; verify offline first.
-- [How to bounce the Fabric capacity](how-to-bounce-the-fabric-capacity.md) — az fabric capacity suspend/resume; poll for Paused before resuming.
+- [How to bounce the Fabric capacity](how-to-bounce-the-fabric-capacity.md) — az fabric capacity suspend/resume clears the throttle; F8 is blocked by a 4 CU regional quota.
 - [Publishing from Desktop overwrites a service refresh](publishing-from-desktop-overwrites-a-service-refresh.md) — a .pbix publish ships its cached data; check partition RefreshedTime before blaming RLS.
 - [Never infer a write succeeded from a wrapper](piping-to-tail-hides-the-exit-code.md) — tail and timeout have each hidden a half-written Bronze; count rows after.
 - [Manifest not found on D:\a\dentally](manifest-not-found-on-d-a-dentally-means-unpushed.md) — that path is the Actions runner; the commit was never pushed.
@@ -29,6 +30,7 @@
 - [Get Data bakes a literal endpoint into the model](get-data-bakes-a-literal-endpoint-into-the-model.md) — a table added that way ignores pServer and does not repoint on promotion.
 - [A detail table needs a column, not a measure](a-detail-table-needs-a-column-not-a-measure.md) — a measure kills auto-exist and multiplies the rows out.
 - [Never deploy an Input.* table in a release](never-deploy-an-input-table-in-a-release.md) — those files start with DROP TABLE and Input.* is owner-curated data.
+- [Input.* rows live in the AppDB, now Azure SQL](input-rows-live-in-the-appdb-now-azure-sql.md) — the sync full-refreshes the warehouse copy; .env.example points at a dead host.
 - [Capitation is an estimate, not observed income](capitation-is-an-estimate-not-observed-income.md) — reconstructed from free exams; the real figures are the plan provider's spreadsheets.
 - [Fabric collation is case-sensitive](fabric-collation-is-case-sensitive.md) — Latin1_General_100_BIN2_UTF8; LIKE and = do not ignore case.
 - [Releases touching one file cannot replay individually](releases-touching-one-file-cannot-replay-individually.md) — a manifest deploys the file's current state; write a combined one for environments behind.
@@ -71,3 +73,11 @@
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
 - [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
+- [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.
+- [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.
+- [Capitation rates have one generation](capitation-rates-have-one-generation.md) — Maple history is priced at 2026 rates; the real Xero gap after that is ~1.5% non-paying members.
+- [A silent except froze patient_stats](a-silent-except-froze-patient-stats.md) — an unlogged NameError stopped the feed for 3 months behind a job reporting Completed.
+- [Financial years differ per tenant](financial-years-differ-per-tenant.md) — Maple is calendar-year, the demo is April-March; a group view can only offer rolling windows.
+- [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
+- [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
+- [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.

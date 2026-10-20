@@ -218,9 +218,22 @@ BEGIN
         DROP TABLE #src;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, Practice_Site_Count, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        --
+        -- ==> SAME NAMELESS-SENTINEL TRAP AS Dim_Practitioners. <== Fact_Metric_Actuals writes
+        -- fk_Practice_Site = -1 for practice-grain rows. The key RESOLVES -- the RLS rule admits
+        -- Tenant_ID = -1 for shared rows -- but with no Site_Name the member draws as (Blank)
+        -- on any by-site visual.
+        INSERT INTO Gold.Dim_Practice_Sites (pk_Practice_Site, Tenant_ID, Site_ID, Site_Name, Practice_Site_Count, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, '-1', 'Practice (all sites)', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site = -1);
+
+        -- Only inserted when absent, and the row is protected from DELETE, so an existing
+        -- nameless sentinel would never be corrected. Backfill it.
+        UPDATE Gold.Dim_Practice_Sites
+        SET    Site_Name     = 'Practice (all sites)',
+               DW_Updated_At = SYSUTCDATETIME()
+        WHERE  pk_Practice_Site = -1
+          AND  (Site_Name IS NULL OR LTRIM(RTRIM(Site_Name)) = '');
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

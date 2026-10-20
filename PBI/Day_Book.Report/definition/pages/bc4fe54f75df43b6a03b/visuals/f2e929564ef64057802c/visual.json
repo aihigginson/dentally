@@ -337,7 +337,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Records behind this check — soonest back in the practice first'"
+                  "Value": "'Records behind this check'"
                 }
               }
             },

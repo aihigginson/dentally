@@ -68,9 +68,15 @@ def generate_xero_finance(tdef, data, load_ts):
     }]
 
     # Monthly Dentally revenue (YYYY-MM -> total invoiced)
+    # ==> NET OF THE NHS BAND CHARGE. <== The patient's band charge is invoiced like anything
+    # else, but it is a SLICE of the UDA income posted to account 200, never income on top of
+    # it. Counting the gross invoice here booked it twice and put private income about 16%
+    # above the warehouse's own private revenue -- the one real gap between the books and the
+    # practice system on this tenant. inv['nhs_amount'] carries the band charge.
     rev_by_month = defaultdict(float)
     for inv in data['invoices']:
-        d, amt = inv.get('dated_on'), float(inv.get('amount') or 0)
+        d = inv.get('dated_on')
+        amt = float(inv.get('amount') or 0) - float(inv.get('nhs_amount') or 0)
         if d and amt > 0:
             rev_by_month[str(d)[:7]] += amt
     if not rev_by_month:
@@ -228,8 +234,21 @@ T11 = {
         # The last two years carry a 4,300 UDA target. The pool that delivers against it grew by
         # a third at the 2026-10-10 reseed, which took completion to 116% -- over-delivery the NHS
         # does not pay for. 4,300 puts it near 89%, which is the shape of a real contract year.
-        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ', contract_number='16C/VDX01/D'),
-        _contract(11, 't11-cl', 'VDX01', 2026, 4300, 28.80, loc_id='QUJ', contract_number='16C/VDX01/D'),
+        #
+        # ==> THE CURRENT YEAR'S CONTRACT IS DELIBERATELY MISSING. <== There is no 2026/27 row, so
+        # the claims being submitted since 1 April 2026 belong to a financial year no contract
+        # covers -- and Gold.usp_Load_Dim_NHS_Contracts synthesises one, dated to the missing year
+        # and flagged Is_Rolled_Forward = 1. That roll-forward is the only part of V220's converted
+        # SQL (#latest / #ny / #claim_yr / #covered) that the demo did not exercise at all: on
+        # 2026-10-14 the five rolled-forward rows in the warehouse existed ONLY on tenant 100, so
+        # the regression suite could not guard the logic and it had to be checked by hand on PROD.
+        #
+        # It is also the honest shape. A practice mid-year whose new contract has not been entered
+        # into Dentally yet is ordinary, and 2025/26 stays flagged active exactly as it would in
+        # real life -- nobody closed it because nobody opened its replacement. The demo gains a
+        # genuine talking point: the UDA tracking keeps working and says where the figure came from.
+        _contract(11, 't11-cl', 'VDX01', 2025, 4300, 28.00, loc_id='QUJ',
+                  contract_number='16C/VDX01/D', active=True),
     ],
     'acquisition_sources': [
         _acq('acq-11-01', 'Walk-in / Off the Street'), _acq('acq-11-02', 'Google Search'),
@@ -249,6 +268,7 @@ T11 = {
         _cr(8,  'Treatment no longer required'),
         _cr(9,  'Patient request'),
         _cr(10, 'System error / admin'),
+        _cr(11, 'Practice cancelled - practitioner requested'),
     ],
     'sundries': (
         [_sundry(11, 't11-cl', n, p) for n, p in [
@@ -382,6 +402,21 @@ T11 = {
     },
     '_site_patient_split': {'t11-cl': 1.0},
     '_params': {
+        # The revenue story, as data. 20% of new private patients took a monthly plan at
+        # the start of the window and 70% do today -- so the plan book outgrows the list,
+        # capitation income climbs, and per-item private billing flattens underneath it.
+        'plan_takeup_start':       0.20,
+        'plan_takeup_now':         0.70,
+        # ==> AND SOME OF THEM LEFT. <== A take-up story with no leavers means every patient with
+        # membership evidence is still ON a rated plan, so Fact_Plan_Spell's Is_Estimated_Plan
+        # branch -- a FORMER member, priced at the default rate -- has no data at all. It was
+        # tenant 100 only until this was added, which is why that half of the capitation code had
+        # to be verified by hand on PROD rather than by the regression suite.
+        #
+        # 6% of the non-capitation private list, which lands near 120 estimated spells against
+        # the live practice's 195. Leavers do not dent the climbing plan line: take-up applies to
+        # JOINERS, and these come off the patients who are already not on a plan today.
+        'plan_leaver_rate':        0.06,
         'active_rate':             0.95,
         # 404 new patients a year against the live practice's 234 pro-rata -- 1.7x too many
         # for a list this size, which flatters every growth and acquisition number.
@@ -400,6 +435,17 @@ T11 = {
         # annual_growth x years). new_patient_rate is left for the other tenants, which still use
         # the old back-dating path.
         'annual_growth':           0.03,
+        # ==> MEASURED AGAINST THE LIVE PRACTICE, NOT GUESSED. <== Left to the generator's
+        # 0.22 default this demo carried 555 'Calculated as inactive' patients out of 8,040
+        # -- 6.9% of the list, against Maple's 931 of 27,850, or 3.3%. Twice the real rate,
+        # on the one page whose whole point is that these are people you can still ring.
+        #
+        # It is NOT a free dial. lapse_rate also sizes the joiner pool
+        # (joiners = n x (lapse_rate + annual_growth x years)), so lowering it starves the
+        # engine that drives the plan story: at 0.19 the plan line still climbs clearly but
+        # by +22.6% over the trailing year instead of +28.8%. 0.19 is as far as it goes
+        # before the story starts paying for the realism.
+        'lapse_rate':              0.19,
         # Measured on the live practice (tenant 100, patient appointments only, last 90
         # days): 1.93% DNA and 26.1% cancelled. _add_disruption emits these as EXTRA rows
         # against the visit that replaced them, so the cancel rate is solved backwards --
@@ -419,7 +465,18 @@ T11 = {
         'bbyl_rate_tx':            0.78,
         'bbyl_rate_hyg':           0.78,
         'recall_booking_rate':     0.78,
+        # ==> CURRENTLY INERT, AND DELIBERATELY SO. <== A plan may only lack a start date
+        # while nothing has happened on it, and every plan here is built from a cluster of
+        # appointments that has already begun -- so the roll never fires and 0 of 59,903
+        # plans come out unaccepted. That is the point: it used to blank the start date on
+        # plans that were COMPLETE, which is what put GBP28,445 of open-course value into an
+        # unlabelled (Blank) age band. Modelling non-acceptance properly needs proposal-only
+        # plans that carry no treatment appointments; until then this does nothing.
         'plan_acceptance_rate':    0.65,
+        # Share of patients whose recall interval was never set on the record. Without
+        # this, "No Recall Date" and "Never Attended" are the same 725 patients and the
+        # scorecard shows one finding twice. No Recall Date must be the SUPERSET.
+        'no_recall_rate':          0.05,
         # Hygiene compliance per exam cycle. Was 0.4 while the cadence bug meant only one
         # visit was ever generated per exam; with the cadence honoured this is what lands
         # hygiene on the live practice's pro-rata 44.9 hours a week.
@@ -435,16 +492,22 @@ T11 = {
 }
 
 T12 = {
-    'tenant_id': 12, 'nhs': False, 'has_ortho': False, 'price_mult': 1.25, 'n_patients': 7500,
-    'domain': 'elaradental.co.uk',
+    # Sized to match T11: a second practice that dwarfs the first makes the group view read as
+    # one practice plus a rounding error.
+    'tenant_id': 12, 'nhs': False, 'has_ortho': False, 'price_mult': 1.25, 'n_patients': 6000,
+    'domain': 'demo2.analytically.info',
     'practice': {
-        'id': _u5('practice', 12), 'name': 'Elara Dental', 'nhs': False,
+        # ==> NAMED LIKE THE FIRST ONE, AND FOR THE SAME REASON. <== Not a plausible practice
+        # name, and not a plausible domain either: a prospect walking through the demo must never
+        # be able to conclude they are being shown another customer's data. A realistic name with
+        # a realistic domain attached is exactly that conclusion.
+        'id': _u5('practice', 12), 'name': 'Demo Practice 2', 'nhs': False,
         'address_line_1': '14 George Street', 'address_line_2': None,
         'town': 'Edinburgh', 'postcode': 'EH2 2PF',
-        'phone_number': '0131 100 0001', 'email_address': 'info@elaradental.co.uk',
-        'patient_email_address': 'patients@elaradental.co.uk',
-        'website': 'https://elaradental.co.uk', 'logo_url': None,
-        'slug': 'elara-dental', 'time_zone': 'Europe/London',
+        'phone_number': '0131 100 0001', 'email_address': 'info@demo2.analytically.info',
+        'patient_email_address': 'patients@demo2.analytically.info',
+        'website': 'https://demo2.analytically.info', 'logo_url': None,
+        'slug': 'demo-practice-2', 'time_zone': 'Europe/London',
         'medical_history_expiry_days': 365,
         'custom_patient_field_label_1': None, 'custom_patient_field_label_2': None,
         'oh_mon_open': '09:00', 'oh_mon_close': '17:30',
@@ -458,17 +521,51 @@ T12 = {
     'sites': [
         {'id': 't12-gt', 'name': 'George Street', 'active': True,
          'address_line_1': '14 George Street', 'town': 'Edinburgh', 'postcode': 'EH2 2PF',
-         'phone_number': '0131 100 1001', 'email': 'info@elaradental.co.uk',
+         'phone_number': '0131 100 1001', 'email': 'georgestreet@demo2.analytically.info',
          'monday_open': '09:00', 'monday_close': '17:30',
          'tuesday_open': '09:00', 'tuesday_close': '17:30',
          'wednesday_open': '09:00', 'wednesday_close': '17:30',
          'thursday_open': '09:00', 'thursday_close': '17:30',
          'friday_open': '09:00', 'friday_close': '17:30',
          'saturday_open': '09:00', 'saturday_close': '13:00'},
+        # ==> THE SECOND SITE IS THE POINT OF THIS TENANT. <== The site filter only appears when a
+        # practice has more than one, so without this there is nothing to demonstrate.
+        {'id': 't12-sb', 'name': 'Stockbridge', 'active': True,
+         'address_line_1': '41 Raeburn Place', 'town': 'Edinburgh', 'postcode': 'EH4 1HU',
+         'phone_number': '0131 100 1002', 'email': 'stockbridge@demo2.analytically.info',
+         'monday_open': '08:30', 'monday_close': '17:00',
+         'tuesday_open': '08:30', 'tuesday_close': '17:00',
+         'wednesday_open': '08:30', 'wednesday_close': '17:00',
+         'thursday_open': '08:30', 'thursday_close': '19:00',
+         'friday_open': '08:30', 'friday_close': '16:00'},
     ],
     'payment_plans': [
         _pp(1, 'Private',   dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
-        _pp(2, 'Care Plan', monthly='17.99', dr=12, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        # ==> THE SAME EIGHT TIERS AS TENANT 11, AND THAT IS THE POINT. <== A group buys its care
+        # plan from ONE provider, so the product -- the tier names and the monthly fees -- is the
+        # same at every practice it owns. The single bespoke 'Care Plan' at 17.99 that used to sit
+        # here described a practice that had gone out and bought its own scheme, which is not what
+        # a multi-practice group looks like.
+        #
+        # The ids deliberately start at 4 and skip 2-3, matching tenant 11's numbering, so the
+        # rate rows in Input.Plan_Capitation_Rate are identical in shape across the two practices
+        # and the group view compares like with like.
+        #
+        # ==> THE FEES ARE NOT MARKED UP, EVEN THOUGH THIS PRACTICE IS. <== price_mult 1.25 raises
+        # the per-ITEM private fees, which is this practice's own tariff. The plan fee belongs to
+        # the provider, so it is the same 8-65 as tenant 11. A member here pays the same monthly
+        # amount and more for restorative work, which is exactly how it works in life.
+        #
+        # Six-monthly recalls on the tiers against twelve on Private: the included check-ups are
+        # what the monthly fee buys, so the plan drives the recall frequency, not the practice.
+        _pp(4,  'Child Plan',   monthly='8.00',  dr=6, hr=6, exam_dur=20, sp_dur=30, emg_dur=20),
+        _pp(5,  'Essentials A', monthly='22.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(6,  'Care Plan A',  monthly='24.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(7,  'Care Plan B',  monthly='34.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(8,  'Essentials B', monthly='36.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(9,  'Care Plan C',  monthly='44.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(10, 'Care Plan D',  monthly='55.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
+        _pp(11, 'Care Plan E',  monthly='65.00', dr=6, hr=6, exam_dur=30, sp_dur=45, emg_dur=20),
     ],
     'contracts': [],
     'acquisition_sources': [
@@ -483,6 +580,7 @@ T12 = {
         _cr(3, 'Patient DNA'),
         _cr(4, 'Practice cancelled - practitioner unwell'),
         _cr(5, 'Treatment no longer required'),
+        _cr(6, 'Practice cancelled - practitioner requested'),
     ],
     'sundries': [_sundry(12, 't12-gt', n, p) for n, p in [
         ('Premium Electric Toothbrush', 89.99), ('Air Flosser', 49.99),
@@ -494,15 +592,20 @@ T12 = {
         {'id': 1, 'first_name': 'Fiona',   'last_name': 'MacDonald', 'title': 'Dr', 'role': 'dentist',
          'site_id': 't12-gt', 'gdc_number': '1220001', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
-        {'id': 2, 'first_name': 'Ross',    'last_name': 'Cameron',   'title': 'Dr', 'role': 'dentist',
-         'site_id': 't12-gt', 'gdc_number': '1220002', 'nhs_pct': 0.0,
-         'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [1,3], 'late_end': '19:30', 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
+        # ==> SHARED WITH T11, BY NAME ONLY. <== Zoe Crawford is a 0.40 FTE associate at the
+    # Demonstration Practice working Thursdays and Fridays; here she takes Mondays and Tuesdays.
+    # The two records are separate practitioners that happen to share a name -- which is what a
+    # real associate splitting a week across two of the owner's practices looks like, and all the
+    # demo needs.
+    {'id': 2, 'first_name': 'Zoe',     'last_name': 'Crawford',  'title': 'Dr', 'role': 'dentist',
+         'site_id': 't12-sb', 'gdc_number': '1220002', 'nhs_pct': 0.0,
+         'work_days': [0,1], 'start_time': '09:00', 'end_time': '17:30',
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 3, 'first_name': 'Preethi', 'last_name': 'Nair',      'title': 'Dr', 'role': 'dentist',
-         'site_id': 't12-gt', 'gdc_number': '1220003', 'nhs_pct': 0.0,
+         'site_id': 't12-sb', 'gdc_number': '1220003', 'nhs_pct': 0.0,
          'work_days': [0,2,3,4,5], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 4, 'first_name': 'Josh',    'last_name': 'Elliott',   'title': 'Dr', 'role': 'specialist',
          'site_id': 't12-gt', 'gdc_number': '1220004', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3], 'start_time': '09:00', 'end_time': '17:00',
@@ -510,25 +613,60 @@ T12 = {
         {'id': 5, 'first_name': 'Hannah',  'last_name': 'Wu',        'title': 'Dr', 'role': 'specialist',
          'site_id': 't12-gt', 'gdc_number': '1220005', 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 6, 'first_name': 'Kate',    'last_name': "O'Brien",   'title': 'Ms', 'role': 'hygienist',
          'site_id': 't12-gt', 'gdc_number': '1220006', 'nhs_pct': 0.0,
          'work_days': [0,1,3,4], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 7, 'first_name': 'Anna',    'last_name': 'Johansson', 'title': 'Ms', 'role': 'hygienist',
          'site_id': 't12-gt', 'gdc_number': '1220007', 'nhs_pct': 0.0,
          'work_days': [1,2,4,5], 'start_time': '09:00', 'end_time': '17:00',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 8, 'first_name': 'Mel',     'last_name': 'Peters',    'title': 'Ms', 'role': 'tco',
          'site_id': 't12-gt', 'gdc_number': None, 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
         {'id': 9, 'first_name': 'Simon',   'last_name': 'Brooks',    'title': 'Mr', 'role': 'tco',
          'site_id': 't12-gt', 'gdc_number': None, 'nhs_pct': 0.0,
          'work_days': [0,1,2,3,4], 'start_time': '09:00', 'end_time': '17:30',
-         'late_days': [], 'late_end': None, 'pp_ids': [1,2], 'performs_nhs': False, 'active': True},
+         'late_days': [], 'late_end': None, 'pp_ids': [1,4,5,6,7,8,9,10,11], 'performs_nhs': False, 'active': True},
     ],
-    '_site_patient_split': {'t12-gt': 1.0},
+    # Relative weights among the plans this practice offers. The TIER mix mirrors tenant 11's --
+    # same provider, same book shape, C-heavy with Essentials A second -- so the group view is
+    # comparing like with like. Private carries the rest: there is no NHS plan here, so every
+    # patient is drawn from this one set.
+    '_pp_weights': {
+        1: 73.4,      # Private
+        4:  0.21,     # Child Plan
+        5:  6.73,     # Essentials A
+        6:  1.32,     # Care Plan A
+        7:  4.13,     # Care Plan B
+        8:  1.85,     # Essentials B
+        9:  8.90,     # Care Plan C
+        10: 2.35,     # Care Plan D
+        11: 0.33,     # Care Plan E
+    },
+    '_params': {
+        # ==> A YOUNGER PLAN BOOK THAN TENANT 11, ON PURPOSE. <== Tenant 11 runs 20% -> 70%
+        # take-up, which is the practice that has been converting patients for years and is the
+        # story the walkthrough opens on. If this practice matched it, the group view would show
+        # two identical businesses and prove nothing.
+        #
+        # Half those rates: a group that has rolled the plan out to its second practice more
+        # recently. The combined mix then sits BETWEEN the two rather than being dragged to one of
+        # them, which is what makes the All-practices view worth looking at.
+        'plan_takeup_start':       0.10,
+        'plan_takeup_now':         0.35,
+        # No leavers modelled here. Tenant 11 carries the estimated-spell case (plan_leaver_rate
+        # 0.06) and one tenant exercising it is enough for the regression suite; a second only
+        # muddies the group comparison.
+        #
+        # A SMALLER recall gap than tenant 11's 0.05. This practice has only 20 never-attended
+        # patients against tenant 11's 986, so the same rate would make its scorecard read as the
+        # messier of the two, which is the opposite of the story: t12 is the newer, tidier book.
+        'no_recall_rate':          0.02,
+    },
+    '_site_patient_split': {'t12-gt': 0.62, 't12-sb': 0.38},
 }
 
 SEED_TENANTS = {11: T11, 12: T12}

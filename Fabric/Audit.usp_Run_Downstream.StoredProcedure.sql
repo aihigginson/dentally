@@ -71,8 +71,16 @@ BEGIN
         WHILE @Added > 0
         BEGIN
             SET @Lvl = @Lvl + 1;
+            -- ==> DISTINCT, BECAUSE THE NOT IN BELOW CANNOT SEE THIS INSERT'S OWN ROWS. <==
+            -- The NOT IN is evaluated against #plan as it stood BEFORE the statement, so a job
+            -- with two parents at the same level was inserted once per parent and then RUN once
+            -- per parent. Six of the thirty-two steps downstream of BRONZE_PATIENT_STATS were
+            -- duplicated that way -- Metric Actuals, the daily aggregate, KPI Snapshot, both
+            -- Data Quality jobs and Patient At Risk, none of them cheap. Idempotent, so the
+            -- result was right and the capacity bill was not. Every other column here is
+            -- functionally dependent on Process_Code, so DISTINCT collapses exactly the twins.
             INSERT INTO #plan (Process_Code, Process_Name, Process_Category_Code, Run_Level, Is_Per_Tenant)
-            SELECT  pc.Process_Code
+            SELECT  DISTINCT pc.Process_Code
                   , pc.Process_Name
                   , pc.Process_Category_Code
                   , @Lvl

@@ -134,9 +134,14 @@ _EMERGENCY_CODES = {9001, 9002}
 # ─── TENANT DEFINITIONS ───────────────────────────────────────────────────────
 
 def _contract(tid, site_id, site_code, year, target, uda_val, uoa_target=0, uoa_val=0,
-              loc_id="", contract_number="", is_ortho=False):
+              loc_id="", contract_number="", is_ortho=False, active=None):
     y0, y1 = year, year+1
-    active = (y0 == 2026)
+    # ==> active IS A FLAG SOMEBODY SETS, NOT A DATE COMPARISON. <== It defaults to "the current
+    # year's contract", which is the tidy case. A real practice leaves LAST year's contract
+    # flagged active when nobody has loaded the new one yet -- and that is precisely the state
+    # Gold.usp_Load_Dim_NHS_Contracts synthesises a roll-forward for, so the demo needs to be
+    # able to reproduce it. Pass active=True on an expired year to do that.
+    active = (y0 == 2026) if active is None else active
     suffix = "/O" if is_ortho else "/D"
     cn = contract_number or f"16C/{site_code}{suffix}/{y0-2022:02d}"
     return {
@@ -250,6 +255,122 @@ def _cr(id_, reason, archived=False):
         "updated_at": _iso(START),
     }
 
+def _easter(year):
+    """Easter Sunday for a year -- anonymous Gregorian algorithm (Meeus/Jones/Butcher).
+
+    Needed because practice-side cancellations are not spread evenly through the year:
+    they cluster on the school holidays, when the clinicians take their leave.
+    """
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    m = (32 + 2 * e + 2 * i - h - k) % 7
+    n = (a + 11 * h + 22 * m) // 451
+    month, day = divmod(h + m - 7 * n + 114, 31)
+    return date(year, month, day + 1)
+
+
+# ==> WHY THE PRACTITIONER CANCELS, AND WHEN. <== The practice books the patient months
+# ahead and the dentist books their leave afterwards, so the practice is the one that rings
+# to cancel. Push Book-Before-You-Leave up and this goes up with it -- the two metrics pull
+# against each other instead of both simply improving, which is the whole argument for
+# reading a board rather than a single number.
+_PR_REQ_PEAK = 0.66          # the Easter fortnight either side, and the whole of August
+_PR_REQ_BASE = 0.265         # the rest of the year
+# Those two windows are ~16% of the year, so the blended share over NON-DNA cancellations is
+#   0.162 * 0.66 + 0.838 * 0.265 = 0.329
+# A DNA short-circuits this roll (a no-show cannot be practitioner-requested) and DNAs run at
+# roughly a tenth of all reason rows, so the share ON THE CHART -- which bands DNA alongside
+# the cancellations -- comes out at about 0.329 * 0.9 = 30%, which is what was asked for.
+
+
+def _practitioner_requested_share(d):
+    if d.month == 8:                                   # August, the long summer leave
+        return _PR_REQ_PEAK
+    if abs((d - _easter(d.year)).days) <= 14:          # the Easter fortnight either side
+        return _PR_REQ_PEAK
+    return _PR_REQ_BASE
+
+
+# Relative weights for everything that is NOT a DNA and NOT practitioner-requested. They
+# only have to be sensible against each other; the practitioner-requested share is applied
+# first and these then divide what is left.
+_CR_WEIGHTS = {
+    "in_advance":          16,
+    "short_notice":        14,
+    "patient_unwell":      10,
+    "patient_request":      9,
+    "work_completed":       6,
+    "not_required":         5,
+    "practitioner_unwell":  5,
+    "practice_emergency":   3,
+    "admin":                2,
+    "other":                3,
+}
+
+
+def _cr_kind(reason):
+    """Classify a tenant's reason TEXT, because each tenant writes its own list.
+
+    t11 carries ten reasons and t12 five, spelled differently ("Patient DNA (did not
+    attend)" against "Patient DNA"), so the weights cannot be keyed on an id.
+    Order matters: practitioner-requested before request, practitioner-unwell before unwell.
+    """
+    r = reason.lower()
+    if "did not attend" in r or "dna" in r:      return "dna"
+    if "practitioner requested" in r:            return "practitioner_requested"
+    if "short notice" in r:                      return "short_notice"
+    if "in advance" in r:                        return "in_advance"
+    if "practitioner" in r and "unwell" in r:    return "practitioner_unwell"
+    if "emergency" in r:                         return "practice_emergency"
+    if "unwell" in r:                            return "patient_unwell"
+    if "work completed" in r:                    return "work_completed"
+    if "no longer required" in r:                return "not_required"
+    if "request" in r:                           return "patient_request"
+    if "system error" in r or "admin" in r:      return "admin"
+    return "other"
+
+
+def _cancel_reason_picker(tdef):
+    """Build one weighted, date-aware, state-aware picker for a tenant.
+
+    Replaces rng.choice(cr_ids). Returns pick(cd, state, rng) -> reason id.
+    A tenant missing a kind simply never draws it; a tenant with no practitioner-requested
+    reason falls through to the weighted pool, so this is safe for any reason list.
+    """
+    by_kind = {}
+    for c in tdef["cancellation_reasons"]:
+        by_kind.setdefault(_cr_kind(c["reason"]), c["id"])
+
+    dna_id = by_kind.get("dna")
+    pr_id = by_kind.get("practitioner_requested")
+    pool = [(cid, _CR_WEIGHTS.get(k, 3))
+            for k, cid in by_kind.items()
+            if k not in ("dna", "practitioner_requested")]
+    total = sum(w for _, w in pool)
+
+    def pick(cd, state, rng):
+        # A patient who did not turn up did not give a reason, and the practice did not
+        # cancel on them. There is exactly one honest answer.
+        if state == "did_not_attend" and dna_id is not None:
+            return dna_id
+        if pr_id is not None and rng.random() < _practitioner_requested_share(cd):
+            return pr_id
+        if not pool:
+            return dna_id if dna_id is not None else tdef["cancellation_reasons"][0]["id"]
+        r = rng.random() * total
+        for cid, w in pool:
+            r -= w
+            if r < 0:
+                return cid
+        return pool[-1][0]
+
+    return pick
+
 # ── T1 Smile Group ────────────────────────────────────────────────────────────
 T1 = {
     "api_key": "dev-mock-key-abc123",
@@ -328,6 +449,7 @@ T1 = {
         _cr(5,"Practice cancelled - practitioner unwell"),_cr(6,"Practice cancelled - emergency"),
         _cr(7,"Work completed at previous visit"),_cr(8,"Treatment no longer required"),
         _cr(9,"Patient request"),_cr(10,"System error / admin"),
+        _cr(11,"Practice cancelled - practitioner requested"),
     ],
     "sundries": (
         [_sundry(1,"site-hs",n,p) for n,p in [
@@ -862,9 +984,21 @@ def gen_users_and_practitioners(tdef):
             "last_login": _iso(START),
         }
 
+        # ==> A NON-CLINICAL PRACTITIONER IS NEVER ACTIVE. <== Measured against the live practice
+        # on 2026-10-15: it carries 6 Receptionist and 13 Administrator rows plus a Practice
+        # Manager, and every single one is Active = 0. The demo made its two TCO -> Receptionist
+        # rows ACTIVE, which is a state the real data never reaches -- they had no appointments and
+        # no revenue, so they were inert everywhere except a role list, and the target grid duly
+        # offered 'Receptionist' as a target LEVEL and auto-wrote 24 default targets against it.
+        #
+        # Forced here rather than in each tenant's _prac_defs, so it cannot come back for a tenant
+        # somebody adds later. The rows still exist, because the real practice has them -- they are
+        # just inactive, as there.
+        _non_clinical = _API_ROLE.get(p["role"], p["role"]) in (
+            "Administrator", "Receptionist", "Practice Manager", "Nurse", "Technician")
         practitioners.append({
             "id": uid, "user_id": uid,
-            "site_id": p["site_id"], "active": p["active"],
+            "site_id": p["site_id"], "active": False if _non_clinical else p["active"],
             "gdc_number": p.get("gdc_number"),
             "nhs_number": nhs_number,
             "default_contract_id": default_contract_id,
@@ -1013,6 +1147,10 @@ def gen_patients(tdef, rng):
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
     nhs_pp_id = next((pp["id"] for pp in tdef["payment_plans"] if pp.get("nhs")), None)
     pp_weights = tdef.get("_pp_weights", {})
+    # Capitation = a plan that bills a monthly fee. Premium Private is a tariff, not a
+    # membership, and carries no monthly charge -- it must not count as plan take-up.
+    _cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
+                   if pp["name"] in _CAPITATION_PLANS and float(pp.get("monthly_charge") or 0) > 0}
 
     # ==> n_patients IS THE LIST WE END WITH; JOINERS ARE GENERATED ON TOP OF IT. <==
     # It used to be the total ever generated, with new_patient_rate merely choosing WHEN an
@@ -1024,6 +1162,14 @@ def gen_patients(tdef, rng):
     #
     # Joiners replace the lapsed AND add the year-on-year growth, so the roster at the start of
     # the window is smaller than today's and grows through it.
+    # ==> THE REVENUE STORY LIVES HERE. <== The share of new private patients who register
+    # ONTO a monthly plan, then and now. Everything the walkthrough claims about the revenue
+    # mix is produced by this curve and nothing else: plan income rises because the plan book
+    # grows faster than the list, and private invoicing flattens because the same people stop
+    # being billed per item. Set both to the same value and the story disappears, which is
+    # exactly the state this replaces.
+    _takeup_then  = params.get("plan_takeup_start", 0.20)
+    _takeup_now   = params.get("plan_takeup_now",   0.70)
     _lapse_rate   = params.get("lapse_rate", 0.22)
     _growth       = params.get("annual_growth", 0.03)
     _years        = max(1.0, (TODAY - START).days / 365.0)
@@ -1034,6 +1180,19 @@ def gen_patients(tdef, rng):
 
     patients = []
     for i in range(1, n_total+1):
+        # ==> WHEN THEY JOINED IS DECIDED FIRST, BECAUSE THE PLAN DEPENDS ON IT. <==
+        # The roster joined before START, joiners during the window. Weighted towards the
+        # recent end (sqrt) because a growing list recruits more each year than the year before.
+        if i in _joiner_ix:
+            _span = max(1, (TODAY - START).days)
+            created = START + timedelta(days=int(_span * (rng.random() ** 0.5)))
+            _cohort = (created - START).days / float(_span)      # 0.0 at START, 1.0 today
+        else:
+            created_offset = rng.randint(0, 365*5)
+            created = START - timedelta(days=created_offset)
+            _cohort = 0.0                                        # the historic mix
+        _takeup = _takeup_then + (_takeup_now - _takeup_then) * _cohort
+
         # Assign site
         r = rng.random()
         cum = 0.0
@@ -1070,10 +1229,17 @@ def gen_patients(tdef, rng):
             # ratio is the recurring-revenue story the plan reporting exists to tell.
             private_pps = [pid for pid in dentist["pp_ids"] if pid != nhs_pp_id]
             if private_pps:
-                _w = [pp_weights.get(pid, 1.0) for pid in private_pps]
+                # Capitation or not, by the cohort's take-up rate; then the TIER by the usual
+                # weights within whichever group won. Splitting it this way keeps the relative
+                # mix of tiers (and of Private vs Premium Private) exactly as configured while
+                # letting the capitation SHARE move with the join date.
+                _cap  = [pid for pid in private_pps if pid in _cap_pp_ids]
+                _rest = [pid for pid in private_pps if pid not in _cap_pp_ids]
+                _pool = _cap if (_cap and _rest and rng.random() < _takeup) else (_rest or _cap)
+                _w = [pp_weights.get(pid, 1.0) for pid in _pool]
                 _r = rng.random() * sum(_w)
-                pp_id = private_pps[-1]
-                for _pid, _wi in zip(private_pps, _w):
+                pp_id = _pool[-1]
+                for _pid, _wi in zip(_pool, _w):
                     _r -= _wi
                     if _r <= 0:
                         pp_id = _pid
@@ -1121,19 +1287,6 @@ def gen_patients(tdef, rng):
                         "site-ma":"M1","site-mb":"M2","site-bm":"B1"}
         pc_area = postcode_map.get(site_id, "SW1")
         postcode = f"{pc_area} {rng.randint(1,9)}{rng.choice('ABCDEFGH')}{rng.choice('ABCDEFGHJKLMNPQRSTUVWXY')}"
-
-        # Created date: the roster joined before START, joiners during the window.
-        #
-        # ==> AND JOINERS REACH TODAY. <== This stopped 90 days short, so the trailing-twelve-
-        # month new-patient count was a quarter light for no reason -- a practice does not stop
-        # registering patients three months before you look at it. Weighted towards the recent
-        # end (sqrt) because a growing list recruits more each year than it did the year before.
-        if i in _joiner_ix:
-            _span = max(1, (TODAY - START).days)
-            created = START + timedelta(days=int(_span * (rng.random() ** 0.5)))
-        else:
-            created_offset = rng.randint(0, 365*5)
-            created = START - timedelta(days=created_offset)
 
         # Ethnicity
         ethnicity = rng.choice(_ET)
@@ -1810,6 +1963,7 @@ def _add_disruption(tdef, appointments, rng):
     # unrebooked DNAs at all, against 2,203 and 454 on the live practice.
     stranded_rate = params.get("stranded_rate", 0.9)
     cr_ids      = [c["id"] for c in tdef["cancellation_reasons"]]
+    _pick_cr    = _cancel_reason_picker(tdef)
     tid         = tdef["tenant_id"]
     if not cr_ids:
         return
@@ -1864,7 +2018,7 @@ def _add_disruption(tdef, appointments, rng):
                 "start_time":         _iso(cd, a["start_time"][11:19]),
                 "finish_time":        _iso(cd, a["finish_time"][11:19]),
                 "state":              st,
-                "appointment_cancellation_reason_id": rng.choice(cr_ids),
+                "appointment_cancellation_reason_id": _pick_cr(cd, st, rng),
                 # Booked 7-41 days ahead of the slot it was booked into, exactly as
                 # _booked_on does for the appointment this one was cloned from.
                 "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
@@ -1941,7 +2095,7 @@ def _add_disruption(tdef, appointments, rng):
             "start_time":         _iso(cd, a["start_time"][11:19]),
             "finish_time":        _iso(cd, a["finish_time"][11:19]),
             "state":              st_term,
-            "appointment_cancellation_reason_id": rng.choice(cr_ids),
+            "appointment_cancellation_reason_id": _pick_cr(cd, st_term, rng),
             "pending_at":         _iso(min(cd - timedelta(days=7 + (next_id % 35)), TODAY)),
             "arrived_at":         None,
             "completed_at":       None,
@@ -2017,6 +2171,38 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
     # charging them was double-counting as well as hiding the stream.
     cap_pp_ids = {pp["id"] for pp in tdef["payment_plans"]
                   if str(pp.get("monthly_charge") or "0").replace(".", "").strip("0")}
+
+    # ==> SOMEBODY HAS TO HAVE *LEFT* A PLAN, OR HALF THE CAPITATION CODE IS NEVER RUN. <==
+    # Gold.usp_Load_Fact_Revenue prices a spell two ways. A member still on a rated plan is
+    # priced at their own tier (Is_Estimated_Plan = 0). A patient with membership evidence whose
+    # CURRENT plan is not rated is a FORMER member: their spell is estimated at the default rate
+    # and flagged Is_Estimated_Plan = 1, which is the whole reason that flag exists.
+    #
+    # The generator gave every patient one plan for life, so that second branch had no data
+    # anywhere in the demo -- on 2026-10-14 all 195 estimated spells in the warehouse belonged to
+    # tenant 100. Nothing reproducible exercised it.
+    #
+    # A leaver is modelled where it actually shows: their exams and hygiene were COVERED while
+    # they were a member and charged afterwards, and their plan today is the private tariff. The
+    # cut-off is the leaving date. Keyed on the course START date because that is what the
+    # warehouse reads -- plan_course groups on tp.Start_Date, not on when the course finished.
+    #
+    # Deterministic from the patient id via _u5 rather than drawn from rng: this must not shift
+    # every later random draw in the generator just by being switched on for one tenant.
+    _leaver_rate = tdef.get("_params", {}).get("plan_leaver_rate", 0.0)
+    _ex_until = {}
+    if cap_pp_ids and _leaver_rate > 0:
+        _span_days = max(1, (TODAY - START).days)
+        for _p in patients:
+            if _p["payment_plan_id"] in cap_pp_ids:
+                continue                      # still a member -- priced, not estimated
+            _h = int(_u5("exmember", tid, _p["id"]).replace("-", "")[:8], 16)
+            if (_h % 100000) / 100000.0 < _leaver_rate:
+                # Left between 30% and 75% of the way through the window, so there is room for
+                # several six-monthly exams before it (the estimated branch needs >= 2 evidence
+                # months) and a visible stretch of charged visits after it.
+                _ex_until[_p["id"]] = START + timedelta(
+                    days=int(_span_days * (0.30 + 0.45 * (((_h >> 12) % 1000) / 1000.0))))
 
     # Practitioners available as referrers (dentists/orthodontists/specialists only)
     all_prac_ids = [p["id"] for p in tdef["_prac_defs"]
@@ -2129,7 +2315,9 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nhs_cat = tx.get("nhs_treatment_cat") or 0
                 uda_b = tx.get("uda_band") or 0
 
-                covered = (pp_id in cap_pp_ids
+                # A former member's exams were covered up to the day they left (see _ex_until).
+                _was_member = (pat_id in _ex_until and first_date < _ex_until[pat_id])
+                covered = ((pp_id in cap_pp_ids or _was_member)
                            and (code in _EXAM_CODES or code == _HYGIENE_CODE))
                 if is_nhs or covered:
                     price = 0.0
@@ -2162,7 +2350,22 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                 nickname = f"{tx0.get('description','Treatment')} - {month_str}"
 
             # plan_acceptance_rate: non-hygiene plans have a chance of no start_date (not accepted)
-            if not is_hygiene_plan and plan_acceptance_rate < 1.0 and rng.random() > plan_acceptance_rate:
+            #
+            # ==> A PLAN THAT HAS BEEN CARRIED OUT CANNOT BE ONE THE PATIENT NEVER ACCEPTED. <==
+            # This used to blank start_date on any non-hygiene plan the roll picked, leaving
+            # 13,407 plans in t11 marked Complete with NO START DATE -- treatment that was done,
+            # on a plan nobody agreed to -- plus 84 In Progress and 56 Open - No Appointment.
+            # Those 140 open ones were the entire (Blank) column in "Open Plan Value by Age":
+            # GBP28,445 of outstanding value in a bucket with no label, because the model's
+            # Course Age Bucket returns BLANK() when [Start Date] is blank.
+            #
+            # A plan may only be unaccepted while nothing has happened on it: not completed, not
+            # in progress, and with its first appointment still in the future. Every started or
+            # finished course now carries the start date it plainly had, so the open-course
+            # charts have no blank band left at all.
+            _plan_started = completed or in_progress or first_date < TODAY
+            if (not is_hygiene_plan and not _plan_started
+                    and plan_acceptance_rate < 1.0 and rng.random() > plan_acceptance_rate):
                 start_date_val = None
             else:
                 start_date_val = _iso(first_date)
@@ -2266,6 +2469,11 @@ def gen_treatment_plans_and_items(tdef, patients, appointments, tx_by_id, fee_ma
                         _en = "%02d:%02d:00" % (9 + rng.randint(0, 6), rng.choice([0, 30]))
                         appointments.append({
                             "id": _next_apt_id, "patient_id": pat_id,
+                            # ==> THE SITE, WHICH THIS PATH USED TO DROP. <== Every other
+                            # appointments.append carries it; this one (the forward rebook)
+                            # did not, so those rows resolved to fk_Practice_Site = -1 and
+                            # vanished the moment a user picked a site rather than "All".
+                            "site_id": pat_site_id,
                             "practitioner_id": _pr, "user_id": _pr,
                             "payment_plan_id": pp_id, "room_id": None,
                             "start_time": _iso(_d, _st), "finish_time": _iso(_d, _en),
@@ -2939,7 +3147,20 @@ def gen_recalls(tdef, patients, apts_by_pat, prac_defs_by_id, tx_by_code, rng):
 # Called after appointments are generated; backfills dentist_recall_date and
 # hygienist_recall_date onto patient dicts based on actual last attended exams.
 
-def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id):
+def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id,
+                                rng=None, no_recall_rate=0.0):
+    """Backfill recall dates from attendance, and leave a real gap where reception never set one.
+
+    ==> A RECALL DATE DERIVED PURELY FROM ATTENDANCE MAKES TWO DATA-QUALITY CHECKS IDENTICAL. <==
+    This used to give every patient with a completed exam a recall date and every patient
+    without one None, so "No Recall Date" and "Never Attended" returned the SAME 725 records.
+    They are meant to be different findings, and No Recall Date should always be the larger:
+    it is a superset, because a patient who never attended obviously has no recall either.
+
+    no_recall_rate is the share of patients whose recall interval was simply never set on the
+    record. Those are the ones the check is really for -- they attend, they look healthy on
+    every list, nothing ever flags them as overdue, and they quietly stop coming.
+    """
     exam_tx_ids  = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) in _EXAM_CODES}
     hygiene_tx_ids = {tx["id"] for tx in tx_by_code.values() if int(tx["code"]) == _HYGIENE_CODE}
     for pat in patients:
@@ -2950,6 +3171,14 @@ def enrich_patient_recall_dates(patients, apts_by_pat, tx_by_code, pp_by_id):
                         if a["state"] == "completed"]
         exams        = [a for a in completed if a.get("treatment_id") in exam_tx_ids]
         hygiene_apts = [a for a in completed if a.get("treatment_id") in hygiene_tx_ids]
+
+        # Nobody ever set an interval on this record. BOTH have to be absent for the check to
+        # fire, which is also the honest case: a record created at the desk and never finished.
+        if rng is not None and no_recall_rate and rng.random() < no_recall_rate:
+            pat["dentist_recall_date"]   = None
+            pat["hygienist_recall_date"] = None
+            continue
+
         if exams:
             last_exam_d = date.fromisoformat(max(a["start_time"][:10] for a in exams))
             pat["dentist_recall_date"]   = str(_add_months(last_exam_d, dr_interval))
@@ -3075,7 +3304,9 @@ def generate_tenant(tdef):
     for a in appointments:
         _apts_by_pat_tmp.setdefault(a["patient_id"], []).append(a)
     pp_by_id = {pp["id"]: pp for pp in tdef["payment_plans"]}
-    enrich_patient_recall_dates(patients, _apts_by_pat_tmp, tx_by_code, pp_by_id)
+    enrich_patient_recall_dates(
+        patients, _apts_by_pat_tmp, tx_by_code, pp_by_id, rng,
+        tdef.get("_params", {}).get("no_recall_rate", 0.0))
 
     plans, plan_items, treatment_appts = gen_treatment_plans_and_items(
         tdef, patients, appointments, tx_by_id, fee_map, rng)
