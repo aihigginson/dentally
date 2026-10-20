@@ -18,9 +18,14 @@ WHAT IS DELETED:
     Other Period_Types are untouched.
 
 AFTER LOADING:
-    1. Run Gold.usp_Load_Fact_Targets
-    2. Run Gold.usp_Load_Fact_Effective_Targets
+    1. Run Gold.usp_Load_Fact_Daily_Targets
+    2. Run Gold.usp_Load_Aggregate_Period_Targets
     3. Refresh Power BI dataset
+
+    (Both are in Audit.Process_Config, so the nightly build does this anyway -- run them
+     by hand only to see the targets before the next build. The old instruction named
+     Gold.usp_Load_Fact_Targets and Gold.usp_Load_Fact_Effective_Targets, dead since
+     2026-07-14: they still succeed, against a table nothing reads.)
 """
 
 import argparse
@@ -214,9 +219,10 @@ def main():
 
     print(f"Inserted {len(records)} rows into Input.Targets.")
     print("\nNext steps:")
-    print("  1. Run Gold.usp_Load_Fact_Targets")
-    print("  2. Run Gold.usp_Load_Fact_Effective_Targets")
+    print("  1. Run Gold.usp_Load_Fact_Daily_Targets")
+    print("  2. Run Gold.usp_Load_Aggregate_Period_Targets")
     print("  3. Refresh Power BI dataset")
+    print("     (the nightly build runs 1 and 2 anyway)")
 
     conn.close()
 

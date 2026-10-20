@@ -1,0 +1,54 @@
+# =====================================================================
+# Release V223 -- drop the target loaders that stopped running in July
+# =====================================================================
+# Targets reach the reports through
+#
+#     Input.Targets -> Gold.usp_Load_Fact_Daily_Targets -> Gold.usp_Load_Aggregate_Period_Targets
+#
+# Both are registered in Audit.Process_Config, so the nightly build runs them. Three older
+# procedures survive alongside that chain, registered nowhere and called by nothing:
+#
+#     Gold.usp_Load_Targets                  NEVER run -- 0 rows in Process_Execution_Log
+#     Gold.usp_Load_Fact_Targets             37 runs, last 2026-07-14
+#     Gold.usp_Load_Fact_Effective_Targets   36 runs, last 2026-07-14
+#
+# ==> THEY ARE WORSE THAN CLUTTER BECAUSE THEY STILL SUCCEED. <== TENANT_ONBOARDING.md and
+# Scripts/Load_Targets_From_Template.py both instructed an operator to run two of them after
+# bulk-loading a template. Following that produced no error and no targets: the procedures
+# write Gold.Fact_Targets and Gold.Fact_Effective_Targets, which nothing downstream reads.
+# Those instructions are corrected in the same commit as this manifest.
+#
+# ==> THE TABLES AND VIEWS ARE DELIBERATELY LEFT IN PLACE. <== Gold.Fact_Targets (141 rows,
+# frozen at 2026-07-14) and Gold.Fact_Effective_Targets (86 rows) are still exposed as
+# PBI.[_Targets] and PBI.[_Effective Targets], and the semantic model still IMPORTS both --
+# they are two of the 57 tables every refresh processes. No measure and no report visual
+# references either: 0 hits across PBI_Dentally.csx and every page definition. So they are
+# dead weight, but dropping the views would fail the next model refresh and leave the live
+# customer's data stale. Removing them is a two-step that starts in the model, not here.
+#
+# Dropping a procedure cannot affect a running build: neither name appears in
+# Audit.Process_Config or Audit.Process_Dependency, and no other module references them
+# except one comment header in usp_Load_Fact_Effective_Targets, which goes with it.
+# ---------------------------------------------------------------------
+
+# Guard FIRST: refuse if anything has started depending on them since this was written.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Name IN ('Gold.usp_Load_Targets','Gold.usp_Load_Fact_Targets','Gold.usp_Load_Fact_Effective_Targets'); IF @n <> 0 BEGIN SET @e = 'V223 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' of these procedures are registered in Audit.Process_Config -- they are not dead.'; THROW 50530, @e, 1; END;
+
+# And refuse if any surviving module still calls one of them.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id WHERE o.name NOT IN ('usp_Load_Targets','usp_Load_Fact_Targets','usp_Load_Fact_Effective_Targets') AND (m.definition LIKE '%EXEC%usp[_]Load[_]Targets%' OR m.definition LIKE '%EXEC%usp[_]Load[_]Fact[_]Targets%' OR m.definition LIKE '%EXEC%usp[_]Load[_]Fact[_]Effective[_]Targets%'); IF @n <> 0 BEGIN SET @e = 'V223 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' module(s) still EXEC one of these procedures.'; THROW 50531, @e, 1; END;
+
+EXEC     DROP PROCEDURE IF EXISTS [Gold].[usp_Load_Targets];
+EXEC     DROP PROCEDURE IF EXISTS [Gold].[usp_Load_Fact_Targets];
+EXEC     DROP PROCEDURE IF EXISTS [Gold].[usp_Load_Fact_Effective_Targets];
+
+# Gone.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.type = 'P' AND o.name IN ('usp_Load_Targets','usp_Load_Fact_Targets','usp_Load_Fact_Effective_Targets'); IF @n <> 0 BEGIN SET @e = 'V223 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' of the three procedures still exist.'; THROW 50532, @e, 1; END;
+
+# The LIVE chain must still be there and still be registered -- this release must not have
+# taken the working loaders with it.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.type = 'P' AND o.name IN ('usp_Load_Fact_Daily_Targets','usp_Load_Aggregate_Period_Targets'); IF @n <> 2 BEGIN SET @e = 'V223 FAILED: the live target chain is incomplete -- found ' + CAST(@n AS VARCHAR(10)) + ' of 2.'; THROW 50533, @e, 1; END;
+
+# And the targets the reports read are still there.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Period_Targets; IF @n = 0 BEGIN SET @e = 'V223 FAILED: Gold.Aggregate_Period_Targets is empty.'; THROW 50534, @e, 1; END;
+
+TEST

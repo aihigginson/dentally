@@ -3252,13 +3252,18 @@
     async function saveTargetGrid() {
         const saveBtn = document.getElementById('targets-save'), msg = document.getElementById('targets-msg');
         const fy = +document.getElementById('targets-fy').value;
-        // A blank role cell materialises the Practice value it's showing as a placeholder into a REAL
-        // row (Option A: one-time fill on save, no ongoing derivation -> a complete set of target rows).
-        // Only non-FTE role cells carry a placeholder; orphan (removed-role) cells are excluded so their
-        // x-delete still blanks them.
+        // ==> A BLANK CELL SAVES AS BLANK. <== This used to materialise the Practice value a role
+        // cell shows as a PLACEHOLDER into a real row ("Option A: one-time fill on save"), which
+        // meant pressing Save wrote targets the user never typed -- and re-created every row that
+        // had just been deliberately cleared, so a tidy-up could not survive one Save.
+        //
+        // It also contradicted the panel directly above it, which promises
+        // "Blank = no target (uncoloured)". A placeholder is a hint about what Practice-level will
+        // apply; it is not an answer the user gave, and Save must not put words in their mouth.
+        //
+        // The placeholder still DISPLAYS, so the hint is unchanged. Only the write is.
         const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => {
-            const isOrphan = !!i.closest('[data-ocol]');
-            const raw = i.value !== '' ? i.value : (isOrphan ? '' : i.placeholder);
+            const raw = i.value;
             return {
                 tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
                 value: (raw === '' || raw == null) ? null : +raw,

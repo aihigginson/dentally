@@ -26,7 +26,7 @@ A user sees their **client's** tenant(s). RLS filters every tenant-bearing table
 
 5. **Load data.** Run the Fabric **Bronze ingestion pipeline** for the tenant (uses the `Audit.Tenants` API creds), then the **Silver → Gold** loads. The PBI presentation views and reports are shared across tenants — no per-tenant report build needed.
 
-6. **Targets (optional).** Either users with `Maintain_Targets=1` enter them in the app, or bulk-load from a template: `Scripts/Load_Targets_From_Template.py` (filename `T{tenant}_{FY}.xlsx`), then run `Gold.usp_Load_Fact_Targets` + `Gold.usp_Load_Fact_Effective_Targets`.
+6. **Targets (optional).** Either users with `Maintain_Targets=1` enter them in the app, or bulk-load from a template: `Scripts/Load_Targets_From_Template.py` (filename `T{tenant}_{FY}.xlsx`). The nightly build then explodes them via `Gold.usp_Load_Fact_Daily_Targets` and `Gold.usp_Load_Aggregate_Period_Targets`, both registered in `Audit.Process_Config` -- run those two by hand only if you need the targets visible before the next build.
 
 7. **Refresh the semantic model** so it imports the new tenant's data + the updated `Application_Users` RLS mapping.
 
