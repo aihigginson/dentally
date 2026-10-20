@@ -2323,11 +2323,24 @@ add("DNAs Not Rebooked",
 )",
     "#,##0");
 
+// ==> A RECALL DENTALLY HAS CLOSED IS NOT WORK. <== Is_In_Scope tests only the due date
+// and the patient being Active, and Is_Booked means "has a FUTURE appointment" -- so
+// attending could never clear a recall. Adam Thompson attended on 28/08/2026 and still
+// sat on his clinician's list against a Dentist recall Dentally marked Completed 318 days
+// earlier. Across Maple: 441 Completed + 4 Booked out of 2,301, some 729 days overdue.
+//
+// Excludes the TERMINAL statuses rather than listing the actionable ones, so a status
+// Dentally adds later turns up on the worklist instead of silently vanishing from it.
+//
+// Deliberately filtered HERE and not in Is_In_Scope: that flag also feeds the Retention
+// Outlook denominators in usp_Load_Fact_KPI_Snapshot, and narrowing a denominator to
+// flatter a conversion rate is the V197 mistake. This measure is the pair's only consumer.
 add("Recalls To Action",
     @"CALCULATE(
     COUNTROWS('_Recalls'),
     '_Recalls'[Retention Outlook In Scope] = 1,
-    '_Recalls'[Is Booked] = FALSE()
+    '_Recalls'[Is Booked] = FALSE(),
+    NOT '_Recalls'[Status] IN { ""Completed"", ""Booked"" }
 )",
     "#,##0");
 
