@@ -21,14 +21,15 @@
 
 DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
 
-# No row may name a table that does not exist -- the general form of the fault, not just
-# the two from V224. This is what should have caught it before the RI check did.
-# ==> sys.* CANNOT BE CORRELATED WITH A USER TABLE IN FABRIC. <== The first version of this
-# guard used NOT EXISTS (SELECT 1 FROM sys.objects ... WHERE o.name = c.Fact_Table) and the
-# warehouse rejected it: "The query references an object that is not supported in distributed
-# processing mode." Materialise the Gold names into a temp table first, then join -- which is
-# the house rule anyway (see V220: temp tables, not CTEs).
-EXEC     DROP TABLE IF EXISTS #gold_tables; SELECT CAST(o.name AS VARCHAR(128)) AS nm INTO #gold_tables FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.type IN ('U','V'); DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config c LEFT JOIN #gold_tables f ON f.nm = CAST(c.Fact_Table AS VARCHAR(128)) LEFT JOIN #gold_tables d ON d.nm = CAST(c.Dim_Table  AS VARCHAR(128)) WHERE f.nm IS NULL OR d.nm IS NULL; DROP TABLE #gold_tables; IF @n <> 0 BEGIN SET @e = 'V225 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' RI_Check_Config row(s) name a Gold table that does not exist.'; THROW 50550, @e, 1; END;
+# ==> NO SQL GUARD HERE, DELIBERATELY. <== Two attempts to assert "every RI_Check_Config row
+# names a real Gold table" were both rejected by Fabric: correlating sys.objects with a user
+# table, and then SELECT ... INTO #temp FROM sys.objects, each gave
+#     "The query references an object that is not supported in distributed processing mode."
+#
+# It does not need one. Deploy.ps1 runs a referential-integrity check after every manifest,
+# and that is precisely what caught this fault -- V224 deployed cleanly and the RI check then
+# failed the run with "Invalid object name 'Gold.Fact_Effective_Targets'". A second guard here
+# would duplicate a control that already works, in a dialect that will not express it.
 
 # And the seed landed rather than emptying the table.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config; IF @n < 50 BEGIN SET @e = 'V225 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' RI config rows after the reseed.'; THROW 50551, @e, 1; END;
