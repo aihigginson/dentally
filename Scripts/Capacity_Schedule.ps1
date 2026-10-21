@@ -40,9 +40,12 @@ $type = 'Microsoft.Fabric/capacities'
 # nothing -- every hour after 08:00 silently resolved to an empty SKU. A list of rows
 # cannot be read the wrong way.
 $schedule = @(
-    @{ From = 0;  Sku = 'pause' }  # nothing is scheduled between 23:00 and 07:00
-    @{ From = 6;  Sku = 'F2' }     # early, in case somebody is up before the day starts
-    @{ From = 8;  Sku = 'F4' }     # working day
+    @{ From = 0;  Sku = 'pause' }  # nothing is scheduled between 23:00 and 06:00
+    # ==> F4 FROM 06:00, NOT F2. <== The catch-all semantic model refresh runs at 07:00,
+    # and a model refresh is memory-hungry in exactly the way halving the SKU punishes.
+    # An F2 window here would have been two CU-hours a day bought at the price of the
+    # refresh that exists to make the data trustworthy in the morning.
+    @{ From = 6;  Sku = 'F4' }     # early starters, and the 07:00 refresh
     @{ From = 18; Sku = 'F2' }     # evening
     @{ From = 22; Sku = 'F4' }     # the nightly build -- 22:03 to about 22:37 UK
 )

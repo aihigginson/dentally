@@ -6,28 +6,28 @@ name: Fabric capacity schedule
 #
 #   00:00-06:00 UK   paused      nothing is scheduled; measured over 14 days, the hour
 #                                histogram in Audit.Process_Execution_Log is empty here
-#   06:00-08:00 UK   F2          early starters
-#   08:00-18:00 UK   F4          working day
+#   06:00-18:00 UK   F4          working day, and the 07:00 catch-all model refresh
 #   18:00-22:00 UK   F2          evening
 #   22:00-00:00 UK   F4          the nightly build, 22:03 to about 22:37 UK
 #
 # ==> CRON IS UTC AND THE SCHEDULE IS UK LOCAL. <== The Fabric pipeline is scheduled in
 # UK local time, so the window protecting the nightly build has to move with the clocks
 # or it misses the build by an hour every winter. The times below are therefore fired at
-# the union of BOTH offsets' boundaries -- 10 a day -- and Capacity_Schedule.ps1 works out
+# the union of BOTH offsets' boundaries -- 8 a day -- and Capacity_Schedule.ps1 works out
 # what UK local time it actually is and no-ops the half that is not due. That also makes
 # the job self-healing: a scale that fails, or a cron GitHub runs late, is corrected at
 # the next firing rather than leaving the capacity stuck on the wrong SKU overnight.
 #
 # -LeadMinutes 15 makes each run ask "what should be true in 15 minutes?", so the change
 # has LANDED by the boundary. Resuming a paused capacity takes a couple of minutes and a
-# resize a few more; without the lead, 08:00 would be when the climb to F4 starts.
+# resize a few more; without the lead, 06:00 would be when the climb to F4 starts.
 
 on:
   schedule:
-    #     UK 23:45 05:45 07:45 17:45 21:45 in winter, and the same wall-clock times in
-    #     summer land an hour earlier in UTC. Union of both, so either offset is covered.
-    - cron: '45 4,5,6,7,16,17,20,21,22,23 * * *'
+    #     Boundaries are 00:00, 06:00, 18:00 and 22:00 UK, fired 15 minutes early: that is
+    #     23:45 05:45 17:45 21:45 in winter, and the same wall-clock times land an hour
+    #     earlier in UTC over summer. Union of both, so either offset is covered.
+    - cron: '45 4,5,16,17,20,21,22,23 * * *'
   workflow_dispatch:
     inputs:
       at:
