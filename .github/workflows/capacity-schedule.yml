@@ -70,8 +70,11 @@ jobs:
           AT: ${{ inputs.at }}
           DRY: ${{ inputs.dry_run }}
         run: |
-          # not $args -- that is PowerShell's own automatic parameter array
-          $argv = @('-LeadMinutes', '15')
-          if ($env:AT)  { $argv += @('-At', $env:AT) }
-          if ($env:DRY -eq 'true') { $argv += '-WhatIf' }
-          ./Scripts/Capacity_Schedule.ps1 @argv
+          # ==> SPLAT A HASHTABLE, NOT AN ARRAY. <== An array splat binds positionally, so
+          # -WhatIf -- a common parameter that CmdletBinding supplies rather than one the
+          # param block declares -- is not matched and the run dies with "A positional
+          # parameter cannot be found that accepts argument '-WhatIf'".
+          $p = @{ LeadMinutes = 15 }
+          if ($env:AT) { $p.At = $env:AT }
+          if ($env:DRY -eq 'true') { $p.WhatIf = $true }
+          ./Scripts/Capacity_Schedule.ps1 @p
