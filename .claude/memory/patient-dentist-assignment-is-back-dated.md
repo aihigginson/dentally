@@ -25,13 +25,6 @@ current assignment, and the gap there shrinks month by month until it crosses.
 That one is about the VALUE being reconstructed; this is about the ATTRIBUTION being
 back-dated. A practice with stable lists never shows it, which is why it survived a year.
 
-**The history IS recoverable, just not from Dim_Patients.** `Gold.Fact_Appointments`
-records which practitioner actually saw a patient on the day, so who treated whom over
-time can be reconstructed from attendance. That is how the Ian Hunt handover was measured
-(he last treated a patient on 2026-03-31; 548 of his patients then met a new dentist, and
-36.7% never returned against 23.7% for those dentists' own patients). Use appointments for
-any "who was their dentist then" question.
-
 **How to apply:** never present per-practitioner plan revenue, or anything filtered on
 `Dim_Patients.Dentist_Practitioner_ID`, as a historical fact -- it is "what this month
 would look like if today's list had always applied". Practice-level totals are unaffected.

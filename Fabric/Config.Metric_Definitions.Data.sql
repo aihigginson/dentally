@@ -53,8 +53,6 @@ USING (VALUES
         'Of hygienist recall cycles that were actively chased (a reminder was sent) and have since concluded, the percentage that ended with the patient returning (Completed vs Missed). Higher is better.'),
     ('lapsed_patients',            'Lapsed Patients',                    'patients',   'count',    'Patients who lapsed in the period (deactivated, or 730+ days since last seen)', 1, 1, 1, 26, 'below', 'cumulative',
         'The number of patients whose 24-month examination clock expired during the period — who passed the point of being considered active without returning. Now a flow metric summed over the period. Lower is better; a measure of attrition.'),
-    ('post_switch_loss_rate',     'Lost After Changing Dentist',        'patients',   'percent',  'Patients who met a new dentist and never returned',                           0, 1, 1, 26, 'below', 'rate',
-        'Of patients who saw a different clinician for the first time at least three months ago, the share who have not attended since. A list changing hands costs patients even when nobody has done anything wrong, and this is usually the largest single identified cause of loss -- far larger than refused treatment plans. Judge a clinician on their OWN patients separately: whoever absorbs the departing dentist list will carry most of this.'),
     ('lapsed_deactivated',         'Lapsed (Set Inactive)',              'patients',   'count',    'Patients set inactive (Active=0) in the period',                             1, 1, 1, 27, 'below', 'cumulative',
         'Patients explicitly marked inactive during the period -- the definitive lapsed cohort. Lower is better.'),
     ('lapsed_calculated',          'Lapsed (Silently)',                  'patients',   'count',    'Active patients 730+ days since last seen, in the period',                    1, 1, 1, 28, 'below', 'cumulative',
@@ -162,9 +160,6 @@ UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
 -- New-patient Clinical metrics are display-only (no target entry / no Daily_Targets rows).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('avg_first_plan_value', 'new_patient_retention');
--- Lost After Changing Dentist is a consequence of a handover, not a performance target.
-UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
-    WHERE [Metric_Key] = 'post_switch_loss_rate';
 -- Plan Rejection Rate is comparative, not a number a practice sets: it is read against
 -- peers doing similar work. No target entry, no Daily_Targets rows.
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
