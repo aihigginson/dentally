@@ -177,9 +177,15 @@
         .crumb:hover { color: var(--text); text-decoration: underline; }
         .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
         .crumb-sep { color: var(--text-3); user-select: none; }
+        /* A popover hanging off the header button, not a band across the page.
+           Fixed rather than absolute so it is positioned from the button's viewport
+           rect without caring what scrolled. */
         .filter-bar {
-            background: white; border-bottom: 1px solid var(--border);
-            padding: 9px 24px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
+            position: fixed; z-index: 120;
+            background: white; border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(16,34,54,0.18);
+            padding: 12px 16px; display: none; align-items: center; gap: 12px;
+            flex-wrap: wrap; max-width: min(720px, calc(100vw - 24px));
         }
         .filter-bar.open { display: flex; }
         .filter-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
@@ -202,11 +208,9 @@
         .filter-sep   { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
         .filter-check { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; white-space: nowrap; }
         .filter-check input[type=checkbox] { accent-color: var(--navy); width: 14px; height: 14px; cursor: pointer; }
-        .filter-badge {
-            margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
-            background: #EBF3F9; color: var(--navy); font-size: 12px; font-weight: 500;
-            padding: 3px 10px; border-radius: 20px; white-space: nowrap;
-        }
+        /* The live filter summary, now the label of the header button itself. */
+        #filter-summary { font-weight: 500; white-space: nowrap; max-width: 46vw;
+                          overflow: hidden; text-overflow: ellipsis; }
 
         /* ── Main ── */
         .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
@@ -488,7 +492,6 @@
         @media (max-width: 768px) {
             .filter-bar { padding: 10px 16px; }
             .crumb-bar  { padding: 6px 16px; }
-            .filter-badge { display: none; }
             .header { padding: 0 16px; height: 46px; }
             .header-org { display: none; }
             .nav { padding: 0 8px; }
@@ -545,21 +548,18 @@
     <div class="header-right">
         <!-- Report controls live in the banner so the nav row can be reclaimed entirely
              for single-report users. -->
-        <button class="filter-toggle" id="filter-toggle">
+        <button class="filter-toggle" id="filter-toggle" title="Change the filters" aria-haspopup="true" aria-expanded="false">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-            <span class="ctrl-label">Filters</span>
+            <span class="ctrl-label" id="filter-summary">Last 12 Months &middot; All sites &middot; All practitioners</span>
         </button>
-        <button class="filter-toggle" id="defs-toggle" title="Plain-English metric definitions">
+        <button class="filter-toggle" id="defs-toggle" title="Plain-English metric definitions" aria-label="Definitions">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
-            <span class="ctrl-label">Definitions</span>
         </button>
-        <a class="filter-toggle" id="contact-link" href="#" title="Contact us" style="text-decoration:none">
+        <a class="filter-toggle" id="contact-link" href="#" title="Contact us" aria-label="Contact us" style="text-decoration:none">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-            <span class="ctrl-label">Contact us</span>
         </a>
-        <button class="filter-toggle" id="settings-toggle" title="Practice settings" style="display:none">
+        <button class="filter-toggle" id="settings-toggle" title="Practice settings" aria-label="Practice settings" style="display:none">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span class="ctrl-label">Settings</span>
         </button>
         <div class="nav-report-controls" id="nav-report-controls">
             <button class="page-tile" title="Full screen" onclick="toggleFullscreen()">
@@ -625,7 +625,6 @@
     <label class="filter-check" for="f-active-only">
         <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-    <div class="filter-badge" id="filter-badge">Last 12 Months &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
@@ -1533,10 +1532,6 @@
         if (firstTab) firstTab.classList.add('active');
         activateSection(firstKey);
 
-        if (window.innerWidth > 768) {
-            filterBar.classList.add('open');
-            filterToggleBtn.classList.add('active');
-        }
         loadFilters(false);
         // Preload the other accessible report sections in the background (desktop only).
         // New modules have no SECTION_REPORT entry, so they're skipped here.
@@ -1684,8 +1679,7 @@
         if (navControls) navControls.style.display = key === 'targets' ? 'none' : 'flex';
 
         if (key === 'targets') {
-            filterBar.classList.remove('open');
-            filterToggleBtn.classList.remove('active');
+            setFilterBar(false);
             filterToggleBtn.style.visibility = 'hidden';
             loadTargets();
         } else {
@@ -1702,9 +1696,37 @@
     const filterToggleBtn = document.getElementById('filter-toggle');
     const filterBar       = document.getElementById('filter-bar');
 
-    filterToggleBtn.addEventListener('click', () => {
-        const open = filterBar.classList.toggle('open');
+    // Hang the panel under its button, clamped to the viewport so a long summary on a
+    // narrow window cannot push it off the right-hand edge.
+    function positionFilterBar() {
+        const r = filterToggleBtn.getBoundingClientRect();
+        filterBar.style.top = (r.bottom + 6) + 'px';
+        filterBar.style.left = '';
+        filterBar.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
+    }
+
+    function setFilterBar(open) {
+        filterBar.classList.toggle('open', open);
         filterToggleBtn.classList.toggle('active', open);
+        filterToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) positionFilterBar();
+    }
+
+    filterToggleBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        setFilterBar(!filterBar.classList.contains('open'));
+    });
+
+    // Clicking anywhere else puts it away; clicking a control inside must not.
+    filterBar.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => {
+        if (filterBar.classList.contains('open')) setFilterBar(false);
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && filterBar.classList.contains('open')) setFilterBar(false);
+    });
+    window.addEventListener('resize', () => {
+        if (filterBar.classList.contains('open')) positionFilterBar();
     });
 
     // ── Fullscreen ───────────────────────────────────────────────────────────
@@ -4050,7 +4072,7 @@
     const selSite     = document.getElementById('f-site');
     const selRole     = document.getElementById('f-role');
     const selPract    = document.getElementById('f-pract');
-    const badge       = document.getElementById('filter-badge');
+    const badge       = document.getElementById('filter-summary');
     const ROLE_ALL_LABEL = {
         all: 'All practitioners', Dentist: 'All Dentists',
         Hygienist: 'All Hygienists', Therapist: 'All Therapists',
