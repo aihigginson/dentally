@@ -166,7 +166,7 @@
 
         /* ── Filter bar ── */
         .crumb-bar {
-            background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+            background: var(--bg-subtle); border-top: 1px solid var(--border);
             padding: 6px 24px; display: flex; align-items: center; gap: 7px;
             flex-shrink: 0; font-size: 12px; min-height: 17px;
         }
@@ -591,9 +591,6 @@
     <div class="nav-tab"        data-section="my_data">My Data</div>
 </nav>
 
-<!-- ════════════════ BREADCRUMB ════════════════ -->
-<nav class="crumb-bar" id="crumb-bar" aria-label="Breadcrumb" hidden></nav>
-
 <!-- ════════════════ FILTER BAR ════════════════ -->
 <div class="filter-bar" id="filter-bar">
     <span class="filter-label">Filters</span>
@@ -683,6 +680,9 @@
     </section>
 
 </main>
+
+<!-- ════════════════ BREADCRUMB ════════════════ -->
+<nav class="crumb-bar" id="crumb-bar" aria-label="Breadcrumb" hidden></nav>
 
 <!-- ════════════════ METRIC DEFINITIONS PANEL ════════════════ -->
 <div class="defs-overlay" id="defs-overlay">
@@ -1841,11 +1841,17 @@
             else { el.type = 'button'; el.addEventListener('click', onClick); }
             bar.appendChild(el);
         };
-        // The section itself is the first step home.
+        // ==> THE REPORT NAME AND ITS FIRST PAGE ARE THE SAME PLACE. <== Listing both
+        // gave "Day Book > Day Book", with the active styling landing on the second --
+        // so the segment that actually takes you somewhere looked like a label. The
+        // first page is dropped as a segment; the report name does its job, and stays
+        // clickable even when it is alone, since going back to the top is the point.
+        const mainPage = (d.pages[0] || {}).name;
+        const rest = trail.filter(t => !(t.kind === 'page' && t.name === mainPage));
         add(tab.textContent.trim(),
-            () => goToCrumb(key, { kind: 'page', name: (d.pages[0] || {}).name }), false);
-        trail.forEach((t, i) => add(t.displayName, () => goToCrumb(key, t),
-                                    i === trail.length - 1));
+            () => goToCrumb(key, { kind: 'page', name: mainPage }), false);
+        rest.forEach((t, i) => add(t.displayName, () => goToCrumb(key, t),
+                                   i === rest.length - 1));
         bar.hidden = false;
     }
 

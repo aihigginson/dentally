@@ -48,8 +48,8 @@
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
               "active": true,
-              "format": "MMM yyyy",
-              "displayName": "Month"
+              "displayName": "Month",
+              "format": "MMM yyyy"
             },
             {
               "field": {
@@ -64,6 +64,7 @@
               },
               "queryRef": "List Payment Plans.Payment Plan Name",
               "nativeQueryRef": "Payment Plan Name",
+              "active": false,
               "displayName": "Plan"
             }
           ]
