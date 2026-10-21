@@ -85,3 +85,4 @@
 - [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
+- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.

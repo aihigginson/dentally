@@ -64,41 +64,80 @@ BEGIN
         FROM   [Gold].[Dim_Date]
         WHERE  Full_Date BETWEEN @Pre_From AND @Pre_To AND Is_Working_Day_England = 1;
 
-        -- Practice-grain actuals for both windows. fk_Practitioner = -1 is the practice row.
-        DROP TABLE IF EXISTS #raw;
+        -- ==> THE SAME FIGURE IS WRITTEN TWICE: ONCE AT SITE -1 AND ONCE AT THE REAL SITE. <==
+        -- fk_Practitioner = -1 alone is NOT the practice row. Filtering on the practitioner
+        -- only and summing doubled every count (a rate survived it, since numerator and
+        -- denominator doubled together, which is exactly why it went unnoticed). The practice
+        -- grain is BOTH keys at -1.
+        DROP TABLE IF EXISTS #daily;
         SELECT a.Tenant_ID,
                a.Metric,
                CASE WHEN d.Full_Date >= @Now_From THEN 1 ELSE 2 END          AS Which,
-               SUM(CAST(a.Numerator   AS DECIMAL(38,6)))                     AS Numerator,
-               SUM(CAST(a.Denominator AS DECIMAL(38,6)))                     AS Denominator
-        INTO   #raw
+               d.Full_Date,
+               CAST(a.Numerator   AS DECIMAL(38,6))                          AS Numerator,
+               CAST(a.Denominator AS DECIMAL(38,6))                          AS Denominator
+        INTO   #daily
         FROM   [Gold].[Fact_Metric_Actuals] a
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
         WHERE  a.fk_Practitioner = -1
-          AND  d.Full_Date BETWEEN @Pre_From AND @Now_To
-        GROUP BY a.Tenant_ID, a.Metric,
-                 CASE WHEN d.Full_Date >= @Now_From THEN 1 ELSE 2 END;
+          AND  a.fk_Practice_Site = -1
+          AND  d.Full_Date BETWEEN @Pre_From AND @Now_To;
 
-        -- Resolve each window to a single comparable value.
-        -- ==> A RATE DIVIDES ITS OWN DENOMINATOR OUT; A COUNT DOES NOT. <==
+        DROP TABLE IF EXISTS #agg;
+        SELECT Tenant_ID, Metric, Which,
+               SUM(Numerator)   AS Numerator,
+               SUM(Denominator) AS Denominator,
+               MAX(Full_Date)   AS Last_Date
+        INTO   #agg
+        FROM   #daily
+        GROUP BY Tenant_ID, Metric, Which;
+
+        -- ==> A point_in_time METRIC IS A SNAPSHOT, AND IT IS WRITTEN WEEKLY, NOT DAILY. <==
+        -- Sixteen of the active metrics are snapshots -- Active Patients, Outstanding
+        -- Invoices, Deposit Ratio, Overdue Recalls among them -- and Fact_Metric_Actuals
+        -- carries one row a week for them. Summing four of those and dividing by twenty
+        -- working days is meaningless, and because the number of snapshots per window
+        -- varies the result swings on nothing: Active Patients read +25% while the
+        -- underlying count was quietly FALLING, 6,282 to 6,236. A snapshot compares at its
+        -- latest reading in each window, which is what the practice would see on the day.
+        DROP TABLE IF EXISTS #snap;
+        SELECT dl.Tenant_ID, dl.Metric, dl.Which, dl.Numerator, dl.Denominator
+        INTO   #snap
+        FROM   #daily dl
+        JOIN   #agg g ON g.Tenant_ID = dl.Tenant_ID AND g.Metric = dl.Metric
+                     AND g.Which = dl.Which AND g.Last_Date = dl.Full_Date;
+
+        -- ==> BRANCH ON Target_Type, NEVER ON Format_Type. <== Deposit Ratio is a percent
+        -- AND a snapshot; treating every percent as a rate made it sum four weekly readings
+        -- over four weekly denominators and swing wildly enough to top the list on noise.
         DROP TABLE IF EXISTS #val;
-        SELECT r.Tenant_ID,
-               r.Metric,
-               r.Which,
+        SELECT g.Tenant_ID,
+               g.Metric,
+               g.Which,
                m.Range_Type,
-               CASE WHEN m.Target_Type = 'rate' OR m.Format_Type = 'percent'
-                    THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END              AS Per_Working_Day,
-               CASE WHEN m.Target_Type = 'rate' OR m.Format_Type = 'percent'
-                    THEN CASE WHEN r.Denominator <> 0
-                              THEN r.Numerator / r.Denominator END
-                    ELSE CASE WHEN w.Working_Days <> 0
-                              THEN r.Numerator / w.Working_Days END END      AS Val,
-               r.Numerator                                                   AS Raw_Numerator,
-               CAST(ISNULL(m.Area_Weight, 5) AS DECIMAL(9,2))                AS Area_Weight
+               CASE WHEN m.Target_Type = 'cumulative' THEN CAST(1 AS BIT)
+                    ELSE CAST(0 AS BIT) END                                  AS Per_Working_Day,
+               CASE
+                   WHEN m.Target_Type = 'rate'
+                        THEN CASE WHEN g.Denominator <> 0
+                                  THEN g.Numerator / g.Denominator END
+                   WHEN m.Target_Type = 'cumulative'
+                        THEN CASE WHEN w.Working_Days <> 0
+                                  THEN g.Numerator / w.Working_Days END
+                   ELSE CASE WHEN s.Denominator IS NOT NULL AND s.Denominator <> 0
+                             THEN s.Numerator / s.Denominator
+                             ELSE s.Numerator END
+               END                                                           AS Val,
+               CASE WHEN m.Target_Type = 'cumulative' THEN g.Numerator
+                    ELSE s.Numerator END                                     AS Raw_Numerator,
+               CAST(ISNULL(m.Area_Weight, 5) AS DECIMAL(9,2))                AS Area_Weight,
+               CAST(m.Target_Type AS VARCHAR(16))                            AS Target_Type
         INTO   #val
-        FROM   #raw r
-        JOIN   [Config].[Metric_Definitions] m ON m.Metric_Key = r.Metric AND m.Is_Active = 1
-        JOIN   #wd w ON w.Which = r.Which;
+        FROM   #agg g
+        JOIN   [Config].[Metric_Definitions] m ON m.Metric_Key = g.Metric AND m.Is_Active = 1
+        JOIN   #wd w ON w.Which = g.Which
+        LEFT JOIN #snap s ON s.Tenant_ID = g.Tenant_ID AND s.Metric = g.Metric
+                         AND s.Which = g.Which;
 
         -- Pair the windows and score the movement in the direction Range_Type calls good.
         DROP TABLE IF EXISTS #move;
@@ -127,8 +166,10 @@ BEGIN
         WHERE  n.Which = 1
           AND  n.Val IS NOT NULL AND p.Val IS NOT NULL
           AND  ABS(p.Val) > 0.000001
-          -- a move from a trivial base is arithmetic, not news
-          AND  (n.Per_Working_Day = 0 OR p.Raw_Numerator >= @Min_Base);
+          -- ==> A MOVE FROM A TRIVIAL BASE IS ARITHMETIC, NOT NEWS. <== A rate is exempt
+          -- because it is already scale-free; everything with a countable base -- totals and
+          -- snapshots alike -- has to clear @Min_Base before it may rank.
+          AND  (n.Target_Type = 'rate' OR p.Raw_Numerator >= @Min_Base);
 
         DROP TABLE IF EXISTS #ranked;
         SELECT mv.Tenant_ID,
@@ -169,8 +210,8 @@ BEGIN
             SET @My_Inserts = @@ROWCOUNT;
         END
 
-        DROP TABLE #wd; DROP TABLE #raw; DROP TABLE #val;
-        DROP TABLE #move; DROP TABLE #ranked;
+        DROP TABLE #wd; DROP TABLE #daily; DROP TABLE #agg; DROP TABLE #snap;
+        DROP TABLE #val; DROP TABLE #move; DROP TABLE #ranked;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************
