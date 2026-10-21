@@ -1,0 +1,41 @@
+# =====================================================================
+# Release V229 -- Lost After Changing Dentist
+# =====================================================================
+# Measured on the live tenant after the former owner stopped treating patients on
+# 2026-03-31: 548 of his patients met an unfamiliar dentist and 36.7% never returned,
+# against 23.7% for those same dentists' own patients. 201 patients.
+#
+# For comparison, the concern the practice actually raised -- patients lost after refusing
+# a large treatment plan -- accounts for 7. This is roughly thirty times larger and nobody
+# is at fault for it.
+#
+# ==> JUDGE A CLINICIAN ON THEIR OWN PATIENTS, SEPARATELY. <== Whoever absorbs a departing
+# dentist's list carries nearly all of this. One associate took 383 of the 548 and his
+# inherited loss rate is 40.2%, while on his OWN patients he is 24.9% -- indistinguishable
+# from his peers at 22.8% and 22.0%. Reported as one number he looks like the problem; split
+# by origin he is average and the handover is the problem.
+#
+# ==> THE SWITCH IS RECONSTRUCTED FROM ATTENDANCE. <== Dim_Patients holds one CURRENT
+# dentist and no history -- the same limitation that back-dates per-practitioner capitation.
+# Fact_Appointments records who actually saw whom on the day, so a switch is "first completed
+# appointment with someone who was not the first clinician this patient saw".
+#
+# Three months of grace before a switch counts, or every recent handover reads as a loss.
+# Has_Target = 0: this is the consequence of a handover, not a number to be held to.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Config.Metric_Definitions WHERE Metric_Key = 'post_switch_loss_rate' AND Is_Active = 1 AND Section = 'patients' AND Range_Type = 'below' AND Target_Type = 'rate' AND Supports_Practitioner = 1 AND ISNULL(Has_Target,0) = 0; IF @n <> 1 BEGIN SET @e = 'V229 FAILED: post_switch_loss_rate is not defined as an active, targetless patients rate supporting practitioners.'; THROW 50580, @e, 1; END;
+
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# A share cannot exceed one. A numerator above its denominator would mean the three-month
+# grace had been applied to the losses but not to the switches.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'post_switch_loss_rate' AND (Denominator IS NULL OR Denominator <= 0 OR Numerator IS NULL OR Numerator > Denominator); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' post_switch_loss_rate row(s) have a missing or impossible rate.'; THROW 50581, @e, 1; END;
+
+# Both grains, or the per-clinician split this metric exists to enable is missing.
+EXEC     DECLARE @p INT, @c INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'post_switch_loss_rate' AND fk_Practitioner = -1; SELECT @c = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'post_switch_loss_rate' AND fk_Practitioner <> -1; IF @p = 0 OR @c = 0 BEGIN SET @e = 'V229 FAILED: practice rows ' + CAST(@p AS VARCHAR(10)) + ', practitioner rows ' + CAST(@c AS VARCHAR(10)) + ' -- both grains are required.'; THROW 50582, @e, 1; END;
+
+TEST
