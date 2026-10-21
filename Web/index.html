@@ -1705,11 +1705,19 @@
 
     // Hang the panel under its button, clamped to the viewport so a long summary on a
     // narrow window cannot push it off the right-hand edge.
+    // ==> ANCHOR THE LEFT EDGE, NOT THE RIGHT. <== Anchoring right meant the panel grew
+    // LEFTWARDS from the button, and this button sits left of centre in the header -- so
+    // at its full width the panel's left edge ran off the screen. It now hangs from the
+    // button's left edge and is clamped to the viewport, so it can never leave the window
+    // on either side whatever the header width or the length of the summary.
     function positionFilterBar() {
         const r = filterToggleBtn.getBoundingClientRect();
         filterBar.style.top = (r.bottom + 6) + 'px';
-        filterBar.style.left = '';
-        filterBar.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
+        filterBar.style.right = '';
+        // measured while open, so offsetWidth is the real laid-out width
+        const w = filterBar.offsetWidth || 320;
+        const maxLeft = Math.max(12, window.innerWidth - w - 12);
+        filterBar.style.left = Math.min(Math.max(12, r.left), maxLeft) + 'px';
     }
 
     function setFilterBar(open) {
