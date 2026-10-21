@@ -64,6 +64,11 @@ CREATE TABLE [Gold].[Aggregate_Practice_Insights](
     [Value_Before]          [decimal](18,4) NULL,
     [Relative_Change]       [decimal](18,6) NULL,       -- signed, as a fraction
     [Target_Value]          [decimal](18,4) NULL,       -- context only, may be NULL
+    -- ==> THE SAME MOVE A YEAR AGO, SO SEASONAL IS NOT MISTAKEN FOR NEW. <== Average Plan
+    -- Value climbs every autumn as patients return from holiday and book treatment rather
+    -- than check-ups. Reporting that as a win each September would cost the panel its
+    -- credibility. NULL where there is no comparable year.
+    [Last_Year_Change]      [decimal](18,6) NULL,
     [Narrative]             [varchar](600)  NULL,       -- written later, never required
     [DW_Created_At]         [datetime2](6)  NOT NULL,
     [DW_Updated_At]         [datetime2](6)  NOT NULL

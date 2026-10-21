@@ -55,6 +55,12 @@ BEGIN
         DECLARE @Now_To   DATE = DATEADD(DAY, 6, @Last_Complete_Week);
         DECLARE @Pre_From DATE = DATEADD(DAY, -@Block_Days, @Now_From);
         DECLARE @Pre_To   DATE = DATEADD(DAY, -1, @Now_From);
+        -- 364 days, not a calendar year: 52 whole weeks keeps the same weekdays in the
+        -- window, so the comparison is not quietly shifted by a day or two.
+        DECLARE @LY_Now_From DATE = DATEADD(DAY, -364, @Now_From);
+        DECLARE @LY_Now_To   DATE = DATEADD(DAY, -364, @Now_To);
+        DECLARE @LY_Pre_From DATE = DATEADD(DAY, -364, @Pre_From);
+        DECLARE @LY_Pre_To   DATE = DATEADD(DAY, -364, @Pre_To);
 
         -- Working days per window per tenant: a count compared across a bank holiday is
         -- otherwise a fifth down on nothing.
@@ -67,7 +73,13 @@ BEGIN
         UNION ALL
         SELECT 2, COUNT(*)
         FROM   [Gold].[Dim_Date]
-        WHERE  Full_Date BETWEEN @Pre_From AND @Pre_To AND Is_Working_Day_England = 1;
+        WHERE  Full_Date BETWEEN @Pre_From AND @Pre_To AND Is_Working_Day_England = 1
+        UNION ALL
+        SELECT 3, COUNT(*) FROM [Gold].[Dim_Date]
+        WHERE  Full_Date BETWEEN @LY_Now_From AND @LY_Now_To AND Is_Working_Day_England = 1
+        UNION ALL
+        SELECT 4, COUNT(*) FROM [Gold].[Dim_Date]
+        WHERE  Full_Date BETWEEN @LY_Pre_From AND @LY_Pre_To AND Is_Working_Day_England = 1;
 
         -- ==> THE SAME FIGURE IS WRITTEN TWICE: ONCE AT SITE -1 AND ONCE AT THE REAL SITE. <==
         -- fk_Practitioner = -1 alone is NOT the practice row. Filtering on the practitioner
@@ -77,7 +89,10 @@ BEGIN
         DROP TABLE IF EXISTS #daily;
         SELECT a.Tenant_ID,
                a.Metric,
-               CASE WHEN d.Full_Date >= @Now_From THEN 1 ELSE 2 END          AS Which,
+               CASE WHEN d.Full_Date BETWEEN @Now_From    AND @Now_To    THEN 1
+                    WHEN d.Full_Date BETWEEN @Pre_From    AND @Pre_To    THEN 2
+                    WHEN d.Full_Date BETWEEN @LY_Now_From AND @LY_Now_To THEN 3
+                    WHEN d.Full_Date BETWEEN @LY_Pre_From AND @LY_Pre_To THEN 4 END AS Which,
                d.Full_Date,
                CAST(a.Numerator   AS DECIMAL(38,6))                          AS Numerator,
                CAST(a.Denominator AS DECIMAL(38,6))                          AS Denominator
@@ -86,7 +101,8 @@ BEGIN
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
         WHERE  a.fk_Practitioner = -1
           AND  a.fk_Practice_Site = -1
-          AND  d.Full_Date BETWEEN @Pre_From AND @Now_To;
+          AND  (d.Full_Date BETWEEN @Pre_From    AND @Now_To
+             OR  d.Full_Date BETWEEN @LY_Pre_From AND @LY_Now_To);
 
         DROP TABLE IF EXISTS #agg;
         SELECT Tenant_ID, Metric, Which,
@@ -176,6 +192,19 @@ BEGIN
           -- snapshots alike -- has to clear @Min_Base before it may rank.
           AND  (n.Target_Type = 'rate' OR p.Raw_Numerator >= @Min_Base);
 
+        -- The identical arithmetic on windows 3 and 4, so a reader can tell "this is new"
+        -- from "this happens every autumn". No row is dropped for lacking one -- a tenant
+        -- live for under a year simply has no comparable, and that is reported as unknown
+        -- rather than as zero, which would read as "no seasonal effect".
+        DROP TABLE IF EXISTS #lastyear;
+        SELECT n.Tenant_ID, n.Metric,
+               (n.Val - p.Val) / ABS(p.Val)                                   AS Last_Year_Change
+        INTO   #lastyear
+        FROM   #val n
+        JOIN   #val p ON p.Tenant_ID = n.Tenant_ID AND p.Metric = n.Metric AND p.Which = 4
+        WHERE  n.Which = 3
+          AND  n.Val IS NOT NULL AND p.Val IS NOT NULL AND ABS(p.Val) > 0.000001;
+
         DROP TABLE IF EXISTS #ranked;
         SELECT mv.Tenant_ID,
                CASE WHEN mv.Goodness < 0 THEN 'Watch' ELSE 'Good' END         AS Direction,
@@ -197,7 +226,7 @@ BEGIN
                 (pk_Insight, Tenant_ID, Week_Commencing_Date, Direction, Rank_In_Direction,
                  Metric, Display_Name, Section, Format_Type, Per_Working_Day,
                  Value_Now, Value_Before, Relative_Change, Target_Value,
-                 Narrative, DW_Created_At, DW_Updated_At)
+                 Last_Year_Change, Narrative, DW_Created_At, DW_Updated_At)
             SELECT ROW_NUMBER() OVER (ORDER BY rk.Tenant_ID, rk.Direction, rk.Rank_In_Direction),
                    rk.Tenant_ID, @Last_Complete_Week, rk.Direction, rk.Rank_In_Direction,
                    rk.Metric, m.Display_Name, m.Section, m.Format_Type, rk.Per_Working_Day,
@@ -205,9 +234,11 @@ BEGIN
                    CAST(rk.Value_Before   AS DECIMAL(18,4)),
                    CAST(rk.Relative_Change AS DECIMAL(18,6)),
                    CAST(t.Target_Value    AS DECIMAL(18,4)),
+                   CAST(ly.Last_Year_Change AS DECIMAL(18,6)),
                    NULL, SYSUTCDATETIME(), SYSUTCDATETIME()
             FROM   #ranked rk
             JOIN   [Config].[Metric_Definitions] m ON m.Metric_Key = rk.Metric
+            LEFT JOIN #lastyear ly ON ly.Tenant_ID = rk.Tenant_ID AND ly.Metric = rk.Metric
             LEFT JOIN [Gold].[Aggregate_Period_Targets] t
                    ON t.Tenant_ID = rk.Tenant_ID AND t.Metric = rk.Metric
                   AND t.Date_Grouping = 'Last 3 Months' AND t.Target_Level = 'Practice'
@@ -216,7 +247,7 @@ BEGIN
         END
 
         DROP TABLE #wd; DROP TABLE #daily; DROP TABLE #agg; DROP TABLE #snap;
-        DROP TABLE #val; DROP TABLE #move; DROP TABLE #ranked;
+        DROP TABLE #val; DROP TABLE #move; DROP TABLE #ranked; DROP TABLE #lastyear;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************
