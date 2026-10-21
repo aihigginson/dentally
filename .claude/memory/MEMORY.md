@@ -86,3 +86,4 @@
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
 - [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.
+- [Treatment plan acceptance is unknowable](treatment-plan-acceptance-is-unknowable.md) — Accepted_At is hardcoded NULL; plans are not deleted, but no plan can be shown as accepted or declined.
