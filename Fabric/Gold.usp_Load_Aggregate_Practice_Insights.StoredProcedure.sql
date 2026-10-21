@@ -41,10 +41,15 @@ BEGIN
         --**** Procedure logic starts  ****
         --*********************************
 
-        -- The Monday of the last fully elapsed week.
-        DECLARE @Last_Complete_Week DATE =
-            DATEADD(DAY, -((DATEPART(WEEKDAY, SYSUTCDATETIME()) + 5) % 7) - 7,
-                    CAST(SYSUTCDATETIME() AS DATE));
+        -- ==> ASK Dim_Date WHERE THE WEEK STARTS; DO NOT RECOMPUTE IT. <== DATEPART(WEEKDAY)
+        -- is relative to @@DATEFIRST, so deriving the Monday arithmetically agrees with the
+        -- rest of the product only while that setting happens to be 7. A session under a
+        -- different DATEFIRST would shift every window by up to six days and desynchronise
+        -- these weeks from Week_Commencing_Date everywhere else, silently. The dimension
+        -- already holds the answer.
+        DECLARE @This_Week DATE = (SELECT Week_Commencing_Date FROM [Gold].[Dim_Date]
+                                   WHERE Full_Date = CAST(SYSUTCDATETIME() AS DATE));
+        DECLARE @Last_Complete_Week DATE = DATEADD(DAY, -7, @This_Week);
 
         DECLARE @Now_From DATE = DATEADD(DAY, -(@Block_Days - 7), @Last_Complete_Week);
         DECLARE @Now_To   DATE = DATEADD(DAY, 6, @Last_Complete_Week);
