@@ -583,8 +583,8 @@
     <div class="filter-field">
         <label for="f-period">Period</label>
         <select class="filter-select" id="f-period">
-            <option value="Last 12 Months">Last 12 Months</option>
-            <option value="Last 3 Months" selected>Last 3 Months</option>
+            <option value="Last 12 Months" selected>Last 12 Months</option>
+            <option value="Last 3 Months">Last 3 Months</option>
         </select>
     </div>
     <div class="filter-sep"></div>
@@ -608,7 +608,7 @@
     <label class="filter-check" for="f-active-only">
         <input type="checkbox" id="f-active-only" checked> Active only
     </label>
-    <div class="filter-badge" id="filter-badge">Last 3 Months &middot; All sites &middot; All practitioners</div>
+    <div class="filter-badge" id="filter-badge">Last 12 Months &middot; All sites &middot; All practitioners</div>
 </div>
 
 <!-- ════════════════ FULLSCREEN CLOSE ════════════════ -->
@@ -3913,7 +3913,7 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'Last 3 Months', site: 'all', role: 'all', pract: 'all' };
+    const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all' };
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
     const selRole     = document.getElementById('f-role');
@@ -4025,7 +4025,7 @@
                         const _cur = filterState.period;
                         selPeriod.innerHTML = data.periods.map(p => '<option value="' + escHtml(p) + '">' + escHtml(p) + '</option>').join('');
                         selPeriod.value = data.periods.indexOf(_cur) >= 0 ? _cur
-                                        : (data.periods.indexOf('Last 3 Months') >= 0 ? 'Last 3 Months' : data.periods[0]);
+                                        : (data.periods.indexOf('Last 12 Months') >= 0 ? 'Last 12 Months' : data.periods[0]);
                         filterState.period = selPeriod.value;
                     }
                 }
