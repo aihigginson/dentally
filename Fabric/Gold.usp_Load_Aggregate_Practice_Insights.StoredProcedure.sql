@@ -94,15 +94,25 @@ BEGIN
                     WHEN d.Full_Date BETWEEN @LY_Now_From AND @LY_Now_To THEN 3
                     WHEN d.Full_Date BETWEEN @LY_Pre_From AND @LY_Pre_To THEN 4 END AS Which,
                d.Full_Date,
-               CAST(a.Numerator   AS DECIMAL(38,6))                          AS Numerator,
-               CAST(a.Denominator AS DECIMAL(38,6))                          AS Denominator
+               SUM(CAST(a.Numerator   AS DECIMAL(38,6)))                     AS Numerator,
+               SUM(CAST(a.Denominator AS DECIMAL(38,6)))                     AS Denominator
         INTO   #daily
         FROM   [Gold].[Fact_Metric_Actuals] a
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
         WHERE  a.fk_Practitioner = -1
           AND  a.fk_Practice_Site = -1
           AND  (d.Full_Date BETWEEN @Pre_From    AND @Now_To
-             OR  d.Full_Date BETWEEN @LY_Pre_From AND @LY_Now_To);
+             OR  d.Full_Date BETWEEN @LY_Pre_From AND @LY_Now_To)
+        -- ==> ONE ROW PER DATE, GUARANTEED. <== #snap picks the row matching the window's
+        -- last date, so two rows sharing that date silently double everything downstream --
+        -- which is what the rank guard caught the moment the year-ago join multiplied them
+        -- out. Collapsing here makes the grain true rather than merely usually true.
+        GROUP BY a.Tenant_ID, a.Metric,
+                 CASE WHEN d.Full_Date BETWEEN @Now_From    AND @Now_To    THEN 1
+                      WHEN d.Full_Date BETWEEN @Pre_From    AND @Pre_To    THEN 2
+                      WHEN d.Full_Date BETWEEN @LY_Now_From AND @LY_Now_To THEN 3
+                      WHEN d.Full_Date BETWEEN @LY_Pre_From AND @LY_Pre_To THEN 4 END,
+                 d.Full_Date;
 
         DROP TABLE IF EXISTS #agg;
         SELECT Tenant_ID, Metric, Which,
