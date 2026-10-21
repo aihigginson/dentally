@@ -23,3 +23,13 @@ do not add a guard that fails the release on one. Judge the feature by whether t
 [[capitation-is-an-estimate-not-observed-income]],
 [[a-minus-one-fk-hides-under-all-and-kills-under-a-selection]] (the usual case, where a blank FK IS
 the bug — this is the exception), [[a-role-filter-blanks-on-my-data]].
+
+**The rate basis changed in April 2026 and the rate table does not know.** Maple's own
+pay sheets are exact multiples of **8.75** in Jan/Feb/Mar 2026 (Lily 840.00 = 96,
+Maxine 306.25 = 35, Katherine 175.00 = 20, Locums 70.00 = 8) and exact multiples of
+**28.70** from April on. 8.75 is a quarter of 35.00, so the earlier basis looks like time
+rather than attendance -- unconfirmed, worth asking the practice. Every row of
+`Input.Plan_Capitation_Rate` for tenant 100 carries `Hygienist_Visit_Value = 28.70`
+effective 2020-04-01, so the warehouse applies the current rate to all history and cannot
+reproduce Jan-Mar on any patient set. See
+[[patient-dentist-assignment-is-back-dated]] for the other half of that gap.

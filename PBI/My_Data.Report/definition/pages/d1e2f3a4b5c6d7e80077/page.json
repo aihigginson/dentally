@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "d1e2f3a4b5c6d7e80077",
+  "displayName": "Monthly Pay",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

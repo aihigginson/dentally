@@ -23,13 +23,13 @@
                       "Entity": "List Date"
                     }
                   },
-                  "Property": "Week Ending Date"
+                  "Property": "Month Commencing Date"
                 }
               },
-              "queryRef": "List Date.Week Ending Date",
-              "nativeQueryRef": "Week Ending Date",
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
               "active": true,
-              "format": "d"
+              "format": "MMM yyyy"
             }
           ]
         },
@@ -174,7 +174,7 @@
                 "Entity": "List Date"
               }
             },
-            "Property": "Week Ending Date"
+            "Property": "Month Commencing Date"
           }
         },
         "type": "Categorical"
