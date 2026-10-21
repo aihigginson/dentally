@@ -165,6 +165,18 @@
         .filter-toggle.active { border-color: var(--navy); color: var(--navy); background: #EBF3F9; }
 
         /* ── Filter bar ── */
+        .crumb-bar {
+            background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+            padding: 6px 24px; display: flex; align-items: center; gap: 7px;
+            flex-shrink: 0; font-size: 12px; min-height: 17px;
+        }
+        .crumb {
+            background: none; border: 0; padding: 0; margin: 0; font: inherit;
+            color: var(--text-3); cursor: pointer;
+        }
+        .crumb:hover { color: var(--text); text-decoration: underline; }
+        .crumb.current { color: var(--text); font-weight: 600; cursor: default; }
+        .crumb-sep { color: var(--text-3); user-select: none; }
         .filter-bar {
             background: white; border-bottom: 1px solid var(--border);
             padding: 9px 24px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
@@ -249,6 +261,7 @@
         body.is-fullscreen .header,
         body.is-fullscreen .nav,
         body.is-fullscreen .filter-bar { display: none !important; }
+        body.is-fullscreen .crumb-bar  { display: none !important; }
         body.is-fullscreen .main { padding: 0; }
         body.is-fullscreen .embed-full { position: fixed; inset: 0; width: 100vw !important; height: 100vh !important; margin: 0 !important; z-index: 200; }
         body.is-fullscreen .fullscreen-close { display: flex; }
@@ -474,6 +487,7 @@
         /* ── Mobile ── */
         @media (max-width: 768px) {
             .filter-bar { padding: 10px 16px; }
+            .crumb-bar  { padding: 6px 16px; }
             .filter-badge { display: none; }
             .header { padding: 0 16px; height: 46px; }
             .header-org { display: none; }
@@ -576,6 +590,9 @@
     <div class="nav-tab"        data-section="nhs">NHS</div>
     <div class="nav-tab"        data-section="my_data">My Data</div>
 </nav>
+
+<!-- ════════════════ BREADCRUMB ════════════════ -->
+<nav class="crumb-bar" id="crumb-bar" aria-label="Breadcrumb" hidden></nav>
 
 <!-- ════════════════ FILTER BAR ════════════════ -->
 <div class="filter-bar" id="filter-bar">
@@ -1674,6 +1691,7 @@
         } else {
             filterToggleBtn.style.visibility = '';
             initSubnav(key);
+            renderBreadcrumb(key);
             loadEmbedsInSection(key);
             // My Data is always scoped to the user's own practitioner.
             if (key === 'my_data') selectMyDataPractitioner();
@@ -1735,6 +1753,95 @@
 
     document.addEventListener('click', () => closePageDropdown());
 
+    // ── Breadcrumb ───────────────────────────────────────────────────────────
+    // One trail per section: page and bookmark segments in the order they were reached.
+    // Revisiting a segment truncates back to it rather than appending, so going back and
+    // forward does not grow the trail for ever.
+    function crumbTrail(key) {
+        const d = sectionSubnavData[key];
+        if (!d) return null;
+        if (!d.trail) d.trail = [];
+        return d.trail;
+    }
+
+    function notePage(key, name, displayName) {
+        const trail = crumbTrail(key);
+        if (!trail || !name) return;
+        const i = trail.findIndex(t => t.kind === 'page' && t.name === name);
+        if (i >= 0) trail.length = i + 1;
+        else trail.push({ kind: 'page', name, displayName: displayName || name });
+        if (key === activeSection) renderBreadcrumb(key);
+    }
+
+    function noteBookmark(key, name, displayName, pageName) {
+        const trail = crumbTrail(key);
+        if (!trail || !name) return;
+        // a view replaces the view before it; it does not stack on it
+        while (trail.length && trail[trail.length - 1].kind === 'bookmark') trail.pop();
+        trail.push({ kind: 'bookmark', name, displayName: displayName || name, pageName });
+        if (key === activeSection) renderBreadcrumb(key);
+    }
+
+    function goToCrumb(key, seg) {
+        const d = sectionSubnavData[key];
+        if (!d || !d.report) return;
+        if (seg.kind === 'page') { d.report.setPage(seg.name); return; }
+        // A bookmark belongs to a page. If we have wandered off it -- which is exactly
+        // what a drillthrough does -- put the page back before applying the view.
+        const apply = () => d.report.bookmarksManager.apply(seg.name).catch(() => {});
+        if (seg.pageName && d.activePage !== seg.pageName) {
+            Promise.resolve(d.report.setPage(seg.pageName)).then(apply).catch(() => {});
+        } else {
+            apply();
+        }
+    }
+
+    function renderBreadcrumb(key) {
+        const bar = document.getElementById('crumb-bar');
+        if (!bar) return;
+        const d = sectionSubnavData[key];
+        const tab = document.querySelector('.nav-tab[data-section="' + key + '"]');
+        const trail = (d && d.trail) || [];
+        if (!d || !tab || key === 'targets' || !trail.length) { bar.hidden = true; return; }
+        bar.innerHTML = '';
+        const add = (label, onClick, isLast) => {
+            if (bar.childNodes.length) {
+                const sep = document.createElement('span');
+                sep.className = 'crumb-sep';
+                sep.setAttribute('aria-hidden', 'true');
+                sep.textContent = '\u203A';
+                bar.appendChild(sep);
+            }
+            const el = document.createElement(isLast ? 'span' : 'button');
+            el.className = 'crumb' + (isLast ? ' current' : '');
+            el.textContent = label;
+            if (isLast) el.setAttribute('aria-current', 'page');
+            else { el.type = 'button'; el.addEventListener('click', onClick); }
+            bar.appendChild(el);
+        };
+        // The section itself is the first step home.
+        add(tab.textContent.trim(),
+            () => goToCrumb(key, { kind: 'page', name: (d.pages[0] || {}).name }), false);
+        trail.forEach((t, i) => add(t.displayName, () => goToCrumb(key, t),
+                                    i === trail.length - 1));
+        bar.hidden = false;
+    }
+
+    // ==> A DRILLTHROUGH FIRES NEITHER pageChanged NOR bookmarkApplied. <== It only
+    // renders. Re-read the active page here and correct the trail; the name guard stops
+    // an ordinary re-render from doing anything at all.
+    async function syncActivePage(key, rep) {
+        try {
+            const pages = await rep.getPages();
+            const act = pages.find(p => p.isActive);
+            if (!act) return;
+            const d = sectionSubnavData[key];
+            if (!d || d.activePage === act.name) return;
+            d.activePage = act.name;
+            notePage(key, act.name, act.displayName);
+        } catch (e) { /* mid-navigation; the next render retries */ }
+    }
+
     // Populates the dropdown from the static SECTION_PAGES list (names pre-captured at build time).
     function initSubnav(sectionKey) {
         const pageList = SECTION_PAGES[sectionKey] || [];
@@ -1755,10 +1862,34 @@
         if (data.activePage && data.activePage !== data.pages[0]?.name) {
             report.setPage(data.activePage);
         }
+        if (!data.trail || !data.trail.length) {
+            const first = data.pages[0];
+            if (first && first.name) notePage(sectionKey, first.name, first.displayName);
+        }
+        // ==> r.on() VALIDATES THE EVENT NAME AND THROWS ON ONE IT DOES NOT KNOW. <==
+        // 'bookmarkApplied' is in this client's allowed list, but an unwrapped registration
+        // is exactly how 'tokenExpired' silently killed every handler after it -- see the
+        // comment on the tokenExpired block below. A client without it loses the view
+        // segment of the breadcrumb and nothing else.
+        try {
+            report.off('bookmarkApplied');
+            report.on('bookmarkApplied', async e => {
+                const bm = (e.detail && (e.detail.bookmarkName || e.detail.name)) || null;
+                if (!bm) return;
+                const d = sectionSubnavData[sectionKey];
+                let label = bm;
+                try {
+                    const all = await report.bookmarksManager.getBookmarks();
+                    label = (all.find(b => b.name === bm) || {}).displayName || bm;
+                } catch (err) { /* fall back to the internal name */ }
+                noteBookmark(sectionKey, bm, label, d ? d.activePage : null);
+            });
+        } catch (err) { _devLog('[breadcrumb] bookmarkApplied unavailable:', err); }
         report.off('pageChanged');
         report.on('pageChanged', e => {
             const active = e.detail.newPage.name;
             if (sectionSubnavData[sectionKey]) sectionSubnavData[sectionKey].activePage = active;
+            notePage(sectionKey, active, e.detail.newPage.displayName);
             if (activeDropdown?.sectionKey === sectionKey) {
                 activeDropdown.el.querySelectorAll('.page-dropdown-item').forEach(btn => {
                     btn.classList.toggle('active', btn.textContent === data.pages.find(p => p.name === active)?.displayName);
@@ -3799,6 +3930,7 @@
         r.on('rendered', () => {
             const d = sectionSubnavData[sectionKey];
             if (d && d.pages.some(p => !p.name)) attachReportToSubnav(sectionKey, r);
+            syncActivePage(sectionKey, r);
             // Re-assert filters once the report has actually rendered. The setFilters
             // on 'loaded' can land before the report is ready (NHS dropped the date
             // filter on first display); a single guarded re-apply here fixes it
