@@ -14,7 +14,9 @@
       "c6edb867631e411d9ccc",
       "43c89356fd823245ca7e",
       "eab698b496fafcb3bbe7",
-      "f23e328a6835926cc84e"
+      "f23e328a6835926cc84e",
+      "f1e2d3c4b5a601110001",
+      "f1e2d3c4b5a601110002"
     ],
     "suppressData": true
   },
@@ -613,8 +615,6 @@
           },
           "c6edb867631e411d9ccc": {
             "singleVisual": {
-              "visualType": "tableEx",
-              "objects": {},
               "display": {
                 "mode": "hidden"
               }
@@ -635,6 +635,20 @@
             }
           },
           "f23e328a6835926cc84e": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "f1e2d3c4b5a601110001": {
+            "singleVisual": {
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "f1e2d3c4b5a601110002": {
             "singleVisual": {
               "display": {
                 "mode": "hidden"
