@@ -3,9 +3,9 @@
   "name": "f1e2d3c4b5a601110002",
   "position": {
     "x": 8,
-    "y": 332,
+    "y": 348,
     "z": 9101,
-    "height": 252,
+    "height": 236,
     "width": 628,
     "tabOrder": 9101
   },
@@ -48,7 +48,23 @@
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
               "active": true,
-              "format": "MMM yyyy"
+              "format": "MMM yyyy",
+              "displayName": "Month"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Payment Plans"
+                    }
+                  },
+                  "Property": "Payment Plan Name"
+                }
+              },
+              "queryRef": "List Payment Plans.Payment Plan Name",
+              "nativeQueryRef": "Payment Plan Name",
+              "displayName": "Plan"
             }
           ]
         },

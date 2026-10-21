@@ -5,8 +5,8 @@
     "x": 8,
     "y": 128,
     "z": 9100,
-    "height": 196,
-    "width": 1264,
+    "height": 212,
+    "width": 774,
     "tabOrder": 9100
   },
   "visual": {
@@ -28,7 +28,8 @@
               },
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
-              "format": "MMM yyyy"
+              "format": "MMM yyyy",
+              "displayName": "Month"
             },
             {
               "field": {
@@ -113,20 +114,6 @@
               },
               "queryRef": "_Measures.Cross-Charge Out",
               "nativeQueryRef": "Cross-Charge Out"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Cross-Charged Visits"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charged Visits",
-              "nativeQueryRef": "Cross-Charged Visits"
             }
           ]
         }
