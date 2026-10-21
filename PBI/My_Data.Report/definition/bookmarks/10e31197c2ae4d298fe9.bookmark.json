@@ -6,15 +6,14 @@
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
       "5da3ff6fc7174dbebb17",
-      "81e51d6d314b4d9ea4e5",
       "c7d8e9f0a1b2c3d40056",
       "e65b92cb285befc0124c",
       "da38b36b81d54b7d0e6e",
       "e32d2eb958ccb932c146",
       "c6edb867631e411d9ccc",
-      "43c89356fd823245ca7e",
-      "eab698b496fafcb3bbe7",
-      "f23e328a6835926cc84e"
+      "f23e328a6835926cc84e",
+      "f1e2d3c4b5a601110001",
+      "f1e2d3c4b5a601110002"
     ],
     "suppressData": true
   },
@@ -152,159 +151,7 @@
             }
           },
           "5da3ff6fc7174dbebb17": {
-            "filters": {
-              "byExpr": [
-                {
-                  "name": "e7e100b2d0081de6e94e",
-                  "type": "Categorical",
-                  "expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Date"
-                        }
-                      },
-                      "Property": "Week Commencing Date"
-                    }
-                  },
-                  "howCreated": 0
-                },
-                {
-                  "name": "a744715fdb4b70135900",
-                  "type": "Categorical",
-                  "expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "Category Bucket"
-                        }
-                      },
-                      "Property": "Category"
-                    }
-                  },
-                  "howCreated": 0
-                },
-                {
-                  "name": "86445e0336c4c6882a13",
-                  "type": "Advanced",
-                  "expression": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Measures"
-                        }
-                      },
-                      "Property": "Revenue (Top N)"
-                    }
-                  },
-                  "howCreated": 0
-                }
-              ]
-            },
             "singleVisual": {
-              "visualType": "columnChart",
-              "objects": {},
-              "orderBy": [
-                {
-                  "Direction": 1,
-                  "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Date"
-                        }
-                      },
-                      "Property": "Week Commencing Date"
-                    }
-                  }
-                }
-              ],
-              "activeProjections": {
-                "Category": [
-                  {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Date"
-                        }
-                      },
-                      "Property": "Week Commencing Date"
-                    }
-                  }
-                ]
-              },
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "81e51d6d314b4d9ea4e5": {
-            "filters": {
-              "byExpr": [
-                {
-                  "name": "c8437fc45c26bdcac005",
-                  "type": "Categorical",
-                  "expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Treatments"
-                        }
-                      },
-                      "Property": "Standard Treatment Category"
-                    }
-                  },
-                  "howCreated": 0
-                },
-                {
-                  "name": "e8f5cae0507d60406838",
-                  "type": "Advanced",
-                  "expression": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Invoice Items"
-                        }
-                      },
-                      "Property": "Revenue"
-                    }
-                  },
-                  "howCreated": 0
-                }
-              ]
-            },
-            "singleVisual": {
-              "visualType": "donutChart",
-              "objects": {},
-              "orderBy": [
-                {
-                  "Direction": 2,
-                  "Expression": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Invoice Items"
-                        }
-                      },
-                      "Property": "Revenue"
-                    }
-                  }
-                }
-              ],
-              "activeProjections": {
-                "Category": [
-                  {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Treatments"
-                        }
-                      },
-                      "Property": "Standard Treatment Category"
-                    }
-                  }
-                ]
-              },
               "display": {
                 "mode": "hidden"
               }
@@ -516,72 +363,7 @@
             }
           },
           "c7d8e9f0a1b2c3d40056": {
-            "filters": {
-              "byExpr": [
-                {
-                  "name": "73788f1d77543f6fde4d",
-                  "type": "Categorical",
-                  "expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Patients"
-                        }
-                      },
-                      "Property": "Standard Payment Plan"
-                    }
-                  },
-                  "howCreated": 0
-                },
-                {
-                  "name": "95578f487184d7d7a1cd",
-                  "type": "Advanced",
-                  "expression": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Measures"
-                        }
-                      },
-                      "Property": "Patients Booked"
-                    }
-                  },
-                  "howCreated": 0
-                }
-              ]
-            },
             "singleVisual": {
-              "visualType": "donutChart",
-              "objects": {},
-              "orderBy": [
-                {
-                  "Direction": 2,
-                  "Expression": {
-                    "Measure": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "_Measures"
-                        }
-                      },
-                      "Property": "Patients Booked"
-                    }
-                  }
-                }
-              ],
-              "activeProjections": {
-                "Category": [
-                  {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "List Patients"
-                        }
-                      },
-                      "Property": "Standard Payment Plan"
-                    }
-                  }
-                ]
-              },
               "display": {
                 "mode": "hidden"
               }
@@ -615,31 +397,16 @@
             }
           },
           "c6edb867631e411d9ccc": {
-            "singleVisual": {
-              "visualType": "tableEx",
-              "objects": {}
-            }
-          },
-          "43c89356fd823245ca7e": {
-            "singleVisual": {
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "eab698b496fafcb3bbe7": {
-            "singleVisual": {
-              "display": {
-                "mode": "hidden"
-              }
-            }
+            "singleVisual": {}
           },
           "f23e328a6835926cc84e": {
-            "singleVisual": {
-              "display": {
-                "mode": "hidden"
-              }
-            }
+            "singleVisual": {}
+          },
+          "f1e2d3c4b5a601110001": {
+            "singleVisual": {}
+          },
+          "f1e2d3c4b5a601110002": {
+            "singleVisual": {}
           }
         }
       }

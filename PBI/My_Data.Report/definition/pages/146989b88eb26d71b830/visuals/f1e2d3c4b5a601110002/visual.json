@@ -1,36 +1,39 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "eab698b496fafcb3bbe7",
+  "name": "f1e2d3c4b5a601110002",
   "position": {
-    "x": 782.19112627986351,
-    "y": 127.98634812286689,
-    "z": 6001,
-    "height": 196,
-    "width": 489.99317406143336,
-    "tabOrder": 6001
+    "x": 8,
+    "y": 348,
+    "z": 9101,
+    "height": 236,
+    "width": 628,
+    "tabOrder": 9101
   },
   "visual": {
     "visualType": "pivotTable",
     "query": {
       "queryState": {
-        "Rows": {
+        "Columns": {
           "projections": [
             {
               "field": {
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Practitioners"
+                      "Entity": "List Hygienist"
                     }
                   },
                   "Property": "Full Name"
                 }
               },
-              "queryRef": "List Practitioners.Full Name",
+              "queryRef": "List Hygienist.Full Name",
               "nativeQueryRef": "Full Name",
-              "active": true,
-              "displayName": "Practitioner"
-            },
+              "active": true
+            }
+          ]
+        },
+        "Rows": {
+          "projections": [
             {
               "field": {
                 "Column": {
@@ -44,9 +47,25 @@
               },
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
-              "active": false,
+              "active": true,
               "displayName": "Month",
               "format": "MMM yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Payment Plans"
+                    }
+                  },
+                  "Property": "Payment Plan Name"
+                }
+              },
+              "queryRef": "List Payment Plans.Payment Plan Name",
+              "nativeQueryRef": "Payment Plan Name",
+              "active": false,
+              "displayName": "Plan"
             }
           ]
         },
@@ -60,64 +79,38 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Cross-Charged Visits"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charged Visits",
-              "nativeQueryRef": "Cross-Charged Visits"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
                   "Property": "Cross-Charge Out"
                 }
               },
               "queryRef": "_Measures.Cross-Charge Out",
               "nativeQueryRef": "Cross-Charge Out"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Cross-Charge In"
-                }
-              },
-              "queryRef": "_Measures.Cross-Charge In",
-              "nativeQueryRef": "Cross-Charge In"
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Measure": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "_Measures"
-                  }
-                },
-                "Property": "Cross-Charged Visits"
-              }
-            },
-            "direction": "Descending"
-          }
-        ],
-        "isDefaultSort": true
       }
     },
     "objects": {
       "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "rowHeaders": [
         {
           "properties": {
             "fontSize": {
@@ -157,24 +150,9 @@
           }
         }
       ],
-      "rowHeaders": [
+      "total": [
         {
-          "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
-            "fontFamily": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Arial'"
-                }
-              }
-            }
-          }
+          "properties": {}
         }
       ]
     },
@@ -185,7 +163,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'By practitioner'"
+                  "Value": "'Operating expenses: cross-charge by hygienist'"
                 }
               }
             },
@@ -206,13 +184,13 @@
           }
         }
       ],
-      "subTitle": [
+      "stylePreset": [
         {
           "properties": {
-            "show": {
+            "name": {
               "expr": {
                 "Literal": {
-                  "Value": "false"
+                  "Value": "'None'"
                 }
               }
             }

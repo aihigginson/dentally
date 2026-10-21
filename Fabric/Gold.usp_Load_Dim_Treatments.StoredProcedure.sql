@@ -63,7 +63,7 @@ BEGIN
         DELETE tgt
         FROM Gold.Dim_Treatments tgt
         WHERE NOT EXISTS (SELECT 1 FROM #src WHERE Treatment_ID = tgt.Treatment_ID AND Tenant_ID = tgt.Tenant_ID)
-        AND tgt.pk_Treatment <> -1;
+        AND tgt.pk_Treatment > 0;
         SET @My_Deletes = @@ROWCOUNT;
 
         -- Update changed rows
@@ -131,6 +131,35 @@ BEGIN
         INSERT INTO Gold.Dim_Treatments (pk_Treatment, Tenant_ID, Treatment_ID, Treatment_Count, DW_Created_At, DW_Updated_At)
         SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments WHERE pk_Treatment = -1);
+
+        -- ==> REVENUE WITH NO TREATMENT IS NOT THE SAME AS A TREATMENT WE COULD NOT RESOLVE. <==
+        -- Gold.Fact_Revenue unions four branches and three of them have no treatment to point at:
+        -- an NHS claim is valued in UDAs, and plan capitation and the hygienist cross-charge are
+        -- not invoice lines at all. All three used to borrow the -1 unknown row, so a chart split
+        -- by treatment category drew them together as one unlabelled (Blank) -- the single biggest
+        -- member on My Data > Earnings, and the reader had no way to tell what it contained.
+        --
+        -- They get named rows of their own instead. -1 keeps its original meaning: an invoice line
+        -- whose treatment genuinely did not resolve, which is a data question worth still being
+        -- able to see on its own.
+        INSERT INTO Gold.Dim_Treatments
+            (pk_Treatment, Tenant_ID, Treatment_ID, Nomenclature,
+             Treatment_Category_Name, Standard_Treatment_Category,
+             Treatment_Count, DW_Created_At, DW_Updated_At)
+        SELECT v.pk, -1, v.pk, v.label, v.label, v.label, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        FROM   (VALUES (-2, 'Capitation'), (-3, 'NHS')) AS v(pk, label)
+        WHERE  NOT EXISTS (SELECT 1 FROM Gold.Dim_Treatments d WHERE d.pk_Treatment = v.pk);
+
+        -- The rows above are inserted once; this repairs one that predates the labels, and is a
+        -- no-op on every run after that. Same shape as the V221 backfill, same reason.
+        UPDATE tgt
+        SET    Nomenclature                = v.label,
+               Treatment_Category_Name     = v.label,
+               Standard_Treatment_Category = v.label,
+               DW_Updated_At               = SYSUTCDATETIME()
+        FROM   Gold.Dim_Treatments tgt
+        JOIN   (VALUES (-2, 'Capitation'), (-3, 'NHS')) AS v(pk, label) ON v.pk = tgt.pk_Treatment
+        WHERE  tgt.Treatment_Category_Name IS NULL;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

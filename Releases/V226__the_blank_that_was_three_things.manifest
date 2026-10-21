@@ -1,0 +1,50 @@
+# =====================================================================
+# Release V226 -- the (Blank) treatment category was three different things
+# =====================================================================
+# On My Data > Earnings, "Earnings by treatment category" draws a (Blank) member that is
+# routinely the largest one on the chart. It is not one thing. Gold.Fact_Revenue unions four
+# branches and three of them have no treatment to point at, so all three borrowed the -1
+# unknown row:
+#
+#     NHS            a claim is valued in UDAs; there is no invoice line behind it
+#     Capitation     a reconstructed plan fee, not an invoice line at all
+#     Cross-charge   plan money moved from a dentist to a hygienist
+#
+# plus the genuine case -1 exists for: an invoice line whose treatment did not resolve.
+#
+# Four unrelated populations in one unlabelled bar, and no way for the reader to separate
+# them. They get named sentinel rows instead -- -2 'Capitation' (both plan branches) and
+# -3 'NHS' -- and -1 keeps its original meaning, which is worth still being able to see on
+# its own because it is a data question rather than a category.
+#
+# ==> THE DELETE PROTECTED ONLY -1. <== Dim_Treatments removes any row not in #src, excluding
+# pk_Treatment <> -1. New sentinels would have been inserted and then deleted on the very next
+# load, flickering between labelled and blank depending on when anyone looked. The guard is now
+# pk_Treatment > 0, which protects every sentinel including ones added later.
+#
+# The seed INSERT fires WHERE NOT EXISTS, so it creates the two rows once. The UPDATE beside it
+# is the V221 lesson applied up front: an insert alone cannot repair a row that already exists,
+# so the labels are also written to any pre-existing -2/-3 whose name is NULL, and it is a no-op
+# on every run after that.
+#
+# Nothing filters on the value -- a repo-wide search for fk_Treatment compared against a literal
+# returns only a column assignment -- so moving three branches off -1 changes no logic, only what
+# the model has to display.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Treatments.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Revenue.View.sql
+
+# The dimension must carry the rows before the view starts pointing at them, or the model
+# resolves nothing and the chart gains a blank where it used to have a bar.
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Dim_Treatments @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# Both sentinels exist and both are named. A NULL name here is the exact fault V221 fixed
+# for practitioners and sites, so it is asserted rather than assumed.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Treatments WHERE pk_Treatment IN (-2, -3) AND Treatment_Category_Name IS NOT NULL; IF @n <> 2 BEGIN SET @e = 'V226 FAILED: expected 2 named sentinel treatments, found ' + CAST(@n AS VARCHAR(10)) + '.'; THROW 50552, @e, 1; END;
+
+# And the view actually routes to them -- a revenue row of these types still sitting on -1
+# means the view did not deploy, which would otherwise show up only as an unchanged chart.
+EXEC     DECLARE @b INT, @e2 VARCHAR(4000); SELECT @b = COUNT(*) FROM Gold.Fact_Revenue WHERE Revenue_Type IN ('NHS', 'Capitation') AND fk_Treatment = -1; IF @b > 0 BEGIN SET @e2 = 'V226 FAILED: ' + CAST(@b AS VARCHAR(10)) + ' NHS/Capitation revenue rows still point at the -1 unknown treatment.'; THROW 50553, @e2, 1; END;
+
+TEST

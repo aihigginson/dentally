@@ -81,3 +81,7 @@
 - [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
 - [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
 - [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.
+- [sys.* cannot join a user table in Fabric](sys-views-cannot-join-user-tables-in-fabric.md) — and SELECT INTO #temp FROM sys.* fails too; the RI check is the control, do not duplicate it.
+- [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
+- [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
+- [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.

@@ -72,7 +72,7 @@ SELECT  n.pk_Revenue_NHS + 2000000000000,
         n.fk_Practitioner,
         n.fk_Practice_Site,
         CAST(-1 AS BIGINT),                  -- no payment plan
-        CAST(-1 AS BIGINT),                  -- no treatment
+        CAST(-3 AS BIGINT),                  -- the named 'NHS' sentinel treatment
         n.fk_Date,
         n.Amount,
         CAST(0 AS DECIMAL(12,2)),
@@ -95,7 +95,7 @@ SELECT  c.pk_Revenue_Capitation + 3000000000000,
         c.fk_Practitioner,
         c.fk_Practice_Site,
         c.fk_Payment_Plan,
-        CAST(-1 AS BIGINT),
+        CAST(-2 AS BIGINT),                  -- the named 'Capitation' sentinel treatment
         c.fk_Date,
         c.Amount,
         CAST(0 AS DECIMAL(12,2)),
@@ -121,7 +121,7 @@ SELECT  x.pk_Revenue_Cross_Charge + 4000000000000,
         x.fk_Practitioner,
         x.fk_Practice_Site,
         x.fk_Payment_Plan,
-        CAST(-1 AS BIGINT),
+        CAST(-2 AS BIGINT),                  -- plan money too, so it reads as 'Capitation'
         x.fk_Date,
         x.Amount,
         CAST(0 AS DECIMAL(12,2)),

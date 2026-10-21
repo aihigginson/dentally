@@ -1,0 +1,80 @@
+name: Fabric capacity schedule
+
+# Hold the capacity at the SKU the time of day calls for. Pre-revenue the capacity is
+# the biggest line on the bill and it does not need to be F4 while nobody is looking,
+# nor running at all overnight.
+#
+#   00:00-06:00 UK   paused      nothing is scheduled; measured over 14 days, the hour
+#                                histogram in Audit.Process_Execution_Log is empty here
+#   06:00-18:00 UK   F4          working day, and the 07:00 catch-all model refresh
+#   18:00-22:00 UK   F2          evening
+#   22:00-00:00 UK   F4          the nightly build, 22:03 to about 22:37 UK
+#
+# ==> CRON IS UTC AND THE SCHEDULE IS UK LOCAL. <== The Fabric pipeline is scheduled in
+# UK local time, so the window protecting the nightly build has to move with the clocks
+# or it misses the build by an hour every winter. The times below are therefore fired at
+# the union of BOTH offsets' boundaries -- 8 a day -- and Capacity_Schedule.ps1 works out
+# what UK local time it actually is and no-ops the half that is not due. That also makes
+# the job self-healing: a scale that fails, or a cron GitHub runs late, is corrected at
+# the next firing rather than leaving the capacity stuck on the wrong SKU overnight.
+#
+# -LeadMinutes 15 makes each run ask "what should be true in 15 minutes?", so the change
+# has LANDED by the boundary. Resuming a paused capacity takes a couple of minutes and a
+# resize a few more; without the lead, 06:00 would be when the climb to F4 starts.
+
+on:
+  schedule:
+    #     Boundaries are 00:00, 06:00, 18:00 and 22:00 UK, fired 15 minutes early: that is
+    #     23:45 05:45 17:45 21:45 in winter, and the same wall-clock times land an hour
+    #     earlier in UTC over summer. Union of both, so either offset is covered.
+    - cron: '45 4,5,16,17,20,21,22,23 * * *'
+  workflow_dispatch:
+    inputs:
+      at:
+        description: 'UK local HH:mm to evaluate instead of now (e.g. 22:00). Blank = now.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Report what it would do and change nothing'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Two runs resizing the same capacity at once is the one way to leave it in a state
+# neither of them intended.
+concurrency:
+  group: fabric-capacity
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The same service principal the prod app deploy uses. It needs rights over the
+      # capacity resource itself (Microsoft.Fabric/capacities read/write plus the
+      # suspend and resume actions) -- Contributor on rg-analytically covers it. Being
+      # a Fabric capacity ADMIN is a different thing and is not what this needs.
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      - name: Apply the schedule
+        shell: pwsh
+        env:
+          AT: ${{ inputs.at }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          # ==> SPLAT A HASHTABLE, NOT AN ARRAY. <== An array splat binds positionally, so
+          # -WhatIf -- a common parameter that CmdletBinding supplies rather than one the
+          # param block declares -- is not matched and the run dies with "A positional
+          # parameter cannot be found that accepts argument '-WhatIf'".
+          $p = @{ LeadMinutes = 15 }
+          if ($env:AT) { $p.At = $env:AT }
+          if ($env:DRY -eq 'true') { $p.WhatIf = $true }
+          ./Scripts/Capacity_Schedule.ps1 @p

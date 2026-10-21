@@ -1,0 +1,47 @@
+# =====================================================================
+# Release V224 -- drop the target tables nothing reads
+# =====================================================================
+# The second half of V223. That release dropped the three procedures that wrote these
+# tables; this drops the tables and the PBI views over them.
+#
+#     Gold.Fact_Targets             141 rows, frozen at 2026-07-14
+#     Gold.Fact_Effective_Targets    86 rows
+#     PBI.[_Targets]
+#     PBI.[_Effective Targets]
+#
+# Nothing reads them: zero references across PBI_Dentally.csx and every report page
+# definition. Targets reach the reports through Input.Targets -> Fact_Daily_Targets ->
+# Aggregate_Period_Targets, which this release must leave untouched.
+#
+# ==> THE TABLES MUST GO, NOT JUST THE VIEWS. <== Meta.usp_Create_Gold_Views builds a PBI
+# view for every table in the Gold schema (FROM sys.tables WHERE s.name = 'Gold'), so
+# dropping the views alone would see them recreated on the next build.
+#
+# ==> ORDER MATTERS ACROSS ENVIRONMENTS. <== While a semantic model still IMPORTS a table,
+# dropping its view fails the next refresh and leaves that environment's data stale. The
+# model goes first, every time:
+#
+#     DEV   model updated 2026-10-20 (both tables removed; refreshed Completed in 46s,
+#           RLS coverage and RLS isolation both green) -- so DEV may take this release now.
+#     PROD  DO NOT DEPLOY until the model has been promoted through the Fabric deployment
+#           pipeline and a PROD refresh has succeeded. Deploying ahead of that breaks the
+#           live customer's nightly refresh.
+# ---------------------------------------------------------------------
+
+# Refuse if anything in the warehouse still depends on them.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.sql_modules m JOIN sys.objects o ON o.object_id = m.object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE o.name NOT IN ('_Targets','_Effective Targets') AND s.name IN ('Gold','Silver','PBI','Meta') AND (m.definition LIKE '%Fact[_]Effective[_]Targets%' OR m.definition LIKE '%Gold.Fact[_]Targets%'); IF @n <> 0 BEGIN SET @e = 'V224 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' module(s) still reference these tables.'; THROW 50540, @e, 1; END;
+
+EXEC     DROP VIEW IF EXISTS [PBI].[_Targets];
+EXEC     DROP VIEW IF EXISTS [PBI].[_Effective Targets];
+EXEC     DROP TABLE IF EXISTS [Gold].[Fact_Targets];
+EXEC     DROP TABLE IF EXISTS [Gold].[Fact_Effective_Targets];
+
+# Gone -- tables and views both, or the generator rebuilds the views next run.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = (SELECT COUNT(*) FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.name IN ('Fact_Targets','Fact_Effective_Targets')) + (SELECT COUNT(*) FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'PBI' AND o.name IN ('_Targets','_Effective Targets')); IF @n <> 0 BEGIN SET @e = 'V224 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' of the four objects still exist.'; THROW 50541, @e, 1; END;
+
+# The LIVE target chain is untouched: both loaders present, both tables populated.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'Gold' AND o.type = 'P' AND o.name IN ('usp_Load_Fact_Daily_Targets','usp_Load_Aggregate_Period_Targets'); IF @n <> 2 BEGIN SET @e = 'V224 FAILED: the live target chain is incomplete -- ' + CAST(@n AS VARCHAR(10)) + ' of 2.'; THROW 50542, @e, 1; END;
+
+EXEC     DECLARE @d INT, @a INT, @e VARCHAR(4000); SELECT @d = COUNT(*) FROM Gold.Fact_Daily_Targets; SELECT @a = COUNT(*) FROM Gold.Aggregate_Period_Targets; IF @d = 0 OR @a = 0 BEGIN SET @e = 'V224 FAILED: live targets are empty -- Fact_Daily_Targets ' + CAST(@d AS VARCHAR(10)) + ', Aggregate_Period_Targets ' + CAST(@a AS VARCHAR(10)) + '.'; THROW 50543, @e, 1; END;
+
+TEST

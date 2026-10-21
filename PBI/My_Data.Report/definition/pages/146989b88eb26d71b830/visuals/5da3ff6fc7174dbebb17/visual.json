@@ -6,7 +6,7 @@
     "y": 230,
     "z": 5000,
     "height": 366,
-    "width": 1279.8634812286689,
+    "width": 820,
     "tabOrder": 5000
   },
   "visual": {
@@ -23,11 +23,11 @@
                       "Entity": "List Date"
                     }
                   },
-                  "Property": "Week Commencing Date"
+                  "Property": "Month Commencing Date"
                 }
               },
-              "queryRef": "List Date.Week Commencing Date",
-              "nativeQueryRef": "Week Commencing Date",
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
               "active": true
             }
           ]
@@ -79,7 +79,7 @@
                     "Entity": "List Date"
                   }
                 },
-                "Property": "Week Commencing Date"
+                "Property": "Month Commencing Date"
               }
             },
             "direction": "Ascending"
@@ -228,7 +228,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Revenue by Week'"
+                  "Value": "'Revenue by Month'"
                 }
               }
             },
@@ -263,7 +263,7 @@
                 "Entity": "List Date"
               }
             },
-            "Property": "Week Commencing Date"
+            "Property": "Month Commencing Date"
           }
         },
         "type": "Categorical"

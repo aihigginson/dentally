@@ -2,18 +2,18 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "c6edb867631e411d9ccc",
   "position": {
-    "x": 8.19112627986348,
-    "y": 127.98634812286689,
+    "x": 790,
+    "y": 128,
     "z": 9000,
-    "height": 456.14334470989758,
-    "width": 1263.9931740614334,
+    "height": 212,
+    "width": 482,
     "tabOrder": 9000
   },
   "visual": {
-    "visualType": "pivotTable",
+    "visualType": "columnChart",
     "query": {
       "queryState": {
-        "Columns": {
+        "Category": {
           "projections": [
             {
               "field": {
@@ -23,17 +23,18 @@
                       "Entity": "List Date"
                     }
                   },
-                  "Property": "Week Ending Date"
+                  "Property": "Month Commencing Date"
                 }
               },
-              "queryRef": "List Date.Week Ending Date",
-              "nativeQueryRef": "Week Ending Date",
+              "queryRef": "List Date.Month Commencing Date",
+              "nativeQueryRef": "Month Commencing Date",
               "active": true,
-              "format": "d"
+              "format": "MMM yyyy",
+              "displayName": "Month"
             }
           ]
         },
-        "Rows": {
+        "Series": {
           "projections": [
             {
               "field": {
@@ -52,7 +53,7 @@
             }
           ]
         },
-        "Values": {
+        "Y": {
           "projections": [
             {
               "field": {
@@ -73,60 +74,89 @@
       }
     },
     "objects": {
-      "columnHeaders": [
+      "legend": [
         {
           "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "8D"
-                }
-              }
-            },
             "fontFamily": {
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
                 }
               }
-            }
-          }
-        }
-      ],
-      "values": [
-        {
-          "properties": {
+            },
             "fontSize": {
               "expr": {
                 "Literal": {
                   "Value": "8D"
                 }
               }
-            },
+            }
+          }
+        }
+      ],
+      "categoryAxis": [
+        {
+          "properties": {
             "fontFamily": {
               "expr": {
                 "Literal": {
                   "Value": "'Arial'"
                 }
               }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
             }
           }
         }
       ],
-      "total": [
+      "valueAxis": [
         {
-          "properties": {}
+          "properties": {
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            }
+          }
         }
       ]
     },
     "visualContainerObjects": {
-      "stylePreset": [
+      "title": [
         {
           "properties": {
-            "name": {
+            "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'None'"
+                  "Value": "'Earnings by treatment category'"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Arial'"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
                 }
               }
             }
@@ -174,7 +204,7 @@
                 "Entity": "List Date"
               }
             },
-            "Property": "Week Ending Date"
+            "Property": "Month Commencing Date"
           }
         },
         "type": "Categorical"

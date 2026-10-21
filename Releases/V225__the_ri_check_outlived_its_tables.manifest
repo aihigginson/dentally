@@ -1,0 +1,37 @@
+# =====================================================================
+# Release V225 -- the RI check outlived its tables
+# =====================================================================
+# V224 applied cleanly: all nine actions OK, "Manifest applied successfully". Deploy.ps1's
+# POST-deploy referential-integrity check then failed the run with
+#
+#     Invalid object name 'Gold.Fact_Effective_Targets'
+#
+# Audit.RI_Check_Config still held five rows naming the two tables V224 dropped, so the
+# check was looking for something that no longer exists. The check is behaving correctly;
+# its configuration was stale. Nothing was orphaned -- the latest RI run is 28 checks, 0
+# failing -- and V224 itself is deployed and logged SUCCESS.
+#
+# ==> THE SEED FILE IS UTF-16. <== One of the few in the repo, which is why a repo-wide
+# grep for Fact_Targets never found it: grep skips UTF-16 silently. It was read and
+# rewritten as UTF-16; 88 VALUES rows remain.
+#
+# Audit.RI_Check_Config.Data.sql is a full reseed (DELETE then INSERT), so deploying the
+# corrected file is the whole change.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
+
+# ==> NO SQL GUARD HERE, DELIBERATELY. <== Two attempts to assert "every RI_Check_Config row
+# names a real Gold table" were both rejected by Fabric: correlating sys.objects with a user
+# table, and then SELECT ... INTO #temp FROM sys.objects, each gave
+#     "The query references an object that is not supported in distributed processing mode."
+#
+# It does not need one. Deploy.ps1 runs a referential-integrity check after every manifest,
+# and that is precisely what caught this fault -- V224 deployed cleanly and the RI check then
+# failed the run with "Invalid object name 'Gold.Fact_Effective_Targets'". A second guard here
+# would duplicate a control that already works, in a dialect that will not express it.
+
+# And the seed landed rather than emptying the table.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.RI_Check_Config; IF @n < 50 BEGIN SET @e = 'V225 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' RI config rows after the reseed.'; THROW 50551, @e, 1; END;
+
+TEST
