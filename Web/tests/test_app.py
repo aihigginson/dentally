@@ -2093,3 +2093,44 @@ def test_pricing_cache_serves_the_whole_payload(client, appmod, monkeypatch):
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError('should be cached')))
     second = client.get('/api/pricing').get_json()
     assert second == first and second['lead_price'] == 120.0
+
+
+# ── Weekly insight narratives ────────────────────────────────────────────────
+# The ranking is decided in SQL and is testable there. What is tested here is the one
+# thing a language model could genuinely get wrong on a customer's own figures: putting
+# a number in the sentence that nobody gave it.
+
+def test_insight_values_are_formatted_before_the_model_sees_them(appmod):
+    f = appmod._fmt_metric_value
+    assert f(0.268, 'percent', False) == '26.8%'
+    assert f(26.8, 'percent', False) == '26.8%'        # already scaled, not multiplied twice
+    assert f(205.34, 'currency', False) == '£205'
+    assert f(1.55, 'count', True) == '1.6 a day'
+    assert f(None, 'currency', False) == 'n/a'
+
+
+def test_a_narrative_may_not_contain_a_number_it_was_not_given(appmod):
+    nums = appmod._insight_numbers
+    facts = 'Change: +56%. Four weeks to now: 26.8%. The four weeks before: 17.2%.'
+    allowed = nums(facts)
+    faithful = 'Short notice cancellations rose 56% to 26.8%, up from 17.2%.'
+    assert not [n for n in nums(faithful) if n not in allowed]
+    # the failure that matters: a figure that reads plausibly and was never supplied
+    invented = 'Short notice cancellations rose 56% to 26.8%, costing about £4,200 a month.'
+    assert [n for n in nums(invented) if n not in allowed] == ['4200']
+
+
+def test_narrate_refuses_without_the_shared_secret(client, appmod, monkeypatch):
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'sekrit')
+    assert client.post('/api/insights/narrate').status_code == 401
+    assert client.post('/api/insights/narrate',
+                       headers={'X-Monitor-Key': 'wrong'}).status_code == 401
+
+
+def test_narrate_is_a_no_op_without_an_api_key(client, appmod, monkeypatch):
+    # No key is not a failure. The ranking is the product; the prose is decoration, and
+    # the nightly build must not go red because a model was unavailable.
+    monkeypatch.setattr(appmod, 'MONITOR_KEY', 'sekrit')
+    monkeypatch.setattr(appmod, 'INSIGHT_API_KEY', '')
+    r = client.post('/api/insights/narrate', headers={'X-Monitor-Key': 'sekrit'})
+    assert r.status_code == 200 and r.get_json()['written'] == 0

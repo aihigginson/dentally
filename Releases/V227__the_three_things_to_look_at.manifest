@@ -58,4 +58,16 @@ EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggreg
 # the sign convention is the one thing a reader cannot check for themselves.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights i JOIN Config.Metric_Definitions m ON m.Metric_Key = i.Metric WHERE (i.Direction = 'Watch' AND ((m.Range_Type = 'above' AND i.Relative_Change > 0) OR (m.Range_Type = 'below' AND i.Relative_Change < 0))) OR (i.Direction = 'Good' AND ((m.Range_Type = 'above' AND i.Relative_Change < 0) OR (m.Range_Type = 'below' AND i.Relative_Change > 0))); IF @n <> 0 BEGIN SET @e = 'V227 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are filed in the wrong direction for their Range_Type.'; THROW 50562, @e, 1; END;
 
+# ==> THE MODEL NEEDS A VIEW, AND Meta.usp_Create_Gold_Views ONLY RUNS AT NIGHT. <== The
+# generator builds a PBI view for every Gold table, so this one would appear on the next
+# build -- but the model cannot be pointed at a view that does not exist yet. Created here
+# in exactly the shape the generator produces (underscores become spaces), so its own
+# DROP/CREATE tonight is a no-op rather than a change.
+EXEC     DROP VIEW IF EXISTS PBI.[Aggregate Practice Insights];
+EXEC     CREATE VIEW PBI.[Aggregate Practice Insights] AS SELECT [pk_Insight] AS [pk Insight], [Tenant_ID] AS [Tenant ID], [Week_Commencing_Date] AS [Week Commencing Date], [Direction] AS [Direction], [Rank_In_Direction] AS [Rank In Direction], [Metric] AS [Metric], [Display_Name] AS [Display Name], [Section] AS [Section], [Format_Type] AS [Format Type], [Per_Working_Day] AS [Per Working Day], [Value_Now] AS [Value Now], [Value_Before] AS [Value Before], [Relative_Change] AS [Relative Change], [Target_Value] AS [Target Value], [Last_Year_Change] AS [Last Year Change], [Narrative] AS [Narrative], [DW_Created_At] AS [DW Created At], [DW_Updated_At] AS [DW Updated At] FROM Gold.[Aggregate_Practice_Insights];
+
+# ==> A TENANT-BEARING TABLE WITHOUT AN RLS RULE IS A CROSS-TENANT LEAK. <== This view
+# carries Tenant ID, so the model needs a filter on it before anything reads it --
+# Check_RLS_Coverage.ps1 fails the build otherwise, which is the control working.
+
 TEST

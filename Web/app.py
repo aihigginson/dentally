@@ -9,6 +9,8 @@ import uuid
 import logging
 import base64
 import hmac
+import urllib.request
+import re
 import hashlib
 import json
 import time
@@ -1758,6 +1760,131 @@ def _principal_token_email_body():
         "We'll check the token can read your data before saving, and your reports will catch up on the "
         "next overnight refresh.\n"
     )
+
+
+# ── Weekly insight narratives ────────────────────────────────────────────────
+# Gold.Aggregate_Practice_Insights holds the six rows; this writes the sentence for each.
+INSIGHT_MODEL   = os.environ.get('INSIGHT_MODEL', 'claude-sonnet-5')
+INSIGHT_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+
+
+def _fmt_metric_value(value, fmt, per_day):
+    """Formatted HERE, never by the model -- it is handed numbers already written."""
+    if value is None:
+        return 'n/a'
+    v = float(value)
+    if fmt == 'percent':
+        out = '%.1f%%' % (v * 100 if abs(v) <= 1.5 else v)
+    elif fmt == 'currency':
+        out = '£{:,.0f}'.format(v)
+    else:
+        out = '{:,.1f}'.format(v).rstrip('0').rstrip('.')
+    return out + (' a day' if per_day else '')
+
+
+def _insight_numbers(text):
+    """Every number a sentence contains, so an invented one can be spotted."""
+    return set(re.findall(r'\d+(?:\.\d+)?', (text or '').replace(',', '')))
+
+
+@app.route('/api/insights/narrate', methods=['POST'])
+def insights_narrate():
+    """Write the plain-English line for each unnarrated insight row.
+
+    The ranking is NOT the model's to make -- it is already in the table. This only turns
+    the figures into a sentence, and refuses any sentence carrying a number it was not
+    given. Shared-secret auth; fails closed if MONITOR_KEY is unset."""
+    if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not INSIGHT_API_KEY:
+        # Deliberately not an error: the ranking stands on its own without prose.
+        app.logger.info('insights: no ANTHROPIC_API_KEY set, leaving narratives empty')
+        return jsonify({'written': 0, 'skipped': 'no api key'}), 200
+
+    written, failed = 0, 0
+    try:
+        conn = _fabric_conn(autocommit=True)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT pk_Insight, Tenant_ID, Direction, Rank_In_Direction, Display_Name,
+                   Section, Format_Type, Per_Working_Day, Value_Now, Value_Before,
+                   Relative_Change, Target_Value, Last_Year_Change
+            FROM   Gold.Aggregate_Practice_Insights
+            WHERE  Narrative IS NULL
+            ORDER  BY Tenant_ID, Direction, Rank_In_Direction""")
+        rows = cur.fetchall()
+
+        for r in rows:
+            now_s = _fmt_metric_value(r.Value_Now, r.Format_Type, r.Per_Working_Day)
+            was_s = _fmt_metric_value(r.Value_Before, r.Format_Type, r.Per_Working_Day)
+            chg = float(r.Relative_Change or 0) * 100
+            facts = [
+                'Metric: %s (%s)' % (r.Display_Name, r.Section),
+                'Four weeks to now: %s' % now_s,
+                'The four weeks before: %s' % was_s,
+                'Change: %+.0f%%' % chg,
+                'This is %s' % ('a concern' if r.Direction == 'Watch' else 'an improvement'),
+            ]
+            if r.Target_Value is not None:
+                facts.append('Their target: %s'
+                             % _fmt_metric_value(r.Target_Value, r.Format_Type, False))
+            if r.Last_Year_Change is not None:
+                facts.append('Over the SAME four weeks last year it moved %+.0f%%'
+                             % (float(r.Last_Year_Change) * 100))
+            else:
+                facts.append('There is no comparable period last year')
+
+            prompt = (
+                "You are writing one sentence for a dental practice owner's weekly summary.\n\n"
+                + '\n'.join(facts) +
+                "\n\nWrite ONE sentence, at most 30 words, in British English.\n"
+                "Rules:\n"
+                "- Use ONLY the figures above. Do not calculate, estimate or invent any number.\n"
+                "- If the same move happened last year, say so plainly -- a seasonal rise is not "
+                "an achievement and a seasonal fall is not a crisis.\n"
+                "- No greeting, no preamble, no exclamation marks, no advice to 'keep it up'.\n"
+                "- Plain and specific. Say what moved and what it means, nothing more.")
+
+            try:
+                body = json.dumps({
+                    'model': INSIGHT_MODEL,
+                    'max_tokens': 150,
+                    'messages': [{'role': 'user', 'content': prompt}],
+                }).encode('utf-8')
+                req = urllib.request.Request(
+                    'https://api.anthropic.com/v1/messages', data=body,
+                    headers={'content-type': 'application/json',
+                             'x-api-key': INSIGHT_API_KEY,
+                             'anthropic-version': '2023-06-01'})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    payload = json.loads(resp.read().decode('utf-8'))
+                text = ''.join(b.get('text', '') for b in payload.get('content', [])).strip()
+            except Exception as e:
+                app.logger.warning('insights: model call failed for %s: %s', r.pk_Insight, e)
+                failed += 1
+                continue
+
+            # ==> A SENTENCE MAY NOT CONTAIN A NUMBER IT WAS NOT GIVEN. <== The figures are
+            # the practice's own; a plausible invented one is worse than no sentence at all.
+            allowed = _insight_numbers(' '.join(facts))
+            invented = [n for n in _insight_numbers(text) if n not in allowed]
+            if not text or invented:
+                app.logger.warning('insights: rejected narrative for %s (invented %s)',
+                                   r.pk_Insight, invented)
+                failed += 1
+                continue
+
+            cur.execute("UPDATE Gold.Aggregate_Practice_Insights "
+                        "SET Narrative = ?, DW_Updated_At = SYSUTCDATETIME() "
+                        "WHERE pk_Insight = ?", text[:600], r.pk_Insight)
+            written += 1
+
+        conn.close()
+        app.logger.info('insights: %d narrative(s) written, %d failed', written, failed)
+        return jsonify({'written': written, 'failed': failed, 'considered': len(rows)}), 200
+    except Exception as e:
+        app.logger.exception('insights: narrate failed')
+        return jsonify({'error': str(e), 'written': written}), 500
 
 
 @app.route('/api/monitor/health', methods=['POST'])
