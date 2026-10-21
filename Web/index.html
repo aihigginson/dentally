@@ -1639,6 +1639,13 @@
         day_book: [
             { displayName: 'Day Book', name: '1404b201b55e6e36945b' },
         ],
+        // ==> MY DATA WAS MISSING HERE. <== Without an entry the section has no pages,
+        // so the breadcrumb had no "first page" to recognise -- it showed the overview
+        // as a second segment ("My Data > Overview") and the report-name link called
+        // setPage(undefined), which silently did nothing.
+        my_data: [
+            { displayName: 'Overview', name: '146989b88eb26d71b830' },
+        ],
     };
 
     // ── State ────────────────────────────────────────────────────────────────
@@ -1846,7 +1853,8 @@
         // so the segment that actually takes you somewhere looked like a label. The
         // first page is dropped as a segment; the report name does its job, and stays
         // clickable even when it is alone, since going back to the top is the point.
-        const mainPage = (d.pages[0] || {}).name;
+        const mainPage = (d.pages[0] || {}).name
+                      || (trail.find(t => t.kind === 'page') || {}).name;
         const rest = trail.filter(t => !(t.kind === 'page' && t.name === mainPage));
         add(tab.textContent.trim(),
             () => goToCrumb(key, { kind: 'page', name: mainPage }), false);
