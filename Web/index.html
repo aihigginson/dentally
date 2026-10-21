@@ -1811,6 +1811,34 @@
         if (key === activeSection) renderBreadcrumb(key);
     }
 
+    // Bookmark groups nest, so flatten before anyone takes "the first one".
+    function flattenBookmarks(list, out) {
+        out = out || [];
+        (list || []).forEach(b => {
+            if (b.children && b.children.length) flattenBookmarks(b.children, out);
+            else out.push(b);
+        });
+        return out;
+    }
+
+    // The report name goes HOME: first page and first view. On a detail screen that is
+    // a real journey; on the opening view it correctly does nothing.
+    function goHome(key) {
+        const d = sectionSubnavData[key];
+        if (!d || !d.report) return;
+        const mainPage = (d.pages[0] || {}).name
+                      || ((d.trail || []).find(t => t.kind === 'page') || {}).name;
+        const first = (d.bookmarks || [])[0];
+        const apply = () => {
+            if (first) d.report.bookmarksManager.apply(first.name).catch(() => {});
+        };
+        if (mainPage && d.activePage !== mainPage) {
+            Promise.resolve(d.report.setPage(mainPage)).then(apply).catch(() => {});
+        } else {
+            apply();
+        }
+    }
+
     function goToCrumb(key, seg) {
         const d = sectionSubnavData[key];
         if (!d || !d.report) return;
@@ -1856,8 +1884,7 @@
         const mainPage = (d.pages[0] || {}).name
                       || (trail.find(t => t.kind === 'page') || {}).name;
         const rest = trail.filter(t => !(t.kind === 'page' && t.name === mainPage));
-        add(tab.textContent.trim(),
-            () => goToCrumb(key, { kind: 'page', name: mainPage }), false);
+        add(tab.textContent.trim(), () => goHome(key), false);
         rest.forEach((t, i) => add(t.displayName, () => goToCrumb(key, t),
                                    i === rest.length - 1));
         bar.hidden = false;
@@ -1886,6 +1913,12 @@
             pages:      pageList.map(p => ({ displayName: p.displayName, name: p.name })),
             report:     prev?.report     || null,
             activePage: prev?.activePage || null,
+            // ==> CARRY THE TRAIL. <== This runs on every section switch. Dropping the
+            // trail emptied the breadcrumb, and renderBreadcrumb hides an empty bar --
+            // then the embed was already loaded, so 'loaded' never fired again to
+            // refill it and the bar simply stayed gone.
+            trail:      prev?.trail      || [],
+            bookmarks:  prev?.bookmarks  || null,
         };
     }
 
@@ -1902,6 +1935,20 @@
             const first = data.pages[0];
             if (first && first.name) notePage(sectionKey, first.name, first.displayName);
         }
+        // A report opens ON its first bookmark -- the navigator draws that button
+        // active -- but nothing fires to say so. Seed it, so the bar opens reading
+        // "My Data > Revenue & Mix" instead of naming the report and stopping.
+        (async () => {
+            try {
+                const all = flattenBookmarks(await report.bookmarksManager.getBookmarks());
+                const d = sectionSubnavData[sectionKey];
+                if (!d || !all.length) return;
+                d.bookmarks = all;
+                if (!(d.trail || []).some(t => t.kind === 'bookmark')) {
+                    noteBookmark(sectionKey, all[0].name, all[0].displayName, d.activePage);
+                }
+            } catch (err) { _devLog('[breadcrumb] no bookmarks:', err); }
+        })();
         // ==> r.on() VALIDATES THE EVENT NAME AND THROWS ON ONE IT DOES NOT KNOW. <==
         // 'bookmarkApplied' is in this client's allowed list, but an unwrapped registration
         // is exactly how 'tokenExpired' silently killed every handler after it -- see the
