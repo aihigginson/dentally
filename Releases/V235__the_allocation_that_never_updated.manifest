@@ -1,0 +1,70 @@
+# =====================================================================
+# Release V235 -- The allocation that never updated
+# =====================================================================
+# ==> Gold.Dim_Patients HAS NEVER UPDATED A PATIENT'S ALLOCATED DENTIST. <==
+#
+# Dentist_Practitioner_ID and Hygienist_Practitioner_ID are built in #src and written by the
+# INSERT, but they appear in NEITHER the UPDATE SET list NOR the change hash. So the
+# allocation is stamped the day a patient first loads and never revisited. When a practice
+# reassigns a list -- the single event this whole series of releases exists to measure -- the
+# warehouse keeps the original dentist for ever.
+#
+# 133 patients at the live tenant are allocated to someone other than the practice's current
+# choice. Small against 27,858, and precisely the handover population being analysed.
+#
+# How it surfaced: V233 added fk_Current_Dentist and DID hash it, so that key refreshed from
+# Silver while the Dentally id beside it stayed frozen, and V233's own cross-check caught the
+# two disagreeing. The guard was written to prove the new column was right and instead proved
+# the old one was wrong. Worth noting for the next release that wires a surrogate key beside
+# an existing natural one: hashing only the new column makes the old one's staleness visible,
+# which is a cheap way to audit a column nobody has questioned.
+#
+# ==> THIS IS NOT THE SAME FAULT AS THE BACK-DATED CAPITATION, IT IS UNDERNEATH IT. <== That
+# one is about a CURRENT allocation being applied to historical months. This one is about the
+# current allocation not even being current. Gold.usp_Load_Fact_Revenue builds its capitation
+# spells from Gold.Dim_Patients.Dentist_Practitioner_ID, so for those 133 patients the
+# revenue has been credited to a dentist the practice moved them away from. The revenue fact
+# is reloaded here for that reason.
+#
+# Other consumers of the same column, all of which have been reading a stale value:
+# Last_Allocated_Dentist_Visit_Date (computed from SILVER, so it was always fresh -- and the
+# disagreement between the two is why the PLAN_MISALLOCATED check has been noisier than it
+# should be), and the hygienist cross-charge, whose visits are filtered on the allocation.
+# ---------------------------------------------------------------------
+
+# V233's columns, repeated so this release stands alone if V233 is replayed out of order.
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Current_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Current_Dentist] [bigint] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Current_Hygienist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Current_Hygienist] [bigint] NULL;
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.vw_Dim_Patients.View.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# Capitation spells are built from the allocation, so 133 patients' plan revenue has been
+# credited to the wrong dentist. Reload the revenue chain now the allocation is correct.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards ---
+
+# ==> THE FAULT ITSELF: the stored allocation must now match Silver. <== This is the check
+# that has never existed, and the reason the staleness survived however many loads.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Silver.Patients s ON s.Patient_ID = p.Patient_ID AND s.Tenant_ID = p.Tenant_ID WHERE p.pk_Patient > 0 AND (ISNULL(p.Dentist_Practitioner_ID, -1) <> ISNULL(CAST(s.Dentist_Practitioner_ID AS INT), -1) OR ISNULL(p.Hygienist_Practitioner_ID, -1) <> ISNULL(CAST(s.Hygienist_Practitioner_ID AS INT), -1)); IF @n <> 0 BEGIN SET @e = 'V235 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) hold an allocation that disagrees with Silver -- the column is still not refreshing.'; THROW 50660, @e, 1; END;
+
+# And the surrogate key must agree with the natural one it was resolved from. This is the
+# V233 guard that found the bug; it must now pass.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p LEFT JOIN Gold.Dim_Practitioners d ON d.pk_Practitioner = p.fk_Current_Dentist WHERE p.pk_Patient > 0 AND ((p.Dentist_Practitioner_ID IS NOT NULL AND (p.fk_Current_Dentist IS NULL OR d.Practitioner_ID <> p.Dentist_Practitioner_ID)) OR (p.Dentist_Practitioner_ID IS NULL AND p.fk_Current_Dentist IS NOT NULL)); IF @n <> 0 BEGIN SET @e = 'V235 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have fk_Current_Dentist disagreeing with Dentist_Practitioner_ID.'; THROW 50661, @e, 1; END;
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p LEFT JOIN Gold.Dim_Practitioners h ON h.pk_Practitioner = p.fk_Current_Hygienist WHERE p.pk_Patient > 0 AND ((p.Hygienist_Practitioner_ID IS NOT NULL AND (p.fk_Current_Hygienist IS NULL OR h.Practitioner_ID <> p.Hygienist_Practitioner_ID)) OR (p.Hygienist_Practitioner_ID IS NULL AND p.fk_Current_Hygienist IS NOT NULL)); IF @n <> 0 BEGIN SET @e = 'V235 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have fk_Current_Hygienist disagreeing with Hygienist_Practitioner_ID.'; THROW 50662, @e, 1; END;
+
+# No key may resolve outside its own tenant.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p WHERE p.pk_Patient > 0 AND ((p.fk_Current_Dentist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners d WHERE d.pk_Practitioner = p.fk_Current_Dentist AND d.Tenant_ID = p.Tenant_ID)) OR (p.fk_Current_Hygienist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners h WHERE h.pk_Practitioner = p.fk_Current_Hygienist AND h.Tenant_ID = p.Tenant_ID)) OR (p.fk_Prior_Dentist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners r WHERE r.pk_Practitioner = p.fk_Prior_Dentist AND r.Tenant_ID = p.Tenant_ID))); IF @n <> 0 BEGIN SET @e = 'V235 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) carry a practitioner key that does not resolve within their own tenant.'; THROW 50663, @e, 1; END;
+
+# Coverage, so a near-empty key cannot pass the agreement checks by being all NULL.
+EXEC     DECLARE @r DECIMAL(6,1), @e VARCHAR(4000); SELECT @r = 100.0 * SUM(CASE WHEN fk_Current_Dentist IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(SUM(CASE WHEN Dentist_Practitioner_ID IS NOT NULL THEN 1 ELSE 0 END), 0) FROM Gold.Dim_Patients WHERE Tenant_ID = 100 AND pk_Patient > 0; IF @r IS NULL OR @r < 99.0 BEGIN SET @e = 'V235 FAILED: only ' + CAST(ISNULL(@r,0) AS VARCHAR(10)) + '% of allocated patients resolved a current dentist key.'; THROW 50664, @e, 1; END;
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Patients' AND COLUMN_NAME IN ('fk Current Dentist', 'fk Current Hygienist'); IF @n <> 2 BEGIN SET @e = 'V235 FAILED: PBI.[List Patients] exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 2 current-practitioner keys.'; THROW 50665, @e, 1; END;
+
+TEST

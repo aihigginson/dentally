@@ -1,0 +1,450 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "a1d47e03b2f968154cae",
+  "position": {
+    "x": 0,
+    "y": 74,
+    "z": 200,
+    "height": 524,
+    "width": 624,
+    "tabOrder": 100
+  },
+  "visual": {
+    "visualType": "deneb7E15AEF80B9E4D4F8E12924291ECE89A",
+    "query": {
+      "queryState": {
+        "dataset": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Practitioners"
+                    }
+                  },
+                  "Property": "Full Name"
+                }
+              },
+              "queryRef": "List Practitioners.Full Name",
+              "nativeQueryRef": "Practitioner Name",
+              "active": true
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Proposed at First Visit"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Proposed at First Visit",
+              "nativeQueryRef": "Spider PB Proposed at First Visit",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Year One per Patient"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Year One per Patient",
+              "nativeQueryRef": "Spider PB Year One per Patient",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB %Delivered"
+                }
+              },
+              "queryRef": "_Measures.Spider PB %Delivered",
+              "nativeQueryRef": "Spider PB %Delivered",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Large First Plan Share"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Large First Plan Share",
+              "nativeQueryRef": "Spider PB Large First Plan Share",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Patients At Risk"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Patients At Risk",
+              "nativeQueryRef": "Spider PB Patients At Risk",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Avg Proposed at First Visit"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Avg Proposed at First Visit",
+              "nativeQueryRef": "Spider PB Avg Proposed at First Visit",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Avg Year One per Patient"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Avg Year One per Patient",
+              "nativeQueryRef": "Spider PB Avg Year One per Patient",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Avg %Delivered"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Avg %Delivered",
+              "nativeQueryRef": "Spider PB Avg %Delivered",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Avg Large First Plan Share"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Avg Large First Plan Share",
+              "nativeQueryRef": "Spider PB Avg Large First Plan Share",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Avg Patients At Risk"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Avg Patients At Risk",
+              "nativeQueryRef": "Spider PB Avg Patients At Risk",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Val Proposed at First Visit"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Val Proposed at First Visit",
+              "nativeQueryRef": "Spider PB Val Proposed at First Visit",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Val Year One per Patient"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Val Year One per Patient",
+              "nativeQueryRef": "Spider PB Val Year One per Patient",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Val %Delivered"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Val %Delivered",
+              "nativeQueryRef": "Spider PB Val %Delivered",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Val Large First Plan Share"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Val Large First Plan Share",
+              "nativeQueryRef": "Spider PB Val Large First Plan Share",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Val Patients At Risk"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Val Patients At Risk",
+              "nativeQueryRef": "Spider PB Val Patients At Risk",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Mean Proposed at First Visit"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Mean Proposed at First Visit",
+              "nativeQueryRef": "Spider PB Mean Proposed at First Visit",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Mean Year One per Patient"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Mean Year One per Patient",
+              "nativeQueryRef": "Spider PB Mean Year One per Patient",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Mean %Delivered"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Mean %Delivered",
+              "nativeQueryRef": "Spider PB Mean %Delivered",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Mean Large First Plan Share"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Mean Large First Plan Share",
+              "nativeQueryRef": "Spider PB Mean Large First Plan Share",
+              "active": false
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Spider PB Mean Patients At Risk"
+                }
+              },
+              "queryRef": "_Measures.Spider PB Mean Patients At Risk",
+              "nativeQueryRef": "Spider PB Mean Patients At Risk",
+              "active": false
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "vega": [
+        {
+          "properties": {
+            "provider": {
+              "expr": {
+                "Literal": {
+                  "Value": "'vega'"
+                }
+              }
+            },
+            "jsonSpec": {
+              "expr": {
+                "Literal": {
+                  "Value": "'{\n  \"$schema\": \"https://vega.github.io/schema/vega/v5.json\",\n  \"background\": \"transparent\",\n  \"padding\": 0,\n  \"signals\": [\n    {\n      \"name\": \"width\",\n      \"update\": \"containerSize()[0] - 2\"\n    },\n    {\n      \"name\": \"height\",\n      \"update\": \"containerSize()[1] - 2\"\n    },\n    {\n      \"name\": \"cx\",\n      \"update\": \"width  / 2\"\n    },\n    {\n      \"name\": \"cy\",\n      \"update\": \"height * 0.55\"\n    },\n    {\n      \"name\": \"radius\",\n      \"update\": \"min((width - 158) / 1.902, height * 0.55 - 74)\"\n    },\n    {\n      \"name\": \"sel_count\",\n      \"update\": \"length(data(''dataset''))\"\n    },\n    {\n      \"name\": \"show_sel\",\n      \"update\": \"sel_count === 1\"\n    },\n    {\n      \"name\": \"sel_name\",\n      \"update\": \"show_sel ? (data(''dataset'')[0][''Practitioner Name''] ? data(''dataset'')[0][''Practitioner Name''] : data(''dataset'')[0][''Full Name'']) : ''''\"\n    },\n    {\n      \"name\": \"avg_col\",\n      \"value\": \"#8AB5B2\"\n    },\n    {\n      \"name\": \"sel_col\",\n      \"value\": \"#1A527A\"\n    },\n    {\n      \"name\": \"tgt_col\",\n      \"value\": \"#6B7280\"\n    }\n  ],\n  \"data\": [\n    {\n      \"name\": \"dataset\"\n    },\n    {\n      \"name\": \"axes\",\n      \"values\": [\n        {\n          \"key\": \"Spider PB Proposed at First Visit\",\n          \"label\": \"%Proposed\",\n          \"i\": 0\n        },\n        {\n          \"key\": \"Spider PB Year One per Patient\",\n          \"label\": \"Y1 Avg £\",\n          \"i\": 1\n        },\n        {\n          \"key\": \"Spider PB Large First Plan Share\",\n          \"label\": \"%Large\",\n          \"i\": 2\n        },\n        {\n          \"key\": \"Spider PB %Delivered\",\n          \"label\": \"%Delivered\",\n          \"i\": 3\n        },\n        {\n          \"key\": \"Spider PB Patients At Risk\",\n          \"label\": \"%Attrition\",\n          \"i\": 4\n        }\n      ],\n      \"transform\": [\n        {\n          \"type\": \"formula\",\n          \"expr\": \"(datum.i / 5) * 2 * PI - PI / 2\",\n          \"as\": \"a\"\n        }\n      ]\n    },\n    {\n      \"name\": \"avg_row\",\n      \"source\": \"dataset\",\n      \"transform\": [\n        {\n          \"type\": \"sample\",\n          \"size\": 1\n        }\n      ]\n    },\n    {\n      \"name\": \"target_long\",\n      \"source\": \"avg_row\",\n      \"transform\": [\n        {\n          \"type\": \"fold\",\n          \"fields\": [\n            \"Spider PB Avg Proposed at First Visit\",\n            \"Spider PB Avg Year One per Patient\",\n            \"Spider PB Avg Large First Plan Share\",\n            \"Spider PB Avg %Delivered\",\n            \"Spider PB Avg Patients At Risk\"\n          ],\n          \"as\": [\n            \"raw_key\",\n            \"target_val\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"replace(datum.raw_key, ''Spider PB Avg '', ''Spider PB '')\",\n          \"as\": \"key\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"isValid(datum.target_val) ? +datum.target_val : 0\",\n          \"as\": \"target_val\"\n        }\n      ]\n    },\n    {\n      \"name\": \"avg_long\",\n      \"source\": \"avg_row\",\n      \"transform\": [\n        {\n          \"type\": \"fold\",\n          \"fields\": [\n            \"Spider PB Avg Proposed at First Visit\",\n            \"Spider PB Avg Year One per Patient\",\n            \"Spider PB Avg Large First Plan Share\",\n            \"Spider PB Avg %Delivered\",\n            \"Spider PB Avg Patients At Risk\"\n          ],\n          \"as\": [\n            \"raw_key\",\n            \"val\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"replace(datum.raw_key, ''Spider PB Avg '', ''Spider PB '')\",\n          \"as\": \"key\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"''Average''\",\n          \"as\": \"series\"\n        }\n      ]\n    },\n    {\n      \"name\": \"sel_long\",\n      \"source\": \"dataset\",\n      \"transform\": [\n        {\n          \"type\": \"fold\",\n          \"fields\": [\n            \"Spider PB Proposed at First Visit\",\n            \"Spider PB Year One per Patient\",\n            \"Spider PB Large First Plan Share\",\n            \"Spider PB %Delivered\",\n            \"Spider PB Patients At Risk\"\n          ],\n          \"as\": [\n            \"key\",\n            \"val\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"(datum[''Practitioner Name''] ? datum[''Practitioner Name''] : datum[''Full Name''])\",\n          \"as\": \"series\"\n        },\n        {\n          \"type\": \"filter\",\n          \"expr\": \"length(data(''dataset'')) === 1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"val_txt_long\",\n      \"source\": \"avg_row\",\n      \"transform\": [\n        {\n          \"type\": \"fold\",\n          \"fields\": [\n            \"Spider PB Val Proposed at First Visit\",\n            \"Spider PB Val Year One per Patient\",\n            \"Spider PB Val Large First Plan Share\",\n            \"Spider PB Val %Delivered\",\n            \"Spider PB Val Patients At Risk\"\n          ],\n          \"as\": [\n            \"raw_key\",\n            \"val_txt\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"replace(datum.raw_key, ''Spider PB Val '', ''Spider PB '')\",\n          \"as\": \"key\"\n        }\n      ]\n    },\n    {\n      \"name\": \"mean_txt_long\",\n      \"source\": \"avg_row\",\n      \"transform\": [\n        {\n          \"type\": \"fold\",\n          \"fields\": [\n            \"Spider PB Mean Proposed at First Visit\",\n            \"Spider PB Mean Year One per Patient\",\n            \"Spider PB Mean Large First Plan Share\",\n            \"Spider PB Mean %Delivered\",\n            \"Spider PB Mean Patients At Risk\"\n          ],\n          \"as\": [\n            \"raw_key\",\n            \"mean_txt\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"replace(datum.raw_key, ''Spider PB Mean '', ''Spider PB '')\",\n          \"as\": \"key\"\n        }\n      ]\n    },\n    {\n      \"name\": \"combined\",\n      \"source\": [\n        \"avg_long\",\n        \"sel_long\"\n      ],\n      \"transform\": [\n        {\n          \"type\": \"formula\",\n          \"expr\": \"isValid(datum.val) ? +datum.val : 0\",\n          \"as\": \"val\"\n        },\n        {\n          \"type\": \"lookup\",\n          \"from\": \"mean_txt_long\",\n          \"key\": \"key\",\n          \"fields\": [\n            \"key\"\n          ],\n          \"values\": [\n            \"mean_txt\"\n          ]\n        },\n        {\n          \"type\": \"lookup\",\n          \"from\": \"val_txt_long\",\n          \"key\": \"key\",\n          \"fields\": [\n            \"key\"\n          ],\n          \"values\": [\n            \"val_txt\"\n          ]\n        },\n        {\n          \"type\": \"lookup\",\n          \"from\": \"target_long\",\n          \"key\": \"key\",\n          \"fields\": [\n            \"key\"\n          ],\n          \"values\": [\n            \"target_val\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"datum.target_val > 0 ? min(datum.val / datum.target_val, 2) / 2 : 0\",\n          \"as\": \"norm\"\n        },\n        {\n          \"type\": \"lookup\",\n          \"from\": \"axes\",\n          \"key\": \"key\",\n          \"fields\": [\n            \"key\"\n          ],\n          \"values\": [\n            \"i\",\n            \"label\",\n            \"a\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"cx + datum.norm * radius * cos(datum.a)\",\n          \"as\": \"px\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"cy + datum.norm * radius * sin(datum.a)\",\n          \"as\": \"py\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"format(datum.norm * 200 - 100, ''+.0f'') + ''% vs peers''\",\n          \"as\": \"pct_label\"\n        }\n      ]\n    },\n    {\n      \"name\": \"avg_data\",\n      \"source\": \"combined\",\n      \"transform\": [\n        {\n          \"type\": \"filter\",\n          \"expr\": \"datum.series === ''Average''\"\n        }\n      ]\n    },\n    {\n      \"name\": \"sel_data\",\n      \"source\": \"combined\",\n      \"transform\": [\n        {\n          \"type\": \"filter\",\n          \"expr\": \"datum.series !== ''Average''\"\n        }\n      ]\n    },\n    {\n      \"name\": \"rings\",\n      \"source\": \"axes\",\n      \"transform\": [\n        {\n          \"type\": \"cross\",\n          \"with\": {\n            \"values\": [\n              {\n                \"r\": 0.25\n              },\n              {\n                \"r\": 0.5\n              },\n              {\n                \"r\": 0.75\n              },\n              {\n                \"r\": 1.0\n              }\n            ]\n          },\n          \"as\": [\n            \"ax\",\n            \"rg\"\n          ]\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"datum.rg.r\",\n          \"as\": \"r\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"datum.ax.i\",\n          \"as\": \"i\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"cx + datum.rg.r * radius * cos(datum.ax.a)\",\n          \"as\": \"px\"\n        },\n        {\n          \"type\": \"formula\",\n          \"expr\": \"cy + datum.rg.r * radius * sin(datum.ax.a)\",\n          \"as\": \"py\"\n        }\n      ]\n    },\n    {\n      \"name\": \"ring_labels\",\n      \"source\": \"rings\",\n      \"transform\": [\n        {\n          \"type\": \"filter\",\n          \"expr\": \"datum.i === 0\"\n        }\n      ]\n    }\n  ],\n  \"marks\": [\n    {\n      \"description\": \"title\",\n      \"type\": \"text\",\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"signal\": \"width / 2\"\n          },\n          \"y\": {\n            \"value\": 14\n          },\n          \"text\": {\n            \"signal\": \"show_sel ? ''Initial Exam Analysis — '' + sel_name : ''Initial Exam Analysis — select one clinician''\"\n          },\n          \"align\": {\n            \"value\": \"center\"\n          },\n          \"fill\": {\n            \"value\": \"#101828\"\n          },\n          \"fontSize\": {\n            \"value\": 15\n          },\n          \"fontWeight\": {\n            \"value\": \"bold\"\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"subtitle\",\n      \"type\": \"text\",\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"signal\": \"width / 2\"\n          },\n          \"y\": {\n            \"value\": 30\n          },\n          \"text\": {\n            \"value\": \"Private plans · patients first seen by them in the last 2 years · the lighter ring is the peer average\"\n          },\n          \"align\": {\n            \"value\": \"center\"\n          },\n          \"fill\": {\n            \"value\": \"#667085\"\n          },\n          \"fontSize\": {\n            \"value\": 10\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"axis spokes\",\n      \"type\": \"rule\",\n      \"from\": {\n        \"data\": \"axes\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"signal\": \"cx\"\n          },\n          \"y\": {\n            \"signal\": \"cy\"\n          },\n          \"x2\": {\n            \"signal\": \"cx + radius * cos(datum.a)\"\n          },\n          \"y2\": {\n            \"signal\": \"cy + radius * sin(datum.a)\"\n          },\n          \"stroke\": {\n            \"value\": \"#d0d5dd\"\n          },\n          \"strokeWidth\": {\n            \"value\": 0.8\n          }\n        },\n        \"update\": {\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"concentric rings — target ring (r=0.5) styled distinctly\",\n      \"type\": \"group\",\n      \"from\": {\n        \"facet\": {\n          \"name\": \"rf\",\n          \"data\": \"rings\",\n          \"groupby\": \"r\"\n        }\n      },\n      \"marks\": [\n        {\n          \"type\": \"line\",\n          \"from\": {\n            \"data\": \"rf\"\n          },\n          \"sort\": {\n            \"field\": \"i\",\n            \"order\": \"ascending\"\n          },\n          \"encode\": {\n            \"enter\": {\n              \"x\": {\n                \"field\": \"px\"\n              },\n              \"y\": {\n                \"field\": \"py\"\n              },\n              \"interpolate\": {\n                \"value\": \"linear-closed\"\n              }\n            },\n            \"update\": {\n              \"stroke\": {\n                \"signal\": \"datum.r === 0.5 ? tgt_col : ''#d0d5dd''\"\n              },\n              \"strokeWidth\": {\n                \"signal\": \"datum.r === 0.5 ? 1.5 : 0.7\"\n              },\n              \"strokeOpacity\": {\n                \"signal\": \"datum.r === 0.5 ? 0.9 : 0.6\"\n              },\n              \"strokeDash\": {\n                \"signal\": \"datum.r === 0.5 ? [4, 3] : [1, 0]\"\n              }\n            }\n          }\n        }\n      ],\n      \"encode\": {\n        \"update\": {\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"average web\",\n      \"type\": \"line\",\n      \"from\": {\n        \"data\": \"avg_data\"\n      },\n      \"sort\": {\n        \"field\": \"i\",\n        \"order\": \"ascending\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"field\": \"px\"\n          },\n          \"y\": {\n            \"field\": \"py\"\n          },\n          \"fill\": {\n            \"signal\": \"avg_col\"\n          },\n          \"fillOpacity\": {\n            \"value\": 0.18\n          },\n          \"stroke\": {\n            \"signal\": \"avg_col\"\n          },\n          \"strokeWidth\": {\n            \"value\": 2\n          },\n          \"strokeOpacity\": {\n            \"value\": 0.85\n          },\n          \"interpolate\": {\n            \"value\": \"linear-closed\"\n          }\n        },\n        \"update\": {\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"average dots\",\n      \"type\": \"symbol\",\n      \"from\": {\n        \"data\": \"avg_data\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"field\": \"px\"\n          },\n          \"y\": {\n            \"field\": \"py\"\n          },\n          \"fill\": {\n            \"signal\": \"avg_col\"\n          },\n          \"size\": {\n            \"value\": 28\n          }\n        },\n        \"update\": {\n          \"tooltip\": {\n            \"signal\": \"{''Metric'': datum.label, ''Peer average'': datum.mean_txt}\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"selected practitioner web (only when sel_count === 1)\",\n      \"type\": \"line\",\n      \"from\": {\n        \"data\": \"sel_data\"\n      },\n      \"sort\": {\n        \"field\": \"i\",\n        \"order\": \"ascending\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"field\": \"px\"\n          },\n          \"y\": {\n            \"field\": \"py\"\n          },\n          \"fill\": {\n            \"signal\": \"sel_col\"\n          },\n          \"stroke\": {\n            \"signal\": \"sel_col\"\n          },\n          \"strokeWidth\": {\n            \"value\": 2\n          },\n          \"interpolate\": {\n            \"value\": \"linear-closed\"\n          }\n        },\n        \"update\": {\n          \"strokeOpacity\": {\n            \"signal\": \"show_sel ? 0.9 : 0\"\n          },\n          \"fillOpacity\": {\n            \"signal\": \"show_sel ? 0.14 : 0\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"selected practitioner dots\",\n      \"type\": \"symbol\",\n      \"from\": {\n        \"data\": \"sel_data\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"fill\": {\n            \"signal\": \"sel_col\"\n          },\n          \"size\": {\n            \"value\": 36\n          }\n        },\n        \"update\": {\n          \"x\": {\n            \"field\": \"px\"\n          },\n          \"y\": {\n            \"field\": \"py\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          },\n          \"tooltip\": {\n            \"signal\": \"show_sel ? {''Clinician'': datum.series, ''Metric'': datum.label, ''You'': datum.val_txt, ''Peers'': datum.mean_txt, ''Position'': datum.pct_label} : {}\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"axis labels\",\n      \"type\": \"text\",\n      \"from\": {\n        \"data\": \"axes\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"signal\": \"cx + (radius + 28) * cos(datum.a)\"\n          },\n          \"y\": {\n            \"signal\": \"cy + (radius + 28) * sin(datum.a)\"\n          },\n          \"text\": {\n            \"field\": \"label\"\n          },\n          \"align\": {\n            \"signal\": \"cos(datum.a) > 0.2 ? ''left'' : cos(datum.a) < -0.2 ? ''right'' : ''center''\"\n          },\n          \"baseline\": {\n            \"signal\": \"sin(datum.a) > 0.2 ? ''top'' : sin(datum.a) < -0.2 ? ''bottom'' : ''middle''\"\n          },\n          \"fill\": {\n            \"value\": \"#344054\"\n          },\n          \"fontSize\": {\n            \"value\": 10\n          },\n          \"fontWeight\": {\n            \"value\": \"600\"\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          }\n        },\n        \"update\": {\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"legend\",\n      \"type\": \"group\",\n      \"encode\": {\n        \"enter\": {\n          \"x\": {\n            \"signal\": \"cx - 120\"\n          },\n          \"y\": {\n            \"signal\": \"height - 22\"\n          }\n        },\n        \"update\": {\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      },\n      \"marks\": [\n        {\n          \"type\": \"symbol\",\n          \"encode\": {\n            \"enter\": {\n              \"x\": {\n                \"value\": 0\n              },\n              \"y\": {\n                \"value\": 7\n              },\n              \"fill\": {\n                \"signal\": \"avg_col\"\n              },\n              \"size\": {\n                \"value\": 60\n              },\n              \"shape\": {\n                \"value\": \"stroke\"\n              }\n            }\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"encode\": {\n            \"enter\": {\n              \"x\": {\n                \"value\": 14\n              },\n              \"y\": {\n                \"value\": 11\n              },\n              \"text\": {\n                \"value\": \"Peer average (same role)\"\n              },\n              \"fill\": {\n                \"value\": \"#344054\"\n              },\n              \"fontSize\": {\n                \"value\": 9\n              },\n              \"font\": {\n                \"value\": \"Segoe UI, sans-serif\"\n              }\n            }\n          }\n        },\n        {\n          \"type\": \"symbol\",\n          \"encode\": {\n            \"enter\": {\n              \"x\": {\n                \"value\": 130\n              },\n              \"y\": {\n                \"value\": 7\n              },\n              \"fill\": {\n                \"signal\": \"sel_col\"\n              },\n              \"size\": {\n                \"value\": 60\n              },\n              \"shape\": {\n                \"value\": \"stroke\"\n              }\n            },\n            \"update\": {\n              \"opacity\": {\n                \"signal\": \"show_sel ? 1 : 0\"\n              }\n            }\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"encode\": {\n            \"enter\": {\n              \"x\": {\n                \"value\": 144\n              },\n              \"y\": {\n                \"value\": 11\n              },\n              \"fill\": {\n                \"value\": \"#344054\"\n              },\n              \"fontSize\": {\n                \"value\": 9\n              },\n              \"font\": {\n                \"value\": \"Segoe UI, sans-serif\"\n              }\n            },\n            \"update\": {\n              \"text\": {\n                \"signal\": \"show_sel ? sel_name : ''Select one practitioner''\"\n              },\n              \"opacity\": {\n                \"signal\": \"show_sel ? 1 : 0.4\"\n              }\n            }\n          }\n        }\n      ]\n    },\n    {\n      \"description\": \"no single selection\",\n      \"type\": \"text\",\n      \"encode\": {\n        \"enter\": {\n          \"align\": {\n            \"value\": \"center\"\n          },\n          \"baseline\": {\n            \"value\": \"middle\"\n          },\n          \"fill\": {\n            \"value\": \"#667085\"\n          },\n          \"fontSize\": {\n            \"value\": 13\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          }\n        },\n        \"update\": {\n          \"x\": {\n            \"signal\": \"width / 2\"\n          },\n          \"y\": {\n            \"signal\": \"height / 2\"\n          },\n          \"text\": {\n            \"signal\": \"sel_count > 1 ? ''Select a single clinician to compare them with their peers'' : ''Select a clinician''\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 0 : 1\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"selected value labels\",\n      \"type\": \"text\",\n      \"from\": {\n        \"data\": \"sel_data\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"fill\": {\n            \"signal\": \"sel_col\"\n          },\n          \"fontSize\": {\n            \"value\": 11\n          },\n          \"fontWeight\": {\n            \"value\": \"bold\"\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          },\n          \"align\": {\n            \"value\": \"center\"\n          },\n          \"baseline\": {\n            \"value\": \"middle\"\n          }\n        },\n        \"update\": {\n          \"x\": {\n            \"signal\": \"cx + (datum.norm * radius + 12) * cos(datum.a)\"\n          },\n          \"y\": {\n            \"signal\": \"cy + (datum.norm * radius + 12) * sin(datum.a)\"\n          },\n          \"text\": {\n            \"field\": \"val_txt\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    },\n    {\n      \"description\": \"peer average labels\",\n      \"type\": \"text\",\n      \"from\": {\n        \"data\": \"avg_data\"\n      },\n      \"encode\": {\n        \"enter\": {\n          \"fill\": {\n            \"signal\": \"avg_col\"\n          },\n          \"fontSize\": {\n            \"value\": 9\n          },\n          \"font\": {\n            \"value\": \"Segoe UI, sans-serif\"\n          },\n          \"align\": {\n            \"value\": \"center\"\n          },\n          \"baseline\": {\n            \"value\": \"middle\"\n          }\n        },\n        \"update\": {\n          \"x\": {\n            \"signal\": \"cx + (datum.norm * radius - 22) * cos(datum.a) - 15 * sin(datum.a)\"\n          },\n          \"y\": {\n            \"signal\": \"cy + (datum.norm * radius - 22) * sin(datum.a) + 15 * cos(datum.a)\"\n          },\n          \"text\": {\n            \"field\": \"mean_txt\"\n          },\n          \"opacity\": {\n            \"signal\": \"show_sel ? 1 : 0\"\n          }\n        }\n      }\n    }\n  ],\n  \"autosize\": {\n    \"type\": \"none\",\n    \"contains\": \"padding\"\n  }\n}\n'"
+                }
+              }
+            },
+            "jsonConfig": {
+              "expr": {
+                "Literal": {
+                  "Value": "'{\n  \"autosize\": {\n    \"contains\": \"padding\",\n    \"type\": \"fit\"\n  }\n}'"
+                }
+              }
+            },
+            "enableTooltips": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "enableContextMenu": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "enableHighlight": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "enableSelection": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "selectionMaxDataPoints": {
+              "expr": {
+                "Literal": {
+                  "Value": "50D"
+                }
+              }
+            },
+            "selectionMode": {
+              "expr": {
+                "Literal": {
+                  "Value": "'simple'"
+                }
+              }
+            },
+            "version": {
+              "expr": {
+                "Literal": {
+                  "Value": "'6.2.0'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "stateManagement": [
+        {
+          "properties": {
+            "viewportHeight": {
+              "expr": {
+                "Literal": {
+                  "Value": "524D"
+                }
+              }
+            },
+            "viewportWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "624D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "developer": [
+        {
+          "properties": {
+            "version": {
+              "expr": {
+                "Literal": {
+                  "Value": "'1.9.1.0'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "isHidden": true
+}

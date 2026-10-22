@@ -80,7 +80,17 @@ BEGIN
                 LEFT JOIN [Gold].[Dim_Practitioners]  dpr ON dpr.Tenant_ID = p.Tenant_ID AND dpr.Practitioner_ID = p.Dentist_Practitioner_ID
                 LEFT JOIN [Gold].[Dim_Practice_Sites] dps ON dps.Tenant_ID = p.Tenant_ID AND dps.Site_ID        = p.Site_ID
                 LEFT JOIN [Gold].[Dim_Payment_Plans]  dpp ON dpp.Tenant_ID = p.Tenant_ID AND dpp.Payment_Plan_ID = p.Payment_Plan_ID
+                -- ==> THE ARCHIVE IS NOT LAPSED. <== A patient with no completed appointment,
+                -- no invoice and no payment anywhere was never had, so they cannot have been
+                -- lost. They are overwhelmingly pre-migration records: the practice brought
+                -- its patient list but only part of its appointment history. At the live
+                -- tenant they are 19,471 of the 21,761 rows this fact used to carry, so every
+                -- lapsed count and reason breakdown in the product has been ten times too big.
+                -- fk_Patient_Status is the single place that judgement lives (V229).
                 WHERE   p.Lapsed_Type IS NOT NULL
+                AND     NOT EXISTS ( SELECT 1 FROM [Gold].[Dim_Patient_Status] s
+                                     WHERE s.pk_Patient_Status = p.fk_Patient_Status
+                                       AND s.Is_Reportable = 0 )
                   AND   p.pk_Patient > 0;
 
                 SET @My_Inserts = @@ROWCOUNT;

@@ -1,0 +1,997 @@
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "background": "transparent",
+  "padding": 0,
+  "signals": [
+    {
+      "name": "width",
+      "update": "containerSize()[0] - 2"
+    },
+    {
+      "name": "height",
+      "update": "containerSize()[1] - 2"
+    },
+    {
+      "name": "cx",
+      "update": "width  / 2"
+    },
+    {
+      "name": "cy",
+      "update": "height * 0.55"
+    },
+    {
+      "name": "radius",
+      "update": "min((width - 158) / 1.902, height * 0.55 - 74)"
+    },
+    {
+      "name": "sel_count",
+      "update": "length(data('dataset'))"
+    },
+    {
+      "name": "show_sel",
+      "update": "sel_count === 1"
+    },
+    {
+      "name": "sel_name",
+      "update": "show_sel ? (data('dataset')[0]['Practitioner Name'] ? data('dataset')[0]['Practitioner Name'] : data('dataset')[0]['Full Name']) : ''"
+    },
+    {
+      "name": "avg_col",
+      "value": "#8AB5B2"
+    },
+    {
+      "name": "sel_col",
+      "value": "#1A527A"
+    },
+    {
+      "name": "tgt_col",
+      "value": "#6B7280"
+    }
+  ],
+  "data": [
+    {
+      "name": "dataset"
+    },
+    {
+      "name": "axes",
+      "values": [
+        {
+          "key": "Spider PB Proposed at First Visit",
+          "label": "%Proposed",
+          "i": 0
+        },
+        {
+          "key": "Spider PB Year One per Patient",
+          "label": "Y1 Avg £",
+          "i": 1
+        },
+        {
+          "key": "Spider PB Large First Plan Share",
+          "label": "%Large",
+          "i": 2
+        },
+        {
+          "key": "Spider PB %Delivered",
+          "label": "%Delivered",
+          "i": 3
+        },
+        {
+          "key": "Spider PB Patients At Risk",
+          "label": "%Attrition",
+          "i": 4
+        }
+      ],
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "(datum.i / 5) * 2 * PI - PI / 2",
+          "as": "a"
+        }
+      ]
+    },
+    {
+      "name": "avg_row",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "sample",
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "target_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider PB Avg Proposed at First Visit",
+            "Spider PB Avg Year One per Patient",
+            "Spider PB Avg Large First Plan Share",
+            "Spider PB Avg %Delivered",
+            "Spider PB Avg Patients At Risk"
+          ],
+          "as": [
+            "raw_key",
+            "target_val"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider PB Avg ', 'Spider PB ')",
+          "as": "key"
+        },
+        {
+          "type": "formula",
+          "expr": "isValid(datum.target_val) ? +datum.target_val : 0",
+          "as": "target_val"
+        }
+      ]
+    },
+    {
+      "name": "avg_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider PB Avg Proposed at First Visit",
+            "Spider PB Avg Year One per Patient",
+            "Spider PB Avg Large First Plan Share",
+            "Spider PB Avg %Delivered",
+            "Spider PB Avg Patients At Risk"
+          ],
+          "as": [
+            "raw_key",
+            "val"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider PB Avg ', 'Spider PB ')",
+          "as": "key"
+        },
+        {
+          "type": "formula",
+          "expr": "'Average'",
+          "as": "series"
+        }
+      ]
+    },
+    {
+      "name": "sel_long",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider PB Proposed at First Visit",
+            "Spider PB Year One per Patient",
+            "Spider PB Large First Plan Share",
+            "Spider PB %Delivered",
+            "Spider PB Patients At Risk"
+          ],
+          "as": [
+            "key",
+            "val"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "(datum['Practitioner Name'] ? datum['Practitioner Name'] : datum['Full Name'])",
+          "as": "series"
+        },
+        {
+          "type": "filter",
+          "expr": "length(data('dataset')) === 1"
+        }
+      ]
+    },
+    {
+      "name": "val_txt_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider PB Val Proposed at First Visit",
+            "Spider PB Val Year One per Patient",
+            "Spider PB Val Large First Plan Share",
+            "Spider PB Val %Delivered",
+            "Spider PB Val Patients At Risk"
+          ],
+          "as": [
+            "raw_key",
+            "val_txt"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider PB Val ', 'Spider PB ')",
+          "as": "key"
+        }
+      ]
+    },
+    {
+      "name": "mean_txt_long",
+      "source": "avg_row",
+      "transform": [
+        {
+          "type": "fold",
+          "fields": [
+            "Spider PB Mean Proposed at First Visit",
+            "Spider PB Mean Year One per Patient",
+            "Spider PB Mean Large First Plan Share",
+            "Spider PB Mean %Delivered",
+            "Spider PB Mean Patients At Risk"
+          ],
+          "as": [
+            "raw_key",
+            "mean_txt"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "replace(datum.raw_key, 'Spider PB Mean ', 'Spider PB ')",
+          "as": "key"
+        }
+      ]
+    },
+    {
+      "name": "combined",
+      "source": [
+        "avg_long",
+        "sel_long"
+      ],
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "isValid(datum.val) ? +datum.val : 0",
+          "as": "val"
+        },
+        {
+          "type": "lookup",
+          "from": "mean_txt_long",
+          "key": "key",
+          "fields": [
+            "key"
+          ],
+          "values": [
+            "mean_txt"
+          ]
+        },
+        {
+          "type": "lookup",
+          "from": "val_txt_long",
+          "key": "key",
+          "fields": [
+            "key"
+          ],
+          "values": [
+            "val_txt"
+          ]
+        },
+        {
+          "type": "lookup",
+          "from": "target_long",
+          "key": "key",
+          "fields": [
+            "key"
+          ],
+          "values": [
+            "target_val"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.target_val > 0 ? min(datum.val / datum.target_val, 2) / 2 : 0",
+          "as": "norm"
+        },
+        {
+          "type": "lookup",
+          "from": "axes",
+          "key": "key",
+          "fields": [
+            "key"
+          ],
+          "values": [
+            "i",
+            "label",
+            "a"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "cx + datum.norm * radius * cos(datum.a)",
+          "as": "px"
+        },
+        {
+          "type": "formula",
+          "expr": "cy + datum.norm * radius * sin(datum.a)",
+          "as": "py"
+        },
+        {
+          "type": "formula",
+          "expr": "format(datum.norm * 200 - 100, '+.0f') + '% vs peers'",
+          "as": "pct_label"
+        }
+      ]
+    },
+    {
+      "name": "avg_data",
+      "source": "combined",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.series === 'Average'"
+        }
+      ]
+    },
+    {
+      "name": "sel_data",
+      "source": "combined",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.series !== 'Average'"
+        }
+      ]
+    },
+    {
+      "name": "rings",
+      "source": "axes",
+      "transform": [
+        {
+          "type": "cross",
+          "with": {
+            "values": [
+              {
+                "r": 0.25
+              },
+              {
+                "r": 0.5
+              },
+              {
+                "r": 0.75
+              },
+              {
+                "r": 1.0
+              }
+            ]
+          },
+          "as": [
+            "ax",
+            "rg"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.rg.r",
+          "as": "r"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.ax.i",
+          "as": "i"
+        },
+        {
+          "type": "formula",
+          "expr": "cx + datum.rg.r * radius * cos(datum.ax.a)",
+          "as": "px"
+        },
+        {
+          "type": "formula",
+          "expr": "cy + datum.rg.r * radius * sin(datum.ax.a)",
+          "as": "py"
+        }
+      ]
+    },
+    {
+      "name": "ring_labels",
+      "source": "rings",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "datum.i === 0"
+        }
+      ]
+    }
+  ],
+  "marks": [
+    {
+      "description": "title",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "width / 2"
+          },
+          "y": {
+            "value": 14
+          },
+          "text": {
+            "signal": "show_sel ? 'Initial Exam Analysis — ' + sel_name : 'Initial Exam Analysis — select one clinician'"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#101828"
+          },
+          "fontSize": {
+            "value": 15
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          }
+        }
+      }
+    },
+    {
+      "description": "subtitle",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "width / 2"
+          },
+          "y": {
+            "value": 30
+          },
+          "text": {
+            "value": "Private plans · patients first seen by them in the last 2 years · the lighter ring is the peer average"
+          },
+          "align": {
+            "value": "center"
+          },
+          "fill": {
+            "value": "#667085"
+          },
+          "fontSize": {
+            "value": 10
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          }
+        }
+      }
+    },
+    {
+      "description": "axis spokes",
+      "type": "rule",
+      "from": {
+        "data": "axes"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "cx"
+          },
+          "y": {
+            "signal": "cy"
+          },
+          "x2": {
+            "signal": "cx + radius * cos(datum.a)"
+          },
+          "y2": {
+            "signal": "cy + radius * sin(datum.a)"
+          },
+          "stroke": {
+            "value": "#d0d5dd"
+          },
+          "strokeWidth": {
+            "value": 0.8
+          }
+        },
+        "update": {
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "concentric rings — target ring (r=0.5) styled distinctly",
+      "type": "group",
+      "from": {
+        "facet": {
+          "name": "rf",
+          "data": "rings",
+          "groupby": "r"
+        }
+      },
+      "marks": [
+        {
+          "type": "line",
+          "from": {
+            "data": "rf"
+          },
+          "sort": {
+            "field": "i",
+            "order": "ascending"
+          },
+          "encode": {
+            "enter": {
+              "x": {
+                "field": "px"
+              },
+              "y": {
+                "field": "py"
+              },
+              "interpolate": {
+                "value": "linear-closed"
+              }
+            },
+            "update": {
+              "stroke": {
+                "signal": "datum.r === 0.5 ? tgt_col : '#d0d5dd'"
+              },
+              "strokeWidth": {
+                "signal": "datum.r === 0.5 ? 1.5 : 0.7"
+              },
+              "strokeOpacity": {
+                "signal": "datum.r === 0.5 ? 0.9 : 0.6"
+              },
+              "strokeDash": {
+                "signal": "datum.r === 0.5 ? [4, 3] : [1, 0]"
+              }
+            }
+          }
+        }
+      ],
+      "encode": {
+        "update": {
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "average web",
+      "type": "line",
+      "from": {
+        "data": "avg_data"
+      },
+      "sort": {
+        "field": "i",
+        "order": "ascending"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "field": "px"
+          },
+          "y": {
+            "field": "py"
+          },
+          "fill": {
+            "signal": "avg_col"
+          },
+          "fillOpacity": {
+            "value": 0.18
+          },
+          "stroke": {
+            "signal": "avg_col"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "strokeOpacity": {
+            "value": 0.85
+          },
+          "interpolate": {
+            "value": "linear-closed"
+          }
+        },
+        "update": {
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "average dots",
+      "type": "symbol",
+      "from": {
+        "data": "avg_data"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "field": "px"
+          },
+          "y": {
+            "field": "py"
+          },
+          "fill": {
+            "signal": "avg_col"
+          },
+          "size": {
+            "value": 28
+          }
+        },
+        "update": {
+          "tooltip": {
+            "signal": "{'Metric': datum.label, 'Peer average': datum.mean_txt}"
+          },
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "selected practitioner web (only when sel_count === 1)",
+      "type": "line",
+      "from": {
+        "data": "sel_data"
+      },
+      "sort": {
+        "field": "i",
+        "order": "ascending"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "field": "px"
+          },
+          "y": {
+            "field": "py"
+          },
+          "fill": {
+            "signal": "sel_col"
+          },
+          "stroke": {
+            "signal": "sel_col"
+          },
+          "strokeWidth": {
+            "value": 2
+          },
+          "interpolate": {
+            "value": "linear-closed"
+          }
+        },
+        "update": {
+          "strokeOpacity": {
+            "signal": "show_sel ? 0.9 : 0"
+          },
+          "fillOpacity": {
+            "signal": "show_sel ? 0.14 : 0"
+          },
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "selected practitioner dots",
+      "type": "symbol",
+      "from": {
+        "data": "sel_data"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "signal": "sel_col"
+          },
+          "size": {
+            "value": 36
+          }
+        },
+        "update": {
+          "x": {
+            "field": "px"
+          },
+          "y": {
+            "field": "py"
+          },
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          },
+          "tooltip": {
+            "signal": "show_sel ? {'Clinician': datum.series, 'Metric': datum.label, 'You': datum.val_txt, 'Peers': datum.mean_txt, 'Position': datum.pct_label} : {}"
+          }
+        }
+      }
+    },
+    {
+      "description": "axis labels",
+      "type": "text",
+      "from": {
+        "data": "axes"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "cx + (radius + 28) * cos(datum.a)"
+          },
+          "y": {
+            "signal": "cy + (radius + 28) * sin(datum.a)"
+          },
+          "text": {
+            "field": "label"
+          },
+          "align": {
+            "signal": "cos(datum.a) > 0.2 ? 'left' : cos(datum.a) < -0.2 ? 'right' : 'center'"
+          },
+          "baseline": {
+            "signal": "sin(datum.a) > 0.2 ? 'top' : sin(datum.a) < -0.2 ? 'bottom' : 'middle'"
+          },
+          "fill": {
+            "value": "#344054"
+          },
+          "fontSize": {
+            "value": 10
+          },
+          "fontWeight": {
+            "value": "600"
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          }
+        },
+        "update": {
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "legend",
+      "type": "group",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "cx - 120"
+          },
+          "y": {
+            "signal": "height - 22"
+          }
+        },
+        "update": {
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      },
+      "marks": [
+        {
+          "type": "symbol",
+          "encode": {
+            "enter": {
+              "x": {
+                "value": 0
+              },
+              "y": {
+                "value": 7
+              },
+              "fill": {
+                "signal": "avg_col"
+              },
+              "size": {
+                "value": 60
+              },
+              "shape": {
+                "value": "stroke"
+              }
+            }
+          }
+        },
+        {
+          "type": "text",
+          "encode": {
+            "enter": {
+              "x": {
+                "value": 14
+              },
+              "y": {
+                "value": 11
+              },
+              "text": {
+                "value": "Peer average (same role)"
+              },
+              "fill": {
+                "value": "#344054"
+              },
+              "fontSize": {
+                "value": 9
+              },
+              "font": {
+                "value": "Segoe UI, sans-serif"
+              }
+            }
+          }
+        },
+        {
+          "type": "symbol",
+          "encode": {
+            "enter": {
+              "x": {
+                "value": 130
+              },
+              "y": {
+                "value": 7
+              },
+              "fill": {
+                "signal": "sel_col"
+              },
+              "size": {
+                "value": 60
+              },
+              "shape": {
+                "value": "stroke"
+              }
+            },
+            "update": {
+              "opacity": {
+                "signal": "show_sel ? 1 : 0"
+              }
+            }
+          }
+        },
+        {
+          "type": "text",
+          "encode": {
+            "enter": {
+              "x": {
+                "value": 144
+              },
+              "y": {
+                "value": 11
+              },
+              "fill": {
+                "value": "#344054"
+              },
+              "fontSize": {
+                "value": 9
+              },
+              "font": {
+                "value": "Segoe UI, sans-serif"
+              }
+            },
+            "update": {
+              "text": {
+                "signal": "show_sel ? sel_name : 'Select one practitioner'"
+              },
+              "opacity": {
+                "signal": "show_sel ? 1 : 0.4"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "description": "no single selection",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "fill": {
+            "value": "#667085"
+          },
+          "fontSize": {
+            "value": 13
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "width / 2"
+          },
+          "y": {
+            "signal": "height / 2"
+          },
+          "text": {
+            "signal": "sel_count > 1 ? 'Select a single clinician to compare them with their peers' : 'Select a clinician'"
+          },
+          "opacity": {
+            "signal": "show_sel ? 0 : 1"
+          }
+        }
+      }
+    },
+    {
+      "description": "selected value labels",
+      "type": "text",
+      "from": {
+        "data": "sel_data"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "signal": "sel_col"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "cx + (datum.norm * radius + 12) * cos(datum.a)"
+          },
+          "y": {
+            "signal": "cy + (datum.norm * radius + 12) * sin(datum.a)"
+          },
+          "text": {
+            "field": "val_txt"
+          },
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "description": "peer average labels",
+      "type": "text",
+      "from": {
+        "data": "avg_data"
+      },
+      "encode": {
+        "enter": {
+          "fill": {
+            "signal": "avg_col"
+          },
+          "fontSize": {
+            "value": 9
+          },
+          "font": {
+            "value": "Segoe UI, sans-serif"
+          },
+          "align": {
+            "value": "center"
+          },
+          "baseline": {
+            "value": "middle"
+          }
+        },
+        "update": {
+          "x": {
+            "signal": "cx + (datum.norm * radius - 22) * cos(datum.a) - 15 * sin(datum.a)"
+          },
+          "y": {
+            "signal": "cy + (datum.norm * radius - 22) * sin(datum.a) + 15 * cos(datum.a)"
+          },
+          "text": {
+            "field": "mean_txt"
+          },
+          "opacity": {
+            "signal": "show_sel ? 1 : 0"
+          }
+        }
+      }
+    }
+  ],
+  "autosize": {
+    "type": "none",
+    "contains": "padding"
+  }
+}

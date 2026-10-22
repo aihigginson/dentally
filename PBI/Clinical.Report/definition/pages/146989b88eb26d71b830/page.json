@@ -53,5 +53,17 @@
         }
       }
     ]
-  }
+  },
+  "visualInteractions": [
+    {
+      "source": "35cc7bbf3ee1a9a11d8b",
+      "target": "16c628af05cc9aac9ee2",
+      "type": "DataFilter"
+    },
+    {
+      "source": "f5531afe5d96eb287460",
+      "target": "16c628af05cc9aac9ee2",
+      "type": "DataFilter"
+    }
+  ]
 }

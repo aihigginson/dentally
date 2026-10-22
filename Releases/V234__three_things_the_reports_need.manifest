@@ -1,0 +1,86 @@
+# =====================================================================
+# Release V234 -- Three things the reports need
+# =====================================================================
+# Batched rather than cut one at a time. Three independent fixes, all of which the Clinical
+# report's plan-behaviour radar either needs or is misled by.
+#
+# ---------------------------------------------------------------------
+# 1. THE LAPSED FACT IS 89% PRE-MIGRATION RECORDS.
+# ---------------------------------------------------------------------
+# Gold.Fact_Lapsed_Patients is built from Dim_Patients.Lapsed_Type IS NOT NULL, which takes
+# everyone the practice ever marked inactive -- including patients with NO completed
+# appointment, NO invoice and NO payment anywhere in the warehouse. At the live tenant that
+# is 19,471 of 21,761 rows. Every lapsed count and reason breakdown in the product has been
+# roughly ten times too big.
+#
+# Those patients are pre-migration: the practice brought its patient list but only part of
+# its appointment history, so anyone who stopped attending before the first appointment on
+# file is indistinguishable from someone who never came. V229 gave them their own rung with
+# Is_Reportable = 0; this makes the lapsed fact honour it. A patient who was never had
+# cannot have been lost.
+#
+# ==> EXPECT LAPSED FIGURES TO FALL BY ABOUT 19,500 AT THE LIVE TENANT. <== That is the
+# point of the change, not a side effect, but it is a customer-visible number moving a long
+# way and should not arrive unannounced.
+#
+# ---------------------------------------------------------------------
+# 2. TWO THINGS CALLED "AT RISK" DISAGREE.
+# ---------------------------------------------------------------------
+# PBI.[_Patient At Risk] already exists: an operational worklist, one row per patient PER
+# ROUTE (recall due, cancelled not rebooked, open course with no appointment), covering 713
+# patients at the live tenant. V229's ladder rung counts 1,167 patients on a narrower and
+# later test -- reminded, and silent for over two months.
+#
+# Neither is wrong and they answer different questions, but both would read "At Risk" on the
+# same report, which is how a practice stops trusting both figures. The rung is renamed to
+# say what it measures: Recall Unanswered 2m+. The Is_At_Risk FLAG is unchanged, so nothing
+# bound to it breaks.
+#
+# ---------------------------------------------------------------------
+# 3. Is_First_Year_Plan -- THE DENOMINATOR THE RADAR NEEDS.
+# ---------------------------------------------------------------------
+# "Share of everything ever planned" is substantially a measure of RELATIONSHIP LENGTH. It
+# ranked the practice's former owner last at 36.4% purely because his patients had been with
+# him 59 months on average, and put a clinician with 16-month relationships above him. Fixing
+# the window to each patient's first twelve months removes the artefact.
+#
+# Paired with the maturity and rolling rules that live in the DAX -- relationships begun
+# 12-24 months ago -- it stops a clinician GROWING their list reading as an extreme
+# front-loader simply because their patients have had no time to be planned a second time.
+# ---------------------------------------------------------------------
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Is_First_Year_Plan') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Is_First_Year_Plan] [bit] NULL;
+
+DEPLOY   Fabric\Gold.Dim_Patient_Status.Data.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Lapsed_Patients.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards ---
+
+# The archive must be gone from the lapsed fact, and the fact must still hold the genuinely
+# lapsed. Zero rows would mean the NOT EXISTS matched everything.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients f JOIN Gold.Dim_Patients p ON p.pk_Patient = f.fk_Patient AND p.Tenant_ID = f.Tenant_ID JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE s.Is_Reportable = 0; IF @n <> 0 BEGIN SET @e = 'V234 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' archived patient(s) are still counted as lapsed.'; THROW 50670, @e, 1; END;
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Tenant_ID = 100; IF @n < 1000 OR @n > 6000 BEGIN SET @e = 'V234 FAILED: the lapsed fact holds ' + CAST(@n AS VARCHAR(10)) + ' rows for tenant 100; about 2,290 was expected once the archive was excluded.'; THROW 50671, @e, 1; END;
+
+# Every lapsed row must still carry one of the two real lapse types.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Lapsed_Type NOT IN ('Set as inactive','Calculated as inactive') OR Lapsed_Type IS NULL; IF @n <> 0 BEGIN SET @e = 'V234 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' lapsed row(s) carry no recognisable lapse type.'; THROW 50672, @e, 1; END;
+
+# The rung is renamed but the FLAG must be untouched -- exactly one rung is At Risk, and it
+# is the renamed one. Anything bound to Is_At_Risk keeps working.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patient_Status WHERE Is_At_Risk = 1 AND Status_Code = 'RECALL_SENT_NO_REPLY_GT2M' AND Status_Name = 'Recall Unanswered 2m+'; IF @n <> 1 BEGIN SET @e = 'V234 FAILED: the At Risk rung is not the renamed one.'; THROW 50673, @e, 1; END;
+
+# A first-visit plan is always a first-year plan, so the share the radar plots is bounded.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE ISNULL(Is_First_Visit_Plan,0) = 1 AND ISNULL(Is_First_Year_Plan,0) = 0; IF @n <> 0 BEGIN SET @e = 'V234 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' first-visit plan(s) are not flagged as first-year, so the share can exceed 100%.'; THROW 50674, @e, 1; END;
+
+# And it must be populated, or the radar divides by nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE Tenant_ID = 100 AND ISNULL(Is_First_Year_Plan,0) = 1; IF @n < 1000 BEGIN SET @e = 'V234 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' first-year plan(s) on tenant 100 -- the flag is not being set.'; THROW 50675, @e, 1; END;
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Treatment Plans' AND COLUMN_NAME = 'Is First Year Plan'; IF @n <> 1 BEGIN SET @e = 'V234 FAILED: PBI.[_Treatment Plans] does not expose Is First Year Plan.'; THROW 50676, @e, 1; END;
+
+TEST

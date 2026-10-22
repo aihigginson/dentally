@@ -1,0 +1,176 @@
+# =====================================================================
+# Release V229 -- The patient lifecycle as a dimension
+# =====================================================================
+# The practice believed one associate loses patients by writing oversized treatment plans
+# for new patients. Answering that by hand took five separate cohorts with five different
+# denominators, and the findings could not be put on one chart because 7.6% of denture
+# plans, 36.7% of inherited patients and 18.8% of small-plan patients are not comparable
+# quantities. This release puts the attributes on the patient and the plan so the question
+# can be asked with one cohort and one outcome.
+#
+# ==> THE LIFECYCLE IS A DIMENSION, NOT A CASE EXPRESSION. <== Gold.Dim_Patients carries
+# fk_Patient_Status; the name, the ordering and the Is_Active / Is_At_Risk / Is_Lost /
+# Is_Reportable flags live on Gold.Dim_Patient_Status. A measure asks Is_Lost = 1 instead of
+# restating a ladder over Lapsed_Type, Dentist_Recall_Date and a reminder age in every place
+# that needs it. Lost is the two lapsed rungs; At Risk is reminded-and-silent for over two
+# months, the last rung where intervention still works.
+#
+# ==> THE ARCHIVE RUNG IS THE BIG NUMBER IN THIS RELEASE. <== A practice that migrated to
+# Dentally brought its patient list but only part of its appointment history: at the live
+# tenant patient records start in 1996 and appointments start on 2012-02-29. Everyone who
+# stopped attending before that is indistinguishable from someone who never came, and the
+# product has been counting all of them as lapsed patients. 19,512 of them.
+#
+# So the figures MOVE, deliberately and a long way: lapsed patient counts at the live tenant
+# fall by roughly 19,500. The rule is the absence of any relationship at all -- no completed
+# appointment, no invoice, no payment -- which is self-identifying and needs no per-tenant
+# go-live date, because creation dates run continuously from 1996 to 2026 with no migration
+# cliff to key off. Archiving hides no money: those patients carry 1,274 pounds in total.
+# Archived is therefore tested BEFORE the lapsed rungs -- a patient with no attendance
+# history was never lost, because they were never had.
+#
+# ==> OWNERSHIP IS ESTABLISHED BY EXAMS, NOT BY VISITS. <== A patient who sees an unfamiliar
+# dentist for one exam and three follow-up treatment appointments has NOT changed dentist;
+# the treatments are the consequence of that single exam. A spell therefore needs TWO
+# CONSECUTIVE exams. Not three: the mean gap between a patient's exams at the live practice
+# is 278 days, so three would take over two years to recognise a change -- by which time the
+# 24-month lapse test has already fired and the patient has gone. Two confirms in about nine
+# months, inside the recall cycle, and the spell is DATED FROM THE FIRST exam of the run so
+# the history reads correctly even though confirmation only arrives at the second.
+#
+# The dentist/hygienist split uses Silver.Practitioners.User_Role exactly as V216 does --
+# Dentally calls every clinician Dentist or Hygienist, which is precisely the split needed
+# and is tenant-agnostic. Custom_Role is for comparing a clinician against their PEERS and
+# is deliberately not used here.
+#
+# ==> HEX IS NOW MAPPED, AND THAT MOVES THE APPOINTMENT JOURNEY. <== HEX was the single
+# largest hole in Silver.Appointment_Reason_Map: 15,796 completed appointments across 3,016
+# patients matching nothing, so those patients' check-ups registered as no category and the
+# ownership rule could not see them at all. It is 42% hygienist-performed, which is harmless
+# for ownership (the User_Role filter drops that half) but DOES move the Exam/Hygiene split
+# in Gold.Fact_Appointment_Journey -- so both appointment facts are reloaded here. 'Hex 20'
+# and 'Hex 30' are deliberately NOT mapped: 96% hygienist-performed, so they look like timed
+# hygiene slots, and mapping them would misclassify 2,742 hygiene appointments.
+#
+# ==> THE PLAN SIDE STORES FACTS, NOT A JUDGEMENT. <== Is_First_Visit_Plan is true when the
+# plan was written on the day that clinician FIRST SAW that patient -- per relationship, not
+# the patient's first ever visit, because someone who transfers after ten years gets a
+# first-meeting plan from their new dentist too. Front-loading then reads as a SHARE of a
+# patient's planned value, bounded 0-1, which separated two clinicians a ratio of two means
+# had tied (79.5% against 63.9%) and cannot be moved several places by one large case.
+#
+# There is no Is_Large flag. One threshold cannot serve an implantologist whose ordinary
+# case is 4,654 pounds and a routine course of 50, across practices with different price
+# lists, and a stored judgement cannot be revised without restating history. Plan_Value_Band
+# is a fact; "large" is a comparison against the Custom_Role median, and comparisons belong
+# in the metric. Zero-value plans get their own band -- NHS-only courses and single-line
+# pricing put a lot of 0.00 rows in, and letting them sit in the lowest band drags every
+# median and share toward nothing.
+#
+# ==> THE TABLE DDL FILES ARE NOT DEPLOYED. <== Gold.Dim_Patients.Table.sql and
+# Gold.Fact_Treatment_Plans.Table.sql both begin with DROP TABLE. Dropping the patient
+# dimension would destroy every pk_Patient the facts point at -- dims MERGE and keep their
+# keys across loads, which is the whole point. Columns are added by guarded ALTER, exactly
+# as V216 did. Only the genuinely new table is deployed from its DDL.
+# ---------------------------------------------------------------------
+
+# --- columns, by ALTER. Never by deploying the DDL. ---
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Patient_Status') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Patient_Status] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Prior_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Prior_Dentist] [bigint] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Date_Current_Dentist_Since') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Date_Current_Dentist_Since] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Current_Dentist_Since_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Current_Dentist_Since_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Date_Last_Seen_Prior_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Date_Last_Seen_Prior_Dentist] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Last_Seen_Prior_Dentist_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Last_Seen_Prior_Dentist_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Dentist_Spell_Count') ALTER TABLE [Gold].[Dim_Patients] ADD [Dentist_Spell_Count] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Has_Settled_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [Has_Settled_Dentist] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Dentist_Exam_Count') ALTER TABLE [Gold].[Dim_Patients] ADD [Dentist_Exam_Count] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Exams_With_Current_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [Exams_With_Current_Dentist] [int] NULL;
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Is_First_Visit_Plan') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Is_First_Visit_Plan] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='First_Met_Date') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [First_Met_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Plan_Value_Band') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Plan_Value_Band] [varchar](20) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Plan_Value_Band_Sort') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Plan_Value_Band_Sort] [int] NULL;
+
+# --- the new dimension. Genuinely new, so its DDL is safe to deploy. ---
+DEPLOY   Fabric\Gold.Dim_Patient_Status.Table.sql
+DEPLOY   Fabric\Gold.Dim_Patient_Status.Data.sql
+
+# --- the reason map, and the load-order edge fk_Prior_Dentist needs ---
+DEPLOY   Fabric\Silver.Appointment_Reason_Map.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+# --- loaders and the presentation view ---
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.vw_Dim_Patients.View.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+
+# The ladder must be seeded before any patient is given a key into it.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patient_Status; IF @n <> 11 BEGIN SET @e = 'V229 FAILED: Dim_Patient_Status holds ' + CAST(@n AS VARCHAR(10)) + ' rungs, expected 11.'; THROW 50590, @e, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# The reason map changed, so both appointment facts have to be rebuilt before anything
+# reads Appointment_Reason again -- including the journey, whose Exam/Hygiene split moves.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards ---
+
+# Every patient must hold a status, and it must resolve. An unresolved fk hides under "All"
+# and blanks every tile the moment a status is selected.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p WHERE p.pk_Patient > 0 AND (p.fk_Patient_Status IS NULL OR NOT EXISTS (SELECT 1 FROM Gold.Dim_Patient_Status s WHERE s.pk_Patient_Status = p.fk_Patient_Status)); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) carry a missing or unresolvable fk_Patient_Status.'; THROW 50591, @e, 1; END;
+
+# HEX must no longer leak raw practice shorthand into a product column.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments WHERE Appointment_Reason = 'HEX'; IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' appointment(s) still read Appointment_Reason = HEX -- the reason map did not take.'; THROW 50592, @e, 1; END;
+
+# The archive rung must only ever hold patients with no money attached. If it starts
+# swallowing paying patients, retention figures silently improve for the wrong reason.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE s.Is_Reportable = 0 AND (ISNULL(p.Total_Invoiced,0) > 0 OR ISNULL(p.Total_Paid,0) > 0); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' archived patient(s) have invoices or payments -- the archive is hiding real activity.'; THROW 50593, @e, 1; END;
+
+# A spell is internally consistent or it is nonsense: settled means at least one spell,
+# unsettled means none and no current-spell date; a prior dentist implies two spells.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE pk_Patient > 0 AND ((ISNULL(Has_Settled_Dentist,0) = 0 AND (ISNULL(Dentist_Spell_Count,0) <> 0 OR Current_Dentist_Since_Date IS NOT NULL)) OR (ISNULL(Has_Settled_Dentist,0) = 1 AND (ISNULL(Dentist_Spell_Count,0) < 1 OR Current_Dentist_Since_Date IS NULL)) OR (fk_Prior_Dentist IS NOT NULL AND ISNULL(Dentist_Spell_Count,0) < 2)); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have an internally inconsistent dentist spell.'; THROW 50594, @e, 1; END;
+
+# The previous dentist's last exam cannot fall on or after the current spell begins -- the
+# spells are runs through one ordered sequence, so an overlap means the islands are wrong.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE Last_Seen_Prior_Dentist_Date IS NOT NULL AND Current_Dentist_Since_Date IS NOT NULL AND Last_Seen_Prior_Dentist_Date >= Current_Dentist_Since_Date; IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) last saw their PREVIOUS dentist on or after the current spell started.'; THROW 50595, @e, 1; END;
+
+# Exams with the current dentist are a subset of all dentist exams, and neither can be
+# dated in the future -- a future booking must never be counted as an exam.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE pk_Patient > 0 AND (ISNULL(Exams_With_Current_Dentist,0) > ISNULL(Dentist_Exam_Count,0) OR Current_Dentist_Since_Date > CAST(SYSUTCDATETIME() AS DATE) OR Last_Seen_Prior_Dentist_Date > CAST(SYSUTCDATETIME() AS DATE)); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have more exams with their current dentist than in total, or a spell date in the future.'; THROW 50596, @e, 1; END;
+
+# Every plan must carry a band, and the band and its sort key must agree. A sort key that
+# drifts from its label reorders a visual without changing a number anyone would notice.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE Plan_Value_Band IS NULL OR Plan_Value_Band_Sort IS NULL OR Plan_Value_Band_Sort <> CASE WHEN ISNULL(Private_Treatment_Value,0) <= 0 THEN 0 WHEN Private_Treatment_Value < 250 THEN 1 WHEN Private_Treatment_Value < 500 THEN 2 WHEN Private_Treatment_Value < 1000 THEN 3 WHEN Private_Treatment_Value < 2500 THEN 4 ELSE 5 END; IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan(s) have a missing band or a sort key that disagrees with it.'; THROW 50597, @e, 1; END;
+
+# A first-visit plan must actually fall on the day that clinician first saw that patient.
+#
+# ==> AND THAT IS THE ONLY INVARIANT HERE. <== This guard originally also asserted that
+# First_Met_Date <= the plan's created date, on the reasoning that a plan cannot predate the
+# meeting it came out of. It failed on 1,262 plans, and the reasoning was simply wrong: a
+# plan is ASSIGNED to a clinician, it does not come out of a meeting with them. A referral
+# to the implantologist, work allocated to whoever will carry it out, a plan raised by one
+# dentist and given to another -- in all of those the assigned clinician may not have
+# completed an appointment with that patient yet, sometimes not for years (worst case here
+# 2,085 days). Only 125 of the 1,262 were the cancelled-first-appointment case that
+# hypothesis predicted. Is_First_Visit_Plan is correctly 0 for every one of them, and at
+# 0.7% of plans they do not move the front-load share. Do not reinstate that clause.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans tp JOIN Gold.Dim_Date d ON d.pk_Date = tp.fk_Date_Created WHERE ISNULL(tp.Is_First_Visit_Plan,0) = 1 AND (tp.First_Met_Date IS NULL OR tp.First_Met_Date <> d.Full_Date); IF @n <> 0 BEGIN SET @e = 'V229 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan(s) are flagged first-visit but First_Met_Date is not the day the plan was created.'; THROW 50598, @e, 1; END;
+
+# Coverage, which is the failure that actually threatens this flag: #met joins on three
+# columns with casts on two of them, so a type or tenant mismatch would match nothing at
+# all, leave every flag 0, and pass the invariant above silently. Front-loading would then
+# read as zero for every clinician and look like a finding rather than a broken join.
+EXEC     DECLARE @n INT, @p INT, @e VARCHAR(4000); SELECT @n = COUNT(*), @p = COUNT(DISTINCT fk_Practitioner) FROM Gold.Fact_Treatment_Plans WHERE ISNULL(Is_First_Visit_Plan,0) = 1; IF @n = 0 OR @p < 2 BEGIN SET @e = 'V229 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' plan(s) across ' + CAST(@p AS VARCHAR(10)) + ' practitioner(s) are flagged first-visit -- the #met join is matching nothing.'; THROW 50601, @e, 1; END;
+
+# Gold.vw_Dim_Patients OVERRIDES the table, so a column added to Gold.Dim_Patients and not
+# added to the view never reaches PBI.[List Patients] and nothing complains.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Patients' AND COLUMN_NAME IN ('fk Patient Status', 'fk Prior Dentist', 'Current Dentist Since Date', 'Last Seen Prior Dentist Date', 'Dentist Spell Count', 'Has Settled Dentist', 'Dentist Exam Count', 'Exams With Current Dentist'); IF @n <> 8 BEGIN SET @e = 'V229 FAILED: PBI.[List Patients] exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 8 new columns -- Gold.vw_Dim_Patients is not passing them through.'; THROW 50599, @e, 1; END;
+
+# The status dimension must reach PBI as its own table, or nothing can join the flags.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Patient Status'; IF @n <> 1 BEGIN SET @e = 'V229 FAILED: PBI.[List Patient Status] was not generated.'; THROW 50600, @e, 1; END;
+
+TEST

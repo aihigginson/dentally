@@ -1,0 +1,41 @@
+# =====================================================================
+# Release V232 -- View is a pre-op assessment
+# =====================================================================
+# The last unmapped reason text of any size at the live practice. V230 deliberately left it
+# alone -- Principal-heavy, 316-day recurrence, never charged, and nobody outside the
+# practice could say what it was. The owner identified it: a pre-operative assessment, with
+# the proviso that the operation may turn out not to be needed. It maps to Continuing
+# Treatment.
+#
+# 2,508 completed appointments. It was also the single largest item in the No Payer bucket
+# that V231 created -- 1,178 items, 1,163 of them completed and not one invoiced -- which is
+# consistent with an assessment step the practice absorbs.
+#
+# ==> THIS ONE DOES CHANGE A VISIBLE NUMBER. <== Unlike V230's self-named reasons, 'View' was
+# falling through as the literal string 'View' in Appointment_Reason. Those 2,508
+# appointments now read 'Continuing Treatment', which moves the Exam / Hygiene / Continuing
+# Treatment split in Gold.Fact_Appointment_Journey. That is the intended effect.
+#
+# Nothing else needs rebuilding. The exam ownership rule in Gold.usp_Load_Dim_Patients keys
+# on Category = 'Exam' and Continuing Treatment is not one, so no spell, exam count or
+# patient status moves. Gold.Fact_Treatment_Plans does not read appointment reasons at all.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Silver.Appointment_Reason_Map.Data.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards ---
+
+# No appointment may still read the raw shorthand.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments WHERE Appointment_Reason = 'View'; IF @n <> 0 BEGIN SET @e = 'V232 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' appointment(s) still read Appointment_Reason = View.'; THROW 50630, @e, 1; END;
+
+# Coverage must only improve. The V230 floor is 70%; the live practice should now clear 92%.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT a.Tenant_ID FROM Silver.Appointments a LEFT JOIN Silver.Appointment_Reason_Map m ON m.Reason_Text = NULLIF(TRIM(a.Reason), '') WHERE a.State = 'Completed' GROUP BY a.Tenant_ID HAVING COUNT(*) >= 1000 AND 100.0 * SUM(CASE WHEN m.Reason_Text IS NULL THEN 0 ELSE 1 END) / COUNT(*) < 70.0) x; IF @n <> 0 BEGIN SET @e = 'V232 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' tenant(s) are under the 70% reason-mapping floor.'; THROW 50631, @e, 1; END;
+
+# The exam rule must NOT have moved -- Continuing Treatment is not an exam, so if the
+# ownership columns shifted, the mapping has leaked into the wrong category.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE pk_Patient > 0 AND ((ISNULL(Has_Settled_Dentist,0) = 0 AND (ISNULL(Dentist_Spell_Count,0) <> 0 OR Current_Dentist_Since_Date IS NOT NULL)) OR (ISNULL(Has_Settled_Dentist,0) = 1 AND (ISNULL(Dentist_Spell_Count,0) < 1 OR Current_Dentist_Since_Date IS NULL)) OR ISNULL(Exams_With_Current_Dentist,0) > ISNULL(Dentist_Exam_Count,0)); IF @n <> 0 BEGIN SET @e = 'V232 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have an inconsistent dentist spell.'; THROW 50632, @e, 1; END;
+
+TEST

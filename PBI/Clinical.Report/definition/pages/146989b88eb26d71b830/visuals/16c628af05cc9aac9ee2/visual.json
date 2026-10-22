@@ -42,11 +42,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Open Courses Without Appointment"
+                  "Property": "Open Courses"
                 }
               },
-              "queryRef": "_Measures.Open Courses Without Appointment",
-              "nativeQueryRef": "Open Courses Without Appointment"
+              "queryRef": "_Measures.Open Courses",
+              "nativeQueryRef": "Open Courses"
             },
             {
               "field": {
@@ -56,11 +56,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Open Courses"
+                  "Property": "Open Courses Without Appointment"
                 }
               },
-              "queryRef": "_Measures.Open Courses",
-              "nativeQueryRef": "Open Courses"
+              "queryRef": "_Measures.Open Courses Without Appointment",
+              "nativeQueryRef": "Open Courses Without Appointment"
             }
           ]
         }

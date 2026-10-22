@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "1st Appointments",
-  "name": "040254def63c304ef18f",
+  "displayName": "Initial Exam",
+  "name": "c5d81f3a97b2e0461fda",
   "options": {
     "applyOnlyToTargetVisuals": true,
     "targetVisualNames": [
@@ -18,11 +18,9 @@
       "35cc7bbf3ee1a9a11d8b",
       "f5531afe5d96eb287460",
       "487ee07330dfcf70def5",
-      "21442f768b77f9380245",
-      "96f10e50a87f38b8d196",
-      "778515253097092d7201"
-    ],
-    "suppressData": true
+      "a1d47e03b2f968154cae",
+      "f4a19d27c6b08e351abc"
+    ]
   },
   "explorationState": {
     "version": "1.0",
@@ -147,21 +145,15 @@
               }
             }
           },
-          "21442f768b77f9380245": {
+          "a1d47e03b2f968154cae": {
             "singleVisual": {
-              "visualType": "clusteredBarChart",
+              "visualType": "deneb7E15AEF80B9E4D4F8E12924291ECE89A",
               "objects": {}
             }
           },
-          "96f10e50a87f38b8d196": {
+          "f4a19d27c6b08e351abc": {
             "singleVisual": {
-              "visualType": "clusteredBarChart",
-              "objects": {}
-            }
-          },
-          "778515253097092d7201": {
-            "singleVisual": {
-              "visualType": "slicer",
+              "visualType": "textbox",
               "objects": {}
             }
           }

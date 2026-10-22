@@ -87,3 +87,11 @@
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
 - [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.
 - [Treatment plan acceptance is unknowable](treatment-plan-acceptance-is-unknowable.md) — Accepted_At is hardcoded NULL; plans are not deleted, but no plan can be shown as accepted or declined.
+- [Overnight pause kept despite flaky cron](overnight-pause-kept-despite-flaky-cron.md) — SETTLED: the saving wins; owner checks the site each morning, `gh workflow run capacity-schedule.yml` fixes it.
+- [An unmapped reason reads as itself](an-unmapped-reason-reads-as-itself.md) — Appointment_Reason falls back to raw text, so the map was recognising 29.5% and looked fine; join the map to judge coverage.
+- [Lead with the decision, not the argument](lead-with-the-decision-not-the-argument.md) — long build-ups leave nowhere to interject; define measures, strip internal labels, ask the owner.
+- [A warehouse guard cannot see the model](a-warehouse-guard-cannot-see-the-model.md) — V224 dropped two PBI views as unread and broke the model; sys.sql_modules proves nothing about Power BI.
+- [Batch fixes before writing a manifest](batch-fixes-before-writing-a-manifest.md) — V229-V235 in one afternoon, three repairing the previous; accumulate into the undeployed manifest instead.
+- [AddMeasure on an existing name silently loses](addmeasure-on-an-existing-name-silently-loses.md) — the original survives and your edit never applies; some chart axes update, others freeze, no error.
+- [An Unconstrained alias must join only to practitioners](an-unconstrained-alias-must-join-only-to-practitioners.md) — auto-detected joins gave two paths to List Patients; the HOME page broke, not the new one.
+- [PBIR enums are validated and fail closed](pbir-enums-are-validated-and-fail-closed.md) — "Filter" instead of "DataFilter" stopped the whole report opening; fetch the $schema.

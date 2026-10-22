@@ -2579,6 +2579,146 @@ RETURN IF(selected <> """", selected, cur_fy)",
 
 }
 
+// ===================== Spider: plan behaviour =====================
+// Five axes comparing ONE selected clinician against their own role cohort. The Deneb spec
+// renders only when a single practitioner is selected.
+//
+// ==> EACH AXIS SHIPS TWICE: A RATIO TO PLOT AND THE REAL NUMBERS TO READ. <== A radar needs
+// a common scale, so the plotted value is individual / cohort. But "1.24" tells a principal
+// nothing; the Note measure beside it says "81.6% against a peer average of 66.9%" already
+// formatted for that axis, and the spec binds it to the tooltip.
+//
+// ==> THE COHORT IS Custom Role, NOT THE WHOLE PRACTICE. <== Spider Revenue benchmarks
+// against every practitioner in the tenant, which sets an associate beside an implantologist
+// whose ordinary case is 4,654 pounds and a hygienist who proposes nothing at all.
+//
+// The window is fixed inside the measures -- relationships begun 12-24 months ago, matured
+// so a year has completed and rolling so it reads as current. A clinician GROWING their list
+// would otherwise look like an extreme front-loader purely because their patients have had
+// no time to be planned a second time.
+//
+// Patients At Risk is INVERTED (peers / me) so that further from the centre is always the
+// better direction on every axis.
+{
+    var sfolder = "Spider Plan Behaviour";
+    var stable  = "_Measures";
+
+    foreach (var existing in Model.Tables[stable].Measures
+        .Where(m => m.DisplayFolder == sfolder).ToList())
+        existing.Delete();
+
+    Action<string,string> sadd = (name, dax) => {
+        var m = Model.Tables[stable].AddMeasure(name, dax);
+        m.DisplayFolder = sfolder; m.FormatString = "0.00";
+    };
+    Action<string,string> snote = (name, dax) => {
+        var m = Model.Tables[stable].AddMeasure(name, dax);
+        m.DisplayFolder = sfolder; m.IsHidden = false;
+    };
+
+    sadd("Spider PB Proposed at First Visit",
+        @"VAR me    = [%Proposed]
+VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Proposed] )
+RETURN IFERROR ( DIVIDE ( me, peers ), 0 )");
+    snote("Spider PB Val Proposed at First Visit", @"FORMAT ( [%Proposed], ""0.0%"" )");
+    snote("Spider PB Mean Proposed at First Visit",
+        @"VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Proposed] )
+RETURN FORMAT ( peers, ""0.0%"" )");
+    sadd("Spider PB Year One per Patient",
+        @"VAR me    = [Y1 Avg £]
+VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [Y1 Avg £] )
+RETURN IFERROR ( DIVIDE ( me, peers ), 0 )");
+    snote("Spider PB Val Year One per Patient", @"FORMAT ( [Y1 Avg £], ""£#,##0"" )");
+    snote("Spider PB Mean Year One per Patient",
+        @"VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [Y1 Avg £] )
+RETURN FORMAT ( peers, ""£#,##0"" )");
+    sadd("Spider PB %Delivered",
+        @"VAR me    = [%Delivered]
+VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Delivered] )
+RETURN IFERROR ( DIVIDE ( me, peers ), 0 )");
+    snote("Spider PB Val %Delivered", @"FORMAT ( [%Delivered], ""0.0%"" )");
+    snote("Spider PB Mean %Delivered",
+        @"VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Delivered] )
+RETURN FORMAT ( peers, ""0.0%"" )");
+    sadd("Spider PB Large First Plan Share",
+        @"VAR me    = [%Large]
+VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Large] )
+RETURN IFERROR ( DIVIDE ( me, peers ), 0 )");
+    snote("Spider PB Val Large First Plan Share", @"FORMAT ( [%Large], ""0.0%"" )");
+    snote("Spider PB Mean Large First Plan Share",
+        @"VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), [%Large] )
+RETURN FORMAT ( peers, ""0.0%"" )");
+    // ==> NOT INVERTED. <== Every axis plots the plain ratio, so further out means MORE
+    // of that thing and the reader decides what it is worth. Inverting this one would
+    // assert that fewer at risk is better -- probably true, but the same chart refuses to
+    // claim a direction for proposing more treatment earlier, and it should be consistent.
+    sadd("Spider PB Patients At Risk",
+        @"VAR me    = CALCULATE ( [%Attrition], TREATAS ( VALUES ( 'List Practitioners'[pk Practitioner] ), 'List Patients'[fk Current Dentist] ) )
+VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), VAR pk = 'List Practitioners'[pk Practitioner] RETURN CALCULATE ( [%Attrition], TREATAS ( { pk }, 'List Patients'[fk Current Dentist] ) ) )
+RETURN IFERROR ( DIVIDE ( me, peers ), 0 )");
+    snote("Spider PB Val Patients At Risk", @"FORMAT ( CALCULATE ( [%Attrition], TREATAS ( VALUES ( 'List Practitioners'[pk Practitioner] ), 'List Patients'[fk Current Dentist] ) ), ""0.0%"" )");
+    // Same VAR capture as the ratio: without it this prints the practice-wide figure for
+    // every clinician, because the relationship from List Practitioners to List Patients
+    // is not the active path and nothing isolates the row.
+    snote("Spider PB Mean Patients At Risk",
+        @"VAR peers = AVERAGEX ( FILTER ( ALL ( 'List Practitioners' ), 'List Practitioners'[Tenant ID] IN VALUES ( 'List Practitioners'[Tenant ID] ) && 'List Practitioners'[Custom Role] IN VALUES ( 'List Practitioners'[Custom Role] ) ), VAR pk = 'List Practitioners'[pk Practitioner] RETURN CALCULATE ( [%Attrition], TREATAS ( { pk }, 'List Patients'[fk Current Dentist] ) ) )
+RETURN FORMAT ( peers, ""0.0%"" )");
+
+    // The benchmark ring: the cohort average is 1.0 by construction.
+    // ==> THESE ARE SPIDER AXIS KEYS, NOT REPORT LABELS. <== The name built here is
+    // "Spider PB Avg " + ax and the visual binds exactly that, so this array must hold the
+    // measure names the spokes were defined with -- NOT the short labels the table shows.
+    // The rename pass rewrites quoted strings wholesale and will clobber it otherwise.
+    foreach (var ax in new[] { "Proposed at First Visit", "Year One per Patient",
+                               "Large First Plan Share", "%Delivered",
+                               "Patients At Risk" })
+    {
+        var m = Model.Tables[stable].AddMeasure("Spider PB Avg " + ax, "1.0");
+        m.DisplayFolder = sfolder; m.FormatString = "0.00";
+    }
+}
+
+// Patient-grain companion. On List Patients because that is where fk_Patient_Status lives;
+// the archive is excluded or every rate is diluted by patients who never attended.
+{
+    var lp = Model.Tables["List Patients"];
+    foreach (var m in lp.Measures.Where(m => m.Name == "%Attrition"
+                                          || m.Name == "Patients Reportable").ToList())
+        m.Delete();
+
+    var prp = lp.AddMeasure("Patients Reportable", @"CALCULATE ( COUNTROWS ( 'List Patients' ), 'List Patient Status'[Is Reportable] = TRUE () )");
+    prp.DisplayFolder = "Patients"; prp.FormatString = "#,##0";
+    prp.Description = "Patients excluding the archive -- no attendance, no invoice, no payment anywhere in the warehouse. At the live practice that is 19,471 pre-migration records; counting them inflates every retention rate.";
+
+    // ==> 100 - POSITIVE OUTCOMES / OUTCOMES EXPECTED. <== The previous version divided by
+    // every patient, which counted someone whose recall is not yet due as retained and made
+    // the figure move with WHEN a clinician took patients on rather than whether they keep
+    // them -- at the live practice it doubled across the window for two associates and
+    // halved for a third. Only patients who have actually reached an outcome count here:
+    // booked (the positive one), recall overdue, or reminded and silent. Still waiting is
+    // not an outcome, and neither is a patient with no recall set.
+    var par = lp.AddMeasure("%Attrition", @"VAR Rolling = EDATE ( TODAY (), -24 )
+VAR Cohort =
+    FILTER (
+        'List Patients',
+        'List Patients'[Current Dentist Since Date] >= Rolling
+    )
+VAR Expected =
+    CALCULATE (
+        COUNTROWS ( 'List Patients' ), Cohort,
+        'List Patient Status'[Status Code] IN { ""ACTIVE_BOOKED"", ""RECALL_OVERDUE_UNSENT"",
+                                                ""RECALL_SENT_NO_REPLY_LT2M"", ""RECALL_SENT_NO_REPLY_GT2M"" }
+    )
+VAR Positive =
+    CALCULATE (
+        COUNTROWS ( 'List Patients' ), Cohort,
+        'List Patient Status'[Status Code] = ""ACTIVE_BOOKED""
+    )
+RETURN IF ( Expected = 0, BLANK (), 1 - DIVIDE ( Positive, Expected ) )");
+    par.DisplayFolder = "Patients"; par.FormatString = "0.0%";
+    par.Description = "Of this clinician's patients who have reached a recall outcome, the share who have NOT rebooked. Patients whose recall is not yet due are excluded -- they have no outcome yet, and counting them as retained flatters whoever has taken on patients most recently.";
+}
+
 // ===================== SpiderRevenue =====================
 {
 // TabularEditor_SpiderRevenue.csx
@@ -2796,10 +2936,16 @@ add("Spider Rev Avg Deposit Value",
         bucketTbl.Columns["Sort Order"].IsHidden = true;
     }
 
+    // ==> THE RANKING HONOURS THE PERIOD. <== It used to carry REMOVEFILTERS('List Date'),
+    // so the top N was ranked over ALL TIME and then displayed filtered to the page's period.
+    // That gave a stable axis but buried categories that mattered in the period: on the live
+    // tenant at 12 months it showed Dentures Related Services (not in the period's top 8) and
+    // folded Periodontic Related Services (which was) into Other. CALCULATE is still needed
+    // for the context transition inside ADDCOLUMNS -- only REMOVEFILTERS was dropped.
     var mt = Model.Tables["_Measures"];
     var topDax = @"VAR N = 8
 VAR SelBucket = SELECTEDVALUE ( 'Category Bucket'[Category] )
-VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( '_Revenue'[Revenue Category] ), ""@Total"", CALCULATE ( SUM ( '_Revenue'[Amount] ), REMOVEFILTERS ( 'List Date' ) ) )
+VAR Ranked = ADDCOLUMNS ( ALLSELECTED ( '_Revenue'[Revenue Category] ), ""@Total"", CALCULATE ( SUM ( '_Revenue'[Amount] ) ) )
 VAR WithRank = ADDCOLUMNS ( Ranked, ""@Rank"", RANKX ( Ranked, [@Total], , DESC, DENSE ) )
 VAR TopNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] <= N && '_Revenue'[Revenue Category] <> ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
 VAR OtherNames = SELECTCOLUMNS ( FILTER ( WithRank, [@Rank] > N || '_Revenue'[Revenue Category] = ""Other"" ), ""Cat"", '_Revenue'[Revenue Category] )
@@ -2901,7 +3047,8 @@ RETURN
     roll3("Private", "Private Revenue");
     roll3("Plan",    "Plan Capitation Revenue");
     roll3("NHS",     "NHS Revenue");
-
+
+
 
     // Ratio -> pooled over the window (evaluate the whole measure in the windowed context)
     roll12("Chair Utilisation",        "Chair Utilisation",        true, "#,##0.0%");
@@ -2984,6 +3131,126 @@ RETURN
     var rc = Model.Tables["_Recalls"].AddMeasure("Recall Count", @"COUNTROWS ( '_Recalls' )");
     rc.DisplayFolder = g; rc.FormatString = "#,##0";
     rc.Description = "Rows on the Recall Details page -- recalls, not patients.";
+}
+
+// ===================== Proposed at first visit (year one) ================================
+// What share of the treatment a clinician proposes in a patient's FIRST YEAR was proposed at
+// the very first meeting. A principal reads the SPREAD across their associates, which is the
+// thing they can act on -- a chart that singles out one person is an accusation, not control.
+//
+// ==> READS '_Treatment Plans Unconstrained', NOT '_Treatment Plans'. <== The cohort is a
+// rolling window on when each RELATIONSHIP started, not on when plans were created, so the
+// page's date slicer must not reach it. Same reason List Date Unconstrained exists: the
+// non-standard constraint belongs in the measure, not in the page filter.
+//
+// Three rules, each of which the figure is wrong without:
+//
+//   MATURED. Only relationships at least 12 months old. Otherwise a patient first seen three
+//   months ago contributes their first-visit value against a three-month denominator and
+//   reads 100% -- so ANYONE GROWING THEIR LIST APPEARS HIGH, which is the opposite of useful.
+//
+//   ROLLING. Only relationships that started within 24 months, so this is current behaviour
+//   rather than what somebody did in 2015. Dropping the upper bound moved one associate from
+//   level-pegging with the Principal to an apparent outlier -- an artefact of counting old
+//   relationships, and exactly the sort of false finding this product must not publish.
+//
+//   FIXED WINDOW. The denominator is the patient's first twelve months, never "everything
+//   ever planned". That version is mostly a measure of relationship LENGTH: it ranked the
+//   practice's former owner last purely because his patients had been with him five years.
+{
+    string g2 = "Treatment Plans";
+    var tbl = Model.Tables.FirstOrDefault(x => x.Name == "_Treatment Plans Unconstrained")
+           ?? Model.Tables["_Treatment Plans"];
+    string T = tbl.Name;
+    foreach (var m in Model.Tables.SelectMany(x => x.Measures)
+                          .Where(m => m.Name == "First Plan Value"
+                                   || m.Name == "First Year Plan Value"
+                                   || m.Name == "Plan Value"
+                                   || m.Name == "First Met"
+                                   || m.Name == "First Plan Share"
+                                   || m.Name == "First Plan Share (Pooled)"
+                                   || m.Name == "First Visit Share of Year One"
+                                   // ==> EVERY MEASURE THIS BLOCK CREATES MUST BE LISTED HERE. <==
+                                   // A name that is added but never deleted keeps its ORIGINAL
+                                   // definition for ever: the re-add silently loses, and an edit
+                                   // to the DAX appears to have no effect no matter how many times
+                                   // the script is applied. These four cost an afternoon -- the two
+                                   // axes that behaved were the two that were on this list.
+                                   || m.Name == "First Visit Proposed"
+                                   || m.Name == "Year One Proposed"
+                                   || m.Name == "First Plan Delivered"
+                                   || m.Name == "%Delivered"
+                                   || m.Name == "Year One Completed"
+                                   || m.Name == "%Started"
+                                   || m.Name == "%Large"
+                                   || m.Name == "Y1 Avg £"
+                                   || m.Name == "%Proposed").ToList())
+        m.Delete();
+
+    var fpv = tbl.AddMeasure("First Visit Proposed", string.Format(@"CALCULATE ( SUM ( '{0}'[Private Treatment Value] ), '{0}'[Is First Visit Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )", T));
+    fpv.DisplayFolder = g2; fpv.FormatString = "£#,##0";
+    // ==> THIS IS THE DENOMINATOR OF %Delivered. <== It must carry the SAME payer and
+    // window filters as First Plan Delivered above it. Without them the ratio was a
+    // windowed numerator over an all-time denominator and read 19% instead of 63%.
+    fpv.Description = "Private value proposed on the day this clinician first saw the patient. Same cohort and payer filters as First Plan Delivered, so the two divide cleanly.";
+
+    var fyv = tbl.AddMeasure("Year One Proposed", string.Format(@"CALCULATE ( SUM ( '{0}'[Private Treatment Value] ), '{0}'[Is First Year Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )", T));
+    fyv.DisplayFolder = g2; fyv.FormatString = "£#,##0";
+    fyv.Description = "Private value proposed in the patient's first twelve months with this clinician.";
+
+    var pfv = tbl.AddMeasure("%Proposed", string.Format(@"VAR Rolling = EDATE ( TODAY (), -24 )
+VAR Cohort =
+    FILTER (
+        VALUES ( '{0}'[fk Patient] ),
+        VAR Met = CALCULATE ( MIN ( '{0}'[First Met Date] ) )
+        RETURN NOT ISBLANK ( Met ) && Met >= Rolling && [Year One Proposed] > 0
+    )
+RETURN
+DIVIDE (
+    CALCULATE ( [First Visit Proposed], Cohort ),
+    CALCULATE ( [Year One Proposed], Cohort )
+)", T));
+    pfv.DisplayFolder = g2; pfv.FormatString = "0.0%";
+
+    var fpd = tbl.AddMeasure("First Plan Delivered", string.Format(@"CALCULATE ( SUM ( '{0}'[Private Treatment Value Completed] ), '{0}'[Is First Visit Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )", T));
+    fpd.DisplayFolder = g2; fpd.FormatString = "£#,##0";
+    fpd.Description = "Value actually completed off plans written at the first meeting -- the immediate upside of proposing early. Treatment that got done, not treatment that was offered.";
+
+    // No 28-day filter needed: the cohort only admits relationships at least twelve months
+    // old, so every plan in it is long past the point where "not started" means declined.
+    var fpa = tbl.AddMeasure("%Started", string.Format(@"VAR Judged  = CALCULATE ( COUNTROWS ( '{0}' ), '{0}'[Is First Visit Plan] = TRUE () )
+VAR Started = CALCULATE ( COUNTROWS ( '{0}' ), '{0}'[Is First Visit Plan] = TRUE (), '{0}'[Has Completed Item] = TRUE () )
+RETURN DIVIDE ( Started, Judged )", T));
+    fpa.DisplayFolder = g2; fpa.FormatString = "0.0%";
+    fpa.Description = "Share of first-meeting plans where any item was started. At the live practice every associate sits at 97-99%, so read it as a floor being held rather than a differentiator.";
+
+    // ==> ACCEPTANCE WAS A FLAT AXIS. <== 97.7% to 99.3% across the three associates is a
+    // 1.6-point spread; on a radar that is a straight line and tells a principal nothing.
+    // The ambition of the plan is what actually separates them: 18.7% against 4.9% and 4.4%.
+    // ==> A SHARE, NOT A TOTAL. <== First Plan Delivered is an absolute and therefore
+    // tracks list size: the clinician with more patients delivers more, which is not a
+    // fact about how they work. Dividing by what they proposed at the same meetings makes
+    // it comparable, and keeps numerator and denominator on the same population.
+    var pcd = tbl.AddMeasure("%Delivered", @"DIVIDE ( [First Plan Delivered], [First Visit Proposed] )");
+    pcd.DisplayFolder = g2; pcd.FormatString = "0.0%";
+    pcd.Description = "Of the private value proposed at the first meeting, the share completed. Independent of list size, unlike the delivered total it replaces.";
+
+    var lps = tbl.AddMeasure("%Large", string.Format(@"VAR Judged = CALCULATE ( COUNTROWS ( '{0}' ), '{0}'[Is First Visit Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )
+VAR Large  = CALCULATE ( COUNTROWS ( '{0}' ), '{0}'[Is First Visit Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[Private Treatment Value] >= 1000, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )
+RETURN DIVIDE ( Large, Judged )", T));
+    lps.DisplayFolder = g2; lps.FormatString = "0.0%";
+    lps.Description = "Share of first-meeting plans worth 1,000 pounds or more. The practice's original concern was that one associate proposes too much too early; this is that claim as a number.";
+
+    // ==> COMPLETED, NOT PROPOSED. <== Proposed money is an intention; this is what the
+    // practice actually banked per patient in their first year.
+    var fyc = tbl.AddMeasure("Year One Completed", string.Format(@"CALCULATE ( SUM ( '{0}'[Private Treatment Value Completed] ), '{0}'[Is First Year Plan] = TRUE (), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) )", T));
+    fyc.DisplayFolder = g2; fyc.FormatString = "£#,##0";
+    fyc.Description = "Private value COMPLETED in the patient's first twelve months with this clinician.";
+
+    var yop = tbl.AddMeasure("Y1 Avg £", string.Format(@"DIVIDE ( [Year One Completed], CALCULATE ( DISTINCTCOUNT ( '{0}'[fk Patient] ), '{0}'[fk Plan Payer] = 3, '{0}'[First Met Date] >= EDATE ( TODAY (), -24 ) ) )", T));
+    yop.DisplayFolder = g2; yop.FormatString = "£#,##0";
+    yop.Description = "Private treatment COMPLETED per patient across their first twelve months. Proposed value is an intention; this is what was carried out.";
+    pfv.Description = "Of everything proposed in a patient's first year with this clinician, the share proposed at the first meeting. Patients whose relationship began 12-24 months ago, so the year is complete and the window rolls with today -- a clinician taking on new patients is not penalised, and a long-standing list is not flattered. Read the SPREAD across clinicians, not one figure: at the live practice it runs 64% to 82%. No target, because whether proposing up front is better is genuinely unsettled.";
 }
 
 // ===================== Data Quality =====================
