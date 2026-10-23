@@ -96,3 +96,4 @@
 - [An Unconstrained alias must join only to practitioners](an-unconstrained-alias-must-join-only-to-practitioners.md) — auto-detected joins gave two paths to List Patients; the HOME page broke, not the new one.
 - [PBIR enums are validated and fail closed](pbir-enums-are-validated-and-fail-closed.md) — "Filter" instead of "DataFilter" stopped the whole report opening; fetch the $schema.
 - [Commit at each working point](commit-at-each-working-point.md) — a day uncommitted meant 10 of 14 deploy targets would have shipped stale or failed on the runner.
+- [Azure resource creation needs MFA](azure-resource-creation-needs-mfa.md) — RequestDisallowedByAzure even as subscription Owner; reads and acr build still work.
