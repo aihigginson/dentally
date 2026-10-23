@@ -84,4 +84,4 @@ echo "   status: $STATUS"
 echo
 az containerapp job logs show -n "$JOB" -g "$RG" --execution "$EXEC" --container "$JOB" --tail 30 || true
 echo
-echo "Expect a line like: Fri 18:45 UK -> target F4; capacity is F4, Active"
+echo "Expect a line like: Fri 18:33 UK -> target F2; capacity is F4, Active"

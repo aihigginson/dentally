@@ -95,10 +95,12 @@ if ($existing) {
 
 # ---- 3. prove it, without changing anything -----------------------------------------
 # A job execution is the only honest test: it exercises the image, the identity and the
-# role assignment together. --dry-run reads the capacity and reports, nothing more.
-Write-Host "`nStarting a dry-run execution ..." -ForegroundColor Cyan
+# role assignment together. NO command override -- it runs exactly what the schedule runs,
+# which also means it MAY SCALE THE CAPACITY. That is the point: a dry run proves the
+# plumbing but not the write, and the write is the half that needs the role assignment.
+# (--args cannot carry --dry-run anyway: az's own parser claims it and exits 2.)
+Write-Host "`nStarting a real execution ..." -ForegroundColor Cyan
 $exec = Invoke-AzCli @('containerapp','job','start','-n',$job,'-g',$rg,
-    '--command','python','--args','capacity_schedule.py','--args','--dry-run',
     '--query','name','-o','tsv')
 Write-Host "execution: $exec"
 
