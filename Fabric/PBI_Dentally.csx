@@ -3,6 +3,8 @@
 // scope block { } so local helpers do not collide. ONE paste, ONE Run rebuilds every folder;
 // measures keep exact names + DisplayFolder so report cards re-bind automatically.
 // (Dead spider measures are purged separately by TabularEditor_KillDeadSpiders.csx -- run once.)
+// (Journey measures likewise: TabularEditor_KillJourney.csx -- run once after V241. The
+//  AppointmentJourney block that used to clean that folder went with the feature.)
 
 // ===================== Clinical =====================
 {
