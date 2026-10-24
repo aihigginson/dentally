@@ -3804,12 +3804,14 @@
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            // displayOption 1 = FitToWidth. This only works because EVERY page is
-            // 1280x600 (ratio 2.133) and the app's viewport after chrome is 2.0-2.14 --
-            // fitting the width lands within a couple of percent of the height too. A
-            // page left at 1280x720 is 18% too tall and WILL scroll; fix the canvas, not
-            // this setting. FitToPage was tried and rejected.
-            : { layoutType: 1, customLayout: { displayOption: 1 } };
+            // displayOption 0 = FitToPage: bounded by the container in BOTH dimensions,
+            // so it never scrolls. FitToPage was tried and rejected once before, but that
+            // was against a mix of 1280x720 and 1280x600 canvases, where the 720 pages
+            // letterboxed hard. Every page is now 1280x600 (ratio 2.133) against a
+            // viewport of 2.0-2.14, so the bars should be a few percent at most.
+            // 1 = FitToWidth is the alternative: no bars, but anything taller than the
+            // viewport ratio scrolls.
+            : { layoutType: 1, customLayout: { displayOption: 0 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -3826,7 +3828,7 @@
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2, ...lockdown }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 }, ...lockdown },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 }, ...lockdown },
         };
     }
 
