@@ -747,6 +747,7 @@
                 <button class="settings-tab" data-stab="team">Subscriptions</button>
                 <button class="settings-tab" data-stab="invoices">Invoices</button>
                 <button class="settings-tab" data-stab="admin" id="stab-admin-btn" style="display:none">Admin</button>
+                <button class="settings-tab" data-stab="hierarchy" id="stab-hierarchy-btn" style="display:none">Hierarchy</button>
             </div>
 
             <div class="settings-pane active" id="stab-finance">
@@ -898,6 +899,19 @@
                 </div>
             </div>
 
+            <div class="settings-pane" id="stab-hierarchy">
+                <div class="defs-group">Client hierarchy &mdash; Analytically only</div>
+                <div class="defs-item-desc" style="margin-bottom:14px">
+                    Tie each practice to a client, then place every site in an area. Regions and
+                    areas belong to the client. A level with only one child is hidden from the
+                    customer, so a single-site practice never sees any of this.
+                </div>
+                <div id="hier-body" style="font-size:13px">Loading&hellip;</div>
+                <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+                    <button id="hier-save" style="padding:8px 16px;border:none;border-radius:4px;background:#1A527A;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+                    <span id="hier-msg" style="color:#475467"></span>
+                </div>
+            </div>
             <div class="settings-pane" id="stab-admin">
                 <div class="defs-group">Billing console &mdash; Analytically staff only</div>
                 <div class="defs-item">
@@ -1520,6 +1534,11 @@
             }
             const ab = document.getElementById('stab-admin-btn');
             if (ab) ab.style.display = '';
+            // Analytically only, for now. The CONTROL is _require_staff on the routes,
+            // which tests the mailbox domain Entra asserts at sign-in; this merely stops
+            // the tab appearing for anyone else.
+            const hb = document.getElementById('stab-hierarchy-btn');
+            if (hb) hb.style.display = '';
         }
 
         // Practice admins get the Settings gear (Connect Xero lives there).
@@ -2319,8 +2338,119 @@
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
     { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
+    { const _hs = document.getElementById('hier-save');
+      if (_hs) _hs.addEventListener('click', saveHierarchy); }
     { const _fm = document.getElementById('fy-start-month'); if (_fm) _fm.addEventListener('change', _updateFyDisplay);
       const _fs = document.getElementById('fy-save'); if (_fs) _fs.addEventListener('click', saveFYConfig); }
+
+    // ── Settings: client hierarchy (Analytically only) ───────────────────────
+    // The screen holds the whole tree and saves it in one call. Placing a site depends on its
+    // area existing and an area on its region, so a route per noun would leave a half-saved
+    // tree the first time one of them failed.
+    let _hier = null;
+
+    async function loadHierarchy() {
+        const body = document.getElementById('hier-body');
+        body.textContent = 'Loading\u2026';
+        try {
+            const r = await authFetch('/api/admin/hierarchy');
+            if (!r.ok) { body.textContent = 'Could not load the hierarchy.'; return; }
+            _hier = await r.json();
+            renderHierarchy();
+        } catch (e) { body.textContent = 'Could not load the hierarchy.'; }
+    }
+
+    function _areaOptions(clientId, selected) {
+        // Only this client's areas: an area belongs to a client through its region, and
+        // offering another client's would silently cross the tree.
+        const c = (_hier.clients || []).find(x => x.client_id === clientId);
+        let html = '<option value="">\u2014 unplaced \u2014</option>';
+        (c ? c.regions : []).forEach(rg => (rg.areas || []).forEach(a => {
+            const label = (rg.name === a.name) ? a.name : rg.name + ' \u203a ' + a.name;
+            html += '<option value="' + a.area_id + '"' +
+                    (a.area_id === selected ? ' selected' : '') + '>' + label + '</option>';
+        }));
+        return html;
+    }
+
+    function renderHierarchy() {
+        const clients = _hier.clients || [], tenants = _hier.tenants || [], sites = _hier.sites || [];
+        let h = '';
+        clients.forEach(c => {
+            const myTenants = tenants.filter(t => t.client_id === c.client_id);
+            const mySites = sites.filter(x => x.client_id === c.client_id);
+            h += '<div style="margin-bottom:22px;border:1px solid #e4e7ec;border-radius:6px;padding:12px">';
+            h += '<div style="font-weight:600;margin-bottom:8px">' + c.name +
+                 ' <span style="color:#98a2b3;font-weight:400">#' + c.client_id + '</span></div>';
+
+            h += '<div style="color:#475467;margin:6px 0 4px">Regions and areas</div>';
+            (c.regions || []).forEach(rg => {
+                h += '<div style="margin-left:8px">' + rg.name;
+                const names = (rg.areas || []).map(a => a.name).join(', ');
+                h += '<span style="color:#98a2b3"> \u203a ' + (names || 'no areas') + '</span></div>';
+            });
+            if (!(c.regions || []).length) h += '<div style="margin-left:8px;color:#98a2b3">none</div>';
+
+            h += '<div style="color:#475467;margin:10px 0 4px">Sites</div>';
+            if (!mySites.length) h += '<div style="margin-left:8px;color:#98a2b3">no sites</div>';
+            mySites.forEach(x => {
+                h += '<div style="margin-left:8px;display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+                h += '<span style="min-width:300px">' + x.practice_name + ' \u2014 ' + x.site_name + '</span>';
+                h += '<select data-hier-site="' + x.tenant_id + '|' + x.site_id + '">' +
+                     _areaOptions(c.client_id, x.area_id) + '</select></div>';
+            });
+
+            h += '<div style="color:#475467;margin:10px 0 4px">Practices</div>';
+            myTenants.forEach(t => {
+                h += '<div style="margin-left:8px;color:#667085">' + t.name +
+                     ' <span style="color:#98a2b3">tenant ' + t.tenant_id + '</span></div>';
+            });
+            h += '</div>';
+        });
+
+        const loose = tenants.filter(t => !t.client_id);
+        if (loose.length) {
+            h += '<div style="border:1px solid #fda29b;border-radius:6px;padding:12px">';
+            h += '<div style="font-weight:600;margin-bottom:8px">Practices with no client</div>';
+            loose.forEach(t => {
+                h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+                h += '<span style="min-width:300px">' + t.name + ' <span style="color:#98a2b3">tenant ' +
+                     t.tenant_id + '</span></span>';
+                h += '<select data-hier-tenant="' + t.tenant_id + '"><option value="">\u2014 none \u2014</option>' +
+                     clients.map(c => '<option value="' + c.client_id + '">' + c.name + '</option>').join('') +
+                     '</select></div>';
+            });
+            h += '</div>';
+        }
+        document.getElementById('hier-body').innerHTML = h;
+        document.querySelectorAll('[data-hier-site],[data-hier-tenant]')
+                .forEach(el => el.addEventListener('change', markDirty));
+    }
+
+    async function saveHierarchy() {
+        const msg = document.getElementById('hier-msg');
+        const sites = [], tenants = [];
+        document.querySelectorAll('[data-hier-site]').forEach(el => {
+            const [tid, sid] = el.dataset.hierSite.split('|');
+            sites.push({tenant_id: +tid, site_id: sid,
+                        area_id: el.value === '' ? null : +el.value});
+        });
+        document.querySelectorAll('[data-hier-tenant]').forEach(el => {
+            tenants.push({tenant_id: +el.dataset.hierTenant,
+                          client_id: el.value === '' ? null : +el.value});
+        });
+        msg.textContent = 'Saving\u2026';
+        try {
+            const r = await authFetch('/api/admin/hierarchy', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sites: sites, tenants: tenants})});
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { msg.textContent = j.error || 'Could not save.'; return; }
+            clearDirty();
+            msg.textContent = 'Saved.';
+            loadHierarchy();
+        } catch (e) { msg.textContent = 'Could not save.'; }
+    }
 
     // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
     let _varTenants = [];
@@ -2337,6 +2467,7 @@
         else if (name === 'team')      loadTeam();
         else if (name === 'invoices')  loadInvoices();
         else if (name === 'admin')     { loadAdmin(); loadAffiliate(); }
+        else if (name === 'hierarchy') loadHierarchy();
     }
 
     function _fmtVal(v, fmt) {

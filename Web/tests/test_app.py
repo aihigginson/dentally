@@ -2134,3 +2134,24 @@ def test_narrate_is_a_no_op_without_an_api_key(client, appmod, monkeypatch):
     monkeypatch.setattr(appmod, 'INSIGHT_API_KEY', '')
     r = client.post('/api/insights/narrate', headers={'X-Monitor-Key': 'sekrit'})
     assert r.status_code == 200 and r.get_json()['written'] == 0
+
+
+def test_hierarchy_routes_are_staff_only(appmod, client, monkeypatch):
+    """A practice admin cannot reach the hierarchy, on either verb.
+
+    The hidden tab is a convenience; _require_staff is the control, and it is the thing
+    worth a test. Both verbs are checked because the GET leaking every client's structure
+    is as bad as the POST rewriting it.
+    """
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@practice.co.uk', None))
+    assert client.get('/api/admin/hierarchy').status_code == 403
+    assert client.post('/api/admin/hierarchy', json={'sites': []}).status_code == 403
+
+
+def test_hierarchy_get_is_reached_by_staff(appmod, client, monkeypatch):
+    """A staff login gets past the gate -- so a 403 in the test above is the gate, not auth."""
+    monkeypatch.setattr(appmod, '_auth', lambda: ('me@analytically.info', None))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError('reached the body')))
+    r = client.get('/api/admin/hierarchy')
+    assert r.status_code == 500          # past the gate, failed on the stubbed connection

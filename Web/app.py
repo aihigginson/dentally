@@ -4862,6 +4862,171 @@ def admin_affiliate_payment():
         return _server_error(e, 'admin_affiliate_payment')
 
 
+@app.route('/api/admin/hierarchy', methods=['GET'])
+def admin_hierarchy():
+    """The whole client tree, for the staff-only Hierarchy screen.
+
+    ==> ANALYTICALLY ONLY, AND NOT BECAUSE THE TAB IS HIDDEN. <== _require_staff tests the
+    mailbox domain Entra asserts at sign-in; the hidden tab is a convenience, this is the
+    control. It is deliberately not a flag in Application_Users, which a practice admin can
+    reach through the team screen.
+
+    Clients, their tenants, regions and areas come from AppDB -- the source of truth people
+    edit. The SITES come from the warehouse, because they arrive from Dentally and are not
+    rows anyone can create here. A site with no placement yet comes back with area_id None
+    rather than being dropped, or a newly ingested site would be invisible on the one screen
+    that exists to place it.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    try:
+        ac = _appdb_conn(); acur = ac.cursor()
+        acur.execute("SELECT Client_ID, Client_Name, Is_Active FROM Input.Client ORDER BY Client_Name")
+        clients = [{'client_id': r[0], 'name': r[1], 'is_active': bool(r[2]), 'regions': []}
+                   for r in acur.fetchall()]
+        by_id = {c['client_id']: c for c in clients}
+
+        acur.execute("SELECT Region_ID, Client_ID, Region_Name, Sort_Order FROM Input.Client_Region "
+                     "WHERE Is_Active = 1 ORDER BY Sort_Order, Region_Name")
+        regions = {}
+        for rid, cid, name, sort in acur.fetchall():
+            reg = {'region_id': rid, 'name': name, 'sort': sort, 'areas': []}
+            regions[rid] = reg
+            if cid in by_id:
+                by_id[cid]['regions'].append(reg)
+
+        acur.execute("SELECT Area_ID, Region_ID, Area_Name, Sort_Order FROM Input.Client_Area "
+                     "WHERE Is_Active = 1 ORDER BY Sort_Order, Area_Name")
+        areas = {}
+        for aid, rid, name, sort in acur.fetchall():
+            areas[aid] = {'area_id': aid, 'name': name, 'sort': sort, 'region_id': rid}
+            if rid in regions:
+                regions[rid]['areas'].append(areas[aid])
+
+        acur.execute("SELECT Tenant_ID, Client_ID FROM Input.Client_Tenant")
+        tenant_client = {int(r[0]): int(r[1]) for r in acur.fetchall()}
+        acur.execute("SELECT Tenant_ID, Site_ID, Area_ID FROM Input.Site_Area")
+        placed = {(int(r[0]), r[1]): int(r[2]) for r in acur.fetchall()}
+        ac.close()
+
+        conn = _fabric_conn(); cur = conn.cursor()
+        cur.execute("SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants ORDER BY Tenant_ID")
+        tenants = [{'tenant_id': int(r[0]), 'name': r[1],
+                    'client_id': tenant_client.get(int(r[0]))} for r in cur.fetchall()]
+        cur.execute("SELECT Tenant_ID, Site_ID, Site_Name, Practice_Name "
+                    "FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site > 0 "
+                    "ORDER BY Tenant_ID, Site_Name")
+        sites = [{'tenant_id': int(r[0]), 'site_id': r[1], 'site_name': r[2],
+                  'practice_name': r[3], 'client_id': tenant_client.get(int(r[0])),
+                  'area_id': placed.get((int(r[0]), r[1]))} for r in cur.fetchall()]
+        conn.close()
+
+        return jsonify({'clients': clients, 'tenants': tenants, 'sites': sites,
+                        'areas': list(areas.values())})
+    except Exception as e:
+        return _server_error(e, 'admin_hierarchy')
+
+
+@app.route('/api/admin/hierarchy', methods=['POST'])
+def save_admin_hierarchy():
+    """Save the tree: client names, tenant ties, regions, areas, site placements.
+
+    One payload for the whole screen rather than a route per noun -- placing a site depends on
+    the area existing, and an area on its region, so splitting them across calls would leave a
+    half-saved tree whenever one failed.
+
+    ==> A REGION OR AREA IS ONLY DELETED WHEN NOTHING HANGS OFF IT. <== Deleting one with
+    sites beneath would orphan them silently: Site_Area has a foreign key to Area_ID, so the
+    delete would fail anyway, but failing with a readable message beats a constraint error.
+    """
+    upn, err = _require_staff()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        ac = _appdb_conn(autocommit=True); cur = ac.cursor()
+
+        for c in body.get('clients', []):
+            cur.execute("UPDATE Input.Client SET Client_Name = ?, Updated_At = SYSUTCDATETIME(), "
+                        "Updated_By = ? WHERE Client_ID = ?",
+                        (c['name'], upn, int(c['client_id'])))
+            if not cur.rowcount:
+                cur.execute("INSERT INTO Input.Client (Client_ID, Client_Name, Updated_By) "
+                            "VALUES (?, ?, ?)", (int(c['client_id']), c['name'], upn))
+
+        for t in body.get('tenants', []):
+            tid, cid = int(t['tenant_id']), t.get('client_id')
+            if cid in (None, ''):
+                cur.execute("DELETE FROM Input.Client_Tenant WHERE Tenant_ID = ?", (tid,))
+                continue
+            cur.execute("UPDATE Input.Client_Tenant SET Client_ID = ?, Updated_At = SYSUTCDATETIME(), "
+                        "Updated_By = ? WHERE Tenant_ID = ?", (int(cid), upn, tid))
+            if not cur.rowcount:
+                cur.execute("INSERT INTO Input.Client_Tenant (Tenant_ID, Client_ID, Updated_By) "
+                            "VALUES (?, ?, ?)", (tid, int(cid), upn))
+
+        new_regions = {}
+        for r in body.get('regions', []):
+            if r.get('region_id'):
+                cur.execute("UPDATE Input.Client_Region SET Region_Name = ?, Sort_Order = ?, "
+                            "Updated_At = SYSUTCDATETIME(), Updated_By = ? WHERE Region_ID = ?",
+                            (r['name'], int(r.get('sort') or 0), upn, int(r['region_id'])))
+            else:
+                cur.execute("INSERT INTO Input.Client_Region (Client_ID, Region_Name, Sort_Order, "
+                            "Updated_By) OUTPUT INSERTED.Region_ID VALUES (?, ?, ?, ?)",
+                            (int(r['client_id']), r['name'], int(r.get('sort') or 0), upn))
+                new_regions[r.get('tmp_id')] = int(cur.fetchone()[0])
+
+        new_areas = {}
+        for a in body.get('areas', []):
+            rid = a.get('region_id') or new_regions.get(a.get('tmp_region_id'))
+            if rid is None:
+                continue
+            if a.get('area_id'):
+                cur.execute("UPDATE Input.Client_Area SET Area_Name = ?, Sort_Order = ?, "
+                            "Updated_At = SYSUTCDATETIME(), Updated_By = ? WHERE Area_ID = ?",
+                            (a['name'], int(a.get('sort') or 0), upn, int(a['area_id'])))
+            else:
+                cur.execute("INSERT INTO Input.Client_Area (Region_ID, Area_Name, Sort_Order, "
+                            "Updated_By) OUTPUT INSERTED.Area_ID VALUES (?, ?, ?, ?)",
+                            (int(rid), a['name'], int(a.get('sort') or 0), upn))
+                new_areas[a.get('tmp_id')] = int(cur.fetchone()[0])
+
+        for s in body.get('sites', []):
+            tid, sid, aid = int(s['tenant_id']), s['site_id'], s.get('area_id')
+            aid = new_areas.get(s.get('tmp_area_id'), aid)
+            if aid in (None, ''):
+                cur.execute("DELETE FROM Input.Site_Area WHERE Tenant_ID = ? AND Site_ID = ?",
+                            (tid, sid))
+                continue
+            cur.execute("UPDATE Input.Site_Area SET Area_ID = ?, Updated_At = SYSUTCDATETIME(), "
+                        "Updated_By = ? WHERE Tenant_ID = ? AND Site_ID = ?",
+                        (int(aid), upn, tid, sid))
+            if not cur.rowcount:
+                cur.execute("INSERT INTO Input.Site_Area (Tenant_ID, Site_ID, Area_ID, Updated_By) "
+                            "VALUES (?, ?, ?, ?)", (tid, sid, int(aid), upn))
+
+        for aid in body.get('delete_areas', []):
+            cur.execute("SELECT COUNT(*) FROM Input.Site_Area WHERE Area_ID = ?", (int(aid),))
+            if cur.fetchone()[0]:
+                ac.close()
+                return jsonify({'error': 'That area still has sites in it. Move them first.'}), 409
+            cur.execute("DELETE FROM Input.Client_Area WHERE Area_ID = ?", (int(aid),))
+
+        for rid in body.get('delete_regions', []):
+            cur.execute("SELECT COUNT(*) FROM Input.Client_Area WHERE Region_ID = ?", (int(rid),))
+            if cur.fetchone()[0]:
+                ac.close()
+                return jsonify({'error': 'That region still has areas in it. Remove them first.'}), 409
+            cur.execute("DELETE FROM Input.Client_Region WHERE Region_ID = ?", (int(rid),))
+
+        ac.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return _server_error(e, 'save_admin_hierarchy')
+
+
 @app.route('/partner/details')
 def partner_details_page():
     return send_from_directory('.', 'partner.html')
