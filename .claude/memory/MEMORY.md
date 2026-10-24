@@ -97,3 +97,4 @@
 - [PBIR enums are validated and fail closed](pbir-enums-are-validated-and-fail-closed.md) — "Filter" instead of "DataFilter" stopped the whole report opening; fetch the $schema.
 - [Commit at each working point](commit-at-each-working-point.md) — a day uncommitted meant 10 of 14 deploy targets would have shipped stale or failed on the runner.
 - [Azure resource creation needs MFA](azure-resource-creation-needs-mfa.md) — RequestDisallowedByAzure even as subscription Owner; reads and acr build still work.
+- [Report canvas is 1280x600](report-canvas-is-1280x600.md) — matches the app viewport; the Template caused 20 pages of 720 drift. FitToPage is now ADOPTED, not rejected.
