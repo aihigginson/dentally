@@ -1,0 +1,999 @@
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "width": 900,
+  "height": 500,
+  "padding": {
+    "top": 34,
+    "bottom": 12,
+    "left": 150,
+    "right": 160
+  },
+  "signals": [
+    {
+      "name": "cDNA",
+      "value": "#B05252"
+    },
+    {
+      "name": "cCancPatient",
+      "value": "#C2874A"
+    },
+    {
+      "name": "cCancPractice",
+      "value": "#8A5A2B"
+    },
+    {
+      "name": "cCancOther",
+      "value": "#A99383"
+    },
+    {
+      "name": "cRecallNotSet",
+      "value": "#776B70"
+    },
+    {
+      "name": "cRecallNotSent",
+      "value": "#8A8E92"
+    },
+    {
+      "name": "cFirstReminder",
+      "value": "#8AB5B2"
+    },
+    {
+      "name": "cSecondReminder",
+      "value": "#338AAA"
+    },
+    {
+      "name": "cUnknownAct",
+      "value": "#B0C4CE"
+    },
+    {
+      "name": "cNodeBar",
+      "value": "#1A527A"
+    },
+    {
+      "name": "cNodeBarAlt",
+      "value": "#1A527A"
+    },
+    {
+      "name": "cNodeHover",
+      "value": "#2F5597"
+    },
+    {
+      "name": "cFlowHover",
+      "value": "#A894D8"
+    },
+    {
+      "name": "cHeaderText",
+      "value": "#1A527A"
+    },
+    {
+      "name": "cLabelText",
+      "value": "#6B7280"
+    },
+    {
+      "name": "nW",
+      "value": 14
+    },
+    {
+      "name": "nS",
+      "value": 3
+    },
+    {
+      "name": "dx",
+      "update": "width / (nS - 1)"
+    },
+    {
+      "name": "grand",
+      "update": "data('grand_ds').length > 0 ? data('grand_ds')[0].grand_val : 1"
+    },
+    {
+      "name": "hovSrcStage",
+      "update": "hov != null ? toNumber(slice(hov.srcID, 0, 1)) : -1"
+    },
+    {
+      "name": "hovSrcVal",
+      "update": "hov != null ? slice(hov.srcID, 2) : ''"
+    },
+    {
+      "name": "hovTgtVal",
+      "update": "hov != null ? slice(hov.tgtID, 2) : ''"
+    },
+    {
+      "name": "hov",
+      "value": null,
+      "on": [
+        {
+          "events": "path:mouseover",
+          "update": "datum"
+        },
+        {
+          "events": "path:mouseout",
+          "update": "null"
+        },
+        {
+          "events": "rect:mouseover",
+          "update": "null"
+        }
+      ]
+    },
+    {
+      "name": "hovNode",
+      "value": null,
+      "on": [
+        {
+          "events": "rect:mouseover",
+          "update": "datum"
+        },
+        {
+          "events": "rect:mouseout",
+          "update": "null"
+        },
+        {
+          "events": "path:mouseover",
+          "update": "null"
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "name": "dataset"
+    },
+    {
+      "name": "grand_ds",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "grand_val"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "s0",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Appointment Reason"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "0",
+          "as": "si"
+        },
+        {
+          "type": "formula",
+          "expr": "datum['Last Appointment Reason']",
+          "as": "lab"
+        },
+        {
+          "type": "formula",
+          "expr": "'0|'+datum['Last Appointment Reason']",
+          "as": "nid"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.lab==='Exam'?0:datum.lab==='Hygiene'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Emergency'?3:datum.lab==='Review'?4:datum.lab==='Other'?5:datum.lab==='No Appointment'?6:7",
+          "as": "sort_key"
+        }
+      ]
+    },
+    {
+      "name": "s1",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Activity"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "1",
+          "as": "si"
+        },
+        {
+          "type": "formula",
+          "expr": "datum['Last Activity']",
+          "as": "lab"
+        },
+        {
+          "type": "formula",
+          "expr": "'1|'+datum['Last Activity']",
+          "as": "nid"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.lab==='DNA'?0:datum.lab==='Cancellation Patient'?1:datum.lab==='Cancellation Practice'?2:datum.lab==='Cancellation Other'?3:datum.lab==='Recall Not Set'?4:datum.lab==='Recall Not Sent'?5:datum.lab==='1st Reminder'?6:datum.lab==='2nd Reminder'?7:8",
+          "as": "sort_key"
+        }
+      ]
+    },
+    {
+      "name": "s2",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Current Status"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "2",
+          "as": "si"
+        },
+        {
+          "type": "formula",
+          "expr": "datum['Current Status']",
+          "as": "lab"
+        },
+        {
+          "type": "formula",
+          "expr": "'2|'+datum['Current Status']",
+          "as": "nid"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.lab==='Set Inactive'?0:datum.lab==='Calculated Inactive'?1:datum.lab==='At Risk'?2:3",
+          "as": "sort_key"
+        }
+      ]
+    },
+    {
+      "name": "nodes",
+      "source": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "transform": [
+        {
+          "type": "stack",
+          "groupby": [
+            "si"
+          ],
+          "field": "tot",
+          "sort": {
+            "field": "sort_key",
+            "order": "ascending"
+          },
+          "as": [
+            "y0s",
+            "y1s"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.si * dx",
+          "as": "x"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.y0s / grand * height",
+          "as": "y0"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.y1s / grand * height",
+          "as": "y1"
+        }
+      ]
+    },
+    {
+      "name": "e01",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Appointment Reason",
+            "Last Activity"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "flow"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'0|'+datum['Last Appointment Reason']",
+          "as": "srcID"
+        },
+        {
+          "type": "formula",
+          "expr": "'1|'+datum['Last Activity']",
+          "as": "tgtID"
+        },
+        {
+          "type": "formula",
+          "expr": "datum['Last Activity']",
+          "as": "colorKey"
+        }
+      ]
+    },
+    {
+      "name": "e12",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Activity",
+            "Current Status"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "flow"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'1|'+datum['Last Activity']",
+          "as": "srcID"
+        },
+        {
+          "type": "formula",
+          "expr": "'2|'+datum['Current Status']",
+          "as": "tgtID"
+        },
+        {
+          "type": "formula",
+          "expr": "datum['Last Activity']",
+          "as": "colorKey"
+        }
+      ]
+    },
+    {
+      "name": "edges",
+      "source": [
+        "e01",
+        "e12"
+      ],
+      "transform": [
+        {
+          "type": "lookup",
+          "from": "nodes",
+          "key": "nid",
+          "fields": [
+            "srcID"
+          ],
+          "values": [
+            "x",
+            "y0",
+            "y1",
+            "tot"
+          ],
+          "as": [
+            "sx",
+            "sy0",
+            "sy1",
+            "stot"
+          ]
+        },
+        {
+          "type": "lookup",
+          "from": "nodes",
+          "key": "nid",
+          "fields": [
+            "tgtID"
+          ],
+          "values": [
+            "x",
+            "y0",
+            "y1",
+            "tot"
+          ],
+          "as": [
+            "tx",
+            "ty0",
+            "ty1",
+            "ttot"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "isValid(datum.sx) && isValid(datum.tx) && isValid(datum.stot) && datum.stot > 0 && isValid(datum.ttot) && datum.ttot > 0"
+        },
+        {
+          "type": "stack",
+          "groupby": [
+            "srcID"
+          ],
+          "field": "flow",
+          "sort": {
+            "field": "ty0",
+            "order": "ascending"
+          },
+          "as": [
+            "sr0",
+            "sr1"
+          ]
+        },
+        {
+          "type": "stack",
+          "groupby": [
+            "tgtID"
+          ],
+          "field": "flow",
+          "sort": {
+            "field": "sy0",
+            "order": "ascending"
+          },
+          "as": [
+            "tr0",
+            "tr1"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "datum.sy0 + (datum.sr0/datum.stot)*(datum.sy1-datum.sy0)",
+          "as": "bsy0"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.sy0 + (datum.sr1/datum.stot)*(datum.sy1-datum.sy0)",
+          "as": "bsy1"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.ty0 + (datum.tr0/datum.ttot)*(datum.ty1-datum.ty0)",
+          "as": "bty0"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.ty0 + (datum.tr1/datum.ttot)*(datum.ty1-datum.ty0)",
+          "as": "bty1"
+        },
+        {
+          "type": "formula",
+          "expr": "(datum.sx + nW + datum.tx) / 2",
+          "as": "mx"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.srcID + '~' + datum.tgtID",
+          "as": "key"
+        }
+      ]
+    },
+    {
+      "name": "cohort",
+      "source": "dataset",
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "(hov == null && hovNode == null) || (hovNode != null && ((hovNode.si === 0 && datum['Last Appointment Reason'] === hovNode.lab) || (hovNode.si === 1 && datum['Last Activity'] === hovNode.lab) || (hovNode.si === 2 && datum['Current Status'] === hovNode.lab))) || (hov != null && ((hovSrcStage === 0 && datum['Last Appointment Reason'] === hovSrcVal && datum['Last Activity'] === hovTgtVal) || (hovSrcStage === 1 && datum['Last Activity'] === hovSrcVal && datum['Current Status'] === hovTgtVal)))"
+        }
+      ]
+    },
+    {
+      "name": "ce01",
+      "source": "cohort",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Appointment Reason",
+            "Last Activity"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "cflow"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'0|'+datum['Last Appointment Reason']+'~1|'+datum['Last Activity']",
+          "as": "key"
+        }
+      ]
+    },
+    {
+      "name": "ce12",
+      "source": "cohort",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Activity",
+            "Current Status"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "cflow"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'1|'+datum['Last Activity']+'~2|'+datum['Current Status']",
+          "as": "key"
+        }
+      ]
+    },
+    {
+      "name": "cohort_edges",
+      "source": [
+        "ce01",
+        "ce12"
+      ]
+    },
+    {
+      "name": "overlay_edges",
+      "source": "cohort_edges",
+      "transform": [
+        {
+          "type": "formula",
+          "expr": "slice(datum.key, 0, indexof(datum.key, '~'))",
+          "as": "srcID"
+        },
+        {
+          "type": "formula",
+          "expr": "slice(datum.key, indexof(datum.key, '~') + 1)",
+          "as": "tgtID"
+        },
+        {
+          "type": "lookup",
+          "from": "edges",
+          "key": "key",
+          "fields": [
+            "key"
+          ],
+          "values": [
+            "sx",
+            "bsy0",
+            "bsy1",
+            "tx",
+            "bty0",
+            "bty1",
+            "mx",
+            "flow"
+          ],
+          "as": [
+            "sx",
+            "bsy0",
+            "bsy1",
+            "tx",
+            "bty0",
+            "bty1",
+            "mx",
+            "full_flow"
+          ]
+        },
+        {
+          "type": "filter",
+          "expr": "(hov != null || hovNode != null) && isValid(datum.bsy0) && isValid(datum.bty0) && datum.full_flow > 0"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.cflow / datum.full_flow",
+          "as": "frac"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.bsy0 + datum.frac * (datum.bsy1 - datum.bsy0)",
+          "as": "osy1"
+        },
+        {
+          "type": "formula",
+          "expr": "datum.bty0 + datum.frac * (datum.bty1 - datum.bty0)",
+          "as": "oty1"
+        }
+      ]
+    },
+    {
+      "name": "cns0",
+      "source": "cohort",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Appointment Reason"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "cohort_tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'0|'+datum['Last Appointment Reason']",
+          "as": "nid"
+        }
+      ]
+    },
+    {
+      "name": "cns1",
+      "source": "cohort",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Last Activity"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "cohort_tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'1|'+datum['Last Activity']",
+          "as": "nid"
+        }
+      ]
+    },
+    {
+      "name": "cns2",
+      "source": "cohort",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": [
+            "Current Status"
+          ],
+          "fields": [
+            "Lapse Count"
+          ],
+          "ops": [
+            "sum"
+          ],
+          "as": [
+            "cohort_tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "'2|'+datum['Current Status']",
+          "as": "nid"
+        }
+      ]
+    },
+    {
+      "name": "cohort_node_totals",
+      "source": [
+        "cns0",
+        "cns1",
+        "cns2"
+      ]
+    },
+    {
+      "name": "node_display",
+      "source": "nodes",
+      "transform": [
+        {
+          "type": "lookup",
+          "from": "cohort_node_totals",
+          "key": "nid",
+          "fields": [
+            "nid"
+          ],
+          "values": [
+            "cohort_tot"
+          ],
+          "as": [
+            "cohort_tot"
+          ]
+        },
+        {
+          "type": "formula",
+          "expr": "isValid(datum.cohort_tot) ? datum.cohort_tot : datum.tot",
+          "as": "display_tot"
+        }
+      ]
+    }
+  ],
+  "scales": [
+    {
+      "name": "actColor",
+      "type": "ordinal",
+      "domain": [
+        "DNA",
+        "Cancellation Patient",
+        "Cancellation Practice",
+        "Cancellation Other",
+        "Recall Not Set",
+        "Recall Not Sent",
+        "1st Reminder",
+        "2nd Reminder"
+      ],
+      "range": {
+        "signal": "[cDNA, cCancPatient, cCancPractice, cCancOther, cRecallNotSet, cRecallNotSent, cFirstReminder, cSecondReminder]"
+      }
+    }
+  ],
+  "marks": [
+    {
+      "type": "path",
+      "from": {
+        "data": "edges"
+      },
+      "encode": {
+        "enter": {
+          "path": {
+            "signal": "isValid(datum.bsy0) && isValid(datum.bsy1) && isValid(datum.bty0) && isValid(datum.bty1) ? ('M'+(datum.sx+nW)+','+(datum.bsy0)+' C'+datum.mx+','+(datum.bsy0)+' '+datum.mx+','+(datum.bty0)+' '+datum.tx+','+(datum.bty0)+' L'+datum.tx+','+(datum.bty1)+' C'+datum.mx+','+(datum.bty1)+' '+datum.mx+','+(datum.bsy1)+' '+(datum.sx+nW)+','+(datum.bsy1)+' Z') : 'M0,0Z'"
+          },
+          "fill": {
+            "signal": "!datum.colorKey ? cUnknownAct : (indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], datum.colorKey) >= 0 ? scale('actColor', datum.colorKey) : cUnknownAct)"
+          },
+          "stroke": {
+            "value": "none"
+          },
+          "cursor": {
+            "value": "pointer"
+          }
+        },
+        "update": {
+          "fillOpacity": {
+            "signal": "hov == null && hovNode == null ? 0.35 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.18 : 0.05) : (indata('cohort_edges', 'key', datum.key) ? 0.18 : 0.05)"
+          },
+          "tooltip": {
+            "signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}"
+          }
+        }
+      }
+    },
+    {
+      "type": "path",
+      "from": {
+        "data": "overlay_edges"
+      },
+      "interactive": false,
+      "encode": {
+        "enter": {
+          "fillOpacity": {
+            "value": 0.8
+          },
+          "stroke": {
+            "value": "none"
+          }
+        },
+        "update": {
+          "fill": {
+            "signal": "hovNode != null ? cNodeHover : cFlowHover"
+          },
+          "path": {
+            "signal": "'M'+(datum.sx+nW)+','+datum.bsy0+' C'+datum.mx+','+datum.bsy0+' '+datum.mx+','+datum.bty0+' '+datum.tx+','+datum.bty0+' L'+datum.tx+','+datum.oty1+' C'+datum.mx+','+datum.oty1+' '+datum.mx+','+datum.osy1+' '+(datum.sx+nW)+','+datum.osy1+' Z'"
+          }
+        }
+      }
+    },
+    {
+      "type": "rect",
+      "from": {
+        "data": "nodes"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "field": "x"
+          },
+          "width": {
+            "signal": "nW"
+          },
+          "y": {
+            "field": "y0"
+          },
+          "y2": {
+            "field": "y1"
+          },
+          "cornerRadius": {
+            "value": 2
+          }
+        },
+        "update": {
+          "fill": {
+            "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : (datum.si === 1 && indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], datum.lab) >= 0 ? scale('actColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))"
+          },
+          "cursor": {
+            "value": "pointer"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "node_display"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4"
+          },
+          "y": {
+            "signal": "(datum.y0 + datum.y1) / 2"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "align": {
+            "signal": "datum.si === 0 ? 'right' : 'left'"
+          },
+          "fontSize": {
+            "value": 10
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fill": {
+            "signal": "cLabelText"
+          },
+          "limit": {
+            "value": 150
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.lab + ' (' + datum.display_tot + ')'"
+          },
+          "opacity": {
+            "signal": "(datum.y1 - datum.y0) >= 4 ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "0"
+          },
+          "y": {
+            "value": -22
+          },
+          "text": {
+            "value": "Last Appointment Reason"
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fill": {
+            "signal": "cHeaderText"
+          },
+          "align": {
+            "value": "center"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "dx"
+          },
+          "y": {
+            "value": -22
+          },
+          "text": {
+            "value": "Last Activity"
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fill": {
+            "signal": "cHeaderText"
+          },
+          "align": {
+            "value": "center"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "dx * 2"
+          },
+          "y": {
+            "value": -22
+          },
+          "text": {
+            "value": "Current Status"
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fill": {
+            "signal": "cHeaderText"
+          },
+          "align": {
+            "value": "center"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -99,3 +99,4 @@
 - [Azure resource creation needs MFA](azure-resource-creation-needs-mfa.md) — RequestDisallowedByAzure even as subscription Owner; reads and acr build still work.
 - [Report canvas is 1280x600](report-canvas-is-1280x600.md) — matches the app viewport; the Template caused 20 pages of 720 drift. FitToPage is now ADOPTED, not rejected.
 - [Client hierarchy attaches to the site](client-hierarchy-attaches-to-the-site.md) — Region/Area hang off the site; Practice is derived, shown only when an area holds 2+ tenants.
+- [The csx owns only the _Measures table](the-csx-owns-only-the-measures-table.md) — fact tables carry hand-made measures reports bind to; sweeping them would have deleted 9 live ones.

@@ -83,6 +83,16 @@ BEGIN
                                           'RECALL_SENT_NO_REPLY_GT2M');
 
                 -- ---- stage 1: the last COMPLETED appointment -------------------------------
+                -- ---- the categories the map actually defines ------------------------------
+                -- Fact_Appointments.Appointment_Reason holds the mapped Category where the map
+                -- matched and the RAW reason text where it did not, so membership of this set
+                -- is exactly the test of "was this reason ever categorised".
+                DROP TABLE IF EXISTS #reason_cat;
+                SELECT  DISTINCT Category
+                INTO    #reason_cat
+                FROM    Silver.Appointment_Reason_Map
+                WHERE   NULLIF(TRIM(Category), '') IS NOT NULL;
+
                 -- Completed only. A cancelled or missed appointment is stage 2, not stage 1 --
                 -- "what they last came in for" means they came in.
                 DROP TABLE IF EXISTS #last_appt;
@@ -167,7 +177,12 @@ BEGIN
                         ISNULL(la.fk_Practice_Site, -1)                 AS fk_Practice_Site,
                         q.fk_Patient_Status,
                         la.fk_Date_Start                                AS fk_Date_Last_Appointment,
-                        ISNULL(la.Appointment_Reason, 'No Appointment') AS Last_Appointment_Reason,
+                        -- No appointment at all is a STATE, not an uncategorised reason, so it
+                        -- keeps its own node. Anything the map never categorised rolls into
+                        -- 'Other' -- the behaviour the map's own header documents.
+                        CASE WHEN la.fk_Patient IS NULL     THEN 'No Appointment'
+                             WHEN rcat.Category IS NOT NULL THEN la.Appointment_Reason
+                             ELSE 'Other' END                       AS Last_Appointment_Reason,
                         -- ==> AN APPOINTMENT EVENT BEATS A RECALL STATE. <== A DNA or a
                         -- cancellation is something that HAPPENED; a recall state is a thing that
                         -- did not. Where both exist the event wins, and only patients with no
@@ -188,7 +203,8 @@ BEGIN
                 FROM    #pop q
                 LEFT JOIN #last_appt  la ON la.Tenant_ID = q.Tenant_ID AND la.fk_Patient = q.fk_Patient AND la.rn = 1
                 LEFT JOIN #last_event le ON le.Tenant_ID = q.Tenant_ID AND le.fk_Patient = q.fk_Patient AND le.rn = 1
-                LEFT JOIN #recall     rc ON rc.Tenant_ID = q.Tenant_ID AND rc.fk_Patient = q.fk_Patient;
+                LEFT JOIN #recall     rc ON rc.Tenant_ID = q.Tenant_ID AND rc.fk_Patient = q.fk_Patient
+                LEFT JOIN #reason_cat rcat ON rcat.Category = la.Appointment_Reason;
 
                 SET @My_Inserts = @@ROWCOUNT;
 
@@ -196,6 +212,7 @@ BEGIN
                 DROP TABLE IF EXISTS #last_appt;
                 DROP TABLE IF EXISTS #last_event;
                 DROP TABLE IF EXISTS #recall;
+                DROP TABLE IF EXISTS #reason_cat;
 
                 --*********************************
                 --****  Procedure logic ends   ****
