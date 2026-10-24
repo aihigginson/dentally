@@ -2360,49 +2360,151 @@
         } catch (e) { body.textContent = 'Could not load the hierarchy.'; }
     }
 
-    function _areaOptions(clientId, selected) {
+    let _hierNewId = 0, _hierDelRegions = [], _hierDelAreas = [];
+
+    function _areaOptions(clientId, selected, selectedTmp) {
         // Only this client's areas: an area belongs to a client through its region, and
-        // offering another client's would silently cross the tree.
+        // offering another client's would silently cross the tree. Areas not yet saved are
+        // offered too, under a tmp id the save route resolves.
         const c = (_hier.clients || []).find(x => x.client_id === clientId);
-        let html = '<option value="">\u2014 unplaced \u2014</option>';
+        let html = '<option value="">— unplaced —</option>';
         (c ? c.regions : []).forEach(rg => (rg.areas || []).forEach(a => {
-            const label = (rg.name === a.name) ? a.name : rg.name + ' \u203a ' + a.name;
-            html += '<option value="' + a.area_id + '"' +
-                    (a.area_id === selected ? ' selected' : '') + '>' + label + '</option>';
+            const label = (rg.name === a.name) ? a.name : rg.name + ' › ' + a.name;
+            const val = a.area_id ? String(a.area_id) : 'tmp:' + a.tmp_id;
+            const on = a.area_id ? (a.area_id === selected) : (a.tmp_id === selectedTmp);
+            html += '<option value="' + val + '"' + (on ? ' selected' : '') + '>' +
+                    _esc(label || '(unnamed)') + '</option>';
         }));
         return html;
     }
 
+    function _esc(t) {
+        return String(t == null ? '' : t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // Names are read back out of the inputs at save time rather than on every keystroke, so
+    // typing never triggers a re-render and never moves the caret.
+    function _collectNames() {
+        document.querySelectorAll('[data-hier-rname]').forEach(el => {
+            const r = _findRegion(el.dataset.hierRname);
+            if (r) r.name = el.value;
+        });
+        document.querySelectorAll('[data-hier-aname]').forEach(el => {
+            const a = _findArea(el.dataset.hierAname);
+            if (a) a.name = el.value;
+        });
+    }
+
+    function _findRegion(key) {
+        let out = null;
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            if (_key(r, 'region_id') === key) out = r;
+        }));
+        return out;
+    }
+
+    function _findArea(key) {
+        let out = null;
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => (r.areas || []).forEach(a => {
+            if (_key(a, 'area_id') === key) out = a;
+        })));
+        return out;
+    }
+
+    function _key(o, idField) { return o[idField] ? String(o[idField]) : 'tmp:' + o.tmp_id; }
+
+    function hierAddRegion(clientId) {
+        _collectNames();
+        const c = (_hier.clients || []).find(x => x.client_id === clientId);
+        if (!c) return;
+        c.regions.push({region_id: null, tmp_id: ++_hierNewId, name: '', areas: []});
+        markDirty(); renderHierarchy();
+    }
+
+    function hierAddArea(regionKey) {
+        _collectNames();
+        const r = _findRegion(regionKey);
+        if (!r) return;
+        r.areas.push({area_id: null, tmp_id: ++_hierNewId, name: ''});
+        markDirty(); renderHierarchy();
+    }
+
+    function hierDelRegion(regionKey) {
+        _collectNames();
+        let done = false;
+        (_hier.clients || []).forEach(c => {
+            const i = (c.regions || []).findIndex(r => _key(r, 'region_id') === regionKey);
+            if (i < 0 || done) return;
+            const r = c.regions[i];
+            if ((r.areas || []).length) { alert('Remove its areas first.'); done = true; return; }
+            if (r.region_id) _hierDelRegions.push(r.region_id);
+            c.regions.splice(i, 1); done = true;
+        });
+        markDirty(); renderHierarchy();
+    }
+
+    function hierDelArea(areaKey) {
+        _collectNames();
+        // A placed site blocks the delete here rather than at the server, where it would come
+        // back as a foreign key error after everything else had already been written.
+        const inUse = (_hier.sites || []).some(x => areaKey === String(x.area_id));
+        if (inUse) { alert('That area still has sites in it. Move them first.'); return; }
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            const i = (r.areas || []).findIndex(a => _key(a, 'area_id') === areaKey);
+            if (i < 0) return;
+            if (r.areas[i].area_id) _hierDelAreas.push(r.areas[i].area_id);
+            r.areas.splice(i, 1);
+        }));
+        markDirty(); renderHierarchy();
+    }
+
     function renderHierarchy() {
         const clients = _hier.clients || [], tenants = _hier.tenants || [], sites = _hier.sites || [];
+        const btn = 'border:1px solid #d0d5dd;background:#fff;border-radius:4px;cursor:pointer;' +
+                    'font-size:12px;padding:2px 8px';
         let h = '';
         clients.forEach(c => {
             const myTenants = tenants.filter(t => t.client_id === c.client_id);
             const mySites = sites.filter(x => x.client_id === c.client_id);
             h += '<div style="margin-bottom:22px;border:1px solid #e4e7ec;border-radius:6px;padding:12px">';
-            h += '<div style="font-weight:600;margin-bottom:8px">' + c.name +
+            h += '<div style="font-weight:600;margin-bottom:8px">' + _esc(c.name) +
                  ' <span style="color:#98a2b3;font-weight:400">#' + c.client_id + '</span></div>';
 
             h += '<div style="color:#475467;margin:6px 0 4px">Regions and areas</div>';
             (c.regions || []).forEach(rg => {
-                h += '<div style="margin-left:8px">' + rg.name;
-                const names = (rg.areas || []).map(a => a.name).join(', ');
-                h += '<span style="color:#98a2b3"> \u203a ' + (names || 'no areas') + '</span></div>';
+                const rk = _key(rg, 'region_id');
+                h += '<div style="margin-left:8px;margin-bottom:6px">';
+                h += '<input data-hier-rname="' + rk + '" value="' + _esc(rg.name) +
+                     '" placeholder="Region name" style="width:200px;padding:3px 6px">';
+                h += ' <button type="button" style="' + btn + '" data-hier-addarea="' + rk + '">+ area</button>';
+                h += ' <button type="button" style="' + btn + '" data-hier-delregion="' + rk + '">×</button>';
+                (rg.areas || []).forEach(a => {
+                    const ak = _key(a, 'area_id');
+                    h += '<div style="margin-left:24px;margin-top:4px">';
+                    h += '<input data-hier-aname="' + ak + '" value="' + _esc(a.name) +
+                         '" placeholder="Area name" style="width:180px;padding:3px 6px">';
+                    h += ' <button type="button" style="' + btn + '" data-hier-delarea="' + ak + '">×</button>';
+                    h += '</div>';
+                });
+                h += '</div>';
             });
-            if (!(c.regions || []).length) h += '<div style="margin-left:8px;color:#98a2b3">none</div>';
+            h += '<div style="margin-left:8px;margin-top:4px"><button type="button" style="' + btn +
+                 '" data-hier-addregion="' + c.client_id + '">+ region</button></div>';
 
-            h += '<div style="color:#475467;margin:10px 0 4px">Sites</div>';
+            h += '<div style="color:#475467;margin:12px 0 4px">Sites</div>';
             if (!mySites.length) h += '<div style="margin-left:8px;color:#98a2b3">no sites</div>';
             mySites.forEach(x => {
                 h += '<div style="margin-left:8px;display:flex;gap:8px;align-items:center;margin-bottom:4px">';
-                h += '<span style="min-width:300px">' + x.practice_name + ' \u2014 ' + x.site_name + '</span>';
-                h += '<select data-hier-site="' + x.tenant_id + '|' + x.site_id + '">' +
-                     _areaOptions(c.client_id, x.area_id) + '</select></div>';
+                h += '<span style="min-width:300px">' + _esc(x.practice_name) + ' — ' + _esc(x.site_name) + '</span>';
+                h += '<select data-hier-site="' + x.tenant_id + '|' + _esc(x.site_id) + '">' +
+                     _areaOptions(c.client_id, x.area_id, x.tmp_area_id) + '</select></div>';
             });
 
             h += '<div style="color:#475467;margin:10px 0 4px">Practices</div>';
             myTenants.forEach(t => {
-                h += '<div style="margin-left:8px;color:#667085">' + t.name +
+                h += '<div style="margin-left:8px;color:#667085">' + _esc(t.name) +
                      ' <span style="color:#98a2b3">tenant ' + t.tenant_id + '</span></div>';
             });
             h += '</div>';
@@ -2414,38 +2516,67 @@
             h += '<div style="font-weight:600;margin-bottom:8px">Practices with no client</div>';
             loose.forEach(t => {
                 h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">';
-                h += '<span style="min-width:300px">' + t.name + ' <span style="color:#98a2b3">tenant ' +
+                h += '<span style="min-width:300px">' + _esc(t.name) + ' <span style="color:#98a2b3">tenant ' +
                      t.tenant_id + '</span></span>';
-                h += '<select data-hier-tenant="' + t.tenant_id + '"><option value="">\u2014 none \u2014</option>' +
-                     clients.map(c => '<option value="' + c.client_id + '">' + c.name + '</option>').join('') +
+                h += '<select data-hier-tenant="' + t.tenant_id + '"><option value="">— none —</option>' +
+                     clients.map(c => '<option value="' + c.client_id + '">' + _esc(c.name) + '</option>').join('') +
                      '</select></div>';
             });
             h += '</div>';
         }
         document.getElementById('hier-body').innerHTML = h;
-        document.querySelectorAll('[data-hier-site],[data-hier-tenant]')
+        document.querySelectorAll('[data-hier-site],[data-hier-tenant],[data-hier-rname],[data-hier-aname]')
                 .forEach(el => el.addEventListener('change', markDirty));
+        document.querySelectorAll('[data-hier-addregion]').forEach(el =>
+            el.addEventListener('click', () => hierAddRegion(+el.dataset.hierAddregion)));
+        document.querySelectorAll('[data-hier-addarea]').forEach(el =>
+            el.addEventListener('click', () => hierAddArea(el.dataset.hierAddarea)));
+        document.querySelectorAll('[data-hier-delregion]').forEach(el =>
+            el.addEventListener('click', () => hierDelRegion(el.dataset.hierDelregion)));
+        document.querySelectorAll('[data-hier-delarea]').forEach(el =>
+            el.addEventListener('click', () => hierDelArea(el.dataset.hierDelarea)));
     }
 
     async function saveHierarchy() {
         const msg = document.getElementById('hier-msg');
+        _collectNames();
+
+        const regions = [], areas = [];
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            if (!(r.name || '').trim()) return;          // an unnamed row is an abandoned click
+            regions.push({region_id: r.region_id, tmp_id: r.tmp_id,
+                          client_id: c.client_id, name: r.name.trim()});
+            (r.areas || []).forEach(a => {
+                if (!(a.name || '').trim()) return;
+                areas.push({area_id: a.area_id, tmp_id: a.tmp_id,
+                            region_id: r.region_id, tmp_region_id: r.tmp_id,
+                            name: a.name.trim()});
+            });
+        }));
+
         const sites = [], tenants = [];
         document.querySelectorAll('[data-hier-site]').forEach(el => {
             const [tid, sid] = el.dataset.hierSite.split('|');
+            const v = el.value;
             sites.push({tenant_id: +tid, site_id: sid,
-                        area_id: el.value === '' ? null : +el.value});
+                        area_id: (v === '' || v.startsWith('tmp:')) ? null : +v,
+                        tmp_area_id: v.startsWith('tmp:') ? +v.slice(4) : null});
         });
         document.querySelectorAll('[data-hier-tenant]').forEach(el => {
             tenants.push({tenant_id: +el.dataset.hierTenant,
                           client_id: el.value === '' ? null : +el.value});
         });
-        msg.textContent = 'Saving\u2026';
+
+        msg.textContent = 'Saving…';
         try {
             const r = await authFetch('/api/admin/hierarchy', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sites: sites, tenants: tenants})});
+                body: JSON.stringify({regions: regions, areas: areas, sites: sites,
+                                      tenants: tenants, delete_regions: _hierDelRegions,
+                                      delete_areas: _hierDelAreas})});
             const j = await r.json().catch(() => ({}));
             if (!r.ok) { msg.textContent = j.error || 'Could not save.'; return; }
+            _hierDelRegions = []; _hierDelAreas = [];
             clearDirty();
             msg.textContent = 'Saved.';
             loadHierarchy();
