@@ -1,4 +1,4 @@
--- DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Patient_Lapse_Flow] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿-- DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Patient_Lapse_Flow] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 ----------------------------------------------------------------------------------------------------
 --   Stored Procedure : Gold.usp_Load_Fact_Patient_Lapse_Flow
 --   Author           : AIH
@@ -60,10 +60,23 @@ BEGIN
                              WHEN 'LAPSED_SET_INACTIVE'        THEN 'Set Inactive'
                              WHEN 'LAPSED_NO_VISIT_24M'        THEN 'Calculated Inactive'
                              WHEN 'RECALL_SENT_NO_REPLY_GT2M'  THEN 'At Risk'
-                        END                                     AS Current_Status
+                        END                                     AS Current_Status,
+                        -- ==> PLAN MEMBERSHIP IS A CAPITATION RATE, NOT A NAME. <== Standard
+                        -- Payment Plan holds 12 values at the live tenant, mostly plan names
+                        -- (seven Denplan variants) rather than categories -- too many for a
+                        -- slicer and not a taxonomy. A plan patient is one whose plan carries a
+                        -- rate in Input.Plan_Capitation_Rate, which is the rule already settled
+                        -- for who counts as a plan patient. Every Denplan variant has one and
+                        -- nothing else does.
+                        CASE WHEN p.Standard_Payment_Plan = 'NHS'     THEN 'NHS'
+                             WHEN cr.Payment_Plan_ID IS NOT NULL      THEN 'Plan'
+                             WHEN p.Standard_Payment_Plan = 'Private' THEN 'Private'
+                             ELSE 'Other' END                        AS Patient_Category
                 INTO    #pop
                 FROM    Gold.Dim_Patients p
                 JOIN    Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status
+                LEFT JOIN (SELECT DISTINCT Tenant_ID, Payment_Plan_ID FROM Input.Plan_Capitation_Rate) cr
+                       ON cr.Tenant_ID = p.Tenant_ID AND cr.Payment_Plan_ID = p.Payment_Plan_ID
                 WHERE   p.pk_Patient > 0
                   AND   s.Is_Reportable = 1
                   AND   s.Status_Code IN ('LAPSED_SET_INACTIVE', 'LAPSED_NO_VISIT_24M',
@@ -103,10 +116,15 @@ BEGIN
                   AND   (ISNULL(a.Is_DNA, 0) = 1 OR ISNULL(a.Is_Cancelled, 0) = 1);
 
                 -- ---- stage 2b: how far the recall got --------------------------------------
+                -- ==> COUNT THE CONTACTS; THE SECOND-REMINDER FIELDS ARE DEAD. <== Dentally
+                -- populates NEITHER Second_Reminder_Sent_At NOR Second_Reminder_ID -- both are
+                -- empty on all 9,307 of Maple's recalls, right back in Bronze. Reading them made
+                -- "2nd Reminder" unreachable and the practice look as though it never chased
+                -- twice. Times_Contacted says otherwise: 5,749 recalls have been chased more
+                -- than once, up to six times.
                 DROP TABLE IF EXISTS #recall;
                 SELECT  r.Tenant_ID, r.fk_Patient,
-                        MAX(CASE WHEN r.fk_Date_Second_Reminder > 0 THEN 1 ELSE 0 END) AS had_2nd,
-                        MAX(CASE WHEN r.fk_Date_First_Reminder  > 0 THEN 1 ELSE 0 END) AS had_1st,
+                        MAX(ISNULL(TRY_CAST(r.Times_Contacted AS INT), 0)) AS contacts,
                         MAX(CASE WHEN ISNULL(r.Is_Reminder_Sent, 0) = 1 THEN 1 ELSE 0 END) AS sent
                 INTO    #recall
                 FROM    Gold.Fact_Recalls r
@@ -128,6 +146,7 @@ BEGIN
                         [Last_Appointment_Reason]     VARCHAR(100)    NULL,
                         [Last_Activity]               VARCHAR(50)     NULL,
                         [Current_Status]              VARCHAR(50)     NULL,
+                        [Patient_Category]            VARCHAR(50)     NULL,
                         [Patient_Lapse_Flow_Count]    INT             NOT NULL,
                         [DW_Created_At]               DATETIME2(3)    NOT NULL,
                         [DW_Updated_At]               DATETIME2(3)    NOT NULL
@@ -136,7 +155,7 @@ BEGIN
                 INSERT INTO [Gold].[Fact_Patient_Lapse_Flow]
                         (Tenant_ID, bk_Patient_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
                          fk_Patient_Status, fk_Date_Last_Appointment, Last_Appointment_Reason,
-                         Last_Activity, Current_Status, Patient_Lapse_Flow_Count,
+                         Last_Activity, Current_Status, Patient_Category, Patient_Lapse_Flow_Count,
                          DW_Created_At, DW_Updated_At)
                 SELECT  q.Tenant_ID,
                         q.bk_Patient_ID,
@@ -154,13 +173,16 @@ BEGIN
                         -- did not. Where both exist the event wins, and only patients with no
                         -- such event fall through to how far their recall got. Change this CASE
                         -- if "last" should mean strictly most recent in time instead.
+                        -- '2nd Reminder' means two OR MORE contacts: the counter runs to six
+                        -- and the diagram has one band for "chased again", not five.
                         CASE WHEN le.Last_Activity IS NOT NULL THEN le.Last_Activity
                              WHEN rc.fk_Patient IS NULL        THEN 'Recall Not Set'
-                             WHEN rc.had_2nd = 1               THEN '2nd Reminder'
-                             WHEN rc.had_1st = 1               THEN '1st Reminder'
-                             WHEN rc.sent    = 1               THEN '1st Reminder'
+                             WHEN rc.contacts >= 2             THEN '2nd Reminder'
+                             WHEN rc.contacts = 1              THEN '1st Reminder'
+                             WHEN rc.sent     = 1              THEN '1st Reminder'
                              ELSE 'Recall Not Sent' END        AS Last_Activity,
                         q.Current_Status,
+                        q.Patient_Category,
                         1,
                         SYSUTCDATETIME(), SYSUTCDATETIME()
                 FROM    #pop q

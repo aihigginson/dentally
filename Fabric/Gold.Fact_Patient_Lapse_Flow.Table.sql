@@ -39,6 +39,8 @@ CREATE TABLE [Gold].[Fact_Patient_Lapse_Flow](
     [Last_Activity_Date]         [date]         NULL,
     -- Stage 3: Set Inactive, Calculated Inactive, At Risk.
     [Current_Status]             [varchar](50)  NULL,
+    -- Private / NHS / Plan / Other. Plan membership is a capitation rate, not a name.
+    [Patient_Category]           [varchar](50)  NULL,
     [Days_Since_Last_Appointment] [int]         NULL,
     [Patient_Lapse_Flow_Count]   [int]          NOT NULL,
     [DW_Created_At]              [datetime2](3) NOT NULL,

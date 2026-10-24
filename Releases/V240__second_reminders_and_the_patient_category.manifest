@@ -1,0 +1,48 @@
+# =====================================================================
+# Release V240 -- second reminders exist after all, and a patient category
+# =====================================================================
+# Two corrections to the flow fact V239 built.
+#
+# ---------------------------------------------------------------------
+# 1. THE SECOND-REMINDER FIELDS ARE DEAD; THE COUNTER IS NOT.
+# ---------------------------------------------------------------------
+# V239 derived the reminder stage from fk_Date_Second_Reminder and concluded that
+# "2nd Reminder" was unreachable -- that the practice never chased twice. Wrong.
+# Second_Reminder_Sent_At and Second_Reminder_ID are empty on all 9,307 of Maple's recalls
+# RIGHT BACK IN BRONZE: Dentally does not populate them. Times_Contacted does:
+#
+#     0 contacts  1,925      3 contacts  1,269
+#     1 contact   1,633      4+          2,021
+#     2 contacts  2,459
+#
+# 5,749 of 9,307 recalls were chased more than once, up to six times. The stage now comes
+# from the counter. '2nd Reminder' means two OR MORE: the diagram wants one band for
+# "chased again", not five.
+#
+# ---------------------------------------------------------------------
+# 2. PATIENT CATEGORY, FOR THE SLICER.
+# ---------------------------------------------------------------------
+# ==> PLAN MEMBERSHIP IS A CAPITATION RATE, NOT A NAME. <== Standard_Payment_Plan holds 12
+# values at the live tenant -- Private, NHS, seven Denplan variants, IRH Fees, Referral --
+# which is a list of plans, not a taxonomy, and far too many for a simple slicer. A plan
+# patient is one whose plan carries a rate in Input.Plan_Capitation_Rate, the rule already
+# settled for who counts as a plan patient. Every Denplan variant has one; nothing else
+# does. That yields Private / NHS / Plan / Other.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Fact_Patient_Lapse_Flow.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Patient_Lapse_Flow.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Patient_Lapse_Flow @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# The whole point of the release: chasing twice must now be visible.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Tenant_ID = 100 AND Last_Activity = '2nd Reminder'; IF @n = 0 BEGIN SET @e = 'V240 FAILED: no patient reaches 2nd Reminder, so the counter is not being read.'; THROW 50700, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Patient_Category IS NULL OR Patient_Category NOT IN ('Private','NHS','Plan','Other'); IF @n <> 0 BEGIN SET @e = 'V240 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) carry a patient category outside the four.'; THROW 50701, @e, 1; END;
+# Plan patients are identified by a capitation rate; if that count is zero the join has broken
+# and every Denplan member has quietly become Private.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Tenant_ID = 100 AND Patient_Category = 'Plan'; IF @n = 0 BEGIN SET @e = 'V240 FAILED: no plan patients, so the capitation-rate join is matching nothing.'; THROW 50702, @e, 1; END;
+EXEC     DECLARE @f INT, @p INT, @e VARCHAR(4000); SELECT @f = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow; SELECT @p = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.pk_Patient > 0 AND s.Is_Reportable = 1 AND s.Status_Code IN ('LAPSED_SET_INACTIVE','LAPSED_NO_VISIT_24M','RECALL_SENT_NO_REPLY_GT2M'); IF @f <> @p BEGIN SET @e = 'V240 FAILED: the fact holds ' + CAST(@f AS VARCHAR(10)) + ' rows for a population of ' + CAST(@p AS VARCHAR(10)) + ' -- the capitation join has fanned it out.'; THROW 50703, @e, 1; END;
+
+TEST
