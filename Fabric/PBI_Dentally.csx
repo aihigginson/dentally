@@ -3,8 +3,28 @@
 // scope block { } so local helpers do not collide. ONE paste, ONE Run rebuilds every folder;
 // measures keep exact names + DisplayFolder so report cards re-bind automatically.
 // (Dead spider measures are purged separately by TabularEditor_KillDeadSpiders.csx -- run once.)
-// (Journey measures likewise: TabularEditor_KillJourney.csx -- run once after V241. The
-//  AppointmentJourney block that used to clean that folder went with the feature.)
+// Measures are swept: anything this script does not rebuild is deleted at the end, so a
+// retired block takes its measures with it. See SELF-CLEANING below.
+
+// =====================================================================
+// SELF-CLEANING: snapshot every measure before any block runs.
+// =====================================================================
+// ==> A RETIRED BLOCK MUST TAKE ITS MEASURES WITH IT. <== Each block below deletes the
+// measures it is about to add, so a measure this script manages is destroyed and rebuilt on
+// every run -- a DIFFERENT object instance afterwards. A measure whose block has been
+// deleted is never touched, so the SAME instance survives to the end. That is the whole
+// test, and it needs no per-block bookkeeping: see the purge at the foot of this file.
+//
+// [Journey Count] is why. Retiring the Appointment Journey removed '_Appointment Journey'
+// from the model, but the measure counting it lived on '_Measures' and survived, reading
+// COUNTROWS over a table that no longer existed. The script reported success; the MODEL
+// carried the error.
+//
+// ==> THIS SCRIPT IS THEREFORE THE SOLE AUTHORITY ON MEASURES. <== A measure made by hand in
+// Desktop and not reproduced here will be deleted on the next run. That is the intent -- one
+// paste, one run, the whole measure layer rebuilt -- but it is worth knowing before you add
+// something in the UI and wonder where it went.
+var __managed_before = Model.Tables.SelectMany(t => t.Measures).ToList();
 
 // ===================== Clinical =====================
 {
@@ -3481,3 +3501,24 @@ in
         }
     }
 }
+
+
+// =====================================================================
+// SELF-CLEANING: delete anything the run did not rebuild.
+// =====================================================================
+// Still present AND still the instance captured at the top = no block owns it any more.
+var __still = new HashSet<Measure>(Model.Tables.SelectMany(t => t.Measures));
+var __orphans = __managed_before.Where(m => __still.Contains(m)).ToList();
+
+foreach (var __m in __orphans)
+    Info("ORPHAN removed: [" + __m.Name + "] on " + __m.Table.Name
+         + (string.IsNullOrEmpty(__m.DisplayFolder) ? "" : " (" + __m.DisplayFolder + ")"));
+
+// Enumerate first, delete second: removing from a collection while iterating it leaves half
+// the orphans behind and the error returns on the next open.
+foreach (var __m in __orphans)
+    __m.Delete();
+
+Info(__orphans.Count == 0
+     ? "No orphaned measures."
+     : "Removed " + __orphans.Count + " orphaned measure(s) whose block no longer exists.");
