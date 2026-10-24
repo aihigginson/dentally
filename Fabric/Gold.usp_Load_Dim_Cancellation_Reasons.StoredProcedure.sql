@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Cancellation_Reasons] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Cancellation_Reasons] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Cancellation_Reasons
 --  Author           :  AIH
@@ -110,13 +110,15 @@ BEGIN
         -- Ensure unknown/-1 seed row exists, labelled "No reason recorded" so cancellations
         -- with no source reason show a meaningful bucket (not a blank) in by-reason visuals.
         INSERT INTO Gold.Dim_Cancellation_Reasons (pk_Cancellation_Reason, Tenant_ID, bk_Cancellation_Reason_ID, Reason, Standard_Cancellation_Reason, Cancellation_Reason_Count, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, '-1', 'No reason recorded', 'No reason recorded', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        SELECT -1, -1, '-1', 'No reason recorded', 'Other', 0, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Cancellation_Reasons WHERE pk_Cancellation_Reason = -1);
 
         -- Backfill the label on an already-seeded -1 row (was NULL before this change).
         UPDATE Gold.Dim_Cancellation_Reasons
-        SET Reason = 'No reason recorded', Standard_Cancellation_Reason = 'No reason recorded', DW_Updated_At = SYSUTCDATETIME()
-        WHERE pk_Cancellation_Reason = -1 AND ISNULL(Reason,'') <> 'No reason recorded';
+        SET Reason = 'No reason recorded', Standard_Cancellation_Reason = 'Other', DW_Updated_At = SYSUTCDATETIME()
+        WHERE pk_Cancellation_Reason = -1
+  AND (ISNULL(Reason,'') <> 'No reason recorded'
+       OR ISNULL(Standard_Cancellation_Reason,'') <> 'Other');
 
         --*********************************
         --**** Procedure logic ends    ****

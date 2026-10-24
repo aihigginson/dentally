@@ -43,17 +43,19 @@ FROM (VALUES
     (100, 'Patient - Work Issue',             'Patient - Work'),
     (100, 'Patient - Financial reasons',      'Patient - Financial'),
 
-    -- 'Was Not Brought' is a child who did not arrive -- a DNA in substance, whatever the
-    -- appointment was marked as.
-    (100, 'Patient - Was Not Brought',        'Did Not Attend'),
-
     -- ==> SHORT NOTICE IS AN URGENCY, NOT A WHO. <== Mapping it to Short Notice keeps the
     -- standard list intact but loses the patient attribution for 565 cancellations. Flagged
     -- deliberately: if the flow should count these as patient-initiated, change this one row
     -- to 'Patient - Personal' and Short Notice stops being reachable for this tenant.
     (100, 'Patient - Short Notice',           'Short Notice'),
 
-    -- A third of all cancellations. Attributable to nobody, and shown as such.
-    (100, 'No reason recorded',               'Other')
+    -- 'Was Not Brought' is a child who did not arrive -- a DNA in substance, whatever the
+    -- appointment was marked as.
+    (100, 'Patient - Was Not Brought',        'Did Not Attend')
+
+    -- NOTE: 'No reason recorded' is NOT in this map and cannot be. It is the -1 sentinel row,
+    -- synthesised by Gold.usp_Load_Dim_Cancellation_Reasons rather than sourced from Dentally,
+    -- so no map row ever matches it; its standard reason is set to 'Other' in that loader.
+    -- A third of all cancellations land there, so Other is shown, never hidden.
 ) AS v (Tenant_ID, Source_Cancellation_Reason, Standard_Cancellation_Reason);
 GO

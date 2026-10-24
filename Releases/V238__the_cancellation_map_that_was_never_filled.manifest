@@ -20,7 +20,7 @@
 # use roll up to:
 #
 #     Cancellation Patient    16,170   49%
-#     Cancellation Other      11,339   35%
+#     Cancellation Other      11,339   35%   (10,774 of it the -1 sentinel)
 #     Cancellation Practice    5,269   16%
 #     Did Not Attend               5
 #
@@ -40,11 +40,14 @@
 # ---------------------------------------------------------------------
 
 DEPLOY   Fabric\Input.Cancellation_Reason_Map.Data.sql
+# The -1 sentinel's standard reason is hard-coded in the loader, not mapped: that row is
+# synthesised, so no map row can ever reach it. It now reads 'Other'.
+DEPLOY   Fabric\Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql
 
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Cancellation_Reasons @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 
 # --- guards -------------------------------------------------------------------------------
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Input.Cancellation_Reason_Map WHERE Tenant_ID = 100; IF @n <> 16 BEGIN SET @e = 'V238 FAILED: the map holds ' + CAST(@n AS VARCHAR(10)) + ' rows for tenant 100, expected 16.'; THROW 50680, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Input.Cancellation_Reason_Map WHERE Tenant_ID = 100; IF @n <> 15 BEGIN SET @e = 'V238 FAILED: the map holds ' + CAST(@n AS VARCHAR(10)) + ' rows for tenant 100, expected 15.'; THROW 50680, @e, 1; END;
 # ==> EVERY MAPPED VALUE MUST BE A REAL STANDARD REASON. <== A typo here would not error: the
 # value would simply pass through as a new "standard" nobody recognises.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Input.Cancellation_Reason_Map m WHERE NOT EXISTS (SELECT 1 FROM Config.Cancellation_Reason_Standard s WHERE s.Standard_Cancellation_Reason = m.Standard_Cancellation_Reason); IF @n <> 0 BEGIN SET @e = 'V238 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' map row(s) name a standard reason that does not exist.'; THROW 50681, @e, 1; END;
