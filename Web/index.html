@@ -2527,6 +2527,13 @@
         document.getElementById('hier-body').innerHTML = h;
         document.querySelectorAll('[data-hier-site],[data-hier-tenant],[data-hier-rname],[data-hier-aname]')
                 .forEach(el => el.addEventListener('change', markDirty));
+        // ==> THE DROPDOWNS GO STALE THE MOMENT A NAME IS TYPED. <== They are built from the
+        // model, and the model only took the typed names on the next add or delete -- so a
+        // name typed after the last add showed as a blank option ("South > ") until something
+        // else forced a render. Updating the model and the option lists on every keystroke
+        // fixes it; re-rendering the whole pane would fix it too and move the caret.
+        document.querySelectorAll('[data-hier-rname],[data-hier-aname]').forEach(el =>
+            el.addEventListener('input', () => { _collectNames(); _refreshAreaSelects(); }));
         document.querySelectorAll('[data-hier-addregion]').forEach(el =>
             el.addEventListener('click', () => hierAddRegion(+el.dataset.hierAddregion)));
         document.querySelectorAll('[data-hier-addarea]').forEach(el =>
@@ -2535,6 +2542,19 @@
             el.addEventListener('click', () => hierDelRegion(el.dataset.hierDelregion)));
         document.querySelectorAll('[data-hier-delarea]').forEach(el =>
             el.addEventListener('click', () => hierDelArea(el.dataset.hierDelarea)));
+    }
+
+    function _refreshAreaSelects() {
+        // Only the <select> option lists are rebuilt, and each keeps what it had selected --
+        // including an area that has no id yet, which is carried as its tmp key.
+        document.querySelectorAll('[data-hier-site]').forEach(el => {
+            const [tid, sid] = el.dataset.hierSite.split('|');
+            const site = (_hier.sites || []).find(x => String(x.tenant_id) === tid && x.site_id === sid);
+            if (!site) return;
+            const keep = el.value;
+            el.innerHTML = _areaOptions(site.client_id, site.area_id, site.tmp_area_id);
+            if ([...el.options].some(o => o.value === keep)) el.value = keep;
+        });
     }
 
     async function saveHierarchy() {
