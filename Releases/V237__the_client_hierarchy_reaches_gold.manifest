@@ -70,7 +70,7 @@ DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
 DEPLOY   Fabric\Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql
 
 # --- 4. copy staging into Input.*, then rebuild the dimension --------------------------
-EXEC     EXEC Meta.usp_Sync_Input_From_AppDB;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Meta.usp_Sync_Input_From_AppDB @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Practice_Sites @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 EXEC     EXEC Meta.usp_Create_Gold_Views;
 
