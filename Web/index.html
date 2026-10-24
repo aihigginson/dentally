@@ -3804,6 +3804,11 @@
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
+            // displayOption 1 = FitToWidth. This only works because EVERY page is
+            // 1280x600 (ratio 2.133) and the app's viewport after chrome is 2.0-2.14 --
+            // fitting the width lands within a couple of percent of the height too. A
+            // page left at 1280x720 is 18% too tall and WILL scroll; fix the canvas, not
+            // this setting. FitToPage was tried and rejected.
             : { layoutType: 1, customLayout: { displayOption: 1 } };
     }
 
@@ -3812,9 +3817,11 @@
         // Lock down data egress (defence-in-depth with the tenant "Export and sharing"
         // settings being off): no right-click context menu ("Show as table" / export),
         // and the "Export data" command hidden from visual headers.
-        // displayOption 1 = models.CommandDisplayOption.Hidden (numeric, matching the
-        // tokenType: 1 convention used here rather than importing the models enum).
-        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 1 } }] };
+        // ==> CommandDisplayOption IS Enabled=0, Disabled=1, HIDDEN=2. <== This read 1
+        // under a comment saying Hidden, so Export data was greyed out in the visual
+        // header rather than absent from it -- still advertising a route the tenant
+        // settings then refuse. Verified against the bundled powerbi.min.js.
+        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 2 } }] };
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
