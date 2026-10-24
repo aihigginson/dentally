@@ -1,0 +1,58 @@
+# =====================================================================
+# Release V239 -- the lapsing-patient flow fact
+# =====================================================================
+# One row per lapsed OR at-risk patient, carrying the three stages of the flow the alluvial
+# will draw: what they last came in for, what happened next, and where they are now.
+#
+# ---------------------------------------------------------------------
+# WHY NOT WIDEN Fact_Lapsed_Patients.
+# ---------------------------------------------------------------------
+# That table holds patients who have ALREADY lapsed, and its counts are the lapsed figures
+# V234 corrected from 21,761 to 2,300. "At risk" patients have not lapsed, so adding them
+# there would move a customer-visible number for the second time in a month, and would make
+# the lapsed count mean something different from its own name.
+#
+# ---------------------------------------------------------------------
+# BOTH KEYS, ON THE SAME ROW.
+# ---------------------------------------------------------------------
+# ==> fk_Practitioner AND fk_Practice_Site ARE BOTH REAL. <== The point of the table is that
+# a clinician can see where they are losing patients, which needs the two keys together --
+# the thing Fact_Metric_Actuals has never done (there is not ONE row there carrying both).
+# The practitioner is Dim_Patients.fk_Current_Dentist: the dentist who OWNED the patient
+# when they drifted, from the exam-ownership spell rule, not whoever last saw them. The site
+# is the one they last attended, because a patient has no site of their own -- and that is
+# what lets the row roll up through Area and Region, which now hang off the site.
+#
+# ---------------------------------------------------------------------
+# TWO RULES THAT ARE JUDGEMENT, NOT FACT.
+# ---------------------------------------------------------------------
+# 1. STAGE 1 COUNTS COMPLETED APPOINTMENTS ONLY. "What they last came in for" means they
+#    came in; a cancellation or a DNA is stage 2.
+# 2. AN APPOINTMENT EVENT BEATS A RECALL STATE. A DNA or cancellation is something that
+#    HAPPENED; a recall state is something that did not. Where a patient has both, the event
+#    wins, and only patients with no such event fall through to how far their recall got.
+#    If "last activity" should mean strictly most recent in time, that is one CASE to change.
+#
+# Nothing is retired here. Fact_Appointment_Journey still loads and the Patient report still
+# binds to it; retiring it is a separate release once a visual reads this table instead.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Fact_Patient_Lapse_Flow.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Patient_Lapse_Flow.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Patient_Lapse_Flow @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# The fact must hold exactly the population the status ladder says it should -- no more, no
+# fewer. A silent join fan-out would show up here as a count that is too high.
+EXEC     DECLARE @f INT, @p INT, @e VARCHAR(4000); SELECT @f = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow; SELECT @p = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.pk_Patient > 0 AND s.Is_Reportable = 1 AND s.Status_Code IN ('LAPSED_SET_INACTIVE','LAPSED_NO_VISIT_24M','RECALL_SENT_NO_REPLY_GT2M'); IF @f <> @p BEGIN SET @e = 'V239 FAILED: the fact holds ' + CAST(@f AS VARCHAR(10)) + ' rows for a population of ' + CAST(@p AS VARCHAR(10)) + '.'; THROW 50690, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Last_Activity IS NULL OR Current_Status IS NULL OR Last_Appointment_Reason IS NULL; IF @n <> 0 BEGIN SET @e = 'V239 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are missing one of the three stages.'; THROW 50691, @e, 1; END;
+# All three end states must be reachable, or the third column of the diagram is a lie.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT Current_Status) FROM Gold.Fact_Patient_Lapse_Flow WHERE Tenant_ID = 100; IF @n <> 3 BEGIN SET @e = 'V239 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of the 3 current statuses appear on tenant 100.'; THROW 50692, @e, 1; END;
+# ==> THE WHOLE POINT: BOTH KEYS REAL ON ONE ROW. <== If this ever reads zero the table has
+# regressed to the shape it exists to avoid.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Tenant_ID = 100 AND fk_Practitioner > 0 AND fk_Practice_Site > 0; IF @n = 0 BEGIN SET @e = 'V239 FAILED: no row carries a real practitioner AND a real site.'; THROW 50693, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='PBI' AND TABLE_NAME='_Patient Lapse Flow'; IF @n <> 1 BEGIN SET @e = 'V239 FAILED: PBI.[_Patient Lapse Flow] was not generated.'; THROW 50694, @e, 1; END;
+
+TEST
