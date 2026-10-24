@@ -308,11 +308,26 @@
                max-width wins, the box stays full width, and PBI letterboxes about 2.5% top
                and bottom — the previous behaviour, and not worth chasing. */
             flex: 1; min-height: 0;
-            aspect-ratio: 1280 / 600;
-            width: auto; max-width: 100%;
-            margin: 0; align-self: flex-start;
+            width: 100%; margin: 0; align-self: flex-start;
             background: white; border: none; display: block;
             overflow: hidden;
+        }
+        /* ==> THE GUARD IS NOT PEDANTRY: WITHOUT aspect-ratio THIS COLLAPSES. <== The rule
+           below swaps width to auto so the ratio can drive it. In a browser that does not
+           honour aspect-ratio, `width: auto` on a block flex item with
+           align-self: flex-start is fit-content -- and the child is an iframe injected by
+           powerbi.js with no intrinsic width, so the box resolves to ZERO and the report
+           disappears entirely. @supports keeps such a browser on the full-width rule above,
+           which is the behaviour that shipped for the last two years.
+
+           aspect-ratio is Chrome 88 / Firefox 89 / Safari 15, all 2021, and the Safari
+           flex-item bugs were fixed in 16 -- so this should never trigger. It costs one
+           line to be certain, against a failure mode that is a blank page. */
+        @supports (aspect-ratio: 1 / 1) {
+            .embed-full {
+                aspect-ratio: 1280 / 600;
+                width: auto; max-width: 100%;
+            }
         }
         .embed-full iframe,
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
