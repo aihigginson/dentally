@@ -3,28 +3,53 @@
 // scope block { } so local helpers do not collide. ONE paste, ONE Run rebuilds every folder;
 // measures keep exact names + DisplayFolder so report cards re-bind automatically.
 // (Dead spider measures are purged separately by TabularEditor_KillDeadSpiders.csx -- run once.)
-// Measures are swept: anything this script does not rebuild is deleted at the end, so a
-// retired block takes its measures with it. See SELF-CLEANING below.
+// (Journey measures likewise: TabularEditor_KillJourney.csx -- run once after V241. The
+//  AppointmentJourney block that used to clean that folder went with the feature.)
 
 // =====================================================================
-// SELF-CLEANING: snapshot every measure before any block runs.
+// RETIRED MEASURES -- named, never swept.
 // =====================================================================
-// ==> A RETIRED BLOCK MUST TAKE ITS MEASURES WITH IT. <== Each block below deletes the
-// measures it is about to add, so a measure this script manages is destroyed and rebuilt on
-// every run -- a DIFFERENT object instance afterwards. A measure whose block has been
-// deleted is never touched, so the SAME instance survives to the end. That is the whole
-// test, and it needs no per-block bookkeeping: see the purge at the foot of this file.
+// ==> A SWEEP OF "EVERYTHING THIS SCRIPT DOES NOT REBUILD" IS NOT SAFE. <== It was tried on
+// 24/10/2026 and would have deleted 41 measures, of which NINE are bound in live report
+// pages -- [Revenue] alone appears on eleven. The model holds three kinds of measure, not
+// two: ones this script owns, ones that are dead, and ones made by hand in Desktop that
+// reports legitimately use. Only the first kind can be rebuilt, so only NAMED retirement is
+// safe.
 //
-// [Journey Count] is why. Retiring the Appointment Journey removed '_Appointment Journey'
-// from the model, but the measure counting it lived on '_Measures' and survived, reading
-// COUNTROWS over a table that no longer existed. The script reported success; the MODEL
-// carried the error.
-//
-// ==> THIS SCRIPT IS THEREFORE THE SOLE AUTHORITY ON MEASURES. <== A measure made by hand in
-// Desktop and not reproduced here will be deleted on the next run. That is the intent -- one
-// paste, one run, the whole measure layer rebuilt -- but it is worth knowing before you add
-// something in the UI and wonder where it went.
-var __managed_before = Model.Tables.SelectMany(t => t.Measures).ToList();
+// Each block below already deletes what it is about to add. This list handles the other
+// case: a measure this script USED to own, whose block has since gone. Add a name here when
+// you retire or rename one, and it is cleaned on the next run.
+var retiredMeasures = new[] {
+    // Retired with the Appointment Journey (V241).
+    "Journey Count",
+    // Renamed on 24/10/2026 when the spider axes took their final labels.
+    "Proposed %", "Proposed at First Visit", "Year One per Patient",
+    "Large First Plan Share", "First Plan Acceptance",
+    // Superseded by [%Attrition] on List Patients.
+    "Patients At Risk Pct",
+    // ==> POWER BI'S AUTO-RENAME ARTEFACTS. <== A failed or repeated apply leaves a numbered
+    // copy behind -- "Year One Proposed 2" and the like -- which nothing references and
+    // nothing rebuilds. Twenty-four of them had accumulated.
+    "First Plan Acceptance 1", "First Plan Acceptance 2", "First Plan Acceptance 3",
+    "First Plan Acceptance 4",
+    "First Plan Delivered 1", "First Plan Delivered 2", "First Plan Delivered 3",
+    "First Plan Delivered 4",
+    "First Visit Proposed 1", "First Visit Proposed 2", "First Visit Proposed 3",
+    "First Visit Proposed 4",
+    "Large First Plan Share 1", "Large First Plan Share 2", "Large First Plan Share 3",
+    "Year One per Patient 1", "Year One per Patient 2", "Year One per Patient 3",
+    "Year One per Patient 4",
+    "Year One Proposed 1", "Year One Proposed 2", "Year One Proposed 3",
+    "Year One Proposed 4",
+    "Diag Invoice Rows 1",
+};
+{
+    var gone = Model.Tables.SelectMany(t => t.Measures)
+                    .Where(m => retiredMeasures.Contains(m.Name)).ToList();
+    foreach (var m in gone) m.Delete();
+    if (gone.Count > 0)
+        Info("Retired " + gone.Count + " measure(s) named in retiredMeasures.");
+}
 
 // ===================== Clinical =====================
 {
@@ -3501,36 +3526,3 @@ in
         }
     }
 }
-
-
-// =====================================================================
-// SELF-CLEANING: delete anything the run did not rebuild.
-// =====================================================================
-// Still present AND still the instance captured at the top = no block owns it any more.
-var __still = new HashSet<Measure>(Model.Tables.SelectMany(t => t.Measures));
-var __orphans = __managed_before.Where(m => __still.Contains(m)).ToList();
-
-// ==> ONE DIALOG, NOT ONE PER MEASURE. <== Info() opens a modal box each time it is called,
-// so thirty orphans meant thirty clicks and nothing you could read as a list. Built as a
-// single string instead: a Windows message box copies WHOLE with Ctrl+C while it has focus,
-// so the list can be pasted somewhere useful.
-if (__orphans.Count > 0)
-{
-    var __report = new System.Text.StringBuilder();
-    __report.AppendLine("Orphaned measures removed (" + __orphans.Count + ") --");
-    __report.AppendLine("no block in this script rebuilds them.");
-    __report.AppendLine();
-    foreach (var __m in __orphans.OrderBy(x => x.Table.Name).ThenBy(x => x.Name))
-        __report.AppendLine("  [" + __m.Name + "]  on " + __m.Table.Name
-             + (string.IsNullOrEmpty(__m.DisplayFolder) ? "" : "  (" + __m.DisplayFolder + ")"));
-    __report.AppendLine();
-    __report.AppendLine("Ctrl+C copies this box.");
-    Info(__report.ToString());
-}
-
-// Enumerate first, delete second: removing from a collection while iterating it leaves half
-// the orphans behind and the error returns on the next open.
-foreach (var __m in __orphans)
-    __m.Delete();
-
-if (__orphans.Count == 0) Info("No orphaned measures.");
