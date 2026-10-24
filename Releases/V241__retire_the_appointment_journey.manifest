@@ -1,0 +1,53 @@
+# =====================================================================
+# Release V241 -- retire the Appointment Journey
+# =====================================================================
+# Gold.Fact_Patient_Lapse_Flow (V239/V240) replaces it. The journey visual was hidden on
+# every one of the Patient report's six bookmarks and carried isHidden at the top level, so
+# nothing on screen loses anything.
+#
+# ---------------------------------------------------------------------
+# ==> REMOVE '_Appointment Journey' FROM THE SEMANTIC MODEL FIRST. <==
+# ---------------------------------------------------------------------
+# This release DROPS the Gold table and the PBI view the model imports. If the model still
+# carries that table when this runs, its next refresh fails on a source that no longer
+# exists. Order:
+#
+#   1. Tabular Editor: delete the '_Appointment Journey' table AND the measures in the
+#      "Appointment Journey" display folder. 'Journey Count' lives on '_Measures', NOT on
+#      the journey table, so deleting the table leaves the measure behind pointing at
+#      nothing. Re-run PBI_Dentally.csx -- the block that created it is gone.
+#   2. Publish the model and the Patient report.
+#   3. Run this release.
+#
+# Nothing breaks if the order slips: the refresh fails loudly and re-running it after the
+# model is cleaned succeeds.
+#
+# ---------------------------------------------------------------------
+# WHAT IS *NOT* RETIRED.
+# ---------------------------------------------------------------------
+# Silver.Appointment_Journey_Attrs is a DIFFERENT object and stays: Gold.usp_Load_Fact_
+# Appointments reads it for Booking / This_Visit / Next_Visit, and Check_Row_Counts.sql
+# monitors it. Only the Gold fact, its view, and its load registration go.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+
+# The view first: it depends on the table.
+EXEC     DROP VIEW IF EXISTS PBI.[_Appointment Journey];
+EXEC     DROP VIEW IF EXISTS Gold.vw_Fact_Appointment_Journey;
+EXEC     DROP PROCEDURE IF EXISTS Gold.usp_Load_Fact_Appointment_Journey;
+EXEC     DROP TABLE IF EXISTS Gold.Fact_Appointment_Journey;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('Fact_Appointment_Journey','vw_Fact_Appointment_Journey','_Appointment Journey'); IF @n <> 0 BEGIN SET @e = 'V241 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' journey object(s) survive.'; THROW 50710, @e, 1; END;
+# ==> THE SILVER TABLE MUST SURVIVE. <== Fact_Appointments reads it; dropping it by mistake
+# would quietly empty Booking / This_Visit / Next_Visit on every appointment.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Silver' AND TABLE_NAME='Appointment_Journey_Attrs'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: Silver.Appointment_Journey_Attrs is gone -- it was never meant to be.'; THROW 50711, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_APPOINTMENT_JOURNEY'; IF @n <> 0 BEGIN SET @e = 'V241 FAILED: the journey load is still registered and the nightly chain will call a dropped proc.'; THROW 50712, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_PATIENT_LAPSE_FLOW'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: the replacement load is not registered, so the flow fact will go stale.'; THROW 50713, @e, 1; END;
+# The replacement must still be there and populated after all that.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow; IF @n = 0 BEGIN SET @e = 'V241 FAILED: the lapse flow fact is empty.'; THROW 50714, @e, 1; END;
+
+TEST

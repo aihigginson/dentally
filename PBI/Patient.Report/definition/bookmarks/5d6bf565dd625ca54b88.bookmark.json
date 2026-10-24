@@ -10,7 +10,6 @@
       "ecd102b2cc2d7f949ada",
       "5d6af4061a9c8411356b",
       "9331d24f9d27b100057a",
-      "e2c565dbd1a39fcc3f22",
       "0ae3f661d1b8efb80cc9",
       "59450b97013af8b3a0a6",
       "8d2d8282f38261331db3",
@@ -74,15 +73,6 @@
           "9331d24f9d27b100057a": {
             "singleVisual": {
               "visualType": "slicer",
-              "objects": {},
-              "display": {
-                "mode": "hidden"
-              }
-            }
-          },
-          "e2c565dbd1a39fcc3f22": {
-            "singleVisual": {
-              "visualType": "deneb7E15AEF80B9E4D4F8E12924291ECE89A",
               "objects": {},
               "display": {
                 "mode": "hidden"
