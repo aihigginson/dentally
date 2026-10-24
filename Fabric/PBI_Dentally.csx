@@ -3510,15 +3510,27 @@ in
 var __still = new HashSet<Measure>(Model.Tables.SelectMany(t => t.Measures));
 var __orphans = __managed_before.Where(m => __still.Contains(m)).ToList();
 
-foreach (var __m in __orphans)
-    Info("ORPHAN removed: [" + __m.Name + "] on " + __m.Table.Name
-         + (string.IsNullOrEmpty(__m.DisplayFolder) ? "" : " (" + __m.DisplayFolder + ")"));
+// ==> ONE DIALOG, NOT ONE PER MEASURE. <== Info() opens a modal box each time it is called,
+// so thirty orphans meant thirty clicks and nothing you could read as a list. Built as a
+// single string instead: a Windows message box copies WHOLE with Ctrl+C while it has focus,
+// so the list can be pasted somewhere useful.
+if (__orphans.Count > 0)
+{
+    var __report = new System.Text.StringBuilder();
+    __report.AppendLine("Orphaned measures removed (" + __orphans.Count + ") --");
+    __report.AppendLine("no block in this script rebuilds them.");
+    __report.AppendLine();
+    foreach (var __m in __orphans.OrderBy(x => x.Table.Name).ThenBy(x => x.Name))
+        __report.AppendLine("  [" + __m.Name + "]  on " + __m.Table.Name
+             + (string.IsNullOrEmpty(__m.DisplayFolder) ? "" : "  (" + __m.DisplayFolder + ")"));
+    __report.AppendLine();
+    __report.AppendLine("Ctrl+C copies this box.");
+    Info(__report.ToString());
+}
 
 // Enumerate first, delete second: removing from a collection while iterating it leaves half
 // the orphans behind and the error returns on the next open.
 foreach (var __m in __orphans)
     __m.Delete();
 
-Info(__orphans.Count == 0
-     ? "No orphaned measures."
-     : "Removed " + __orphans.Count + " orphaned measure(s) whose block no longer exists.");
+if (__orphans.Count == 0) Info("No orphaned measures.");
