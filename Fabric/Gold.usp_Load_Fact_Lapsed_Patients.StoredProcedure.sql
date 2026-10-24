@@ -96,17 +96,26 @@ BEGIN
                 -- Last reminded + 60 days, because that is literally the ladder's own test.
                 -- Date keys are days since the epoch, so + 60 is the key arithmetic and
                 -- Dim_Date turns it back into a date for Lapsed_Date.
+                -- ==> THE SAME RECALL THE LADDER JUDGED, NOT THE LATEST REMINDER. <==
+                -- Gold.usp_Load_Dim_Patients picks ONE recall per patient, the latest by
+                -- Due_Date then Id, and tests THAT recall's last-reminded date against 60
+                -- days. Taking MAX across all of a patient's recalls instead put 46 of 1,167
+                -- at-risk rows in the FUTURE: a patient with an older-DUE recall chased more
+                -- recently gives a later maximum than the rung was judged on. An event dated
+                -- after today belongs to no past period at all.
                 DROP TABLE IF EXISTS #at_risk_date;
-                SELECT  r.Tenant_ID, r.fk_Patient,
-                        MAX(COALESCE(NULLIF(r.fk_Date_Last_Reminded, -1),
-                                     NULLIF(r.fk_Date_First_Reminder, -1))) + 60 AS fk_Date_At_Risk
+                SELECT  x.Tenant_ID, x.fk_Patient, x.fk_Date_Reminded + 60 AS fk_Date_At_Risk
                 INTO    #at_risk_date
-                FROM    [Gold].[Fact_Recalls] r
-                JOIN    #pop q ON q.Tenant_ID = r.Tenant_ID AND q.fk_Patient = r.fk_Patient
-                WHERE   q.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M'
-                GROUP BY r.Tenant_ID, r.fk_Patient
-                HAVING  MAX(COALESCE(NULLIF(r.fk_Date_Last_Reminded, -1),
-                                     NULLIF(r.fk_Date_First_Reminder, -1))) IS NOT NULL;
+                FROM  ( SELECT  r.Tenant_ID, r.fk_Patient,
+                                COALESCE(NULLIF(r.fk_Date_Last_Reminded, -1),
+                                         NULLIF(r.fk_Date_First_Reminder, -1)) AS fk_Date_Reminded,
+                                ROW_NUMBER() OVER (PARTITION BY r.Tenant_ID, r.fk_Patient
+                                                   ORDER BY r.fk_Date_Due DESC, r.bk_Recall_ID DESC) AS rn
+                        FROM    [Gold].[Fact_Recalls] r
+                        JOIN    #pop q ON q.Tenant_ID = r.Tenant_ID AND q.fk_Patient = r.fk_Patient
+                        WHERE   q.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M' ) x
+                WHERE   x.rn = 1
+                  AND   x.fk_Date_Reminded IS NOT NULL;
 
                 -- ---- the categories the reason map actually defines ------------------------
                 -- Fact_Appointments.Appointment_Reason holds the mapped Category where the map

@@ -68,6 +68,10 @@ EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_L
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT Lapsed_Type) FROM Gold.Fact_Lapsed_Patients WHERE Lapsed_Type NOT IN ('Set as inactive','Calculated as inactive','At Risk'); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' unexpected Lapsed_Type value(s) -- the list visual filters on the exact wording.'; THROW 50733, @e, 1; END;
 # ==> EVERY ROW MUST BE DATEABLE. <== An undated row silently vanishes from every period.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE fk_Date_Lapsed = -1 OR fk_Date_Lapsed IS NULL OR Lapsed_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) carry no usable date, so they drop out of every period filter.'; THROW 50734, @e, 1; END;
+# ==> AN EVENT CANNOT HAVE HAPPENED TOMORROW. <== The at-risk date is derived, and the first
+# derivation put 46 rows in the future by choosing a different recall from the one the ladder
+# judged. A future-dated row appears in no past period, so this is a failure, not a curiosity.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Lapsed_Date > CAST(SYSUTCDATETIME() AS DATE); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are dated in the future.'; THROW 50743, @e, 1; END;
 # One row per patient: the grain the list and the flow both depend on.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, fk_Patient FROM Gold.Fact_Lapsed_Patients GROUP BY Tenant_ID, fk_Patient HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) appear twice -- the grain has broken.'; THROW 50735, @e, 1; END;
 # The flow columns must actually be populated, or the alluvial draws nothing.
