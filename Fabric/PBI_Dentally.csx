@@ -7,6 +7,22 @@
 //  AppointmentJourney block that used to clean that folder went with the feature.)
 
 // =====================================================================
+// '_Measures' IS OWNED BY THIS SCRIPT -- snapshot it before any block runs.
+// =====================================================================
+// ==> THE SWEEP IS SCOPED TO '_Measures', AND ONLY THERE. <== Nothing is ever hand-authored
+// on that table, so anything in it that this script does not rebuild has lost its source and
+// must be surfaced, not kept. The FACT tables are different: they carry measures made by hand
+// in Desktop that reports bind to, and a sweep across them would have deleted nine live ones
+// -- [Revenue] alone is on eleven pages. Those are retired BY NAME below instead.
+//
+// The test needs no per-block bookkeeping. Each block deletes the measures it is about to add,
+// so a measure this script owns is destroyed and rebuilt every run -- a DIFFERENT instance
+// afterwards. One nobody rebuilds is never touched, so the SAME instance survives.
+var __owned_before = Model.Tables.Contains("_Measures")
+                   ? Model.Tables["_Measures"].Measures.ToList()
+                   : new List<Measure>();
+
+// =====================================================================
 // RETIRED MEASURES -- named, never swept.
 // =====================================================================
 // ==> A SWEEP OF "EVERYTHING THIS SCRIPT DOES NOT REBUILD" IS NOT SAFE. <== It was tried on
@@ -3524,5 +3540,30 @@ in
             Info("RLS " + role.Name + ": " + aptName + " filter ADDED, copied from '" + donorName
                  + "' -> " + expr);
         }
+    }
+}
+
+
+// =====================================================================
+// '_Measures': anything the run did not rebuild has lost its source.
+// =====================================================================
+if (__owned_before.Count > 0)
+{
+    var __live = new HashSet<Measure>(Model.Tables["_Measures"].Measures);
+    var __lost = __owned_before.Where(m => __live.Contains(m)).ToList();
+    if (__lost.Count > 0)
+    {
+        var __r = new System.Text.StringBuilder();
+        __r.AppendLine("On '_Measures', " + __lost.Count + " measure(s) are not rebuilt by this");
+        __r.AppendLine("script, so their source is lost. Removed:");
+        __r.AppendLine();
+        foreach (var m in __lost.OrderBy(x => x.Name))
+            __r.AppendLine("  [" + m.Name + "]"
+                + (string.IsNullOrEmpty(m.DisplayFolder) ? "" : "  (" + m.DisplayFolder + ")"));
+        __r.AppendLine();
+        __r.AppendLine("Ctrl+C copies this box.");
+        Info(__r.ToString());
+        // Enumerate first, delete second: removing while iterating leaves half of them behind.
+        foreach (var m in __lost) m.Delete();
     }
 }
