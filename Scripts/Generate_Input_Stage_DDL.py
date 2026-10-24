@@ -10,7 +10,10 @@ import subprocess
 import pyodbc
 
 TABLES = ["Application_Users", "Access_Log", "Metric_Variance", "Plan_Capitation_Rate",
-          "Practice_Config", "Practitioner_Pay", "Practitioner_Role", "Targets"]
+          "Practice_Config", "Practitioner_Pay", "Practitioner_Role", "Targets",
+          # The client hierarchy, added 24/10/2026. Client_Tenant and Site_Area are the
+          # placements; the other three are the nodes.
+          "Client", "Client_Tenant", "Client_Region", "Client_Area", "Site_Area"]
 
 OUT = r"C:\Users\aihig\OneDrive\Dentally\Code\Fabric"
 

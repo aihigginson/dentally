@@ -40,6 +40,12 @@ CREATE TABLE [Gold].[Dim_Practice_Sites](
 	[Practice_Website] [VARCHAR](255) NULL,
 	[Practice_NHS] [bit] NULL,
 	[Practice_Time_Zone] [VARCHAR](100) NULL,
+	[Client_ID]                    [int]          NULL,
+	[Client_Name]                  [varchar](255) NULL,
+	[Region_ID]                    [int]          NULL,
+	[Region_Name]                  [varchar](100) NULL,
+	[Area_ID]                      [int]          NULL,
+	[Area_Name]                    [varchar](100) NULL,
 	[Practice_Site_Count] [int] NOT NULL,
 	[DW_Created_At] [datetime2](6) NOT NULL,
 	[DW_Updated_At] [datetime2](6) NOT NULL

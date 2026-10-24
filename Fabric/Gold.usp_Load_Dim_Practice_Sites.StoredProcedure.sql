@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Practice_Sites] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Dim_Practice_Sites] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Dim_Practice_Sites
 --  Author           :  AIH
@@ -73,10 +73,24 @@ BEGIN
             NULLIF(TRIM(p.Website),'')                              AS Practice_Website,
             CAST(ISNULL(p.NHS,0) AS BIT)                            AS Practice_NHS,
             NULLIF(TRIM(p.Time_Zone),'')                            AS Practice_Time_Zone,
-            CAST(1 AS INT)                                          AS Practice_Site_Count
+            CAST(1 AS INT)                                          AS Practice_Site_Count,
+            -- The client hierarchy, curated in AppDB and synced to Input.*. Client comes from
+            -- the TENANT tie so an unplaced site still knows whose it is; Region and Area come
+            -- through the placement and stay null until someone places the site.
+            ct.Client_ID                                            AS Client_ID,
+            NULLIF(TRIM(cl.Client_Name),'')                         AS Client_Name,
+            rg.Region_ID                                            AS Region_ID,
+            NULLIF(TRIM(rg.Region_Name),'')                         AS Region_Name,
+            ar.Area_ID                                              AS Area_ID,
+            NULLIF(TRIM(ar.Area_Name),'')                           AS Area_Name
         INTO #src
         FROM Silver.Sites s
         LEFT JOIN Silver.Practice p ON p.Practice_ID = s.Practice_ID AND p.Tenant_ID = s.Tenant_ID
+        LEFT JOIN Input.Client_Tenant ct ON ct.Tenant_ID = s.Tenant_ID
+        LEFT JOIN Input.Client        cl ON cl.Client_ID = ct.Client_ID
+        LEFT JOIN Input.Site_Area     sa ON sa.Tenant_ID = s.Tenant_ID AND sa.Site_ID = s.Site_ID
+        LEFT JOIN Input.Client_Area   ar ON ar.Area_ID   = sa.Area_ID
+        LEFT JOIN Input.Client_Region rg ON rg.Region_ID = ar.Region_ID
         WHERE s.Site_ID IS NOT NULL;
 
         -- Remove rows no longer in source
@@ -119,6 +133,12 @@ BEGIN
             Practice_Website            = src.Practice_Website,
             Practice_NHS                = src.Practice_NHS,
             Practice_Time_Zone          = src.Practice_Time_Zone,
+            Client_ID                   = src.Client_ID,
+            Client_Name                 = src.Client_Name,
+            Region_ID                   = src.Region_ID,
+            Region_Name                 = src.Region_Name,
+            Area_ID                     = src.Area_ID,
+            Area_Name                   = src.Area_Name,
             DW_Updated_At               = SYSUTCDATETIME()
         FROM Gold.Dim_Practice_Sites tgt
         INNER JOIN #src src ON tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -152,7 +172,13 @@ BEGIN
            ISNULL(CAST(tgt.[Practice_Email] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Practice_Website] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Practice_NHS] AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Practice_Time_Zone] AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Practice_Time_Zone] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Client_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Client_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Region_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Region_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Area_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Area_Name] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[Site_Name] AS VARCHAR(500)), ''),
@@ -184,7 +210,13 @@ BEGIN
            ISNULL(CAST(src.[Practice_Email] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Practice_Website] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Practice_NHS] AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Practice_Time_Zone] AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Practice_Time_Zone] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Client_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Client_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Region_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Region_Name] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Area_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Area_Name] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -199,7 +231,9 @@ BEGIN
             Thursday_Open, Thursday_Close, Friday_Open, Friday_Close,
             Practice_ID, Practice_Name, Practice_Address_Line_1, Practice_Address_Line_2,
             Practice_Town, Practice_Postcode, Practice_Phone, Practice_Email,
-            Practice_Website, Practice_NHS, Practice_Time_Zone, Practice_Site_Count, DW_Created_At, DW_Updated_At
+            Practice_Website, Practice_NHS, Practice_Time_Zone, Practice_Site_Count,
+            Client_ID, Client_Name, Region_ID, Region_Name, Area_ID, Area_Name,
+            DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Practice_Site_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Site_ID),
@@ -210,7 +244,9 @@ BEGIN
             src.Thursday_Open, src.Thursday_Close, src.Friday_Open, src.Friday_Close,
             src.Practice_ID, src.Practice_Name, src.Practice_Address_Line_1, src.Practice_Address_Line_2,
             src.Practice_Town, src.Practice_Postcode, src.Practice_Phone, src.Practice_Email,
-            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, src.Practice_Site_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Practice_Website, src.Practice_NHS, src.Practice_Time_Zone, src.Practice_Site_Count,
+            src.Client_ID, src.Client_Name, src.Region_ID, src.Region_Name, src.Area_ID, src.Area_Name,
+            SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Practice_Sites tgt WHERE tgt.Site_ID = src.Site_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;

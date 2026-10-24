@@ -1,0 +1,88 @@
+# =====================================================================
+# Release V237 -- the client hierarchy reaches Gold
+# =====================================================================
+# Client > Region > Area > Site is curated in AppDB (V236 era, AppDB_Input_Schema.sql) and
+# edited on the staff-only Settings > Hierarchy screen. This carries it into the warehouse
+# and denormalises it onto Gold.Dim_Practice_Sites, so a site row knows its whole ancestry
+# as flat columns.
+#
+# ---------------------------------------------------------------------
+# WHY FLAT COLUMNS AND NOT A PARENT-CHILD DIMENSION.
+# ---------------------------------------------------------------------
+# Rollup becomes a GROUP BY, RLS stays a flat filter on Tenant_ID, and nothing in the Power
+# BI model has to walk a recursive structure. The tree is fixed depth by design; the levels
+# a client does not use collapse by a data rule rather than a setting -- a level is hidden
+# when every node at it has exactly one child.
+#
+# ---------------------------------------------------------------------
+# PRACTICE IS NOT A STORED LEVEL.
+# ---------------------------------------------------------------------
+# Practice is 1:1 with tenant and already denormalised onto this table as Practice_ID /
+# Practice_Name. It is a LEVEL only when an area holds more than one tenant, which is a
+# question the data answers; nothing here stores it as one. Region and Area attach to the
+# SITE precisely so that one tenant covering sites across the country can place them in
+# different areas.
+#
+# ---------------------------------------------------------------------
+# THE Input.* FILES IN THIS RELEASE ARE NEW TABLES.
+# ---------------------------------------------------------------------
+# ==> THE STANDING RULE IS NEVER TO DEPLOY AN Input.* TABLE FILE. <== That rule protects
+# owner-curated rows in a table that ALREADY HOLDS DATA, because those files open with DROP
+# TABLE. These five exist in no warehouse yet, so their first deploy is a create -- the same
+# exception Gold.Dim_Patient_Status took in V229. They must not be redeployed afterwards.
+#
+# ---------------------------------------------------------------------
+# ORDER, AND THE ONE CROSS-SYSTEM DEPENDENCY.
+# ---------------------------------------------------------------------
+# Input_Stage is written by the appdb-sync Container Apps Job, which runs from the
+# analytically image. The image must carry the Web/appdb_sync.py change that adds these five
+# tables to FULL_TABLES, or staging stays empty and every new column lands NULL. Deploy the
+# web change and let the job run BEFORE the loads below, or run the job by hand:
+#
+#     az containerapp job start -n caj-appdb-sync-prod -g rg-analytically
+#
+# Nothing breaks if that is forgotten -- the columns simply read NULL, and re-running the
+# load fills them once staging is populated.
+# ---------------------------------------------------------------------
+
+# --- 1. the columns, additive and guarded ------------------------------------------------
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Client_ID') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Client_ID] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Client_Name') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Client_Name] [varchar](255) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Region_ID') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Region_ID] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Region_Name') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Region_Name] [varchar](100) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Area_ID') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Area_ID] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME='Area_Name') ALTER TABLE [Gold].[Dim_Practice_Sites] ADD [Area_Name] [varchar](100) NULL;
+
+# --- 2. landing and warehouse copies (all five genuinely new) -----------------------------
+DEPLOY   Fabric\Input_Stage.Client.Table.sql
+DEPLOY   Fabric\Input_Stage.Client_Tenant.Table.sql
+DEPLOY   Fabric\Input_Stage.Client_Region.Table.sql
+DEPLOY   Fabric\Input_Stage.Client_Area.Table.sql
+DEPLOY   Fabric\Input_Stage.Site_Area.Table.sql
+DEPLOY   Fabric\Input.Client.Table.sql
+DEPLOY   Fabric\Input.Client_Tenant.Table.sql
+DEPLOY   Fabric\Input.Client_Region.Table.sql
+DEPLOY   Fabric\Input.Client_Area.Table.sql
+DEPLOY   Fabric\Input.Site_Area.Table.sql
+
+# --- 3. the procs ---------------------------------------------------------------------
+DEPLOY   Fabric\Meta.usp_Sync_Input_From_AppDB.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Dim_Practice_Sites.StoredProcedure.sql
+
+# --- 4. copy staging into Input.*, then rebuild the dimension --------------------------
+EXEC     EXEC Meta.usp_Sync_Input_From_AppDB;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Practice_Sites @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- 5. guards ---------------------------------------------------------------------------
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Practice_Sites' AND COLUMN_NAME IN ('Client_ID','Client_Name','Region_ID','Region_Name','Area_ID','Area_Name'); IF @n <> 6 BEGIN SET @e = 'V237 FAILED: Dim_Practice_Sites carries ' + CAST(@n AS VARCHAR(10)) + ' of the 6 hierarchy columns.'; THROW 50670, @e, 1; END;
+# ==> A SITE PLACED IN AN AREA MUST RESOLVE A REGION, AND A REGION A CLIENT. <== A broken
+# chain here is silent: the site simply reports no region and rolls up to nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Practice_Sites WHERE pk_Practice_Site > 0 AND Area_ID IS NOT NULL AND (Region_ID IS NULL OR Area_Name IS NULL OR Region_Name IS NULL); IF @n <> 0 BEGIN SET @e = 'V237 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' placed site(s) do not resolve a region.'; THROW 50671, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Practice_Sites s WHERE s.pk_Practice_Site > 0 AND s.Client_ID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Input.Client c WHERE c.Client_ID = s.Client_ID); IF @n <> 0 BEGIN SET @e = 'V237 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' site(s) carry a Client_ID that is not a client.'; THROW 50672, @e, 1; END;
+# A site may legitimately sit in no area yet -- nobody has placed it. What must NOT happen is
+# a tenant that is tied to a client losing that tie on the way into Gold.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Practice_Sites s JOIN Input.Client_Tenant ct ON ct.Tenant_ID = s.Tenant_ID WHERE s.pk_Practice_Site > 0 AND s.Client_ID IS NULL; IF @n <> 0 BEGIN SET @e = 'V237 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' site(s) of a tied tenant have no Client_ID.'; THROW 50673, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='PBI' AND TABLE_NAME='List Practice Sites' AND COLUMN_NAME IN ('Client ID','Client Name','Region ID','Region Name','Area ID','Area Name'); IF @n <> 6 BEGIN SET @e = 'V237 FAILED: PBI.[List Practice Sites] exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 6 hierarchy columns.'; THROW 50674, @e, 1; END;
+
+TEST
