@@ -69,10 +69,15 @@ var retiredMeasures = new[] {
 
 // ===================== PatientLapseFlow =====================
 {
-// Replaces the retired AppointmentJourney block. Gold.Fact_Patient_Lapse_Flow is PATIENT grain
-// -- one row per lapsed or at-risk patient -- so a count of rows is a count of people, and the
-// three stage columns are plain columns, which is what lets the alluvial drill through to the
-// actual list. (A drillthrough page binds columns, not measures.)
+// Replaces the retired AppointmentJourney block. Gold.Fact_Lapsed_Patients is PATIENT grain --
+// one row per lapsed or at-risk patient -- so a count of rows is a count of people, and the
+// three flow columns are plain columns, which is what lets the alluvial drill to the list that
+// is already on the same page. (A drillthrough page binds columns, not measures.)
+//
+// ==> [Lapse Count] COUNTS EVERY ROW, AT-RISK INCLUDED. <== That is the point of it: the
+// alluvial's third column IS the lapsed/at-risk split. It is NOT a lapsed-patient count, and
+// must never be used as one -- the lapsed figures are [Lapsed Patients] and friends, off
+// '_Metric Actuals'. Anything counting only true lapses over this table sums [Is Lapsed].
 var t = Model.Tables["_Measures"];
 var g = "Patient Lapse Flow";
 
@@ -88,7 +93,7 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // The alluvial sums this once per (stage value) and once per (stage pair), so it is read a few
 // dozen times per render -- COUNTROWS over a table of a few thousand rows, no filter work.
 add("Lapse Count",
-    @"COUNTROWS('_Patient Lapse Flow')",
+    @"COUNTROWS('_Lapsed Patients')",
     "#,##0");
 }
 
@@ -3526,9 +3531,11 @@ in
 // hand-typed duplicate. Re-running is a no-op once the rule is present.
 // =====================================================================
     // ==> EVERY TENANT-BEARING TABLE IMPORTED THROUGH GET DATA BELONGS ON THIS LIST. <==
-    // '_Patient Lapse Flow' is PATIENT grain, so an unfiltered copy does not merely add
-    // another practice's number to a total -- it lists another practice's patients by name.
-    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Patient Lapse Flow" };
+    // '_Lapsed Patients' is PATIENT grain, so an unfiltered copy does not merely add another
+    // practice's number to a total -- it lists another practice's patients by name. It is an
+    // established table and should already be filtered; re-asserting it is a no-op and costs
+    // nothing, which is the point.
+    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Lapsed Patients" };
 
     foreach (var aptName in RLS_TABLES)
     {

@@ -245,7 +245,7 @@
         {
           "type": "aggregate",
           "groupby": [
-            "Current Status"
+            "Lapsed Type"
           ],
           "fields": [
             "Lapse Count"
@@ -264,17 +264,17 @@
         },
         {
           "type": "formula",
-          "expr": "datum['Current Status']",
+          "expr": "datum['Lapsed Type']",
           "as": "lab"
         },
         {
           "type": "formula",
-          "expr": "'2|'+datum['Current Status']",
+          "expr": "'2|'+datum['Lapsed Type']",
           "as": "nid"
         },
         {
           "type": "formula",
-          "expr": "datum.lab==='Set Inactive'?0:datum.lab==='Calculated Inactive'?1:datum.lab==='At Risk'?2:3",
+          "expr": "datum.lab==='Set as inactive'?0:datum.lab==='Calculated as inactive'?1:datum.lab==='At Risk'?2:3",
           "as": "sort_key"
         }
       ]
@@ -364,7 +364,7 @@
           "type": "aggregate",
           "groupby": [
             "Last Activity",
-            "Current Status"
+            "Lapsed Type"
           ],
           "fields": [
             "Lapse Count"
@@ -383,7 +383,7 @@
         },
         {
           "type": "formula",
-          "expr": "'2|'+datum['Current Status']",
+          "expr": "'2|'+datum['Lapsed Type']",
           "as": "tgtID"
         },
         {
@@ -512,7 +512,7 @@
       "transform": [
         {
           "type": "filter",
-          "expr": "(hov == null && hovNode == null) || (hovNode != null && ((hovNode.si === 0 && datum['Last Appointment Reason'] === hovNode.lab) || (hovNode.si === 1 && datum['Last Activity'] === hovNode.lab) || (hovNode.si === 2 && datum['Current Status'] === hovNode.lab))) || (hov != null && ((hovSrcStage === 0 && datum['Last Appointment Reason'] === hovSrcVal && datum['Last Activity'] === hovTgtVal) || (hovSrcStage === 1 && datum['Last Activity'] === hovSrcVal && datum['Current Status'] === hovTgtVal)))"
+          "expr": "(hov == null && hovNode == null) || (hovNode != null && ((hovNode.si === 0 && datum['Last Appointment Reason'] === hovNode.lab) || (hovNode.si === 1 && datum['Last Activity'] === hovNode.lab) || (hovNode.si === 2 && datum['Lapsed Type'] === hovNode.lab))) || (hov != null && ((hovSrcStage === 0 && datum['Last Appointment Reason'] === hovSrcVal && datum['Last Activity'] === hovTgtVal) || (hovSrcStage === 1 && datum['Last Activity'] === hovSrcVal && datum['Lapsed Type'] === hovTgtVal)))"
         }
       ]
     },
@@ -551,7 +551,7 @@
           "type": "aggregate",
           "groupby": [
             "Last Activity",
-            "Current Status"
+            "Lapsed Type"
           ],
           "fields": [
             "Lapse Count"
@@ -565,7 +565,7 @@
         },
         {
           "type": "formula",
-          "expr": "'1|'+datum['Last Activity']+'~2|'+datum['Current Status']",
+          "expr": "'1|'+datum['Last Activity']+'~2|'+datum['Lapsed Type']",
           "as": "key"
         }
       ]
@@ -699,7 +699,7 @@
         {
           "type": "aggregate",
           "groupby": [
-            "Current Status"
+            "Lapsed Type"
           ],
           "fields": [
             "Lapse Count"
@@ -713,7 +713,7 @@
         },
         {
           "type": "formula",
-          "expr": "'2|'+datum['Current Status']",
+          "expr": "'2|'+datum['Lapsed Type']",
           "as": "nid"
         }
       ]
