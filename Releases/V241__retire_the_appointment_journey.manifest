@@ -34,6 +34,10 @@
 # ---------------------------------------------------------------------
 
 DEPLOY   Fabric\Audit.Process_Config.Data.sql
+# ==> AND THE RI CONFIG, WHICH OUTLIVED THE TABLE ONCE BEFORE (V225). <== Four fk rules still
+# pointed at Fact_Appointment_Journey, so the integrity check that runs after every deploy
+# went looking for a table this release drops. The manifest passed and the check did not.
+DEPLOY   Fabric\Audit.RI_Check_Config.Data.sql
 
 # The view first: it depends on the table.
 EXEC     DROP VIEW IF EXISTS PBI.[_Appointment Journey];
