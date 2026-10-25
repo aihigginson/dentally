@@ -2,7 +2,7 @@
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "padding": {
     "top": 20,
-    "bottom": 8,
+    "bottom": 26,
     "left": 150,
     "right": 168
   },
@@ -13,7 +13,7 @@
     },
     {
       "name": "height",
-      "update": "max(180, containerSize()[1] - 28)"
+      "update": "max(180, containerSize()[1] - 46)"
     },
     {
       "name": "nW",
@@ -149,7 +149,7 @@
             "type": "mouseup",
             "markname": "node"
           },
-          "update": "pbiCrossFilterApply(event, event.item.datum.fexpr)"
+          "update": "pbiCrossFilterApply(event, datum.fexpr)"
         },
         {
           "events": {
@@ -157,7 +157,7 @@
             "type": "mouseup",
             "markname": "ribbon"
           },
-          "update": "pbiCrossFilterApply(event, event.item.datum.fexpr)"
+          "update": "pbiCrossFilterApply(event, datum.fexpr)"
         },
         {
           "events": {
@@ -1199,7 +1199,7 @@
             "signal": "-140"
           },
           "y": {
-            "signal": "height + 6"
+            "signal": "height + 9"
           },
           "align": {
             "value": "left"
