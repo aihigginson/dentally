@@ -42,7 +42,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'<  Back'"
+                  "Value": "'Close'"
                 }
               }
             },
@@ -110,19 +110,6 @@
           },
           "selector": {
             "id": "default"
-          }
-        }
-      ],
-      "shape": [
-        {
-          "properties": {
-            "roundEdge": {
-              "expr": {
-                "Literal": {
-                  "Value": "6L"
-                }
-              }
-            }
           }
         }
       ]

@@ -3,11 +3,11 @@
   "name": "1a7c4e9b02f5d6380033",
   "position": {
     "x": 0,
-    "y": 80,
-    "z": 0,
-    "height": 424,
+    "y": 80.1670146137787,
+    "z": 20,
+    "height": 519.749478079332,
     "width": 1280,
-    "tabOrder": 0
+    "tabOrder": 2
   },
   "visual": {
     "visualType": "tableEx",
@@ -280,21 +280,6 @@
           },
           "selector": {
             "metadata": "List Patients.Total Paid"
-          }
-        }
-      ]
-    },
-    "visualContainerObjects": {
-      "title": [
-        {
-          "properties": {
-            "text": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Lapsing patients -- set inactive, calculated inactive, or at risk'"
-                }
-              }
-            }
           }
         }
       ]
