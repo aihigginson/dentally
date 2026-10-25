@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "1a7c4e9b02f5d6380033",
   "position": {
     "x": 0,
@@ -100,7 +100,8 @@
                 }
               },
               "queryRef": "List Patients.Standard Payment Plan",
-              "nativeQueryRef": "Standard Payment Plan"
+              "nativeQueryRef": "Payment Plan",
+              "displayName": "Payment Plan"
             },
             {
               "field": {
@@ -160,6 +161,23 @@
             }
           ]
         }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "List Patients"
+                  }
+                },
+                "Property": "Marketing Consent"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
       }
     },
     "objects": {
@@ -188,7 +206,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "160D"
+                  "Value": "147.73400115097593D"
                 }
               }
             }
@@ -244,7 +262,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "130D"
+                  "Value": "76.81215579563295D"
                 }
               }
             }
@@ -258,7 +276,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "110D"
+                  "Value": "93.10580460723514D"
                 }
               }
             }
@@ -272,7 +290,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "200D"
+                  "Value": "210.79114595386417D"
                 }
               }
             }
@@ -286,7 +304,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "110D"
+                  "Value": "116.19087185963825D"
                 }
               }
             }
@@ -300,7 +318,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "60D"
+                  "Value": "81.02593408239534D"
                 }
               }
             }
@@ -311,7 +329,6 @@
         }
       ]
     },
-    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "background": [
         {
@@ -344,7 +361,152 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "9c0c6eef2bb350f774db",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "feac4c3edef26e1cb228",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Lapsed Patients"
+              }
+            },
+            "Property": "Last Appointment Reason Detail"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "03521d453af3445bffe2",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Lapsed Patients"
+              }
+            },
+            "Property": "Last Activity"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "879ab94daef8474e9a7b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Lapsed Patients"
+              }
+            },
+            "Property": "Lapsed Type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "55c0804f89dc5df0498b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Last Appointment Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "f941975f4b2faa90b71b",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Standard Payment Plan"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "1c33a493dce2c8ac4617",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Mobile Phone"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "b9f0b0ccc9d673803441",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Email Address"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "de61ad6cea34e0d4b611",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Marketing Consent"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "50dd2a7f6764949e5e9e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Total Paid"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   },
   "isHidden": true
 }

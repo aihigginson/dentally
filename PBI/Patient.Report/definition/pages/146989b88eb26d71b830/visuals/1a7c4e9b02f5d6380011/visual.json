@@ -3,10 +3,10 @@
   "name": "1a7c4e9b02f5d6380011",
   "position": {
     "x": 0,
-    "y": 80.1670146137787,
+    "y": 80.375426621160415,
     "z": 0,
-    "height": 519.749478079332,
-    "width": 600,
+    "height": 519.62457337883961,
+    "width": 608.70307167235489,
     "tabOrder": 0
   },
   "visual": {
@@ -162,14 +162,14 @@
             "viewportHeight": {
               "expr": {
                 "Literal": {
-                  "Value": "496D"
+                  "Value": "514D"
                 }
               }
             },
             "viewportWidth": {
               "expr": {
                 "Literal": {
-                  "Value": "568D"
+                  "Value": "597D"
                 }
               }
             },
@@ -239,6 +239,40 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "3D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "3D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
                 }
               }
             }
