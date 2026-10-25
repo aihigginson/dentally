@@ -41,7 +41,8 @@
                 }
               },
               "queryRef": "_Lapsed Patients.Last Activity",
-              "nativeQueryRef": "Last Activity"
+              "nativeQueryRef": "Last Activity",
+              "displayName": "Activity"
             },
             {
               "field": {
@@ -55,7 +56,8 @@
                 }
               },
               "queryRef": "_Lapsed Patients.Lapsed Type",
-              "nativeQueryRef": "Lapsed Type"
+              "nativeQueryRef": "Lapsed Type",
+              "displayName": "Status"
             },
             {
               "field": {

@@ -674,10 +674,34 @@ def filters():
         # FYs cutover..current). Per-tenant + FYyy labels -> driven by the warehouse, not hardcoded.
         # Resilient: a warehouse not yet on the tenant-FY grouping (no Tenant_ID column) must NOT break
         # the whole filter payload -> fall back to [] and the app keeps its static period options.
+        # ==> A PERIOD THAT HAS ALREADY CLOSED IS MISLEADING, SO IT IS NOT OFFERED. <==
+        # Almost everything the product reports is current-state: active patients, overdue
+        # recalls, who is lapsing, contact-detail completeness. Those answer "as things stand",
+        # and standing inside a window that closed last December makes them read as history
+        # when they are not. Last 3 Months, Last 12 Months and the CURRENT financial year all
+        # run to the present; a prior FY does not, and was only ever a trap.
+        #
+        # ==> "UP TO NOW" IS NOT "UP TO TODAY". <== The rolling groupings end on the last build
+        # date, not on the calendar date -- seven days back when this was written, because the
+        # warehouse builds weekly. Testing for today's date therefore returned NOTHING and
+        # would have emptied the filter. The honest test is that a grouping runs as far as the
+        # data does: its last date equals the latest date any grouping has.
+        #
+        # Data-driven on purpose -- no label is parsed, so a grouping added later is judged by
+        # its dates rather than by whether someone remembered to add it to a list here.
         periods = []
         try:
-            cur.execute(f"SELECT DISTINCT Date_Grouping FROM Gold.Dim_Date_Grouping WHERE Tenant_ID IN ({placeholders})", tids)
-            _pv = [r[0] for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT   g.Date_Grouping, MAX(d.Full_Date) AS Ends "
+                f"FROM     Gold.Dim_Date_Grouping g "
+                f"JOIN     Gold.Dim_Date d ON d.pk_Date = g.fk_Date "
+                f"WHERE    g.Tenant_ID IN ({placeholders}) "
+                f"GROUP BY g.Date_Grouping", tids)
+            _rows = cur.fetchall()
+            # Compared in Python rather than a HAVING subquery: Fabric is awkward about scalar
+            # subqueries, and this needs no second round trip.
+            _latest = max((r[1] for r in _rows), default=None)
+            _pv = [r[0] for r in _rows if r[1] == _latest]
             def _prank(v):
                 if v == 'Last 3 Months':  return (0, 0)
                 if v == 'Last 12 Months': return (1, 0)

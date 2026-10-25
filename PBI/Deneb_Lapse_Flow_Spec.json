@@ -2,9 +2,9 @@
   "$schema": "https://vega.github.io/schema/vega/v5.json",
   "padding": {
     "top": 20,
-    "bottom": 26,
+    "bottom": 8,
     "left": 14,
-    "right": 168
+    "right": 120
   },
   "signals": [
     {
@@ -69,7 +69,7 @@
     },
     {
       "name": "cNodeBarAlt",
-      "value": "#1A527A"
+      "value": "#4E86B4"
     },
     {
       "name": "cNodeHover",
@@ -269,11 +269,6 @@
           "type": "formula",
           "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\"",
           "as": "fexpr"
-        },
-        {
-          "type": "formula",
-          "expr": "\"Appointment = \" + datum['Last Appointment Reason']",
-          "as": "flabel"
         }
       ]
     },
@@ -320,11 +315,6 @@
           "type": "formula",
           "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
           "as": "fexpr"
-        },
-        {
-          "type": "formula",
-          "expr": "\"Activity = \" + datum['Last Activity']",
-          "as": "flabel"
         }
       ]
     },
@@ -371,11 +361,6 @@
           "type": "formula",
           "expr": "\"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
           "as": "fexpr"
-        },
-        {
-          "type": "formula",
-          "expr": "\"Status = \" + datum['Lapsed Type']",
-          "as": "flabel"
         }
       ]
     },
@@ -458,11 +443,6 @@
           "type": "formula",
           "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\" + \" && \" + \"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
           "as": "fexpr"
-        },
-        {
-          "type": "formula",
-          "expr": "\"Appointment = \" + datum['Last Appointment Reason'] + \" and \" + \"Activity = \" + datum['Last Activity']",
-          "as": "flabel"
         }
       ]
     },
@@ -505,11 +485,6 @@
           "type": "formula",
           "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\" + \" && \" + \"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
           "as": "fexpr"
-        },
-        {
-          "type": "formula",
-          "expr": "\"Activity = \" + datum['Last Activity'] + \" and \" + \"Status = \" + datum['Lapsed Type']",
-          "as": "flabel"
         }
       ]
     },
@@ -870,19 +845,6 @@
           "as": "display_tot"
         }
       ]
-    },
-    {
-      "name": "selcap",
-      "source": [
-        "nodes",
-        "edges"
-      ],
-      "transform": [
-        {
-          "type": "filter",
-          "expr": "selKey !== '' && (datum.nid === selKey || datum.key === selKey)"
-        }
-      ]
     }
   ],
   "scales": [
@@ -1033,7 +995,7 @@
             "value": "#FFFFFF"
           },
           "limit": {
-            "signal": "datum.si === 2 ? 158 : max(60, dx - nW - 14)"
+            "signal": "datum.si === 2 ? 110 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
@@ -1087,7 +1049,7 @@
             "signal": "cLabelText"
           },
           "limit": {
-            "signal": "datum.si === 2 ? 158 : max(60, dx - nW - 14)"
+            "signal": "datum.si === 2 ? 110 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
@@ -1194,46 +1156,6 @@
             "value": "left"
           }
         }
-      }
-    },
-    {
-      "name": "selcaption",
-      "type": "text",
-      "encode": {
-        "enter": {
-          "x": {
-            "signal": "0"
-          },
-          "y": {
-            "signal": "height + 9"
-          },
-          "align": {
-            "value": "left"
-          },
-          "baseline": {
-            "value": "top"
-          },
-          "fontSize": {
-            "value": 11
-          },
-          "fontFamily": {
-            "value": "Segoe UI"
-          },
-          "fontWeight": {
-            "value": "bold"
-          },
-          "fill": {
-            "signal": "cHeaderText"
-          }
-        },
-        "update": {
-          "text": {
-            "signal": "'Filtered on ' + datum.flabel"
-          }
-        }
-      },
-      "from": {
-        "data": "selcap"
       }
     }
   ],
