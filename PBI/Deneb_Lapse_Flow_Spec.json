@@ -825,7 +825,7 @@
         },
         "update": {
           "fill": {
-            "signal": "hovNode != null ? cNodeHover : cFlowHover"
+            "signal": "hovNode != null ? (hovNode.si === 1 && indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], hovNode.lab) >= 0 ? scale('actColor', hovNode.lab) : cNodeHover) : (hov != null && hov.colorKey && indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], hov.colorKey) >= 0 ? scale('actColor', hov.colorKey) : cFlowHover)"
           },
           "path": {
             "signal": "'M'+(datum.sx+nW)+','+datum.bsy0+' C'+datum.mx+','+datum.bsy0+' '+datum.mx+','+datum.bty0+' '+datum.tx+','+datum.bty0+' L'+datum.tx+','+datum.oty1+' C'+datum.mx+','+datum.oty1+' '+datum.mx+','+datum.osy1+' '+(datum.sx+nW)+','+datum.osy1+' Z'"
@@ -858,10 +858,16 @@
         },
         "update": {
           "fill": {
-            "signal": "hovNode != null && datum.nid === hovNode.nid ? cNodeHover : (datum.si === 1 && indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], datum.lab) >= 0 ? scale('actColor', datum.lab) : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))"
+            "signal": "datum.si === 1 && indexof(['DNA','Cancellation Patient','Cancellation Practice','Cancellation Other','Recall Not Set','Recall Not Sent','1st Reminder','2nd Reminder'], datum.lab) >= 0 ? scale('actColor', datum.lab) : (hovNode != null && datum.nid === hovNode.nid ? cNodeHover : (datum.sort_key % 2 === 0 ? cNodeBar : cNodeBarAlt))"
           },
           "cursor": {
             "value": "pointer"
+          },
+          "stroke": {
+            "signal": "hovNode != null && datum.nid === hovNode.nid ? '#101820' : null"
+          },
+          "strokeWidth": {
+            "signal": "hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0"
           }
         }
       }
