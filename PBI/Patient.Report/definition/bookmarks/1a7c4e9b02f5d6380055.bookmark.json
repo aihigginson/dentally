@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
-  "displayName": "Lost Patient List",
+  "displayName": "Lapsing List",
   "name": "1a7c4e9b02f5d6380055",
   "options": {
     "applyOnlyToTargetVisuals": true,

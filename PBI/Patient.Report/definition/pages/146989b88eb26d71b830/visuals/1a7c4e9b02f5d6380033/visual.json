@@ -34,6 +34,20 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
+                      "Entity": "_Lapsed Patients"
+                    }
+                  },
+                  "Property": "Lapsed Type"
+                }
+              },
+              "queryRef": "_Lapsed Patients.Lapsed Type",
+              "nativeQueryRef": "Lapsed Type"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
                       "Entity": "List Patients"
                     }
                   },
@@ -277,7 +291,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Lost -- no visit in 24+ months, still active in Dentally'"
+                  "Value": "'Lapsing patients -- set inactive, calculated inactive, or at risk'"
                 }
               }
             }
@@ -286,63 +300,6 @@
       ]
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "1a7c4e9b02f5d63800f1",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "_Lapsed Patients"
-              }
-            },
-            "Property": "Lapsed Type"
-          }
-        },
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [
-            {
-              "Name": "l",
-              "Entity": "_Lapsed Patients",
-              "Type": 0
-            }
-          ],
-          "Where": [
-            {
-              "Condition": {
-                "In": {
-                  "Expressions": [
-                    {
-                      "Column": {
-                        "Expression": {
-                          "SourceRef": {
-                            "Source": "l"
-                          }
-                        },
-                        "Property": "Lapsed Type"
-                      }
-                    }
-                  ],
-                  "Values": [
-                    [
-                      {
-                        "Literal": {
-                          "Value": "'Calculated as inactive'"
-                        }
-                      }
-                    ]
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      }
-    ]
   },
   "isHidden": true
 }
