@@ -2157,6 +2157,12 @@ def test_hierarchy_get_is_reached_by_staff(appmod, client, monkeypatch):
     assert r.status_code == 500          # past the gate, failed on the stubbed connection
 
 
+# ==> THE HOME STRIP THAT CONSUMED THESE WAS WITHDRAWN; THE ROUTE IS PARKED, NOT DELETED. <==
+# The ranking multiplied 4-week movement by Area_Weight -- a column that exists for the Home
+# page's five AREA HEADERS -- and 16 of the 44 active metrics carry no weight at all, so they
+# default to 5 and became eligible to headline. A practice-grain rate move can also be pure
+# clinician mix: the "Average Plan Value +33%" card was two clinicians doing bigger work on
+# FEWER plans. These tests keep the endpoint honest until there is a display worth the data.
 def test_insights_requires_auth(client):
     """The highlights are tenant data, so the route sits behind the same gate as the rest.
 
@@ -2259,25 +2265,3 @@ def test_insights_hides_itself_across_several_practices(appmod, client, monkeypa
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
     body = client.get('/api/insights').get_json()
     assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}
-
-
-def test_the_insight_strip_uses_authfetch(appmod):
-    """==> A BARE fetch() HERE IS INVISIBLE, NOT BROKEN. <==
-
-    Auth in this app is a BEARER TOKEN, not a cookie, and authFetch is also what carries
-    X-Acting-Client. loadInsights shipped calling fetch() directly: every request 401'd, the
-    strip hid itself on the non-ok response, and nothing reached the server log either --
-    so the cards were simply absent with no error anywhere. Asserted in the page source
-    because there is no other signal when this regresses.
-    """
-    import io
-    import os
-    import re
-    page = io.open(os.path.join(os.path.dirname(appmod.__file__), 'index.html'),
-                   encoding='utf-8').read()
-    start = page.find('async function loadInsights')
-    assert start != -1, 'loadInsights has moved or been renamed'
-    body = page[start:].split('\n    }')[0]
-    assert "authFetch('/api/insights')" in body
-    # The bare call is the bug: the 'h' guard lets authFetch through and nothing else.
-    assert not re.search(r"[^h]fetch\('/api/insights'", body)
