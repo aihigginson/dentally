@@ -1,15 +1,14 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "f23e328a6835926cc84e",
   "position": {
-    "x": 644,
-    "y": 348,
+    "x": 639.93174061433444,
+    "y": 348.12286689419795,
     "z": 6002,
-    "height": 236,
-    "width": 628,
+    "height": 236.00682593856655,
+    "width": 632.25255972696243,
     "tabOrder": 6002
   },
-  "isHidden": true,
   "visual": {
     "visualType": "tableEx",
     "query": {
@@ -66,21 +65,6 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "List Dentist"
-                    }
-                  },
-                  "Property": "Full Name"
-                }
-              },
-              "queryRef": "List Dentist.Full Name",
-              "nativeQueryRef": "Full Name1",
-              "displayName": "Dentist"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
                       "Entity": "List Hygienist"
                     }
                   },
@@ -121,24 +105,6 @@
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Column": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "List Date"
-                  }
-                },
-                "Property": "Full Date"
-              }
-            },
-            "direction": "Descending"
-          }
-        ],
-        "isDefaultSort": true
       }
     },
     "objects": {
@@ -194,6 +160,22 @@
             }
           }
         }
+      ],
+      "columnWidth": [
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "139.64503803163947D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "List Patients.Full Name"
+          }
+        }
       ]
     },
     "visualContainerObjects": {
@@ -238,5 +220,133 @@
         }
       ]
     }
-  }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "28d5dd7522f716ad1e47",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Full Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "dcd41231d9a71e048869",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Patients"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "6249e1a7c87cb21c49b8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Payment Plans"
+              }
+            },
+            "Property": "Payment Plan Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c198e0559066b1ccdfaa",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Hygienist"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "572c08fb01aecba6201f",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Revenue Cross Charge"
+              }
+            },
+            "Property": "Leg"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "_",
+              "Entity": "_Revenue Cross Charge",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "_"
+                          }
+                        },
+                        "Property": "Leg"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'Credit'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "f56a7c84c9c37cbd58f4",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Hygienist Cross-Charge"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  },
+  "isHidden": true
 }
