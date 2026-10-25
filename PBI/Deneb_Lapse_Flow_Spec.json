@@ -4,7 +4,7 @@
     "top": 20,
     "bottom": 8,
     "left": 14,
-    "right": 120
+    "right": 170
   },
   "signals": [
     {
@@ -995,7 +995,7 @@
             "value": "#FFFFFF"
           },
           "limit": {
-            "signal": "datum.si === 2 ? 110 : max(60, dx - nW - 14)"
+            "signal": "datum.si === 2 ? 162 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
@@ -1049,7 +1049,7 @@
             "signal": "cLabelText"
           },
           "limit": {
-            "signal": "datum.si === 2 ? 110 : max(60, dx - nW - 14)"
+            "signal": "datum.si === 2 ? 162 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
