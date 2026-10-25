@@ -1,0 +1,64 @@
+# =====================================================================
+# Release V247 -- the second reminder gets a date, and Retention can see it
+# =====================================================================
+# ==> Recall_Status COULD NEVER SAY '2nd Reminder'. <== Its branch tests dd_sr.pk_Date, and
+# dd_sr joined Dim_Date on Second_Reminder_Sent_At -- which Dentally leaves empty on every
+# recall for this tenant. Checked at the landing table, not inferred: second_reminder_sent_at
+# and second_reminder_type are NULL on all 125 staged recalls, while first_reminder_sent_at
+# and last_reminded_at are set on 111 and times_contacted >= 2 on 67. Our ingest maps all
+# three faithfully; Dentally simply does not populate them here.
+#
+# Recall_Status is the column every visual on the Retention tab binds, which is why correcting
+# second reminders in V240 changed nothing there: the lapse loader learned to count
+# Times_Contacted and this one never did. fk_Date_Second_Reminder was always NULL for the same
+# reason -- the second reminder had no date at all.
+#
+# ---------------------------------------------------------------------
+# WHY last_reminded_at IS THE RIGHT DATE, AND HOW THAT WAS CHECKED.
+# ---------------------------------------------------------------------
+# Stage.Recalls also lands the full `reminders` JSON array, which Bronze drops. It is
+# populated on all 125 rows, untruncated (longest 888 chars), and ordered NEWEST FIRST. Tested
+# against it:
+#
+#   * JSON_VALUE(reminders,'$[0].date') equals last_reminded_at on all 111 rows that have one
+#     -- so the latest reminder IS last_reminded_at.
+#   * JSON_VALUE(reminders,'$[1].date') is present on exactly 67 rows: the same 67 as
+#     times_contacted >= 2, with no disagreement either way.
+#
+# So "chased twice or more -> the second reminder's date is the last contact" is confirmed by
+# the source, not assumed. The real Second_Reminder_Sent_At still wins wherever Dentally does
+# populate it; last_reminded_at is the fallback.
+#
+# ---------------------------------------------------------------------
+# THE ARRAY ITSELF IS NOT CONSUMED HERE.
+# ---------------------------------------------------------------------
+# It carries per-reminder type, id, date and template_name -- the template names even expose
+# the sequence ("OAB Hygiene recall 3"). That is a Bronze child table and a richer reminder
+# history, deliberately left for its own release. This one gives the second reminder a date
+# and lets Retention show it.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Fact_Recalls.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Recalls @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE WHOLE POINT: THE BRANCH MUST BE REACHABLE. <== A fix that left Recall_Status unable
+# to say '2nd Reminder' would pass every other check here and change nothing on Retention.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID = 100 AND Recall_Status = '2nd Reminder'; IF @n = 0 BEGIN SET @e = 'V247 FAILED: no recall reaches 2nd Reminder -- the branch is still unreachable.'; THROW 50780, @e, 1; END;
+# And it must agree with the contact count, which is the independent evidence.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID = 100 AND Times_Contacted >= 2 AND fk_Date_Second_Reminder IS NULL; IF @n <> 0 BEGIN SET @e = 'V247 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) chased twice or more still have no second-reminder date.'; THROW 50781, @e, 1; END;
+# ==> A SECOND REMINDER CANNOT PREDATE THE FIRST. <== The fallback reads a different field, so
+# this is the check that it is the LATEST contact and not something older.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Second_Reminder_Sent_Date IS NOT NULL AND First_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date < First_Reminder_Sent_Date; IF @n <> 0 BEGIN SET @e = 'V247 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' second reminder(s) predate their first.'; THROW 50782, @e, 1; END;
+# A recall chased once or not at all must NOT acquire a second-reminder date.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Times_Contacted < 2 AND Second_Reminder_Sent_Date IS NOT NULL AND NULLIF(TRIM(ISNULL(Second_Reminder_Type,'')),'') IS NULL; IF @n <> 0 BEGIN SET @e = 'V247 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) chased fewer than twice have been given a second-reminder date.'; THROW 50783, @e, 1; END;
+# The view the Retention visuals read must carry the new column.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Recalls' AND COLUMN_NAME = 'Second Reminder Sent Date'; IF @n <> 1 BEGIN SET @e = 'V247 FAILED: the PBI view does not expose the second-reminder date.'; THROW 50784, @e, 1; END;
+# Nothing may have lost its first-reminder date in the process.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID = 100 AND Recall_Status IN ('1st Reminder','2nd Reminder') AND First_Reminder_Sent_Date IS NULL AND Second_Reminder_Sent_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V247 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' reminded recall(s) carry no reminder date at all.'; THROW 50785, @e, 1; END;
+
+TEST

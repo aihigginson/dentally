@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Gold].[Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -30,6 +30,7 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Due_Date]               [date]          NULL,
 	[Run_Date]               [date]          NULL,
 	[First_Reminder_Sent_Date] [date]        NULL,  -- date the first recall reminder was sent
+[Second_Reminder_Sent_Date] [date]        NULL,  -- date the first recall reminder was sent
 	[Days_Overdue]           [int]           NULL,
 	-- Pre-computed flags: replace heavy DAX set operations in Retention Outlook
 	[Is_In_Scope]            [bit]           NULL,  -- first reminder sent OR due within [-24m, +1m] of ETL run
