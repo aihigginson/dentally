@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "f1e2d3c4b5a601110001",
   "position": {
-    "x": 8,
-    "y": 128,
+    "x": 8.19112627986348,
+    "y": 127.98634812286689,
     "z": 9100,
-    "height": 212,
-    "width": 774,
+    "height": 220.13651877133105,
+    "width": 628.15699658703068,
     "tabOrder": 9100
   },
   "visual": {
@@ -28,8 +28,8 @@
               },
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
-              "format": "MMM yyyy",
-              "displayName": "Month"
+              "displayName": "Month",
+              "format": "MMM yyyy"
             },
             {
               "field": {
@@ -226,6 +226,108 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "dc265e7f4751319f1811",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Month Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "94dce74d9aa9999e4dab",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Private Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "bcd53456610931943bb1",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Plan Capitation Fee"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "8733e1aa60b93e33c970",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "NHS Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "5140cfc280739fe7257c",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Total Revenue"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "98db84d1cb48c0eb4293",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Earnings"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a95a1f68d4bac07335e1",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Cross-Charge Out"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   },
   "isHidden": true
 }

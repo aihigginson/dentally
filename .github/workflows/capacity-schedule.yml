@@ -22,12 +22,18 @@ name: Fabric capacity schedule
 # has LANDED by the boundary. Resuming a paused capacity takes a couple of minutes and a
 # resize a few more; without the lead, 06:00 would be when the climb to F4 starts.
 
+# ==> THE SCHEDULE TRIGGER IS GONE, AND IS NOT COMING BACK. <== Measured 09-23/10/2026,
+# NOT ONE of fourteen scheduled firings ran on time: half never ran at all and the median
+# delay was 4h08. The 05:45 resume landed at about 09:36, so the site was down for the
+# first four hours of the working day and caj-appdb-sync-prod failed every ten minutes
+# from 07:00 until someone resumed the capacity by hand. Firing more often would not have
+# helped -- the delay applied to every firing, not to a random few.
+#
+# The schedule now runs as the Container Apps Job caj-capacity-schedule-prod, hourly at
+# :45, from Web/capacity_schedule.py. Jobs in that environment fire to the minute.
+# This workflow stays as the MANUAL lever: it is the thing to reach for when the capacity
+# is in the wrong state and you want it fixed now.
 on:
-  schedule:
-    #     Boundaries are 00:00, 06:00, 18:00 and 22:00 UK, fired 15 minutes early: that is
-    #     23:45 05:45 17:45 21:45 in winter, and the same wall-clock times land an hour
-    #     earlier in UTC over summer. Union of both, so either offset is covered.
-    - cron: '45 4,5,16,17,20,21,22,23 * * *'
   workflow_dispatch:
     inputs:
       at:

@@ -87,6 +87,11 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONER_DIARY_BREAKS', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONER_DIARY', 'GOLD_FACT_PRACTITIONER_DIARIES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_PRACTITIONERS', 'GOLD_DIM_PRACTITIONERS', 'DATA', 3, 1);
+-- V229: Gold.usp_Load_Dim_Patients resolves fk_Prior_Dentist to a pk_Practitioner, so the
+-- practitioner dimension has to be loaded first. Both are dimensions in the same wave, so
+-- without this edge the ordering is incidental rather than guaranteed -- and a practitioner
+-- loaded after the patients would leave the fk NULL for a whole day.
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_DIM_PATIENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_RECALLS', 'GOLD_FACT_RECALLS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_SITES', 'GOLD_DIM_PRACTICE_SITES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_APPOINTMENTS', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 3, 1);

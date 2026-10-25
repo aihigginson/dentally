@@ -292,14 +292,42 @@
             animation: spin 0.8s linear infinite;
         }
         .embed-full {
-            /* Fill the content area and align left. The old
-               max-width: calc((100vh - 100px) * 16/9) used a magic chrome-height
-               constant that underestimated real chrome, sizing the box wrong and
-               pushing the report off the left edge — removed. */
+            /* ==> SIZE THE CONTAINER TO THE CANVAS RATIO; DO NOT LET POWER BI CENTRE. <==
+               Under FitToPage, PBI scales the canvas to fit the iframe and CENTRES it, so a
+               wide display gets equal bars left and right. Giving the CONTAINER the canvas
+               ratio leaves PBI no spare width to centre within: the leftover becomes page
+               background on the RIGHT and the report sits hard left.
+
+               aspect-ratio derives the width from the height the flex row has already
+               resolved, so there is no viewport arithmetic. The old
+               max-width: calc((100vh - 100px) * 16/9) guessed the chrome height, guessed
+               it short, and pushed the report off the left edge — hence no constants here.
+
+               Measured: 2560x1080 -> 2025 wide, 535px to the right; 1366x768 -> 1359 wide,
+               7px. When the area is TALLER than 2.133 (e.g. 1920x1080, ratio 2.023)
+               max-width wins, the box stays full width, and PBI letterboxes about 2.5% top
+               and bottom — the previous behaviour, and not worth chasing. */
             flex: 1; min-height: 0;
             width: 100%; margin: 0; align-self: flex-start;
             background: white; border: none; display: block;
             overflow: hidden;
+        }
+        /* ==> THE GUARD IS NOT PEDANTRY: WITHOUT aspect-ratio THIS COLLAPSES. <== The rule
+           below swaps width to auto so the ratio can drive it. In a browser that does not
+           honour aspect-ratio, `width: auto` on a block flex item with
+           align-self: flex-start is fit-content -- and the child is an iframe injected by
+           powerbi.js with no intrinsic width, so the box resolves to ZERO and the report
+           disappears entirely. @supports keeps such a browser on the full-width rule above,
+           which is the behaviour that shipped for the last two years.
+
+           aspect-ratio is Chrome 88 / Firefox 89 / Safari 15, all 2021, and the Safari
+           flex-item bugs were fixed in 16 -- so this should never trigger. It costs one
+           line to be certain, against a failure mode that is a blank page. */
+        @supports (aspect-ratio: 1 / 1) {
+            .embed-full {
+                aspect-ratio: 1280 / 600;
+                width: auto; max-width: 100%;
+            }
         }
         .embed-full iframe,
         .embed-full div[class*="powerbi"] { border: none !important; outline: none; }
@@ -719,6 +747,7 @@
                 <button class="settings-tab" data-stab="team">Subscriptions</button>
                 <button class="settings-tab" data-stab="invoices">Invoices</button>
                 <button class="settings-tab" data-stab="admin" id="stab-admin-btn" style="display:none">Admin</button>
+                <button class="settings-tab" data-stab="hierarchy" id="stab-hierarchy-btn" style="display:none">Hierarchy</button>
             </div>
 
             <div class="settings-pane active" id="stab-finance">
@@ -870,6 +899,19 @@
                 </div>
             </div>
 
+            <div class="settings-pane" id="stab-hierarchy">
+                <div class="defs-group">Client hierarchy &mdash; Analytically only</div>
+                <div class="defs-item-desc" style="margin-bottom:14px">
+                    Tie each practice to a client, then place every site in an area. Regions and
+                    areas belong to the client. A level with only one child is hidden from the
+                    customer, so a single-site practice never sees any of this.
+                </div>
+                <div id="hier-body" style="font-size:13px">Loading&hellip;</div>
+                <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+                    <button id="hier-save" style="padding:8px 16px;border:none;border-radius:4px;background:#1A527A;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+                    <span id="hier-msg" style="color:#475467"></span>
+                </div>
+            </div>
             <div class="settings-pane" id="stab-admin">
                 <div class="defs-group">Billing console &mdash; Analytically staff only</div>
                 <div class="defs-item">
@@ -1492,6 +1534,11 @@
             }
             const ab = document.getElementById('stab-admin-btn');
             if (ab) ab.style.display = '';
+            // Analytically only, for now. The CONTROL is _require_staff on the routes,
+            // which tests the mailbox domain Entra asserts at sign-in; this merely stops
+            // the tab appearing for anyone else.
+            const hb = document.getElementById('stab-hierarchy-btn');
+            if (hb) hb.style.display = '';
         }
 
         // Practice admins get the Settings gear (Connect Xero lives there).
@@ -1705,11 +1752,19 @@
 
     // Hang the panel under its button, clamped to the viewport so a long summary on a
     // narrow window cannot push it off the right-hand edge.
+    // ==> ANCHOR THE LEFT EDGE, NOT THE RIGHT. <== Anchoring right meant the panel grew
+    // LEFTWARDS from the button, and this button sits left of centre in the header -- so
+    // at its full width the panel's left edge ran off the screen. It now hangs from the
+    // button's left edge and is clamped to the viewport, so it can never leave the window
+    // on either side whatever the header width or the length of the summary.
     function positionFilterBar() {
         const r = filterToggleBtn.getBoundingClientRect();
         filterBar.style.top = (r.bottom + 6) + 'px';
-        filterBar.style.left = '';
-        filterBar.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
+        filterBar.style.right = '';
+        // measured while open, so offsetWidth is the real laid-out width
+        const w = filterBar.offsetWidth || 320;
+        const maxLeft = Math.max(12, window.innerWidth - w - 12);
+        filterBar.style.left = Math.min(Math.max(12, r.left), maxLeft) + 'px';
     }
 
     function setFilterBar(open) {
@@ -1805,10 +1860,29 @@
     function noteBookmark(key, name, displayName, pageName) {
         const trail = crumbTrail(key);
         if (!trail || !name) return;
-        // a view replaces the view before it; it does not stack on it
-        while (trail.length && trail[trail.length - 1].kind === 'bookmark') trail.pop();
+        // ==> A TAB REPLACES; A DETAIL VIEW STACKS. <== A report that groups its bookmarks is
+        // saying which of them are tabs: the grouped ones are what the navigator draws, and a
+        // bookmark OUTSIDE every group is a detail reached from one of them. So a tab pops the
+        // whole view trail as before, and a detail view pops only other details -- which is
+        // what turns "Patient > Full Screen" into "Patient > Lapsing > Full Screen".
+        // A report with no groups has no detail views, so every bookmark is a tab and this
+        // behaves exactly as it always did.
+        const tabs = sectionSubnavData[key] && sectionSubnavData[key].tabBookmarks;
+        const isTab = !tabs || !tabs.size || tabs.has(name);
+        while (trail.length && trail[trail.length - 1].kind === 'bookmark'
+               && (isTab || !tabs.has(trail[trail.length - 1].name))) trail.pop();
         trail.push({ kind: 'bookmark', name, displayName: displayName || name, pageName });
         if (key === activeSection) renderBreadcrumb(key);
+    }
+
+    // Which bookmarks are TABS, i.e. children of a group? getBookmarks() nests them, so the
+    // ones with a parent are the navigator's; anything top-level with no children is a detail.
+    function groupedBookmarkNames(list, out) {
+        out = out || new Set();
+        (list || []).forEach(b => {
+            if (b.children && b.children.length) b.children.forEach(c => out.add(c.name));
+        });
+        return out;
     }
 
     // Bookmark groups nest, so flatten before anyone takes "the first one".
@@ -1940,10 +2014,14 @@
         // "My Data > Revenue & Mix" instead of naming the report and stopping.
         (async () => {
             try {
-                const all = flattenBookmarks(await report.bookmarksManager.getBookmarks());
+                const raw = await report.bookmarksManager.getBookmarks();
+                const all = flattenBookmarks(raw);
                 const d = sectionSubnavData[sectionKey];
                 if (!d || !all.length) return;
                 d.bookmarks = all;
+                // Captured from the RAW list: flattening throws away the one thing that says
+                // which bookmarks are tabs and which are details hanging off them.
+                d.tabBookmarks = groupedBookmarkNames(raw);
                 if (!(d.trail || []).some(t => t.kind === 'bookmark')) {
                     noteBookmark(sectionKey, all[0].name, all[0].displayName, d.activePage);
                 }
@@ -1962,7 +2040,13 @@
                 const d = sectionSubnavData[sectionKey];
                 let label = bm;
                 try {
-                    const all = await report.bookmarksManager.getBookmarks();
+                    // ==> getBookmarks() RETURNS GROUPS, NOT A FLAT LIST. <== A grouped
+                    // bookmark is a CHILD, so a flat .find() never matches it and the
+                    // breadcrumb falls back to showing the raw GUID. The Patient report
+                    // groups its five tabs so the sixth stays off the navigator, which is
+                    // exactly when this bites. flattenBookmarks already exists for the
+                    // seeding call a few lines up -- this is the one place that missed it.
+                    const all = flattenBookmarks(await report.bookmarksManager.getBookmarks());
                     label = (all.find(b => b.name === bm) || {}).displayName || bm;
                 } catch (err) { /* fall back to the internal name */ }
                 noteBookmark(sectionKey, bm, label, d ? d.activePage : null);
@@ -2283,8 +2367,270 @@
     { const _cl = document.getElementById('contact-link'); if (_cl) _cl.addEventListener('click', e => { e.preventDefault(); openContact(); }); }
     { const _cc = document.getElementById('team-cancel-btn'); if (_cc) _cc.addEventListener('click', openCancel); }
     document.getElementById('assoc-pay-save').addEventListener('click', savePractitionerPay);
+    { const _hs = document.getElementById('hier-save');
+      if (_hs) _hs.addEventListener('click', saveHierarchy); }
     { const _fm = document.getElementById('fy-start-month'); if (_fm) _fm.addEventListener('change', _updateFyDisplay);
       const _fs = document.getElementById('fy-save'); if (_fs) _fs.addEventListener('click', saveFYConfig); }
+
+    // ── Settings: client hierarchy (Analytically only) ───────────────────────
+    // The screen holds the whole tree and saves it in one call. Placing a site depends on its
+    // area existing and an area on its region, so a route per noun would leave a half-saved
+    // tree the first time one of them failed.
+    let _hier = null;
+
+    async function loadHierarchy() {
+        const body = document.getElementById('hier-body');
+        body.textContent = 'Loading\u2026';
+        try {
+            const r = await authFetch('/api/admin/hierarchy');
+            if (!r.ok) { body.textContent = 'Could not load the hierarchy.'; return; }
+            _hier = await r.json();
+            renderHierarchy();
+        } catch (e) { body.textContent = 'Could not load the hierarchy.'; }
+    }
+
+    let _hierNewId = 0, _hierDelRegions = [], _hierDelAreas = [];
+
+    function _areaOptions(clientId, selected, selectedTmp) {
+        // Only this client's areas: an area belongs to a client through its region, and
+        // offering another client's would silently cross the tree. Areas not yet saved are
+        // offered too, under a tmp id the save route resolves.
+        const c = (_hier.clients || []).find(x => x.client_id === clientId);
+        let html = '<option value="">— unplaced —</option>';
+        (c ? c.regions : []).forEach(rg => (rg.areas || []).forEach(a => {
+            const label = (rg.name === a.name) ? a.name : rg.name + ' › ' + a.name;
+            const val = a.area_id ? String(a.area_id) : 'tmp:' + a.tmp_id;
+            const on = a.area_id ? (a.area_id === selected) : (a.tmp_id === selectedTmp);
+            html += '<option value="' + val + '"' + (on ? ' selected' : '') + '>' +
+                    _esc(label || '(unnamed)') + '</option>';
+        }));
+        return html;
+    }
+
+    function _esc(t) {
+        return String(t == null ? '' : t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // Names are read back out of the inputs at save time rather than on every keystroke, so
+    // typing never triggers a re-render and never moves the caret.
+    function _collectNames() {
+        document.querySelectorAll('[data-hier-rname]').forEach(el => {
+            const r = _findRegion(el.dataset.hierRname);
+            if (r) r.name = el.value;
+        });
+        document.querySelectorAll('[data-hier-aname]').forEach(el => {
+            const a = _findArea(el.dataset.hierAname);
+            if (a) a.name = el.value;
+        });
+    }
+
+    function _findRegion(key) {
+        let out = null;
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            if (_key(r, 'region_id') === key) out = r;
+        }));
+        return out;
+    }
+
+    function _findArea(key) {
+        let out = null;
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => (r.areas || []).forEach(a => {
+            if (_key(a, 'area_id') === key) out = a;
+        })));
+        return out;
+    }
+
+    function _key(o, idField) { return o[idField] ? String(o[idField]) : 'tmp:' + o.tmp_id; }
+
+    function hierAddRegion(clientId) {
+        _collectNames();
+        const c = (_hier.clients || []).find(x => x.client_id === clientId);
+        if (!c) return;
+        c.regions.push({region_id: null, tmp_id: ++_hierNewId, name: '', areas: []});
+        markDirty(); renderHierarchy();
+    }
+
+    function hierAddArea(regionKey) {
+        _collectNames();
+        const r = _findRegion(regionKey);
+        if (!r) return;
+        r.areas.push({area_id: null, tmp_id: ++_hierNewId, name: ''});
+        markDirty(); renderHierarchy();
+    }
+
+    function hierDelRegion(regionKey) {
+        _collectNames();
+        let done = false;
+        (_hier.clients || []).forEach(c => {
+            const i = (c.regions || []).findIndex(r => _key(r, 'region_id') === regionKey);
+            if (i < 0 || done) return;
+            const r = c.regions[i];
+            if ((r.areas || []).length) { alert('Remove its areas first.'); done = true; return; }
+            if (r.region_id) _hierDelRegions.push(r.region_id);
+            c.regions.splice(i, 1); done = true;
+        });
+        markDirty(); renderHierarchy();
+    }
+
+    function hierDelArea(areaKey) {
+        _collectNames();
+        // A placed site blocks the delete here rather than at the server, where it would come
+        // back as a foreign key error after everything else had already been written.
+        const inUse = (_hier.sites || []).some(x => areaKey === String(x.area_id));
+        if (inUse) { alert('That area still has sites in it. Move them first.'); return; }
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            const i = (r.areas || []).findIndex(a => _key(a, 'area_id') === areaKey);
+            if (i < 0) return;
+            if (r.areas[i].area_id) _hierDelAreas.push(r.areas[i].area_id);
+            r.areas.splice(i, 1);
+        }));
+        markDirty(); renderHierarchy();
+    }
+
+    function renderHierarchy() {
+        const clients = _hier.clients || [], tenants = _hier.tenants || [], sites = _hier.sites || [];
+        const btn = 'border:1px solid #d0d5dd;background:#fff;border-radius:4px;cursor:pointer;' +
+                    'font-size:12px;padding:2px 8px';
+        let h = '';
+        clients.forEach(c => {
+            const myTenants = tenants.filter(t => t.client_id === c.client_id);
+            const mySites = sites.filter(x => x.client_id === c.client_id);
+            h += '<div style="margin-bottom:22px;border:1px solid #e4e7ec;border-radius:6px;padding:12px">';
+            h += '<div style="font-weight:600;margin-bottom:8px">' + _esc(c.name) +
+                 ' <span style="color:#98a2b3;font-weight:400">#' + c.client_id + '</span></div>';
+
+            h += '<div style="color:#475467;margin:6px 0 4px">Regions and areas</div>';
+            (c.regions || []).forEach(rg => {
+                const rk = _key(rg, 'region_id');
+                h += '<div style="margin-left:8px;margin-bottom:6px">';
+                h += '<input data-hier-rname="' + rk + '" value="' + _esc(rg.name) +
+                     '" placeholder="Region name" style="width:200px;padding:3px 6px">';
+                h += ' <button type="button" style="' + btn + '" data-hier-addarea="' + rk + '">+ area</button>';
+                h += ' <button type="button" style="' + btn + '" data-hier-delregion="' + rk + '">×</button>';
+                (rg.areas || []).forEach(a => {
+                    const ak = _key(a, 'area_id');
+                    h += '<div style="margin-left:24px;margin-top:4px">';
+                    h += '<input data-hier-aname="' + ak + '" value="' + _esc(a.name) +
+                         '" placeholder="Area name" style="width:180px;padding:3px 6px">';
+                    h += ' <button type="button" style="' + btn + '" data-hier-delarea="' + ak + '">×</button>';
+                    h += '</div>';
+                });
+                h += '</div>';
+            });
+            h += '<div style="margin-left:8px;margin-top:4px"><button type="button" style="' + btn +
+                 '" data-hier-addregion="' + c.client_id + '">+ region</button></div>';
+
+            h += '<div style="color:#475467;margin:12px 0 4px">Sites</div>';
+            if (!mySites.length) h += '<div style="margin-left:8px;color:#98a2b3">no sites</div>';
+            mySites.forEach(x => {
+                h += '<div style="margin-left:8px;display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+                h += '<span style="min-width:300px">' + _esc(x.practice_name) + ' — ' + _esc(x.site_name) + '</span>';
+                h += '<select data-hier-site="' + x.tenant_id + '|' + _esc(x.site_id) + '">' +
+                     _areaOptions(c.client_id, x.area_id, x.tmp_area_id) + '</select></div>';
+            });
+
+            h += '<div style="color:#475467;margin:10px 0 4px">Practices</div>';
+            myTenants.forEach(t => {
+                h += '<div style="margin-left:8px;color:#667085">' + _esc(t.name) +
+                     ' <span style="color:#98a2b3">tenant ' + t.tenant_id + '</span></div>';
+            });
+            h += '</div>';
+        });
+
+        const loose = tenants.filter(t => !t.client_id);
+        if (loose.length) {
+            h += '<div style="border:1px solid #fda29b;border-radius:6px;padding:12px">';
+            h += '<div style="font-weight:600;margin-bottom:8px">Practices with no client</div>';
+            loose.forEach(t => {
+                h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+                h += '<span style="min-width:300px">' + _esc(t.name) + ' <span style="color:#98a2b3">tenant ' +
+                     t.tenant_id + '</span></span>';
+                h += '<select data-hier-tenant="' + t.tenant_id + '"><option value="">— none —</option>' +
+                     clients.map(c => '<option value="' + c.client_id + '">' + _esc(c.name) + '</option>').join('') +
+                     '</select></div>';
+            });
+            h += '</div>';
+        }
+        document.getElementById('hier-body').innerHTML = h;
+        document.querySelectorAll('[data-hier-site],[data-hier-tenant],[data-hier-rname],[data-hier-aname]')
+                .forEach(el => el.addEventListener('change', markDirty));
+        // ==> THE DROPDOWNS GO STALE THE MOMENT A NAME IS TYPED. <== They are built from the
+        // model, and the model only took the typed names on the next add or delete -- so a
+        // name typed after the last add showed as a blank option ("South > ") until something
+        // else forced a render. Updating the model and the option lists on every keystroke
+        // fixes it; re-rendering the whole pane would fix it too and move the caret.
+        document.querySelectorAll('[data-hier-rname],[data-hier-aname]').forEach(el =>
+            el.addEventListener('input', () => { _collectNames(); _refreshAreaSelects(); }));
+        document.querySelectorAll('[data-hier-addregion]').forEach(el =>
+            el.addEventListener('click', () => hierAddRegion(+el.dataset.hierAddregion)));
+        document.querySelectorAll('[data-hier-addarea]').forEach(el =>
+            el.addEventListener('click', () => hierAddArea(el.dataset.hierAddarea)));
+        document.querySelectorAll('[data-hier-delregion]').forEach(el =>
+            el.addEventListener('click', () => hierDelRegion(el.dataset.hierDelregion)));
+        document.querySelectorAll('[data-hier-delarea]').forEach(el =>
+            el.addEventListener('click', () => hierDelArea(el.dataset.hierDelarea)));
+    }
+
+    function _refreshAreaSelects() {
+        // Only the <select> option lists are rebuilt, and each keeps what it had selected --
+        // including an area that has no id yet, which is carried as its tmp key.
+        document.querySelectorAll('[data-hier-site]').forEach(el => {
+            const [tid, sid] = el.dataset.hierSite.split('|');
+            const site = (_hier.sites || []).find(x => String(x.tenant_id) === tid && x.site_id === sid);
+            if (!site) return;
+            const keep = el.value;
+            el.innerHTML = _areaOptions(site.client_id, site.area_id, site.tmp_area_id);
+            if ([...el.options].some(o => o.value === keep)) el.value = keep;
+        });
+    }
+
+    async function saveHierarchy() {
+        const msg = document.getElementById('hier-msg');
+        _collectNames();
+
+        const regions = [], areas = [];
+        (_hier.clients || []).forEach(c => (c.regions || []).forEach(r => {
+            if (!(r.name || '').trim()) return;          // an unnamed row is an abandoned click
+            regions.push({region_id: r.region_id, tmp_id: r.tmp_id,
+                          client_id: c.client_id, name: r.name.trim()});
+            (r.areas || []).forEach(a => {
+                if (!(a.name || '').trim()) return;
+                areas.push({area_id: a.area_id, tmp_id: a.tmp_id,
+                            region_id: r.region_id, tmp_region_id: r.tmp_id,
+                            name: a.name.trim()});
+            });
+        }));
+
+        const sites = [], tenants = [];
+        document.querySelectorAll('[data-hier-site]').forEach(el => {
+            const [tid, sid] = el.dataset.hierSite.split('|');
+            const v = el.value;
+            sites.push({tenant_id: +tid, site_id: sid,
+                        area_id: (v === '' || v.startsWith('tmp:')) ? null : +v,
+                        tmp_area_id: v.startsWith('tmp:') ? +v.slice(4) : null});
+        });
+        document.querySelectorAll('[data-hier-tenant]').forEach(el => {
+            tenants.push({tenant_id: +el.dataset.hierTenant,
+                          client_id: el.value === '' ? null : +el.value});
+        });
+
+        msg.textContent = 'Saving…';
+        try {
+            const r = await authFetch('/api/admin/hierarchy', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({regions: regions, areas: areas, sites: sites,
+                                      tenants: tenants, delete_regions: _hierDelRegions,
+                                      delete_areas: _hierDelAreas})});
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { msg.textContent = j.error || 'Could not save.'; return; }
+            _hierDelRegions = []; _hierDelAreas = [];
+            clearDirty();
+            msg.textContent = 'Saved.';
+            loadHierarchy();
+        } catch (e) { msg.textContent = 'Could not save.'; }
+    }
 
     // ── Settings: target-model screens (Roles / Targets / Variances) ─────────
     let _varTenants = [];
@@ -2301,6 +2647,7 @@
         else if (name === 'team')      loadTeam();
         else if (name === 'invoices')  loadInvoices();
         else if (name === 'admin')     { loadAdmin(); loadAffiliate(); }
+        else if (name === 'hierarchy') loadHierarchy();
     }
 
     function _fmtVal(v, fmt) {
@@ -3796,7 +4143,14 @@
     function _layoutSettings() {
         return isMobile()
             ? { layoutType: 2 }
-            : { layoutType: 1, customLayout: { displayOption: 1 } };
+            // displayOption 0 = FitToPage: bounded by the container in BOTH dimensions,
+            // so it never scrolls. FitToPage was tried and rejected once before, but that
+            // was against a mix of 1280x720 and 1280x600 canvases, where the 720 pages
+            // letterboxed hard. Every page is now 1280x600 (ratio 2.133) against a
+            // viewport of 2.0-2.14, so the bars should be a few percent at most.
+            // 1 = FitToWidth is the alternative: no bars, but anything taller than the
+            // viewport ratio scrolls.
+            : { layoutType: 1, customLayout: { displayOption: 0 } };
     }
 
     function _buildConfig({ token, embedUrl, reportId }) {
@@ -3804,14 +4158,16 @@
         // Lock down data egress (defence-in-depth with the tenant "Export and sharing"
         // settings being off): no right-click context menu ("Show as table" / export),
         // and the "Export data" command hidden from visual headers.
-        // displayOption 1 = models.CommandDisplayOption.Hidden (numeric, matching the
-        // tokenType: 1 convention used here rather than importing the models enum).
-        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 1 } }] };
+        // ==> CommandDisplayOption IS Enabled=0, Disabled=1, HIDDEN=2. <== This read 1
+        // under a comment saying Hidden, so Export data was greyed out in the visual
+        // header rather than absent from it -- still advertising a route the tenant
+        // settings then refuse. Verified against the bundled powerbi.min.js.
+        const lockdown = { contextMenuEnabled: false, commands: [{ exportData: { displayOption: 2 } }] };
         return {
             type: 'report', id: reportId, embedUrl, accessToken: token, tokenType: 1,
             settings: mobile
                 ? { navContentPaneEnabled: false, filterPaneEnabled: false, layoutType: 2, ...lockdown }
-                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 1 }, ...lockdown },
+                : { navContentPaneEnabled: false, filterPaneEnabled: false, background: 1, layoutType: 1, customLayout: { displayOption: 0 }, ...lockdown },
         };
     }
 

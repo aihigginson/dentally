@@ -1,0 +1,65 @@
+# =====================================================================
+# Release V231 -- Who paid for the plan
+# =====================================================================
+# 55% of the live practice's treatment plans carry Private_Treatment_Value = 0, and that
+# reads as "nothing happened". It is wrong: 99%+ of those plans have a completed item. They
+# are real clinical work that somebody else paid for.
+#
+# Of 39,340 such plans: 21,272 belong to capitation members, 13,416 carry NHS UDA value,
+# 111 both, and 4,541 have no payer at all. Four populations behind one blank.
+#
+# ==> PRECEDENCE IS WHAT WAS CHARGED, NOT WHAT THE PATIENT IS. <== Private wins over
+# everything, because 2,663 plans belong to capitation members who were ALSO charged
+# privately and 245 carry UDA value alongside a private charge. In both the patient paid.
+# NHS then beats plan membership for the 111 holding both.
+#
+# ==> THE No Payer ROW IS NOT ONE THING, WHICH IS WHY IT IS SEPARATE. <== It mixes genuine
+# ex-gratia treatment -- 193 posterior composites, 77 anterior, 45 glass ionomer fillings,
+# 45 root planings, all completed and never charged, the work a practice redoes when the
+# first attempt did not go perfectly -- with plans whose only items are General Note (637),
+# Notes (351), Prescription (253) or Covid Screening Questions (40). The second kind is
+# filing, not dentistry. Is_Clinical_Activity = 0 keeps it out of activity counts; folding
+# it into Private would have hidden both halves.
+#
+# Tenantless, like Gold.Dim_Patient_Status: the four payers exist for every customer, there
+# is no tenant column, so a row-level rule here would be wrong rather than missing.
+#
+# Two traps avoided in the derivation, both already paid for once in this series of
+# releases: Input.Plan_Capitation_Rate holds one row per effective date per plan, so
+# membership is EXISTS and never a join -- a join multiplies the fact out. And NHS_UDA_Value
+# is VARCHAR(50) in Silver exactly like Private_Treatment_Value, so it needs parsing before
+# it can be compared to a number; V229 failed on precisely that.
+# ---------------------------------------------------------------------
+
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='fk_Plan_Payer') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [fk_Plan_Payer] [int] NULL;
+
+DEPLOY   Fabric\Gold.Dim_Plan_Payer.Table.sql
+DEPLOY   Fabric\Gold.Dim_Plan_Payer.Data.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Plan_Payer; IF @n <> 5 BEGIN SET @e = 'V231 FAILED: Dim_Plan_Payer holds ' + CAST(@n AS VARCHAR(10)) + ' rows, expected 5 (four payers plus the -1 sentinel).'; THROW 50621, @e, 1; END;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards ---
+
+# Every plan must resolve a payer. An unresolved fk hides under "All" and blanks every tile
+# the moment a payer is selected.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans tp WHERE tp.fk_Plan_Payer IS NULL OR NOT EXISTS (SELECT 1 FROM Gold.Dim_Plan_Payer d WHERE d.pk_Plan_Payer = tp.fk_Plan_Payer); IF @n <> 0 BEGIN SET @e = 'V231 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan(s) carry a missing or unresolvable fk_Plan_Payer.'; THROW 50622, @e, 1; END;
+
+# The partition must be exactly right in both directions: every plan with private value is
+# Private and nothing else is, and no plan classified No Payer carries value of either kind.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE (ISNULL(Private_Treatment_Value,0) > 0 AND fk_Plan_Payer <> 3) OR (ISNULL(Private_Treatment_Value,0) <= 0 AND fk_Plan_Payer = 3) OR (fk_Plan_Payer = 4 AND (ISNULL(Private_Treatment_Value,0) > 0 OR ISNULL(NHS_UDA_Value,0) > 0)) OR (fk_Plan_Payer = 1 AND ISNULL(NHS_UDA_Value,0) <= 0); IF @n <> 0 BEGIN SET @e = 'V231 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan(s) are assigned a payer that contradicts their own values.'; THROW 50623, @e, 1; END;
+
+# The EXISTS must not have become a join. If the plan count moved, membership fanned out.
+EXEC     DECLARE @n INT, @b INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans; SELECT @b = COUNT(DISTINCT CAST(Tenant_ID AS VARCHAR(12)) + ':' + CAST(bk_Treatment_Plan_ID AS VARCHAR(20))) FROM Gold.Fact_Treatment_Plans; IF @n <> @b BEGIN SET @e = 'V231 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan rows for ' + CAST(@b AS VARCHAR(10)) + ' distinct plans -- the capitation-rate lookup has fanned the fact out.'; THROW 50624, @e, 1; END;
+
+# All four payers must actually be populated on a tenant with real history. A payer nobody
+# lands in means the derivation is collapsing, and the blank it was built to explain is back.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT fk_Plan_Payer) FROM Gold.Fact_Treatment_Plans WHERE Tenant_ID = 100 AND fk_Plan_Payer > 0; IF @n <> 4 BEGIN SET @e = 'V231 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of the 4 payers are populated on tenant 100.'; THROW 50625, @e, 1; END;
+
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Plan Payer'; IF @n <> 1 BEGIN SET @e = 'V231 FAILED: PBI.[List Plan Payer] was not generated.'; THROW 50626, @e, 1; END;
+
+TEST

@@ -1,0 +1,162 @@
+# =====================================================================
+# Release V236 -- everything dev has that prod does not, as one release
+# =====================================================================
+# Prod's last release is V226 (21 Oct). Dev has run V227, V228, V229, V230, V231, V232,
+# V234 and V235 since. This manifest carries all eight to prod in a single pass.
+#
+# ---------------------------------------------------------------------
+# WHY ONE MANIFEST AND NOT EIGHT.
+# ---------------------------------------------------------------------
+# ==> A MANIFEST DEPLOYS A FILE'S CURRENT STATE, NOT ITS STATE AT THE TIME. <== Four files
+# are touched by three releases each:
+#
+#     Gold.usp_Load_Dim_Patients           V229, V233, V235
+#     Gold.vw_Dim_Patients                 V229, V233, V235
+#     Gold.usp_Load_Fact_Treatment_Plans   V229, V231, V234
+#     Silver.Appointment_Reason_Map        V229, V230, V232
+#
+# Replaying them in order would deploy TODAY'S usp_Load_Fact_Treatment_Plans as part of
+# V229 and then immediately EXEC it -- against a prod warehouse where fk_Plan_Payer and
+# Is_First_Year_Plan do not yet exist, because V231 and V234 have not run. V229 would fail
+# on prod having succeeded on dev, which is the worst shape a release failure can take.
+#
+# So: every column is added first, every file is deployed once, and the loads run once in
+# dependency order. The guards keep their original THROW numbers and V-prefixes so a
+# failure still names the change it came from.
+#
+# V233 IS DELIBERATELY ABSENT. It failed twice on dev and V235 supersedes it; its two
+# columns and both its files are in here via V235. Its manifest should be deleted.
+#
+# V229__lost_after_changing_dentist IS ALSO ABSENT. It ran on dev on 21 Oct and the feature
+# was then reverted in git (19cb158), so the file no longer exists. Prod will not get it.
+# Dev therefore carries objects prod does not -- a known, deliberate drift, not a gap.
+#
+# ---------------------------------------------------------------------
+# TWO CUSTOMER-VISIBLE NUMBERS MOVE.
+# ---------------------------------------------------------------------
+# 1. LAPSED COUNTS FALL BY ABOUT 19,500 at the live tenant (21,761 -> 2,300). V234 makes
+#    Fact_Lapsed_Patients honour Is_Reportable = 0, so patients with no appointment, no
+#    invoice and no payment anywhere in the warehouse stop counting as lost. They are
+#    pre-migration records. This is the point of the change, but it is a tenfold move on a
+#    figure the practice looks at, and should not arrive unannounced.
+#
+# 2. THE JOURNEY EXAM/HYGIENE SPLIT SHIFTS. V230 and V232 add HEX, Exam, View and six
+#    hygiene slot names to the reason map. At the live tenant recognition went from 29.5%
+#    to 90.8%, so appointments that previously fell through as their own raw text are now
+#    categorised. Anything reading Appointment_Reason moves with it.
+#
+# ---------------------------------------------------------------------
+# ORDERING THAT MATTERS.
+# ---------------------------------------------------------------------
+# * Fact_Appointments reloads BEFORE Dim_Patients: exam ownership is derived from mapped
+#   appointment reasons, so the map has to be in the fact before the dimension reads it.
+# * Fact_Revenue reloads AFTER Dim_Patients: capitation spells are built from
+#   Dentist_Practitioner_ID, which V235 unfreezes.
+# * Meta.usp_Create_Gold_Views runs BEFORE the hand-made insights view. The generator DROPS
+#   EVERY VIEW IN THE PBI SCHEMA and rebuilds from Gold tables and Gold.vw_* views; a view
+#   created by hand before it runs would simply be dropped.
+#
+# ---------------------------------------------------------------------
+# NOT IN THIS MANIFEST -- the semantic model and the reports. See the notes that ship with
+# this release; the RLS rule on '_Treatment Plans Unconstrained' is the one that matters.
+# ---------------------------------------------------------------------
+
+# --- 1. columns, all additive and all guarded --------------------------------------------
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Patient_Status') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Patient_Status] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Prior_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Prior_Dentist] [bigint] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Date_Current_Dentist_Since') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Date_Current_Dentist_Since] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Current_Dentist_Since_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Current_Dentist_Since_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Date_Last_Seen_Prior_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Date_Last_Seen_Prior_Dentist] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Last_Seen_Prior_Dentist_Date') ALTER TABLE [Gold].[Dim_Patients] ADD [Last_Seen_Prior_Dentist_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Dentist_Spell_Count') ALTER TABLE [Gold].[Dim_Patients] ADD [Dentist_Spell_Count] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Has_Settled_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [Has_Settled_Dentist] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Dentist_Exam_Count') ALTER TABLE [Gold].[Dim_Patients] ADD [Dentist_Exam_Count] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='Exams_With_Current_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [Exams_With_Current_Dentist] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Current_Dentist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Current_Dentist] [bigint] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Dim_Patients' AND COLUMN_NAME='fk_Current_Hygienist') ALTER TABLE [Gold].[Dim_Patients] ADD [fk_Current_Hygienist] [bigint] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Is_First_Visit_Plan') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Is_First_Visit_Plan] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Is_First_Year_Plan') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Is_First_Year_Plan] [bit] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='First_Met_Date') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [First_Met_Date] [date] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Plan_Value_Band') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Plan_Value_Band] [varchar](20) NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='Plan_Value_Band_Sort') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [Plan_Value_Band_Sort] [int] NULL;
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Gold' AND TABLE_NAME='Fact_Treatment_Plans' AND COLUMN_NAME='fk_Plan_Payer') ALTER TABLE [Gold].[Fact_Treatment_Plans] ADD [fk_Plan_Payer] [int] NULL;
+
+# --- 2. three genuinely new tables -------------------------------------------------------
+# Verified absent from prod before writing this. These three Table.sql files open with
+# DROP TABLE, which is why they may be deployed HERE and must never be deployed for a table
+# that already holds rows.
+DEPLOY   Fabric\Gold.Dim_Patient_Status.Table.sql
+DEPLOY   Fabric\Gold.Dim_Plan_Payer.Table.sql
+DEPLOY   Fabric\Gold.Aggregate_Practice_Insights.Table.sql
+
+# --- 3. seeds (all DELETE + INSERT, or MERGE; all git-managed reference data) -------------
+DEPLOY   Fabric\Gold.Dim_Patient_Status.Data.sql
+DEPLOY   Fabric\Gold.Dim_Plan_Payer.Data.sql
+DEPLOY   Fabric\Silver.Appointment_Reason_Map.Data.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+# --- 4. procedures and the one hand-maintained view --------------------------------------
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.vw_Dim_Patients.View.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Treatment_Plans.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Lapsed_Patients.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practice_Insights.StoredProcedure.sql
+
+# --- 5. seed guards, before the expensive loads so a bad seed fails in seconds ------------
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patient_Status; IF @n <> 11 BEGIN SET @e = 'V236 FAILED (V229 check): Dim_Patient_Status holds ' + CAST(@n AS VARCHAR(10)) + ' rungs, expected 11.'; THROW 50590, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Plan_Payer; IF @n <> 5 BEGIN SET @e = 'V236 FAILED (V231 check): Dim_Plan_Payer holds ' + CAST(@n AS VARCHAR(10)) + ' rows, expected 5 (four payers plus the -1 sentinel).'; THROW 50621, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Config.Metric_Definitions WHERE Metric_Key = 'plan_rejection_rate' AND Is_Active = 1 AND Section = 'clinical' AND Range_Type = 'below' AND Target_Type = 'rate' AND Supports_Practitioner = 1; IF @n <> 1 BEGIN SET @e = 'V236 FAILED (V228 check): plan_rejection_rate is not defined as an active clinical rate supporting practitioners.'; THROW 50570, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Config.Metric_Definitions WHERE Metric_Key = 'plan_rejection_rate' AND ISNULL(Has_Target, 0) <> 0; IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V228 check): plan_rejection_rate must not carry a target.'; THROW 50571, @e, 1; END;
+
+# --- 6. the loads, once each, in dependency order ----------------------------------------
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Revenue @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Aggregate_Practice_Insights @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# --- 7. regenerate PBI, THEN the one view the generator does not make --------------------
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+EXEC     DROP VIEW IF EXISTS PBI.[Aggregate Practice Insights];
+EXEC     CREATE VIEW PBI.[Aggregate Practice Insights] AS SELECT [pk_Insight] AS [pk Insight], [Tenant_ID] AS [Tenant ID], [Week_Commencing_Date] AS [Week Commencing Date], [Direction] AS [Direction], [Rank_In_Direction] AS [Rank In Direction], [Metric] AS [Metric], [Display_Name] AS [Display Name], [Section] AS [Section], [Format_Type] AS [Format Type], [Per_Working_Day] AS [Per Working Day], [Value_Now] AS [Value Now], [Value_Before] AS [Value Before], [Relative_Change] AS [Relative Change], [Target_Value] AS [Target Value], [Last_Year_Change] AS [Last Year Change], [Narrative] AS [Narrative], [DW_Created_At] AS [DW Created At], [DW_Updated_At] AS [DW Updated At] FROM Gold.[Aggregate_Practice_Insights];
+
+# --- 8. guards ---------------------------------------------------------------------------
+# Patient lifecycle and dentist spells (V229, V230, V232)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p WHERE p.pk_Patient > 0 AND (p.fk_Patient_Status IS NULL OR NOT EXISTS (SELECT 1 FROM Gold.Dim_Patient_Status s WHERE s.pk_Patient_Status = p.fk_Patient_Status)); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V229 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) carry a missing or unresolvable fk_Patient_Status.'; THROW 50591, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE s.Is_Reportable = 0 AND (ISNULL(p.Total_Invoiced,0) > 0 OR ISNULL(p.Total_Paid,0) > 0); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V229 check): ' + CAST(@n AS VARCHAR(10)) + ' archived patient(s) have invoices or payments -- the archive is hiding real activity.'; THROW 50593, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE pk_Patient > 0 AND ((ISNULL(Has_Settled_Dentist,0) = 0 AND (ISNULL(Dentist_Spell_Count,0) <> 0 OR Current_Dentist_Since_Date IS NOT NULL)) OR (ISNULL(Has_Settled_Dentist,0) = 1 AND (ISNULL(Dentist_Spell_Count,0) < 1 OR Current_Dentist_Since_Date IS NULL)) OR (fk_Prior_Dentist IS NOT NULL AND ISNULL(Dentist_Spell_Count,0) < 2) OR (Last_Seen_Prior_Dentist_Date IS NOT NULL AND Current_Dentist_Since_Date IS NOT NULL AND Last_Seen_Prior_Dentist_Date >= Current_Dentist_Since_Date) OR ISNULL(Exams_With_Current_Dentist,0) > ISNULL(Dentist_Exam_Count,0) OR Current_Dentist_Since_Date > CAST(SYSUTCDATETIME() AS DATE) OR Last_Seen_Prior_Dentist_Date > CAST(SYSUTCDATETIME() AS DATE)); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V230 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have an internally inconsistent dentist spell.'; THROW 50613, @e, 1; END;
+# The reason map (V229, V230, V232)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments WHERE Appointment_Reason IN ('HEX', 'View'); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V229/V232 check): ' + CAST(@n AS VARCHAR(10)) + ' appointment(s) still read Appointment_Reason = HEX or View -- the reason map did not take.'; THROW 50592, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments WHERE Tenant_ID = 100 AND Appointment_Reason IS NULL; IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V230 check): ' + CAST(@n AS VARCHAR(10)) + ' appointment(s) have no Appointment_Reason at all.'; THROW 50612, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT a.Tenant_ID FROM Silver.Appointments a LEFT JOIN Silver.Appointment_Reason_Map m ON m.Reason_Text = NULLIF(TRIM(a.Reason), '') WHERE a.State = 'Completed' GROUP BY a.Tenant_ID HAVING COUNT(*) >= 1000 AND 100.0 * SUM(CASE WHEN m.Reason_Text IS NULL THEN 0 ELSE 1 END) / COUNT(*) < 70.0) x; IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V230 check): ' + CAST(@n AS VARCHAR(10)) + ' tenant(s) have under 70% of completed appointments recognised by Silver.Appointment_Reason_Map -- an unmapped reason falls through as its own text and is invisible in Appointment_Reason.'; THROW 50610, @e, 1; END;
+EXEC     DECLARE @r DECIMAL(6,1), @e VARCHAR(4000); SELECT @r = 100.0 * (SELECT COUNT(*) FROM Gold.Dim_Patients WHERE Tenant_ID = 100 AND ISNULL(Dentist_Exam_Count,0) > 0) / NULLIF((SELECT COUNT(DISTINCT a.Patient_ID) FROM Silver.Appointments a JOIN Silver.Practitioners pr ON pr.Practitioner_ID = a.Practitioner_ID AND pr.Tenant_ID = a.Tenant_ID JOIN Silver.Appointment_Reason_Map m ON m.Reason_Text = NULLIF(TRIM(a.Reason), '') WHERE a.Tenant_ID = 100 AND a.State = 'Completed' AND m.Category = 'Exam' AND pr.User_Role = 'Dentist'), 0); IF @r IS NULL OR @r < 99.0 BEGIN SET @e = 'V236 FAILED (V230 check): only ' + CAST(ISNULL(@r, 0) AS VARCHAR(10)) + '% of patients with a dentist exam carry a Dentist_Exam_Count -- the ownership rule is not seeing them all.'; THROW 50611, @e, 1; END;
+# Allocation, which V235 unfroze (V233, V235)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Silver.Patients s ON s.Patient_ID = p.Patient_ID AND s.Tenant_ID = p.Tenant_ID WHERE p.pk_Patient > 0 AND (ISNULL(p.Dentist_Practitioner_ID, -1) <> ISNULL(CAST(s.Dentist_Practitioner_ID AS INT), -1) OR ISNULL(p.Hygienist_Practitioner_ID, -1) <> ISNULL(CAST(s.Hygienist_Practitioner_ID AS INT), -1)); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V235 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) hold an allocation that disagrees with Silver -- the column is still not refreshing.'; THROW 50660, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p LEFT JOIN Gold.Dim_Practitioners d ON d.pk_Practitioner = p.fk_Current_Dentist WHERE p.pk_Patient > 0 AND ((p.Dentist_Practitioner_ID IS NOT NULL AND (p.fk_Current_Dentist IS NULL OR d.Practitioner_ID <> p.Dentist_Practitioner_ID)) OR (p.Dentist_Practitioner_ID IS NULL AND p.fk_Current_Dentist IS NOT NULL)); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V235 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have fk_Current_Dentist disagreeing with Dentist_Practitioner_ID.'; THROW 50661, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p LEFT JOIN Gold.Dim_Practitioners h ON h.pk_Practitioner = p.fk_Current_Hygienist WHERE p.pk_Patient > 0 AND ((p.Hygienist_Practitioner_ID IS NOT NULL AND (p.fk_Current_Hygienist IS NULL OR h.Practitioner_ID <> p.Hygienist_Practitioner_ID)) OR (p.Hygienist_Practitioner_ID IS NULL AND p.fk_Current_Hygienist IS NOT NULL)); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V235 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have fk_Current_Hygienist disagreeing with Hygienist_Practitioner_ID.'; THROW 50662, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p WHERE p.pk_Patient > 0 AND ((p.fk_Current_Dentist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners d WHERE d.pk_Practitioner = p.fk_Current_Dentist AND d.Tenant_ID = p.Tenant_ID)) OR (p.fk_Current_Hygienist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners h WHERE h.pk_Practitioner = p.fk_Current_Hygienist AND h.Tenant_ID = p.Tenant_ID)) OR (p.fk_Prior_Dentist IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Gold.Dim_Practitioners r WHERE r.pk_Practitioner = p.fk_Prior_Dentist AND r.Tenant_ID = p.Tenant_ID))); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V235 check): ' + CAST(@n AS VARCHAR(10)) + ' patient(s) carry a practitioner key that does not resolve within their own tenant.'; THROW 50663, @e, 1; END;
+EXEC     DECLARE @r DECIMAL(6,1), @e VARCHAR(4000); SELECT @r = 100.0 * SUM(CASE WHEN fk_Current_Dentist IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(SUM(CASE WHEN Dentist_Practitioner_ID IS NOT NULL THEN 1 ELSE 0 END), 0) FROM Gold.Dim_Patients WHERE Tenant_ID = 100 AND pk_Patient > 0; IF @r IS NULL OR @r < 99.0 BEGIN SET @e = 'V236 FAILED (V235 check): only ' + CAST(ISNULL(@r,0) AS VARCHAR(10)) + '% of allocated patients resolved a current dentist key.'; THROW 50664, @e, 1; END;
+# Treatment plans: bands, first-visit flags, payer (V229, V231)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE Plan_Value_Band IS NULL OR Plan_Value_Band_Sort IS NULL OR Plan_Value_Band_Sort <> CASE WHEN ISNULL(Private_Treatment_Value,0) <= 0 THEN 0 WHEN Private_Treatment_Value < 250 THEN 1 WHEN Private_Treatment_Value < 500 THEN 2 WHEN Private_Treatment_Value < 1000 THEN 3 WHEN Private_Treatment_Value < 2500 THEN 4 ELSE 5 END; IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V229 check): ' + CAST(@n AS VARCHAR(10)) + ' plan(s) have a missing band or a sort key that disagrees with it.'; THROW 50597, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans tp JOIN Gold.Dim_Date d ON d.pk_Date = tp.fk_Date_Created WHERE ISNULL(tp.Is_First_Visit_Plan,0) = 1 AND (tp.First_Met_Date IS NULL OR tp.First_Met_Date <> d.Full_Date); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V229 check): ' + CAST(@n AS VARCHAR(10)) + ' plan(s) are flagged first-visit but First_Met_Date is not the day the plan was created.'; THROW 50598, @e, 1; END;
+EXEC     DECLARE @n INT, @p INT, @e VARCHAR(4000); SELECT @n = COUNT(*), @p = COUNT(DISTINCT fk_Practitioner) FROM Gold.Fact_Treatment_Plans WHERE ISNULL(Is_First_Visit_Plan,0) = 1; IF @n = 0 OR @p < 2 BEGIN SET @e = 'V236 FAILED (V229 check): only ' + CAST(@n AS VARCHAR(10)) + ' plan(s) across ' + CAST(@p AS VARCHAR(10)) + ' practitioner(s) are flagged first-visit -- the #met join is matching nothing.'; THROW 50601, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans tp WHERE tp.fk_Plan_Payer IS NULL OR NOT EXISTS (SELECT 1 FROM Gold.Dim_Plan_Payer d WHERE d.pk_Plan_Payer = tp.fk_Plan_Payer); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V231 check): ' + CAST(@n AS VARCHAR(10)) + ' plan(s) carry a missing or unresolvable fk_Plan_Payer.'; THROW 50622, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans WHERE (ISNULL(Private_Treatment_Value,0) > 0 AND fk_Plan_Payer <> 3) OR (ISNULL(Private_Treatment_Value,0) <= 0 AND fk_Plan_Payer = 3) OR (fk_Plan_Payer = 4 AND (ISNULL(Private_Treatment_Value,0) > 0 OR ISNULL(NHS_UDA_Value,0) > 0)) OR (fk_Plan_Payer = 1 AND ISNULL(NHS_UDA_Value,0) <= 0); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V231 check): ' + CAST(@n AS VARCHAR(10)) + ' plan(s) are assigned a payer that contradicts their own values.'; THROW 50623, @e, 1; END;
+EXEC     DECLARE @n INT, @b INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Treatment_Plans; SELECT @b = COUNT(DISTINCT CAST(Tenant_ID AS VARCHAR(12)) + ':' + CAST(bk_Treatment_Plan_ID AS VARCHAR(20))) FROM Gold.Fact_Treatment_Plans; IF @n <> @b BEGIN SET @e = 'V236 FAILED (V231 check): ' + CAST(@n AS VARCHAR(10)) + ' plan rows for ' + CAST(@b AS VARCHAR(10)) + ' distinct plans -- the capitation-rate lookup has fanned the fact out.'; THROW 50624, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT fk_Plan_Payer) FROM Gold.Fact_Treatment_Plans WHERE Tenant_ID = 100 AND fk_Plan_Payer > 0; IF @n <> 4 BEGIN SET @e = 'V236 FAILED (V231 check): only ' + CAST(@n AS VARCHAR(10)) + ' of the 4 payers are populated on tenant 100.'; THROW 50625, @e, 1; END;
+# Insights and metrics (V227, V228)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, Direction, COUNT(*) AS c, MIN(Rank_In_Direction) AS lo, MAX(Rank_In_Direction) AS hi, COUNT(DISTINCT Rank_In_Direction) AS d FROM Gold.Aggregate_Practice_Insights GROUP BY Tenant_ID, Direction) x WHERE x.c > 3 OR x.lo <> 1 OR x.hi <> x.c OR x.d <> x.c; IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V227 check): ' + CAST(@n AS VARCHAR(10)) + ' tenant/direction group(s) have a broken rank sequence.'; THROW 50560, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights WHERE Value_Now IS NULL OR Value_Before IS NULL OR Relative_Change IS NULL OR Direction NOT IN ('Watch','Good'); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V227 check): ' + CAST(@n AS VARCHAR(10)) + ' row(s) are missing a value or carry an unknown direction.'; THROW 50561, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights i JOIN Config.Metric_Definitions m ON m.Metric_Key = i.Metric WHERE (i.Direction = 'Watch' AND ((m.Range_Type = 'above' AND i.Relative_Change > 0) OR (m.Range_Type = 'below' AND i.Relative_Change < 0))) OR (i.Direction = 'Good' AND ((m.Range_Type = 'above' AND i.Relative_Change < 0) OR (m.Range_Type = 'below' AND i.Relative_Change > 0))); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V227 check): ' + CAST(@n AS VARCHAR(10)) + ' row(s) are filed in the wrong direction for their Range_Type.'; THROW 50562, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND (Denominator IS NULL OR Denominator <= 0 OR Numerator IS NULL OR Numerator > Denominator); IF @n <> 0 BEGIN SET @e = 'V236 FAILED (V228 check): ' + CAST(@n AS VARCHAR(10)) + ' plan_rejection_rate row(s) have a missing or impossible rate.'; THROW 50572, @e, 1; END;
+EXEC     DECLARE @p INT, @c INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND fk_Practitioner = -1; SELECT @c = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND fk_Practitioner <> -1; IF @p = 0 OR @c = 0 BEGIN SET @e = 'V236 FAILED (V228 check): practice rows ' + CAST(@p AS VARCHAR(10)) + ', practitioner rows ' + CAST(@c AS VARCHAR(10)) + ' -- both grains are required.'; THROW 50573, @e, 1; END;
+# The PBI layer the model binds to (V229, V231, V235)
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Patients' AND COLUMN_NAME IN ('fk Patient Status', 'fk Prior Dentist', 'Current Dentist Since Date', 'Last Seen Prior Dentist Date', 'Dentist Spell Count', 'Has Settled Dentist', 'Dentist Exam Count', 'Exams With Current Dentist', 'fk Current Dentist', 'fk Current Hygienist'); IF @n <> 10 BEGIN SET @e = 'V236 FAILED (V229/V235 check): PBI.[List Patients] exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 10 new columns -- Gold.vw_Dim_Patients is not passing them through.'; THROW 50599, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME IN ('List Patient Status', 'List Plan Payer', 'Aggregate Practice Insights'); IF @n <> 3 BEGIN SET @e = 'V236 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' of the 3 new PBI views exist (List Patient Status, List Plan Payer, Aggregate Practice Insights).'; THROW 50600, @e, 1; END;
+
+TEST

@@ -45,6 +45,26 @@ BEGIN
         -- Resolve the plan's OWN dimension keys (practitioner / site / patient / dates) so the
         -- plan-grain measures slice correctly. -1 = unknown (FK guard convention); dates stay
         -- NULL when unparseable (consistent with the other Gold facts).
+        -- ==> WHEN DID THIS CLINICIAN FIRST SEE THIS PATIENT. <== (V229) Per patient AND per
+        -- practitioner, because front-loading is a property of a RELATIONSHIP, not of the
+        -- patient's first ever appointment: someone who transfers after ten years gets a
+        -- first-meeting plan from their new dentist too.
+        --
+        -- Read from Silver, and on State = 'Completed' rather than Completed_At -- at the
+        -- live practice 1,004 cancelled appointments carry a Completed_At, and a cancelled
+        -- appointment is not a meeting.
+        DROP TABLE IF EXISTS #met;
+        SELECT a.Tenant_ID,
+               CAST(a.Patient_ID AS INT)      AS Patient_ID,
+               CAST(a.Practitioner_ID AS INT) AS Practitioner_ID,
+               MIN(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE)) AS First_Met_Date
+        INTO   #met
+        FROM   Silver.Appointments a
+        WHERE  a.State = 'Completed'
+          AND  a.Patient_ID IS NOT NULL
+          AND  a.Practitioner_ID IS NOT NULL
+        GROUP BY a.Tenant_ID, CAST(a.Patient_ID AS INT), CAST(a.Practitioner_ID AS INT);
+
         SELECT
             tp.Tenant_ID                                                        AS Tenant_ID,
             CAST(tp.Id AS INT)                                                  AS bk_Treatment_Plan_ID,
@@ -88,7 +108,54 @@ BEGIN
                      AND fap.Treatment_Plan_ID IS NOT NULL                                   THEN 'In Progress'
                 WHEN ISNULL(itm.Has_Completed_Item,0) = 1 AND ISNULL(itm.Has_Open_Item,0) = 1 THEN 'Open - No Appointment'
                 ELSE 'No Items'
-            END AS VARCHAR(40))                                                 AS Course_Status
+            END AS VARCHAR(40))                                                 AS Course_Status,
+            -- V229. A plan written on the very day this clinician first saw this patient.
+            CAST(CASE WHEN met.First_Met_Date IS NOT NULL
+                       AND met.First_Met_Date = TRY_CAST(LEFT(NULLIF(TRIM(tp.Created_At), ''), 10) AS DATE)
+                      THEN 1 ELSE 0 END AS BIT)                             AS Is_First_Visit_Plan,
+            met.First_Met_Date                                              AS First_Met_Date,
+            -- Within twelve months of this clinician first seeing them. A first-visit plan
+            -- is always a first-year plan, so the share is bounded 0-1 by construction.
+            CAST(CASE WHEN met.First_Met_Date IS NOT NULL
+                       AND TRY_CAST(LEFT(NULLIF(TRIM(tp.Created_At), ''), 10) AS DATE)
+                           < DATEADD(MONTH, 12, met.First_Met_Date)
+                      THEN 1 ELSE 0 END AS BIT)                             AS Is_First_Year_Plan,
+            -- Zero-value plans get their own band rather than falling into the lowest one.
+            -- NHS-only courses and single-line pricing put a lot of 0.00 rows in, and letting
+            -- them sit in "Under 250" drags every median and share toward nothing.
+            -- ==> pv.Value, NOT tp.Private_Treatment_Value. <== The Silver column is
+            -- VARCHAR(50): comparing it to an integer literal forces a varchar -> int
+            -- conversion and T-SQL cannot parse '131.0000' as an int. See the CROSS APPLY.
+            CAST(CASE
+                WHEN pv.Value <=    0                              THEN 'No Private Value'
+                WHEN pv.Value <  250                               THEN 'Under 250'
+                WHEN pv.Value <  500                               THEN '250-499'
+                WHEN pv.Value < 1000                               THEN '500-999'
+                WHEN pv.Value < 2500                               THEN '1,000-2,499'
+                ELSE                                                    '2,500+'
+            END AS VARCHAR(20))                                             AS Plan_Value_Band,
+            CAST(CASE
+                WHEN pv.Value <=    0                              THEN 0
+                WHEN pv.Value <  250                               THEN 1
+                WHEN pv.Value <  500                               THEN 2
+                WHEN pv.Value < 1000                               THEN 3
+                WHEN pv.Value < 2500                               THEN 4
+                ELSE                                                    5
+            END AS INT)                                                     AS Plan_Value_Band_Sort,
+            -- V231. Precedence is WHAT WAS CHARGED, not what the patient is: private value
+            -- means the patient paid, whatever plan or exemption also applied to them.
+            -- ==> EXISTS, NOT A JOIN. <== Input.Plan_Capitation_Rate holds one row per
+            -- effective date per plan, so joining it would multiply the fact out.
+            -- NHS_UDA_Value is VARCHAR(50) in Silver like the private value, so it needs
+            -- parsing before it can be compared to a number.
+            CAST(CASE
+                WHEN pv.Value > 0                                                THEN 3
+                WHEN ISNULL(TRY_CAST(tp.NHS_UDA_Value AS DECIMAL(18,4)), 0) > 0  THEN 1
+                WHEN EXISTS (SELECT 1 FROM Input.Plan_Capitation_Rate cap
+                             WHERE cap.Tenant_ID       = tp.Tenant_ID
+                               AND cap.Payment_Plan_ID = dpat.Payment_Plan_ID)   THEN 2
+                ELSE                                                                  4
+            END AS INT)                                                     AS fk_Plan_Payer
         INTO #src
         FROM Silver.Treatment_Plans tp
         LEFT JOIN Gold.Dim_Treatment_Plans dtp ON dtp.Treatment_Plan_ID = CAST(tp.Id AS INT)             AND dtp.Tenant_ID = tp.Tenant_ID
@@ -98,6 +165,14 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_c           ON dd_c.Full_Date        = TRY_CAST(LEFT(NULLIF(TRIM(tp.Created_At),  ''),10) AS DATE)
         LEFT JOIN Gold.Dim_Date dd_s           ON dd_s.Full_Date        = TRY_CAST(LEFT(NULLIF(TRIM(tp.Start_Date),  ''),10) AS DATE)
         LEFT JOIN Gold.Dim_Date dd_comp        ON dd_comp.Full_Date     = TRY_CAST(LEFT(NULLIF(TRIM(tp.Completed_At),''),10) AS DATE)
+        -- The plan value, parsed once. TRY_CAST rather than CAST: a non-numeric value is a
+        -- Silver data problem and belongs in the No Private Value band, not in an exception
+        -- that stops the whole warehouse load.
+        CROSS APPLY (SELECT ISNULL(TRY_CAST(tp.Private_Treatment_Value AS DECIMAL(18,4)), 0)
+                            AS Value) pv
+        LEFT JOIN #met met                     ON met.Patient_ID        = CAST(tp.Patient_ID AS INT)
+                                              AND met.Practitioner_ID   = CAST(tp.Practitioner_ID AS INT)
+                                              AND met.Tenant_ID         = tp.Tenant_ID
         -- Item aggregate: has-done / has-open flags, last completed-item date (pushed up), and the
         -- private (NHS_Charge=0) value split completed-vs-outstanding. Completed is INT 0/1.
         LEFT JOIN (
@@ -151,6 +226,12 @@ BEGIN
             Has_Open_Item            = src.Has_Open_Item,
             Has_Future_Appointment   = src.Has_Future_Appointment,
             Course_Status            = src.Course_Status,
+            Is_First_Visit_Plan     = src.Is_First_Visit_Plan,
+            First_Met_Date          = src.First_Met_Date,
+            Is_First_Year_Plan      = src.Is_First_Year_Plan,
+            Plan_Value_Band         = src.Plan_Value_Band,
+            Plan_Value_Band_Sort    = src.Plan_Value_Band_Sort,
+            fk_Plan_Payer           = src.fk_Plan_Payer,
             DW_Updated_At           = SYSUTCDATETIME()
         FROM Gold.Fact_Treatment_Plans tgt
         INNER JOIN #src src ON tgt.bk_Treatment_Plan_ID = src.bk_Treatment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID
@@ -173,7 +254,13 @@ BEGIN
            ISNULL(CAST(tgt.[Has_Completed_Item]      AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Has_Open_Item]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Has_Future_Appointment]  AS VARCHAR(500)), ''),
-           ISNULL(CAST(tgt.[Course_Status]           AS VARCHAR(500)), '')
+           ISNULL(CAST(tgt.[Course_Status]           AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_First_Visit_Plan] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[First_Met_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Is_First_Year_Plan] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Plan_Value_Band] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Plan_Value_Band_Sort] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Plan_Payer] AS VARCHAR(500)), '')
            ))
            <> HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(src.[fk_Treatment_Plan]       AS VARCHAR(500)), ''),
@@ -194,7 +281,13 @@ BEGIN
            ISNULL(CAST(src.[Has_Completed_Item]      AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Has_Open_Item]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Has_Future_Appointment]  AS VARCHAR(500)), ''),
-           ISNULL(CAST(src.[Course_Status]           AS VARCHAR(500)), '')
+           ISNULL(CAST(src.[Course_Status]           AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_First_Visit_Plan] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[First_Met_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Is_First_Year_Plan] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Plan_Value_Band] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Plan_Value_Band_Sort] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Plan_Payer] AS VARCHAR(500)), '')
            ));
         SET @My_Updates = @@ROWCOUNT;
 
@@ -207,6 +300,8 @@ BEGIN
             NHS_UDA_Value, NHS_Completed_UDA_Value, Private_Treatment_Value,
             Private_Treatment_Value_Completed, Private_Treatment_Value_Outstanding,
             Last_Activity_Date, Has_Completed_Item, Has_Open_Item, Has_Future_Appointment, Course_Status,
+            Is_First_Visit_Plan, First_Met_Date, Is_First_Year_Plan, Plan_Value_Band, Plan_Value_Band_Sort,
+            fk_Plan_Payer,
             DW_Created_At, DW_Updated_At
         )
         SELECT
@@ -217,12 +312,15 @@ BEGIN
             src.NHS_UDA_Value, src.NHS_Completed_UDA_Value, src.Private_Treatment_Value,
             src.Private_Treatment_Value_Completed, src.Private_Treatment_Value_Outstanding,
             src.Last_Activity_Date, src.Has_Completed_Item, src.Has_Open_Item, src.Has_Future_Appointment, src.Course_Status,
+            src.Is_First_Visit_Plan, src.First_Met_Date, src.Is_First_Year_Plan, src.Plan_Value_Band, src.Plan_Value_Band_Sort,
+            src.fk_Plan_Payer,
             SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Fact_Treatment_Plans tgt WHERE tgt.bk_Treatment_Plan_ID = src.bk_Treatment_Plan_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
+        DROP TABLE #met;
         --*********************************
         --**** Procedure logic ends    ****
         --*********************************

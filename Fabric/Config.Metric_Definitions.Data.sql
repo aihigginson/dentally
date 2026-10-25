@@ -74,6 +74,8 @@ USING (VALUES
         'The total price of work still to be charged on open courses of treatment that have no future appointment booked — money committed but not scheduled. The at-risk work-in-progress; lower is better, and converted by booking these patients back in.'),
     ('exam_ratio',                 'Exam Ratio',                         'clinical',  'percent',  'Percentage of appointments that are examinations', 0, 1, 1, 34, 'within', 'rate',
         'The percentage of appointments that are examinations (check-ups) rather than treatment. Judged against a healthy band rather than simply higher or lower — too low may mean under-recall, too high may mean too little treatment delivered.'),
+    ('plan_rejection_rate',       'Plan Rejection Rate',                'clinical',  'percent',  'Plans 28+ days old with no treatment ever started',                       0, 1, 1, 36, 'below', 'rate',
+        'The share of treatment plans that were presented at least 28 days ago and have had no item started -- the practical definition of a plan the patient declined, since Dentally records no acceptance. Lower is better. Larger plans are refused more often, so judge a clinician against others doing similar work rather than against the practice as a whole. The SHARE refused is the measure, not the money on those plans: an over-ambitious plan was never realistic revenue, so totalling it would flatter whoever quotes most extravagantly.'),
     ('avg_plan_value',             'Average Plan Value',                 'clinical',  'currency', 'Average value of treatment plans presented to patients', 0, 1, 1, 35, 'above', 'rate',
         'The average value of the treatment plans presented to patients in the period — total presented plan value divided by the number of plans. A measure of case size and treatment ambition. Higher generally means larger cases proposed.'),
     ('avg_first_plan_value',       'Avg First Plan Value',               'clinical',  'currency', 'Average value of the plan created at a new patient''s first appointment', 0, 1, 1, 36, 'above', 'rate',
@@ -158,6 +160,10 @@ UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
 -- New-patient Clinical metrics are display-only (no target entry / no Daily_Targets rows).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] IN ('avg_first_plan_value', 'new_patient_retention');
+-- Plan Rejection Rate is comparative, not a number a practice sets: it is read against
+-- peers doing similar work. No target entry, no Daily_Targets rows.
+UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
+    WHERE [Metric_Key] = 'plan_rejection_rate';
 -- Revenue Per Diary Hour is an actual-only metric (drillable ratio, no target).
 UPDATE [Config].[Metric_Definitions] SET [Has_Target] = 0
     WHERE [Metric_Key] = 'revenue_per_diary_hour';

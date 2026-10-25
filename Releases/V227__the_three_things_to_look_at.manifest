@@ -1,0 +1,73 @@
+# =====================================================================
+# Release V227 -- the three things getting worse, and the three getting better
+# =====================================================================
+# The product has always known each practice's metrics, which direction is good, how much
+# each one matters and what the practice's own targets are. What it never did was tell
+# them which to look at FIRST. This computes that once a night instead of waiting to be
+# asked, as six rows a tenant.
+#
+# ==> MOVEMENT IS THE SIGNAL; DISTANCE FROM TARGET IS NOT. <== The first prototype ranked
+# on distance from target and returned Outstanding Invoices, Open Courses Value and Open
+# Courses -- all vast multiples of target, all already known, and all three confirmed
+# earlier as WIP that is CORRECTLY high. That tells a practice nothing. Distance from
+# target measures how long a problem has existed. The ranking is therefore
+# period-over-period movement, with the target carried only as context.
+#
+# ==> FOUR WEEKS AGAINST FOUR WEEKS, STEPPED WEEKLY. <== Both alternatives were measured
+# on the live tenant before choosing:
+#
+#   months        unequal lengths, so a count metric falls every February for no reason.
+#   week on week  Deposit Ratio read 4.0 -> 6.8 -> 12.5 -> 11.9 -> 30.9 -> 9.9%, flipping
+#                 between "going well" and "needs attention" on consecutive weeks; Short
+#                 Notice Cancellations did the same. A practice told opposite things each
+#                 week stops believing any of it.
+#   4wk vs 4wk    Short Notice Cancellations read Watch four runs running at +27/+26/+52/
+#                 +56%, Average Plan Value Good at +22/+39/+55/+40%. One story, strengthening.
+#
+# ==> Area_Weight DECIDES, NOT THE PERCENTAGE. <== A slight fall in revenue matters more
+# than a seismic swing in email capture, and the weights already encode that: Total Revenue
+# 45 and Revenue per Clinical Hour 40 against Email Details 8 and Deposit Ratio 5. Movement
+# is capped at 100% so a small denominator cannot buy the top slot -- which is why Deposit
+# Ratio at +137% now sits BEHIND Average Plan Value at +40%, and why Revenue per Clinical
+# Hour down 8.5% outranks Revenue per Dentist Hour down 11.2%.
+#
+# Counts are normalised per working day; rates are not, since a rate divides its own
+# denominator out. Only complete weeks are compared -- a part-week reads as a collapse.
+#
+# Narrative is deliberately left NULL here. A language model fills it afterwards, and the
+# ranking has to stand on its own when that is slow, unavailable or switched off.
+#
+# The table is new, so Meta.usp_Create_Gold_Views will give it a PBI view on the next
+# build, and the model needs its own RLS rule before anything reads it -- a new model
+# table has none by default.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Aggregate_Practice_Insights.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practice_Insights.StoredProcedure.sql
+
+# Build it once here so the release proves the arithmetic rather than leaving it to tonight.
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Aggregate_Practice_Insights @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# At most three a side per tenant, and the ranks must be 1..n with no gaps or repeats.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, Direction, COUNT(*) AS c, MIN(Rank_In_Direction) AS lo, MAX(Rank_In_Direction) AS hi, COUNT(DISTINCT Rank_In_Direction) AS d FROM Gold.Aggregate_Practice_Insights GROUP BY Tenant_ID, Direction) x WHERE x.c > 3 OR x.lo <> 1 OR x.hi <> x.c OR x.d <> x.c; IF @n <> 0 BEGIN SET @e = 'V227 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' tenant/direction group(s) have a broken rank sequence.'; THROW 50560, @e, 1; END;
+
+# Every row must carry both sides of the comparison and a direction we can draw.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights WHERE Value_Now IS NULL OR Value_Before IS NULL OR Relative_Change IS NULL OR Direction NOT IN ('Watch','Good'); IF @n <> 0 BEGIN SET @e = 'V227 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are missing a value or carry an unknown direction.'; THROW 50561, @e, 1; END;
+
+# A Watch row must actually have moved the wrong way and a Good row the right way --
+# the sign convention is the one thing a reader cannot check for themselves.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights i JOIN Config.Metric_Definitions m ON m.Metric_Key = i.Metric WHERE (i.Direction = 'Watch' AND ((m.Range_Type = 'above' AND i.Relative_Change > 0) OR (m.Range_Type = 'below' AND i.Relative_Change < 0))) OR (i.Direction = 'Good' AND ((m.Range_Type = 'above' AND i.Relative_Change < 0) OR (m.Range_Type = 'below' AND i.Relative_Change > 0))); IF @n <> 0 BEGIN SET @e = 'V227 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are filed in the wrong direction for their Range_Type.'; THROW 50562, @e, 1; END;
+
+# ==> THE MODEL NEEDS A VIEW, AND Meta.usp_Create_Gold_Views ONLY RUNS AT NIGHT. <== The
+# generator builds a PBI view for every Gold table, so this one would appear on the next
+# build -- but the model cannot be pointed at a view that does not exist yet. Created here
+# in exactly the shape the generator produces (underscores become spaces), so its own
+# DROP/CREATE tonight is a no-op rather than a change.
+EXEC     DROP VIEW IF EXISTS PBI.[Aggregate Practice Insights];
+EXEC     CREATE VIEW PBI.[Aggregate Practice Insights] AS SELECT [pk_Insight] AS [pk Insight], [Tenant_ID] AS [Tenant ID], [Week_Commencing_Date] AS [Week Commencing Date], [Direction] AS [Direction], [Rank_In_Direction] AS [Rank In Direction], [Metric] AS [Metric], [Display_Name] AS [Display Name], [Section] AS [Section], [Format_Type] AS [Format Type], [Per_Working_Day] AS [Per Working Day], [Value_Now] AS [Value Now], [Value_Before] AS [Value Before], [Relative_Change] AS [Relative Change], [Target_Value] AS [Target Value], [Last_Year_Change] AS [Last Year Change], [Narrative] AS [Narrative], [DW_Created_At] AS [DW Created At], [DW_Updated_At] AS [DW Updated At] FROM Gold.[Aggregate_Practice_Insights];
+
+# ==> A TENANT-BEARING TABLE WITHOUT AN RLS RULE IS A CROSS-TENANT LEAK. <== This view
+# carries Tenant ID, so the model needs a filter on it before anything reads it --
+# Check_RLS_Coverage.ps1 fails the build otherwise, which is the control working.
+
+TEST

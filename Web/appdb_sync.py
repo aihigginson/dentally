@@ -72,7 +72,10 @@ ALERT_REPEAT_HOURS = float(os.environ.get('ALERT_REPEAT_HOURS', '6'))
 # warehouse, so it cannot see a table that lives only in the AppDB.
 FULL_TABLES = ['Application_Users', 'Access_Log', 'Billing_Contact', 'Metric_Variance',
                'Plan_Capitation_Rate', 'Practice_Config', 'Practitioner_Pay',
-               'Practitioner_Role', 'Targets']
+               'Practitioner_Role', 'Targets',
+               # The client hierarchy. Order matters only to a reader: the copy is per table
+               # and the warehouse proc re-reads them all, so staging order is irrelevant.
+               'Client', 'Client_Tenant', 'Client_Region', 'Client_Area', 'Site_Area']
 
 # Sentinel row in Input_Stage.Sync_Fingerprint recording when the access proc last actually ran.
 # Not a table name, so it can never collide with one of FULL_TABLES.

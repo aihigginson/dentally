@@ -1,0 +1,93 @@
+# =====================================================================
+# Release V243 -- the lapse flow folds back into Fact_Lapsed_Patients
+# =====================================================================
+# Gold.Fact_Patient_Lapse_Flow (V239/V240/V242) was a near-duplicate of a fact that already
+# existed. At tenant 100 Fact_Lapsed_Patients carried 2,300 rows, one per patient, with real
+# practitioner and site keys; the flow fact carried those SAME 2,300 patients plus 1,167 at
+# risk, and its Current_Status was Lapsed_Type under another name -- Set as inactive 1,378,
+# Calculated as inactive 922, the identical counts. Genuinely new were only the at-risk rung
+# and three columns, so those move onto the existing fact and the duplicate goes.
+#
+# ---------------------------------------------------------------------
+# ==> Lapsed_Type NOW CARRIES 'At Risk', WHICH HAS NOT LAPSED. <==
+# ---------------------------------------------------------------------
+# Count lapsed patients over this fact with SUM(Is_Lapsed), NEVER COUNT(*).
+#
+# Nothing customer-facing moves. The lapsed figures (lapsed_patients, lapsed_deactivated,
+# lapsed_calculated) are computed in Gold.usp_Load_Fact_KPI_Snapshot straight off Dim_Patients
+# date fields and land in Fact_Metric_Actuals; [Lapsed Patients] and so [Net Patient Growth]
+# read that aggregate. Nothing anywhere reads Fact_Lapsed_Patients except two visuals on the
+# Patient page, and both already name the rows they mean -- the patient list filters
+# Lapsed Type IN ('Calculated as inactive'), and the other is the alluvial, which counts the
+# whole population deliberately because the lapsed/at-risk split IS its third column. The
+# guards below re-derive the lapsed count from the status ladder and refuse any drift.
+#
+# ---------------------------------------------------------------------
+# ==> V239, V240 AND V242 CAN NO LONGER BE REPLAYED. <==
+# ---------------------------------------------------------------------
+# They DEPLOY Gold.usp_Load_Fact_Patient_Lapse_Flow.StoredProcedure.sql, which this release
+# deletes from the repo. They were only ever applied to DEV and the fact they built never
+# reached PROD, so PROD must NOT run them: it needs V237, V238, V241 and then this one, with
+# V239/V240/V242 skipped entirely. A combined manifest is the usual answer when a file is
+# touched by several releases; here the answer is simpler, because the three releases being
+# skipped built a table that no longer exists.
+#
+# ---------------------------------------------------------------------
+# AT-RISK ROWS ARE DATED, NOT NULL.
+# ---------------------------------------------------------------------
+# fk_Date_Lapsed is NOT NULL and dating the event is the table's whole purpose. An at-risk
+# patient has not lapsed, so Dim_Patients gives them no lapse date -- but the rung is exact:
+# Gold.usp_Load_Dim_Patients tests reminder sent AND more than 60 days since last reminded, so
+# the row is dated last reminded + 60. Date keys are days since the epoch, so that is key
+# arithmetic, and Dim_Date turns it back into a date. (Dentist_Recall_Date is the NEXT recall
+# and runs to 2027 on this cohort -- not the date wanted.)
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Gold.Fact_Lapsed_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Lapsed_Patients.StoredProcedure.sql
+
+# The duplicate, view first because it depends on the table.
+EXEC     DROP VIEW IF EXISTS PBI.[_Patient Lapse Flow];
+EXEC     DROP VIEW IF EXISTS Gold.vw_Fact_Patient_Lapse_Flow;
+EXEC     DROP PROCEDURE IF EXISTS Gold.usp_Load_Fact_Patient_Lapse_Flow;
+EXEC     DROP TABLE IF EXISTS Gold.Fact_Patient_Lapse_Flow;
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE LAPSED COUNT MUST BE WHAT THE LADDER SAYS, RE-DERIVED. <== Not compared against a
+# remembered number: the ladder in Dim_Patients is the authority and this asks it again.
+EXEC     DECLARE @f INT, @d2 INT, @e VARCHAR(4000); SELECT @f = SUM(Is_Lapsed) FROM Gold.Fact_Lapsed_Patients; SELECT @d2 = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.pk_Patient > 0 AND s.Is_Reportable = 1 AND s.Status_Code IN ('LAPSED_SET_INACTIVE','LAPSED_NO_VISIT_24M'); IF @f <> @d2 BEGIN SET @e = 'V243 FAILED: SUM(Is_Lapsed) = ' + CAST(@f AS VARCHAR(10)) + ' but the ladder says ' + CAST(@d2 AS VARCHAR(10)) + ' lapsed. A lapsed figure has moved.'; THROW 50730, @e, 1; END;
+# And the at-risk rung, likewise re-derived.
+EXEC     DECLARE @f INT, @d2 INT, @e VARCHAR(4000); SELECT @f = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Is_Lapsed = 0; SELECT @d2 = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.pk_Patient > 0 AND s.Is_Reportable = 1 AND s.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M'; IF @f <> @d2 BEGIN SET @e = 'V243 FAILED: ' + CAST(@f AS VARCHAR(10)) + ' at-risk rows but the ladder says ' + CAST(@d2 AS VARCHAR(10)) + '.'; THROW 50731, @e, 1; END;
+# ==> Is_Lapsed AND Lapsed_Type MUST NEVER DISAGREE. <== That is the whole contract of the flag.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE (Lapsed_Type = 'At Risk' AND Is_Lapsed <> 0) OR (Lapsed_Type <> 'At Risk' AND Is_Lapsed <> 1); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) where Is_Lapsed contradicts Lapsed_Type.'; THROW 50732, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT Lapsed_Type) FROM Gold.Fact_Lapsed_Patients WHERE Lapsed_Type NOT IN ('Set as inactive','Calculated as inactive','At Risk'); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' unexpected Lapsed_Type value(s) -- the list visual filters on the exact wording.'; THROW 50733, @e, 1; END;
+# ==> EVERY ROW MUST BE DATEABLE. <== An undated row silently vanishes from every period.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE fk_Date_Lapsed = -1 OR fk_Date_Lapsed IS NULL OR Lapsed_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) carry no usable date, so they drop out of every period filter.'; THROW 50734, @e, 1; END;
+# ==> AN EVENT CANNOT HAVE HAPPENED TOMORROW. <== The at-risk date is derived, and the first
+# derivation put 46 rows in the future by choosing a different recall from the one the ladder
+# judged. A future-dated row appears in no past period, so this is a failure, not a curiosity.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Lapsed_Date > CAST(SYSUTCDATETIME() AS DATE); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) are dated in the future.'; THROW 50743, @e, 1; END;
+# One row per patient: the grain the list and the flow both depend on.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, fk_Patient FROM Gold.Fact_Lapsed_Patients GROUP BY Tenant_ID, fk_Patient HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) appear twice -- the grain has broken.'; THROW 50735, @e, 1; END;
+# The flow columns must actually be populated, or the alluvial draws nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Last_Appointment_Reason IS NULL OR Last_Activity IS NULL OR Patient_Category IS NULL; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) have a null flow column and would vanish from the diagram.'; THROW 50736, @e, 1; END;
+# Stage 1 must be categories, not raw reason text (the point V242 made, carried forward).
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT f.Last_Appointment_Reason) FROM Gold.Fact_Lapsed_Patients f WHERE f.Last_Appointment_Reason NOT IN ('Other','No Appointment') AND NOT EXISTS (SELECT 1 FROM Silver.Appointment_Reason_Map m WHERE m.Category = f.Last_Appointment_Reason); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' uncategorised reason(s) reach the fact.'; THROW 50737, @e, 1; END;
+# ==> THE DUPLICATE MUST BE GONE. <== Two tables answering one question is how a practice stops
+# trusting both.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('Fact_Patient_Lapse_Flow','vw_Fact_Patient_Lapse_Flow','_Patient Lapse Flow'); IF @n <> 0 BEGIN SET @e = 'V243 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' lapse-flow object(s) survive.'; THROW 50738, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_PATIENT_LAPSE_FLOW'; IF @n <> 0 BEGIN SET @e = 'V243 FAILED: the retired loader is still registered and the nightly chain will call a dropped proc.'; THROW 50739, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_LAPSED_PATIENTS'; IF @n <> 1 BEGIN SET @e = 'V243 FAILED: the surviving loader is not registered, so the fact will go stale.'; THROW 50740, @e, 1; END;
+# The view the model reads must carry the new columns.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Lapsed Patients' AND COLUMN_NAME IN ('Is Lapsed','Last Appointment Reason','Last Activity','Patient Category'); IF @n <> 4 BEGIN SET @e = 'V243 FAILED: the PBI view exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 4 new columns.'; THROW 50741, @e, 1; END;
+# ==> THE CUSTOMER-FACING LAPSED METRICS ARE COMPUTED ELSEWHERE AND MUST STILL BE THERE. <==
+# This release cannot move them, which is exactly why their absence would mean something else
+# broke on the way through.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT Metric) FROM Gold.Fact_Metric_Actuals WHERE Metric IN ('lapsed_patients','lapsed_deactivated','lapsed_calculated'); IF @n <> 3 BEGIN SET @e = 'V243 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' of the 3 lapsed metrics remain in the actuals -- Net Growth reads these.'; THROW 50742, @e, 1; END;
+
+TEST

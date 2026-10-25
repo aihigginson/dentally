@@ -157,3 +157,101 @@ CREATE TABLE Input.Billing_Contact (
     CONSTRAINT PK_Input_Billing_Contact PRIMARY KEY (Tenant_ID)
 );
 GO
+
+-- =====================================================================
+-- Client hierarchy: Client > Region > Area > (Practice) > Site
+-- =====================================================================
+-- ==> REGION AND AREA ATTACH TO THE SITE, NOT TO THE TENANT. <== A client may run one
+-- Dentally tenant covering sites across the whole country, and those sites have to be
+-- placeable in different areas. Hanging the tree off the tenant would make that
+-- impossible, and it is the shape a large customer is most likely to arrive with.
+--
+-- Practice stays 1:1 with tenant and is NOT stored here: it is derived. It behaves as a
+-- level only when every site in the tenant shares one area; where a tenant's sites span
+-- areas, practice is a cross-cutting label rather than a step in the tree, and the
+-- hierarchy reads Client > Region > Area > Site for that client.
+--
+-- These four tables are curated by Analytically admins, not by the customer: ties of
+-- tenant to client, then of site to area. A customer-facing bulk upload can come later.
+-- Region and Area are auto-created as single pass-throughs for a client that does not
+-- use them, and the degeneracy rule then hides them -- a level is hidden when every node
+-- at it has exactly one child, so a single-site customer sees no trace of any of this.
+
+-- The client: who we sell to and then serve. Client_ID is the SAME integer already used by
+-- Input.Application_Users.Client_ID and Audit.Tenants.Client_ID, so it is assigned, not an
+-- identity -- a new value here must not collide with one already issued in the warehouse.
+IF OBJECT_ID('Input.Client') IS NULL
+CREATE TABLE Input.Client (
+    Client_ID    INT           NOT NULL,
+    Client_Name  VARCHAR(255)  NOT NULL,
+    Is_Active    BIT           NOT NULL CONSTRAINT DF_Input_Client_Is_Active DEFAULT 1,
+    Updated_At   DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Client_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By   VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Client PRIMARY KEY (Client_ID)
+);
+GO
+
+-- Which client a tenant belongs to. A tenant has exactly one client, hence Tenant_ID alone
+-- as the key. This is the admin screen tie that does not exist anywhere in AppDB today --
+-- it lives only in Audit.Tenants.Client_ID in the warehouse, which an admin cannot edit.
+IF OBJECT_ID('Input.Client_Tenant') IS NULL
+CREATE TABLE Input.Client_Tenant (
+    Tenant_ID   INT           NOT NULL,
+    Client_ID   INT           NOT NULL,
+    Updated_At  DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Client_Tenant_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By  VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Client_Tenant PRIMARY KEY (Tenant_ID),
+    CONSTRAINT FK_Input_Client_Tenant_Client FOREIGN KEY (Client_ID) REFERENCES Input.Client (Client_ID)
+);
+GO
+
+-- A client's regions. Identity keys here, unlike the rest of Input.*: these rows are born
+-- in this database rather than mirroring a Dentally business key, and a surrogate lets a
+-- region be renamed without orphaning the areas and sites beneath it.
+IF OBJECT_ID('Input.Client_Region') IS NULL
+CREATE TABLE Input.Client_Region (
+    Region_ID    INT           IDENTITY(1,1) NOT NULL,
+    Client_ID    INT           NOT NULL,
+    Region_Name  VARCHAR(100)  NOT NULL,
+    Sort_Order   INT           NOT NULL CONSTRAINT DF_Input_Client_Region_Sort DEFAULT 0,
+    Is_Active    BIT           NOT NULL CONSTRAINT DF_Input_Client_Region_Is_Active DEFAULT 1,
+    Updated_At   DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Client_Region_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By   VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Client_Region PRIMARY KEY (Region_ID),
+    CONSTRAINT UQ_Input_Client_Region_Name UNIQUE (Client_ID, Region_Name),
+    CONSTRAINT FK_Input_Client_Region_Client FOREIGN KEY (Client_ID) REFERENCES Input.Client (Client_ID)
+);
+GO
+
+-- A region's areas. Client_ID is reachable through Region_ID and is deliberately not
+-- repeated: storing it twice invites the two copies to disagree.
+IF OBJECT_ID('Input.Client_Area') IS NULL
+CREATE TABLE Input.Client_Area (
+    Area_ID     INT           IDENTITY(1,1) NOT NULL,
+    Region_ID   INT           NOT NULL,
+    Area_Name   VARCHAR(100)  NOT NULL,
+    Sort_Order  INT           NOT NULL CONSTRAINT DF_Input_Client_Area_Sort DEFAULT 0,
+    Is_Active   BIT           NOT NULL CONSTRAINT DF_Input_Client_Area_Is_Active DEFAULT 1,
+    Updated_At  DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Client_Area_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By  VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Client_Area PRIMARY KEY (Area_ID),
+    CONSTRAINT UQ_Input_Client_Area_Name UNIQUE (Region_ID, Area_Name),
+    CONSTRAINT FK_Input_Client_Area_Region FOREIGN KEY (Region_ID) REFERENCES Input.Client_Region (Region_ID)
+);
+GO
+
+-- Where each SITE sits in the tree. The grain is the site, which is the whole point: a
+-- tenant's sites may be placed in different areas. Site_ID is VARCHAR(50) to match
+-- Gold.Dim_Practice_Sites.Site_ID; no foreign key, because sites arrive from Dentally and
+-- are not rows in this database.
+IF OBJECT_ID('Input.Site_Area') IS NULL
+CREATE TABLE Input.Site_Area (
+    Tenant_ID   INT           NOT NULL,
+    Site_ID     VARCHAR(50)   NOT NULL,
+    Area_ID     INT           NOT NULL,
+    Updated_At  DATETIME2(3)  NOT NULL CONSTRAINT DF_Input_Site_Area_Updated_At DEFAULT SYSUTCDATETIME(),
+    Updated_By  VARCHAR(256)  NULL,
+    CONSTRAINT PK_Input_Site_Area PRIMARY KEY (Tenant_ID, Site_ID),
+    CONSTRAINT FK_Input_Site_Area_Area FOREIGN KEY (Area_ID) REFERENCES Input.Client_Area (Area_ID)
+);
+GO

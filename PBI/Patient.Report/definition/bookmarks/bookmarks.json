@@ -2,22 +2,18 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmarksMetadata/1.0.0/schema.json",
   "items": [
     {
-      "name": "f99bb98938f9a17aa5fa"
+      "name": "0b17a4c9e2f5d6380ab1",
+      "displayName": "Tabs",
+      "children": [
+        "f99bb98938f9a17aa5fa",
+        "96f362756bf9184f76a2",
+        "5d6bf565dd625ca54b88",
+        "7187f406f482118be57b",
+        "1a7c4e9b02f5d6380044"
+      ]
     },
     {
-      "name": "96f362756bf9184f76a2"
-    },
-    {
-      "name": "5d6bf565dd625ca54b88"
-    },
-    {
-      "name": "7187f406f482118be57b"
-    },
-    {
-      "name": "1a7c4e9b02f5d6380044"
-    },
-    {
-      "name": "1a7c4e9b02f5d6380055"
+      "name": "1a7c4e9b02f5d63800f1"
     }
   ]
 }

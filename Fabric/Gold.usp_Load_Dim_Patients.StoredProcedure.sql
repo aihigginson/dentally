@@ -32,6 +32,22 @@
 --    *14     07/10/2026  AIH V216: Last_Dentist_Visit_Date, Last_Hygienist_Visit_Date and
 --                            Last_Allocated_Dentist_Visit_Date -- last seen by role and by
 --                            the patient's own allocated dentist, from the appointment book.
+--    *15     22/10/2026  AIH V229: fk_Patient_Status (the lifecycle ladder) plus the dentist
+--                            relationship -- prior dentist, current spell start, last seen
+--                            with the previous dentist, spell count and dentist exam counts.
+--                            ==> OWNERSHIP IS ESTABLISHED BY EXAMS, TWO CONSECUTIVE, DATED
+--                            FROM THE FIRST. <== The Archived rung keeps pre-migration
+--                            records (no attendance, no invoice, no payment) out of every
+--                            retention figure -- 19,512 patients at the live tenant.
+--    *16     22/10/2026  AIH V233: fk_Current_Dentist and fk_Current_Hygienist. The existing
+--                            *_Practitioner_ID columns are Dentally ids and cannot join
+--                            Dim_Practitioners, so no patient-grain visual could follow a
+--                            Practitioner or Role filter. V229 added the PRIOR key and
+--                            missed the current pair.
+--    *17     22/10/2026  AIH V235: Dentist_Practitioner_ID and Hygienist_Practitioner_ID
+--                            join the UPDATE SET list and the change hash. They were written
+--                            by the INSERT and never again, so a reassigned patient kept
+--                            their original dentist for ever -- 133 at the live tenant.
 --  To Run			 :   DECLARE  @Run_Inserts   BIGINT, @Run_Updates   BIGINT , @Run_Deletes BIGINT;  EXEC Gold.usp_Load_Dim_Patients @Run_Inserts =@Run_Inserts OUT, @Run_Updates=@Run_Updates OUT , @Run_Deletes = @Run_Deletes OUT
 ---------------------------------------------------------------------
 SET ANSI_NULLS ON
@@ -238,6 +254,253 @@ BEGIN
                     ELSE NULL END
         WHERE p.Patient_ID IS NOT NULL;
 
+        -- ==> THE PATIENT LIFECYCLE, AND WHO THEIR DENTIST ACTUALLY IS. <== (V229)
+        --
+        -- Read from SILVER for the same reason V216 does: this is a dimension, dimensions
+        -- load before facts, so Gold.Fact_Appointments and Gold.Fact_Recalls would answer
+        -- with yesterday's book. Silver.Appointments and Silver.Recalls are already loaded.
+        --
+        -- Seen is State = 'Completed', NOT Completed_At IS NOT NULL -- at the live practice
+        -- 1,004 CANCELLED appointments carry a Completed_At, and a cancelled appointment is
+        -- not a visit however it came to be stamped.
+
+        -- Any attendance at all. Feeds the ARCHIVE test, which is the only rung that asks
+        -- whether this patient has any relationship with the practice on record.
+        DROP TABLE IF EXISTS #attend;
+        -- ==> THE DATE, NOT JUST THE COUNT. <== Without it the recall rungs below cannot ask
+        -- whether the patient has been in since we reminded them, which is the whole of the
+        -- question "did they respond". Completed and on or before today, so a cancellation or
+        -- a DNA cannot clear a recall.
+        --
+        -- A FUTURE BOOKING DOES CLEAR ONE -- but not here. That is rung 1 (ACTIVE_BOOKED),
+        -- tested before any recall rung, off an uncancelled appointment after today. This
+        -- table answers only "have they walked in since", which is the other half.
+        SELECT a.Tenant_ID, a.Patient_ID, COUNT(*) AS Visits,
+               MAX(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE)) AS Last_Attended_Date
+        INTO   #attend
+        FROM   Silver.Appointments a
+        WHERE  a.State = 'Completed'
+          AND  a.Patient_ID IS NOT NULL
+          AND  TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE) <= @Today
+        GROUP BY a.Tenant_ID, a.Patient_ID;
+
+        -- ==> OWNERSHIP IS ESTABLISHED BY EXAMS, NOT BY VISITS. <== A patient who sees an
+        -- unfamiliar dentist for one exam and three follow-up treatment appointments has NOT
+        -- changed dentist: the treatments are the consequence of that one exam, not evidence
+        -- of a relationship. So only exam-category appointments count here.
+        --
+        -- The dentist/hygienist split uses Silver.Practitioners.User_Role, exactly as V216
+        -- does -- Dentally calls every clinician Dentist or Hygienist, which is precisely
+        -- the split needed and is tenant-agnostic. Custom_Role is for comparing clinicians
+        -- against their PEERS and is deliberately not used here. The role filter also makes
+        -- the reason map's shortcomings harmless on the hygiene side, because a hygienist's
+        -- exam cannot establish dentist ownership whatever its reason text says.
+        --
+        -- ==> REASON TEXT ABSENT FROM Silver.Appointment_Reason_Map IS INVISIBLE HERE. <==
+        -- The map is the configuration point and seeding it per customer is an onboarding
+        -- task, not something to work around in this loader. 'HEX' was the live practice's
+        -- gap -- 15,796 completed appointments across 3,016 patients whose check-ups did not
+        -- register as exams at all -- and V229 maps it. Note it is 42% hygienist-performed,
+        -- which is harmless here because the User_Role filter drops that half, but it DOES
+        -- move the Exam/Hygiene split in Gold.Fact_Appointment_Journey, so that fact is
+        -- reloaded in the same release.
+        DROP TABLE IF EXISTS #exam;
+        SELECT DISTINCT
+               a.Tenant_ID,
+               a.Patient_ID,
+               CAST(a.Practitioner_ID AS INT)                              AS Practitioner_ID,
+               TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE)  AS Exam_Date
+        INTO   #exam
+        FROM   Silver.Appointments a
+        JOIN   Silver.Practitioners pr  ON pr.Practitioner_ID = a.Practitioner_ID
+                                       AND pr.Tenant_ID       = a.Tenant_ID
+        JOIN   Silver.Appointment_Reason_Map arm
+                                        ON arm.Reason_Text    = NULLIF(TRIM(a.Reason), '')
+        WHERE  a.State          = 'Completed'
+          AND  a.Patient_ID IS NOT NULL
+          AND  arm.Category     = 'Exam'
+          AND  pr.User_Role     = 'Dentist'
+          AND  TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE) <= @Today;
+
+        -- Gaps and islands. An island is a RUN of consecutive exams with the same dentist:
+        -- subtracting a per-dentist sequence from a per-patient sequence gives every row in
+        -- one unbroken run the same constant. Ordering is tie-broken on Practitioner_ID so
+        -- two exams on one date cannot make the run assignment arbitrary.
+        DROP TABLE IF EXISTS #seq;
+        SELECT Tenant_ID, Patient_ID, Practitioner_ID, Exam_Date,
+               ROW_NUMBER() OVER (PARTITION BY Tenant_ID, Patient_ID
+                                  ORDER BY Exam_Date, Practitioner_ID)
+             - ROW_NUMBER() OVER (PARTITION BY Tenant_ID, Patient_ID, Practitioner_ID
+                                  ORDER BY Exam_Date, Practitioner_ID) AS Island
+        INTO   #seq
+        FROM   #exam;
+
+        -- ==> A SPELL NEEDS TWO CONSECUTIVE EXAMS, AND IS DATED FROM THE FIRST. <== One exam
+        -- with an unfamiliar dentist is a locum, a holiday cover or an emergency slot. But
+        -- the mean gap between a patient's exams at the live practice is 278 days, so
+        -- demanding three consecutive exams would take over two years to recognise a change
+        -- -- by which time the 24-month lapse test has already fired and the patient is gone.
+        -- Two confirms in about nine months, inside the recall cycle. Dating the spell from
+        -- the FIRST exam of the run means the history is right even though the change could
+        -- only be confirmed at the second.
+        DROP TABLE IF EXISTS #spell;
+        SELECT Tenant_ID, Patient_ID, Practitioner_ID, Spell_Start, Spell_End, Exams,
+               ROW_NUMBER() OVER (PARTITION BY Tenant_ID, Patient_ID
+                                  ORDER BY Spell_Start DESC, Practitioner_ID DESC) AS Rev
+        INTO   #spell
+        FROM (
+            SELECT Tenant_ID, Patient_ID, Practitioner_ID,
+                   MIN(Exam_Date) AS Spell_Start,
+                   MAX(Exam_Date) AS Spell_End,
+                   COUNT(*)       AS Exams
+            FROM   #seq
+            GROUP BY Tenant_ID, Patient_ID, Practitioner_ID, Island
+            HAVING COUNT(*) >= 2
+        ) z;
+
+        DROP TABLE IF EXISTS #rel;
+        SELECT cur.Tenant_ID,
+               cur.Patient_ID,
+               cur.Practitioner_ID   AS Current_Dentist_Practitioner_ID,
+               cur.Spell_Start       AS Current_Dentist_Since_Date,
+               prv.Practitioner_ID   AS Prior_Dentist_Practitioner_ID,
+               prv.Spell_End         AS Last_Seen_Prior_Dentist_Date,
+               sc.Spells             AS Dentist_Spell_Count
+        INTO   #rel
+        FROM   #spell cur
+        LEFT JOIN #spell prv ON prv.Tenant_ID  = cur.Tenant_ID
+                            AND prv.Patient_ID = cur.Patient_ID
+                            AND prv.Rev        = 2
+        CROSS APPLY (SELECT COUNT(*) AS Spells FROM #spell s
+                     WHERE s.Tenant_ID = cur.Tenant_ID AND s.Patient_ID = cur.Patient_ID) sc
+        WHERE  cur.Rev = 1;
+
+        -- Exams_With_Current_Dentist counts EVERY exam with that dentist, not just the ones
+        -- inside the current spell -- a patient who went away and came back knows them from
+        -- both. A patient with no qualifying spell has no current dentist, so the column is
+        -- 0 rather than NULL: they have exams, just never two running with one person.
+        DROP TABLE IF EXISTS #excnt;
+        SELECT e.Tenant_ID, e.Patient_ID,
+               COUNT(*) AS Dentist_Exam_Count,
+               SUM(CASE WHEN e.Practitioner_ID = r.Current_Dentist_Practitioner_ID
+                        THEN 1 ELSE 0 END) AS Exams_With_Current_Dentist
+        INTO   #excnt
+        FROM   #exam e
+        LEFT JOIN #rel r ON r.Tenant_ID = e.Tenant_ID AND r.Patient_ID = e.Patient_ID
+        GROUP BY e.Tenant_ID, e.Patient_ID;
+
+        -- ==> Silver.Recalls IS ONE ROW PER RECALL. <== Joining it unaggregated multiplies a
+        -- patient by their recall count and silently inflates whichever status they land in.
+        -- One row per patient, latest due date, tie broken on Id so the pick is deterministic
+        -- when two recalls share a date.
+        DROP TABLE IF EXISTS #recall;
+        SELECT Tenant_ID, Patient_ID, Reminder_Sent, Last_Reminded_Date
+        INTO   #recall
+        FROM (
+            SELECT r.Tenant_ID,
+                   CAST(r.Patient_ID AS INT) AS Patient_ID,
+                   CASE WHEN NULLIF(TRIM(r.First_Reminder_Sent_At), '') IS NOT NULL
+                        THEN 1 ELSE 0 END    AS Reminder_Sent,
+                   COALESCE(
+                       TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At), ''), 10) AS DATE),
+                       TRY_CAST(LEFT(NULLIF(TRIM(r.First_Reminder_Sent_At), ''), 10) AS DATE)
+                   )                         AS Last_Reminded_Date,
+                   ROW_NUMBER() OVER (PARTITION BY r.Tenant_ID, CAST(r.Patient_ID AS INT)
+                                      ORDER BY r.Due_Date DESC, r.Id DESC) AS rn
+            FROM   Silver.Recalls r
+            WHERE  r.Patient_ID IS NOT NULL
+        ) z
+        WHERE  rn = 1;
+
+        -- ==> THE LADDER. PRECEDENCE IS NOT THE DISPLAY ORDER. <== Archived is tested FIRST,
+        -- ahead of both lapsed rungs: a patient with no attendance, no invoice and no payment
+        -- anywhere was never lost, because they were never had. At the live practice that is
+        -- pre-migration dead weight -- patient records start in 1996, appointments start on
+        -- 2012-02-29 -- and calling it lapsed overstates patient loss by an order of
+        -- magnitude. See Gold.Dim_Patient_Status for the whole argument.
+        --
+        -- 'Recall sent' is tested before the recall DATE, because once the practice has
+        -- asked, the asking is what the patient is responding to (or not). 60 days is the
+        -- two-month line, measured from the LAST time they were chased rather than the
+        -- first -- the question is how long they have been silent since being asked.
+        DROP TABLE IF EXISTS #ext;
+        SELECT s.Tenant_ID,
+               s.Patient_ID,
+               CAST(CASE
+                 WHEN ISNULL(at.Visits, 0) = 0
+                      AND ISNULL(s.Total_Invoiced, 0) = 0
+                      AND ISNULL(s.Total_Paid, 0)     = 0            THEN 10
+                 WHEN s.Lapsed_Type = 'Set as inactive'              THEN  8
+                 WHEN s.Lapsed_Type = 'Calculated as inactive'       THEN  7
+                 WHEN s.First_Appointment_Date IS NULL
+                      AND s.Next_Appointment_Date IS NULL            THEN  9
+                 WHEN s.Next_Appointment_Date IS NOT NULL            THEN  1
+                 -- ==> ATTENDING IS RESPONDING. <== Both rungs now require that the patient
+                 -- has NOT been in since the reminder. Without this, 463 of Maple's 1,210
+                 -- at-risk patients had attended within six months -- 1,406 Completed
+                 -- appointments against 22 cancellations -- and were still reported as
+                 -- silent. An attender falls through to the recall-date rungs below, which
+                 -- judge them on their recall rather than on a reminder already answered.
+                 WHEN ISNULL(rc.Reminder_Sent, 0) = 1
+                      AND (at.Last_Attended_Date IS NULL
+                           OR at.Last_Attended_Date <= rc.Last_Reminded_Date)
+                      AND DATEDIFF(DAY, rc.Last_Reminded_Date, @Today) > 60
+                                                                     THEN  6
+                 WHEN ISNULL(rc.Reminder_Sent, 0) = 1
+                      AND (at.Last_Attended_Date IS NULL
+                           OR at.Last_Attended_Date <= rc.Last_Reminded_Date)
+                                                                     THEN  5
+                 WHEN s.Dentist_Recall_Date IS NULL                  THEN  3
+                 WHEN s.Dentist_Recall_Date <= @Today                THEN  4
+                 ELSE                                                       2
+               END AS INT)                                      AS fk_Patient_Status,
+               CAST(dcur.pk_Practitioner AS BIGINT)             AS fk_Current_Dentist,
+               CAST(dhyg.pk_Practitioner AS BIGINT)             AS fk_Current_Hygienist,
+               CAST(dpr.pk_Practitioner AS BIGINT)              AS fk_Prior_Dentist,
+               CAST(dd_cur.pk_Date AS INT)                      AS fk_Date_Current_Dentist_Since,
+               r.Current_Dentist_Since_Date                     AS Current_Dentist_Since_Date,
+               CAST(dd_prv.pk_Date AS INT)                      AS fk_Date_Last_Seen_Prior_Dentist,
+               r.Last_Seen_Prior_Dentist_Date                   AS Last_Seen_Prior_Dentist_Date,
+               CAST(ISNULL(r.Dentist_Spell_Count, 0) AS INT)    AS Dentist_Spell_Count,
+               -- Settled means they have at least one run of two exams with one dentist. A
+               -- patient who has seen a different clinician every single time has not
+               -- settled, and that is a different problem from having changed dentist once.
+               CAST(CASE WHEN r.Patient_ID IS NULL THEN 0 ELSE 1 END AS BIT)
+                                                                AS Has_Settled_Dentist,
+               CAST(ISNULL(ec.Dentist_Exam_Count, 0) AS INT)        AS Dentist_Exam_Count,
+               CAST(ISNULL(ec.Exams_With_Current_Dentist, 0) AS INT) AS Exams_With_Current_Dentist
+        INTO   #ext
+        FROM   #src s
+        LEFT JOIN #attend at ON at.Tenant_ID = s.Tenant_ID AND at.Patient_ID = s.Patient_ID
+        LEFT JOIN #recall rc ON rc.Tenant_ID = s.Tenant_ID AND rc.Patient_ID = s.Patient_ID
+        LEFT JOIN #rel    r  ON r.Tenant_ID  = s.Tenant_ID AND r.Patient_ID  = s.Patient_ID
+        LEFT JOIN #excnt  ec ON ec.Tenant_ID = s.Tenant_ID AND ec.Patient_ID = s.Patient_ID
+        -- Resolved to a surrogate key, not left as a Dentally id: fk_Prior_Dentist is meant
+        -- to join Dim_Practitioners in the model. Dim_Practitioners is a dimension and loads
+        -- in the same wave, so Audit.Process_Dependency carries an explicit edge for this.
+        LEFT JOIN Gold.Dim_Practitioners dpr
+               ON dpr.Practitioner_ID = r.Prior_Dentist_Practitioner_ID
+              AND dpr.Tenant_ID       = s.Tenant_ID
+        -- The CURRENT allocation, resolved from the patient record rather than from a spell:
+        -- Dentally's own allocation is the practice's statement of who owns this patient,
+        -- and it is what a Practitioner slicer is expected to match.
+        LEFT JOIN Gold.Dim_Practitioners dcur
+               ON dcur.Practitioner_ID = s.Dentist_Practitioner_ID
+              AND dcur.Tenant_ID       = s.Tenant_ID
+        LEFT JOIN Gold.Dim_Practitioners dhyg
+               ON dhyg.Practitioner_ID = s.Hygienist_Practitioner_ID
+              AND dhyg.Tenant_ID       = s.Tenant_ID
+        LEFT JOIN Gold.Dim_Date dd_cur ON dd_cur.Full_Date = r.Current_Dentist_Since_Date
+        LEFT JOIN Gold.Dim_Date dd_prv ON dd_prv.Full_Date = r.Last_Seen_Prior_Dentist_Date;
+
+        DROP TABLE #attend;
+        DROP TABLE #exam;
+        DROP TABLE #seq;
+        DROP TABLE #spell;
+        DROP TABLE #rel;
+        DROP TABLE #excnt;
+        DROP TABLE #recall;
+
         -- Remove rows no longer in source
         DELETE tgt
         FROM Gold.Dim_Patients tgt
@@ -293,9 +556,26 @@ BEGIN
             fk_Date_Lapsed                      = src.fk_Date_Lapsed,
             Lapsed_Date                         = src.Lapsed_Date,
             Lapsed_Reason                       = src.Lapsed_Reason,
+            fk_Patient_Status                   = ext.fk_Patient_Status,
+            -- V235: these were in #src and the INSERT but in neither the SET list nor the
+            -- hash, so a reassigned list was never picked up for an existing patient.
+            Dentist_Practitioner_ID             = src.Dentist_Practitioner_ID,
+            Hygienist_Practitioner_ID           = src.Hygienist_Practitioner_ID,
+            fk_Current_Dentist                  = ext.fk_Current_Dentist,
+            fk_Current_Hygienist                = ext.fk_Current_Hygienist,
+            fk_Prior_Dentist                    = ext.fk_Prior_Dentist,
+            fk_Date_Current_Dentist_Since       = ext.fk_Date_Current_Dentist_Since,
+            Current_Dentist_Since_Date          = ext.Current_Dentist_Since_Date,
+            fk_Date_Last_Seen_Prior_Dentist     = ext.fk_Date_Last_Seen_Prior_Dentist,
+            Last_Seen_Prior_Dentist_Date        = ext.Last_Seen_Prior_Dentist_Date,
+            Dentist_Spell_Count                 = ext.Dentist_Spell_Count,
+            Has_Settled_Dentist                 = ext.Has_Settled_Dentist,
+            Dentist_Exam_Count                  = ext.Dentist_Exam_Count,
+            Exams_With_Current_Dentist          = ext.Exams_With_Current_Dentist,
             DW_Updated_At                       = SYSUTCDATETIME()
         FROM Gold.Dim_Patients tgt
         INNER JOIN #src src ON tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID
+        INNER JOIN #ext ext ON ext.Patient_ID = src.Patient_ID AND ext.Tenant_ID = src.Tenant_ID
         WHERE HASHBYTES('SHA2_256', CONCAT_WS(CHAR(0),
            ISNULL(CAST(tgt.[Account_ID] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[First_Name] AS VARCHAR(500)), ''),
@@ -340,6 +620,18 @@ BEGIN
            ISNULL(CAST(tgt.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Patient_Updated_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Lapsed_Type] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Patient_Status] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Prior_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Current_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Dentist_Practitioner_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Hygienist_Practitioner_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Current_Hygienist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Current_Dentist_Since_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Last_Seen_Prior_Dentist_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Dentist_Spell_Count] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Has_Settled_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Dentist_Exam_Count] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Exams_With_Current_Dentist] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Lapsed] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Lapsed_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Lapsed_Reason] AS VARCHAR(500)), '')
@@ -388,6 +680,18 @@ BEGIN
            ISNULL(CAST(src.[Total_Invoiced] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Patient_Updated_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Lapsed_Type] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[fk_Patient_Status] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[fk_Prior_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[fk_Current_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Dentist_Practitioner_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Hygienist_Practitioner_ID] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[fk_Current_Hygienist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Current_Dentist_Since_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Last_Seen_Prior_Dentist_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Dentist_Spell_Count] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Has_Settled_Dentist] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Dentist_Exam_Count] AS VARCHAR(500)), ''),
+           ISNULL(CAST(ext.[Exams_With_Current_Dentist] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Lapsed] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Lapsed_Date] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Lapsed_Reason] AS VARCHAR(500)), '')
@@ -411,7 +715,13 @@ BEGIN
             Last_FTA_Date, Last_Cancelled_Appointment_Date,
             Last_Dentist_Visit_Date, Last_Hygienist_Visit_Date, Last_Allocated_Dentist_Visit_Date,
             Total_Paid, Total_Invoiced,
-            Patient_Created_Date, Patient_Updated_Date, Lapsed_Type, fk_Date_Lapsed, Lapsed_Date, Lapsed_Reason, Patient_Count, DW_Created_At, DW_Updated_At
+            Patient_Created_Date, Patient_Updated_Date, Lapsed_Type, fk_Date_Lapsed, Lapsed_Date, Lapsed_Reason, Patient_Count,
+            fk_Patient_Status, fk_Prior_Dentist, fk_Current_Dentist, fk_Current_Hygienist,
+            fk_Date_Current_Dentist_Since, Current_Dentist_Since_Date,
+            fk_Date_Last_Seen_Prior_Dentist, Last_Seen_Prior_Dentist_Date,
+            Dentist_Spell_Count, Has_Settled_Dentist,
+            Dentist_Exam_Count, Exams_With_Current_Dentist,
+            DW_Created_At, DW_Updated_At
         )
         SELECT
             @pk_Patient_base + ROW_NUMBER() OVER (ORDER BY src.Tenant_ID, src.Patient_ID),
@@ -429,17 +739,25 @@ BEGIN
             src.Last_FTA_Date, src.Last_Cancelled_Appointment_Date,
             src.Last_Dentist_Visit_Date, src.Last_Hygienist_Visit_Date, src.Last_Allocated_Dentist_Visit_Date,
             src.Total_Paid, src.Total_Invoiced,
-            src.Patient_Created_Date, src.Patient_Updated_Date, src.Lapsed_Type, src.fk_Date_Lapsed, src.Lapsed_Date, src.Lapsed_Reason, src.Patient_Count, SYSUTCDATETIME(), SYSUTCDATETIME()
+            src.Patient_Created_Date, src.Patient_Updated_Date, src.Lapsed_Type, src.fk_Date_Lapsed, src.Lapsed_Date, src.Lapsed_Reason, src.Patient_Count,
+            ext.fk_Patient_Status, ext.fk_Prior_Dentist, ext.fk_Current_Dentist, ext.fk_Current_Hygienist,
+            ext.fk_Date_Current_Dentist_Since, ext.Current_Dentist_Since_Date,
+            ext.fk_Date_Last_Seen_Prior_Dentist, ext.Last_Seen_Prior_Dentist_Date,
+            ext.Dentist_Spell_Count, ext.Has_Settled_Dentist,
+            ext.Dentist_Exam_Count, ext.Exams_With_Current_Dentist,
+            SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM #src src
+        INNER JOIN #ext ext ON ext.Patient_ID = src.Patient_ID AND ext.Tenant_ID = src.Tenant_ID
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients tgt WHERE tgt.Patient_ID = src.Patient_ID AND tgt.Tenant_ID = src.Tenant_ID);
         SET @My_Inserts = @@ROWCOUNT;
 
         DROP TABLE #src;
         DROP TABLE #role_visit;
+        DROP TABLE #ext;
 
         -- Ensure unknown/-1 seed row exists (Tenant_ID = -1 passes RLS for shared data)
-        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, Patient_Count, DW_Created_At, DW_Updated_At)
-        SELECT -1, -1, -1, 0, SYSUTCDATETIME(), SYSUTCDATETIME()
+        INSERT INTO Gold.Dim_Patients (pk_Patient, Tenant_ID, Patient_ID, Patient_Count, fk_Patient_Status, DW_Created_At, DW_Updated_At)
+        SELECT -1, -1, -1, 0, -1, SYSUTCDATETIME(), SYSUTCDATETIME()
         WHERE NOT EXISTS (SELECT 1 FROM Gold.Dim_Patients WHERE pk_Patient = -1);
         --*********************************
         --**** Procedure logic ends    ****

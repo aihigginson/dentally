@@ -25,6 +25,14 @@ current assignment, and the gap there shrinks month by month until it crosses.
 That one is about the VALUE being reconstructed; this is about the ATTRIBUTION being
 back-dated. A practice with stable lists never shows it, which is why it survived a year.
 
+**AND IT WAS NOT EVEN CURRENT (found 2026-10-22).** `Dentist_Practitioner_ID` and
+`Hygienist_Practitioner_ID` were in `#src` and the INSERT list but in NEITHER the UPDATE SET
+list NOR the change hash, so the allocation was stamped the day a patient first loaded and
+never revisited. 133 live patients were allocated to someone the practice had moved them
+away from. V235 adds both to the SET list and the hash. Surfaced only because V233's new
+`fk_Current_Dentist` IS hashed, refreshed from Silver, and disagreed with the frozen column
+beside it -- a guard written to prove the new key right proved the old one stale.
+
 **How to apply:** never present per-practitioner plan revenue, or anything filtered on
 `Dim_Patients.Dentist_Practitioner_ID`, as a historical fact -- it is "what this month
 would look like if today's list had always applied". Practice-level totals are unaffected.

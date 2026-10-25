@@ -1,0 +1,60 @@
+# =====================================================================
+# Release V238 -- the cancellation map that was never filled
+# =====================================================================
+# Input.Cancellation_Reason_Map was EMPTY for every tenant. Gold.Dim_Cancellation_Reasons
+# falls back to the raw text when no map row matches, so Standard_Cancellation_Reason has
+# been echoing each practice's own wording verbatim since the column existed, and nothing
+# ever looked wrong.
+#
+# ==> THIS IS THE SAME TRAP AS THE APPOINTMENT REASON MAP. <== V230 found
+# Silver.Appointment_Reason_Map recognising 29.5% of reasons while appearing healthy, for
+# exactly this reason: an unmapped value reads as itself. Anything that has grouped by
+# Standard_Cancellation_Reason has really been grouping by Maple's own strings.
+#
+# ---------------------------------------------------------------------
+# WHAT IT UNBLOCKS.
+# ---------------------------------------------------------------------
+# The lapsing-patient flow needs "cancelled by the practice" told apart from "cancelled by
+# the patient". Maple's reasons carry that in a prefix, so the split is derivable once the
+# raw strings map onto Config.Cancellation_Reason_Standard. On tenant 100 the 16 reasons in
+# use roll up to:
+#
+#     Cancellation Patient    16,170   49%
+#     Cancellation Other      11,339   35%   (10,774 of it the -1 sentinel)
+#     Cancellation Practice    5,269   16%
+#     Did Not Attend               5
+#
+# 'No reason recorded' is 10,774 of 32,773 -- a third of all cancellations -- and rolls into
+# Other by decision, not by default. Other is not a rounding bucket here and must be shown.
+#
+# 'Patient - Short Notice' (565) maps to Short Notice, which keeps the standard list intact
+# but puts those cancellations in Other rather than Patient: short notice is an urgency, not
+# a who. One row to change in the Data file if the flow should count them as patient.
+#
+# ---------------------------------------------------------------------
+# NO CUSTOMER-VISIBLE NUMBER MOVES.
+# ---------------------------------------------------------------------
+# Cancellation COUNTS are unchanged -- this only renames how they group. Any report sliced
+# by cancellation reason will show the standard names instead of Maple's wording, which is
+# the point. The table DDL is not deployed: the table exists, and only its rows change.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Input.Cancellation_Reason_Map.Data.sql
+# The -1 sentinel's standard reason is hard-coded in the loader, not mapped: that row is
+# synthesised, so no map row can ever reach it. It now reads 'Other'.
+DEPLOY   Fabric\Gold.usp_Load_Dim_Cancellation_Reasons.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Cancellation_Reasons @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards -------------------------------------------------------------------------------
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Input.Cancellation_Reason_Map WHERE Tenant_ID = 100; IF @n <> 15 BEGIN SET @e = 'V238 FAILED: the map holds ' + CAST(@n AS VARCHAR(10)) + ' rows for tenant 100, expected 15.'; THROW 50680, @e, 1; END;
+# ==> EVERY MAPPED VALUE MUST BE A REAL STANDARD REASON. <== A typo here would not error: the
+# value would simply pass through as a new "standard" nobody recognises.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Input.Cancellation_Reason_Map m WHERE NOT EXISTS (SELECT 1 FROM Config.Cancellation_Reason_Standard s WHERE s.Standard_Cancellation_Reason = m.Standard_Cancellation_Reason); IF @n <> 0 BEGIN SET @e = 'V238 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' map row(s) name a standard reason that does not exist.'; THROW 50681, @e, 1; END;
+# The whole point of the release: no reason actually in USE may fall through as itself.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT DISTINCT d.Reason FROM Gold.Fact_Appointments a JOIN Gold.Dim_Cancellation_Reasons d ON d.pk_Cancellation_Reason = a.fk_Cancellation_Reason WHERE a.Tenant_ID = 100 AND a.Is_Cancelled = 1 AND NOT EXISTS (SELECT 1 FROM Config.Cancellation_Reason_Standard s WHERE s.Standard_Cancellation_Reason = d.Standard_Cancellation_Reason)) x; IF @n <> 0 BEGIN SET @e = 'V238 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' cancellation reason(s) in use still fall through as their own text.'; THROW 50682, @e, 1; END;
+# Practice-initiated is the contrast the flow exists to show; if it reads zero the prefix
+# convention has changed and the map needs revisiting rather than the diagram.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments a JOIN Gold.Dim_Cancellation_Reasons d ON d.pk_Cancellation_Reason = a.fk_Cancellation_Reason WHERE a.Tenant_ID = 100 AND a.Is_Cancelled = 1 AND d.Standard_Cancellation_Reason = 'Practice Initiated'; IF @n = 0 BEGIN SET @e = 'V238 FAILED: no cancellation resolves to Practice Initiated.'; THROW 50683, @e, 1; END;
+
+TEST

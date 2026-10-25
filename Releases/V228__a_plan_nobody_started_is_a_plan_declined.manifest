@@ -1,0 +1,57 @@
+# =====================================================================
+# Release V228 -- Plan Rejection Rate
+# =====================================================================
+# The practice asked whether one associate loses patients because his treatment plans are
+# too large. The warehouse could not answer it: Dentally's treatment-plans endpoint returns
+# no acceptance field, so Silver writes Accepted_At as a literal NULL and all 71,974 of the
+# tenant's plans look identical. There is no accepted group to compare against.
+#
+# ==> THE PRACTICE SUPPLIED THE RULE THAT REPLACES IT. <== A plan presented 28 days ago with
+# no item ever started is a plan the patient declined. That is observable, and measured on
+# the live tenant it separates the value bands nearly four-fold:
+#
+#       under 200   2.4%          500-999     6.9%
+#       200-499     2.9%          over 1000   8.9%
+#
+# So the practice's instinct about SIZE is right. Their instinct about the PERSON was not:
+# the associate they named sits mid-pack in both bands (7.4% on big plans against 10.9% and
+# 5.6%) and simply presents far more large treatment than his peers -- 23% of his plans are
+# 500+, against 14% and 10%. He converts ambitious work slightly better than average; it is
+# the volume of it that makes him visible.
+#
+# ==> THE SHARE REFUSED IS THE MEASURE. THE MONEY ON THOSE PLANS IS NOT. <== Totalling the
+# value of declined plans and calling it lost revenue is wrong twice over: an over-ambitious
+# plan's value was never realistic, and summing it rewards whoever quotes most
+# extravagantly. Only the rate is stored.
+#
+# ==> 28 DAYS IS ENFORCED ON BOTH ENDS. <== A plan raised last week has not been declined,
+# it is merely new, and counting it inflates the rate for whoever has been busiest lately.
+# The look-back stops at 12 months so this reads as current behaviour.
+#
+# Has_Target = 0 deliberately. This is comparative -- read against peers doing similar work
+# -- not a number a practice sets. And the peer group is Custom_Role, never Dentally's Role:
+# Dentally calls every clinician a Dentist, while the practice has Associates, Associate
+# Specialists, Principals and an Implantologist. Pooling those is how an ordinary associate
+# reads as an outlier, which was caught during this analysis.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Metric_Actuals.StoredProcedure.sql
+DEPLOY   Fabric\Config.Metric_Definitions.Data.sql
+
+# The definition must exist before the loader writes rows the product cannot name.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Config.Metric_Definitions WHERE Metric_Key = 'plan_rejection_rate' AND Is_Active = 1 AND Section = 'clinical' AND Range_Type = 'below' AND Target_Type = 'rate' AND Supports_Practitioner = 1; IF @n <> 1 BEGIN SET @e = 'V228 FAILED: plan_rejection_rate is not defined as an active clinical rate supporting practitioners.'; THROW 50570, @e, 1; END;
+
+# It is comparative, so it must NOT acquire a target and start generating Daily_Targets rows.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Config.Metric_Definitions WHERE Metric_Key = 'plan_rejection_rate' AND ISNULL(Has_Target, 0) <> 0; IF @n <> 0 BEGIN SET @e = 'V228 FAILED: plan_rejection_rate must not carry a target.'; THROW 50571, @e, 1; END;
+
+EXEC     DECLARE @i BIGINT = 0, @u BIGINT = 0, @d BIGINT = 0; EXEC Gold.usp_Load_Fact_Metric_Actuals @Mode = 'PROD', @Run_Inserts = @i OUT, @Run_Updates = @u OUT, @Run_Deletes = @d OUT;
+
+# A rate needs both halves, and a share cannot exceed one. A numerator above its
+# denominator would mean the 28-day filter had been applied to one and not the other.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND (Denominator IS NULL OR Denominator <= 0 OR Numerator IS NULL OR Numerator > Denominator); IF @n <> 0 BEGIN SET @e = 'V228 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' plan_rejection_rate row(s) have a missing or impossible rate.'; THROW 50572, @e, 1; END;
+
+# Both grains must be written: the practice row AND the per-practitioner rows the Clinical
+# cohort comparison needs. One without the other is a half-built metric.
+EXEC     DECLARE @p INT, @c INT, @e VARCHAR(4000); SELECT @p = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND fk_Practitioner = -1; SELECT @c = COUNT(*) FROM Gold.Fact_Metric_Actuals WHERE Metric = 'plan_rejection_rate' AND fk_Practitioner <> -1; IF @p = 0 OR @c = 0 BEGIN SET @e = 'V228 FAILED: practice rows ' + CAST(@p AS VARCHAR(10)) + ', practitioner rows ' + CAST(@c AS VARCHAR(10)) + ' -- both grains are required.'; THROW 50573, @e, 1; END;
+
+TEST

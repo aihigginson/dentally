@@ -1,0 +1,315 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "f4a19d27c6b08e351abc",
+  "position": {
+    "x": 634,
+    "y": 74,
+    "z": 300,
+    "height": 524,
+    "width": 646,
+    "tabOrder": 110
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "How to read this",
+                    "textStyle": {
+                      "fontSize": "9pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "Each spoke compares one clinician with the average of their own role — associates against associates. The lighter ring is that average, so a point outside it is above their peers and a point inside is below. The figures beside each point are the real numbers.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "4pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "%Proposed  ",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  },
+                  {
+                    "value": "Of all private treatment proposed in a patient’s first 12 months with this clinician, the share proposed at the very first appointment.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "Y1 Avg £  ",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  },
+                  {
+                    "value": "Private treatment COMPLETED per patient across their first 12 months. Proposed value is an intention; this is what was actually carried out.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "%Large  ",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  },
+                  {
+                    "value": "Share of first-appointment plans worth £1,000 or more.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "%Delivered  ",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  },
+                  {
+                    "value": "Of the value proposed at the first appointment, the share actually completed. Not the same as a plan being started — a plan can begin and never finish.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "%Attrition  ",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  },
+                  {
+                    "value": "Of the patients who have reached a recall outcome — rebooked, overdue, or reminded and silent — the share who did NOT rebook. Patients whose recall is not yet due are left out, because they have no outcome yet.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "Who is counted",
+                    "textStyle": {
+                      "fontSize": "9pt",
+                      "color": "#1A527A",
+                      "fontWeight": "bold"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "Private plans only — NHS and plan patients carry no private value, so including them would understate everything. Every patient whose first appointment with this clinician was in the last two years, so the picture stays current and moves with today.",
+                    "textStyle": {
+                      "fontSize": "7pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": " ",
+                    "textStyle": {
+                      "fontSize": "3pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "Patients seen in the last few months have not had long for treatment to be carried out, so %Delivered reads a little low for whoever has taken on the most new patients recently.",
+                    "textStyle": {
+                      "fontSize": "6pt",
+                      "color": "#475467"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "padding": [
+        {
+          "properties": {
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            },
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F7F9FB'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "isHidden": true
+}

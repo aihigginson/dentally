@@ -85,3 +85,21 @@
 - [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
+- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.
+- [Treatment plan acceptance is unknowable](treatment-plan-acceptance-is-unknowable.md) — Accepted_At is hardcoded NULL; plans are not deleted, but no plan can be shown as accepted or declined.
+- [Overnight pause kept despite flaky cron](overnight-pause-kept-despite-flaky-cron.md) — SETTLED: the saving wins; owner checks the site each morning, `gh workflow run capacity-schedule.yml` fixes it.
+- [An unmapped reason reads as itself](an-unmapped-reason-reads-as-itself.md) — Appointment_Reason falls back to raw text, so the map was recognising 29.5% and looked fine; join the map to judge coverage.
+- [Lead with the decision, not the argument](lead-with-the-decision-not-the-argument.md) — long build-ups leave nowhere to interject; define measures, strip internal labels, ask the owner.
+- [A warehouse guard cannot see the model](a-warehouse-guard-cannot-see-the-model.md) — V224 dropped two PBI views as unread and broke the model; sys.sql_modules proves nothing about Power BI.
+- [Batch fixes before writing a manifest](batch-fixes-before-writing-a-manifest.md) — V229-V235 in one afternoon, three repairing the previous; accumulate into the undeployed manifest instead.
+- [AddMeasure on an existing name silently loses](addmeasure-on-an-existing-name-silently-loses.md) — the original survives and your edit never applies; some chart axes update, others freeze, no error.
+- [An Unconstrained alias must join only to practitioners](an-unconstrained-alias-must-join-only-to-practitioners.md) — auto-detected joins gave two paths to List Patients; the HOME page broke, not the new one.
+- [PBIR enums are validated and fail closed](pbir-enums-are-validated-and-fail-closed.md) — "Filter" instead of "DataFilter" stopped the whole report opening; fetch the $schema.
+- [Commit at each working point](commit-at-each-working-point.md) — a day uncommitted meant 10 of 14 deploy targets would have shipped stale or failed on the runner.
+- [Azure resource creation needs MFA](azure-resource-creation-needs-mfa.md) — RequestDisallowedByAzure even as subscription Owner; reads and acr build still work.
+- [Report canvas is 1280x600](report-canvas-is-1280x600.md) — matches the app viewport; the Template caused 20 pages of 720 drift. FitToPage is now ADOPTED, not rejected.
+- [Client hierarchy attaches to the site](client-hierarchy-attaches-to-the-site.md) — Region/Area hang off the site; Practice is derived, shown only when an area holds 2+ tenants.
+- [The csx owns only the _Measures table](the-csx-owns-only-the-measures-table.md) — fact tables carry hand-made measures reports bind to; sweeping them would have deleted 9 live ones.
+- [Fact_Lapsed_Patients is the lapsing fact](lapsed-patients-is-the-lapsing-fact.md) — I built a near-duplicate; the customer-facing lapsed figures come from _Metric Actuals, not this fact.
+- [A bookmark lists the visuals it applies to](a-bookmark-lists-the-visuals-it-applies-to.md) — targetVisualNames; a new visual not on it ignores the bookmark and stays hidden, silently.
+- [A short action button needs container padding](a-short-action-button-needs-container-padding.md) — default padding eats a 28px button; it renders as a clickable line of its fill colour.

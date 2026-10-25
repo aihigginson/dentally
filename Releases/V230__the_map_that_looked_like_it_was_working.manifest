@@ -1,0 +1,72 @@
+# =====================================================================
+# Release V230 -- The map that looked like it was working
+# =====================================================================
+# V229 shipped an ownership rule that reads exam-category appointments, and it ran on a
+# QUARTER of the live practice's exams. The cause is a coincidence of spelling that made the
+# fault invisible to the obvious check.
+#
+# ==> Appointment_Reason IS COALESCE(map.Category, RAW REASON TEXT). <== So an unmapped
+# reason does not read as unmapped. It reads as itself. The live practice's own text for a
+# check-up is literally 'Exam' and for treatment 'Continuing Treatment' -- character for
+# character the category names. Querying Gold.Fact_Appointments for Appointment_Reason =
+# 'Exam' therefore returned 31,741 appointments and looked like a healthy mapped category,
+# while Silver.Appointment_Reason_Map matched not one of them. Anything that JOINS the map
+# -- which is what the V229 ownership rule does -- saw only the rows mapped through HEX:
+# 9,009 appointments across 2,911 patients, against a true 8,049 patients with dentist
+# appointments. The column looked categorised. The map was nearly empty.
+#
+# Mapping a self-named reason changes NOTHING downstream: the fallback already produced that
+# exact string, so no measure, tile or journey moves. It only makes the category reachable
+# by a join. That is the whole fix and it is free.
+#
+# The six hygiene slot names are a real change -- they currently leak raw practice shorthand
+# ('20 Scale & Polish', '3 12 Hyg') into a product column, and now resolve to 'Hygiene'.
+# 'Hex 20' and 'Hex 30' go to Hygiene, NOT to Exam with HEX: they are 96% hygienist-performed
+# (1,500 of 1,571 and 1,242 of 1,268), so they are timed hygiene appointments rather than the
+# dentist check-up HEX denotes.
+#
+# 'View' (2,508 appointments) is deliberately left unmapped. It is Principal-heavy with a
+# 316-day recurrence and nobody outside the practice can say what it means. An honest
+# fall-through beats a guessed category.
+#
+# ==> THE NEW GUARD IS THE POINT OF THIS RELEASE. <== A per-tenant coverage floor on mapped
+# reasons. The previous failure mode was silent by construction, and no amount of care with
+# the next rule would have caught it -- only a check that asks "what share of this
+# customer's appointments does the map actually recognise" can.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Silver.Appointment_Reason_Map.Data.sql
+
+# The map feeds Appointment_Reason, which feeds the journey's Exam/Hygiene split, the
+# ownership rule on the patient, and the first-meeting flag on the plan. All four rebuild.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointments @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Appointment_Journey @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Treatment_Plans @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards ---
+
+# ==> COVERAGE, PER TENANT. <== Any tenant with real history must have most of its completed
+# appointments recognised by the map. This is the check that was missing: an unmapped reason
+# falls through as its own text and cannot be spotted by reading Appointment_Reason. 70% is
+# a floor, not a target -- the live practice should clear 90% after this release.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT a.Tenant_ID, COUNT(*) AS appts, SUM(CASE WHEN m.Reason_Text IS NULL THEN 0 ELSE 1 END) AS mapped FROM Silver.Appointments a LEFT JOIN Silver.Appointment_Reason_Map m ON m.Reason_Text = NULLIF(TRIM(a.Reason), '') WHERE a.State = 'Completed' GROUP BY a.Tenant_ID HAVING COUNT(*) >= 1000 AND 100.0 * SUM(CASE WHEN m.Reason_Text IS NULL THEN 0 ELSE 1 END) / COUNT(*) < 70.0) x; IF @n <> 0 BEGIN SET @e = 'V230 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' tenant(s) have under 70% of completed appointments recognised by Silver.Appointment_Reason_Map -- an unmapped reason falls through as its own text and is invisible in Appointment_Reason.'; THROW 50610, @e, 1; END;
+
+# The ownership rule must now see the bulk of dentist exams, not a corner of them. If the
+# patients carrying a dentist exam count fall far short of the patients who actually have
+# exam-category appointments with a dentist, the rule is running on a subset again.
+EXEC     DECLARE @r DECIMAL(6,1), @e VARCHAR(4000); SELECT @r = 100.0 * (SELECT COUNT(*) FROM Gold.Dim_Patients WHERE Tenant_ID = 100 AND ISNULL(Dentist_Exam_Count,0) > 0) / NULLIF((SELECT COUNT(DISTINCT a.Patient_ID) FROM Silver.Appointments a JOIN Silver.Practitioners pr ON pr.Practitioner_ID = a.Practitioner_ID AND pr.Tenant_ID = a.Tenant_ID JOIN Silver.Appointment_Reason_Map m ON m.Reason_Text = NULLIF(TRIM(a.Reason), '') WHERE a.Tenant_ID = 100 AND a.State = 'Completed' AND m.Category = 'Exam' AND pr.User_Role = 'Dentist'), 0); IF @r IS NULL OR @r < 99.0 BEGIN SET @e = 'V230 FAILED: only ' + CAST(ISNULL(@r, 0) AS VARCHAR(10)) + '% of patients with a dentist exam carry a Dentist_Exam_Count -- the ownership rule is not seeing them all.'; THROW 50611, @e, 1; END;
+
+# 'Exam' and 'Continuing Treatment' were mapped precisely because they change nothing. If
+# either count moved, the fallback was NOT already producing that string and this release
+# has quietly recategorised real appointments.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Appointments a JOIN Gold.Dim_Date d ON d.pk_Date = a.fk_Date_Start WHERE a.Tenant_ID = 100 AND a.Appointment_Reason IS NULL; IF @n <> 0 BEGIN SET @e = 'V230 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' appointment(s) have no Appointment_Reason at all.'; THROW 50612, @e, 1; END;
+
+# Spell consistency has to survive a four-fold increase in the exams feeding it -- more
+# exams means more islands, and that is exactly when gaps-and-islands goes wrong.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE pk_Patient > 0 AND ((ISNULL(Has_Settled_Dentist,0) = 0 AND (ISNULL(Dentist_Spell_Count,0) <> 0 OR Current_Dentist_Since_Date IS NOT NULL)) OR (ISNULL(Has_Settled_Dentist,0) = 1 AND (ISNULL(Dentist_Spell_Count,0) < 1 OR Current_Dentist_Since_Date IS NULL)) OR (fk_Prior_Dentist IS NOT NULL AND ISNULL(Dentist_Spell_Count,0) < 2) OR (Last_Seen_Prior_Dentist_Date IS NOT NULL AND Current_Dentist_Since_Date IS NOT NULL AND Last_Seen_Prior_Dentist_Date >= Current_Dentist_Since_Date) OR ISNULL(Exams_With_Current_Dentist,0) > ISNULL(Dentist_Exam_Count,0)); IF @n <> 0 BEGIN SET @e = 'V230 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) have an internally inconsistent dentist spell after the remap.'; THROW 50613, @e, 1; END;
+
+# And the first-visit flag must still land on the right day, with the join still matching.
+EXEC     DECLARE @n INT, @p INT, @e VARCHAR(4000); SELECT @n = COUNT(*), @p = COUNT(DISTINCT fk_Practitioner) FROM Gold.Fact_Treatment_Plans WHERE ISNULL(Is_First_Visit_Plan,0) = 1; IF @n = 0 OR @p < 2 BEGIN SET @e = 'V230 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' plan(s) across ' + CAST(@p AS VARCHAR(10)) + ' practitioner(s) are flagged first-visit.'; THROW 50614, @e, 1; END;
+
+TEST

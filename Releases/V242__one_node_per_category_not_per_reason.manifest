@@ -1,0 +1,46 @@
+# =====================================================================
+# Release V242 -- the lapse flow's first column becomes a category
+# =====================================================================
+# Gold.Fact_Patient_Lapse_Flow.Last_Appointment_Reason arrived as RAW reason text: 40 distinct
+# values for tenant 100 alone, 35 of them between one and ten patients. The alluvial that now
+# sits on the Patient page cannot draw that -- 35 of its first-column nodes would be under a
+# pixel high and unlabelled.
+#
+# Silver.Appointment_Reason_Map's own header already documents the intended behaviour:
+#   "All reasons not in this table will default to 'Other'."
+# Gold.usp_Load_Fact_Appointments does not honour it -- an unmapped reason reads as itself --
+# so the roll-up is done here instead, on the way into the patient-grain fact.
+#
+# ---------------------------------------------------------------------
+# ==> Gold.Fact_Appointments IS DELIBERATELY NOT CHANGED. <==
+# ---------------------------------------------------------------------
+# Its Appointment_Reason column is read by a large number of measures and by
+# Gold.usp_Load_Dim_Patients' ownership rule. Changing its domain is a far wider release than
+# this one, and this fact does not need it.
+#
+# ---------------------------------------------------------------------
+# WHAT THIS DOES NOT FIX.
+# ---------------------------------------------------------------------
+# 35 raw reasons for the live tenant are categorised nowhere, so they land in 'Other' -- about
+# 400 patients. Among them 'New Patient Consultation' carries ~109 patients and is the single
+# most interesting lapse there is: someone who came once and never came back. Adding these to
+# Silver.Appointment_Reason_Map is owner-curated data work, the same job V238 did for
+# cancellations, and is not guessed at here.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Fact_Patient_Lapse_Flow.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Patient_Lapse_Flow @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE WHOLE POINT OF THE RELEASE. <== Every surviving value must be a category the map
+# defines, or one of the two states the loader synthesises.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT f.Last_Appointment_Reason) FROM Gold.Fact_Patient_Lapse_Flow f WHERE f.Last_Appointment_Reason NOT IN ('Other','No Appointment') AND NOT EXISTS (SELECT 1 FROM Silver.Appointment_Reason_Map m WHERE m.Category = f.Last_Appointment_Reason); IF @n <> 0 BEGIN SET @e = 'V242 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' uncategorised reason(s) still reach the fact.'; THROW 50720, @e, 1; END;
+# A first column of one node is a bar chart, not a flow; a first column of 20 is unreadable.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT Last_Appointment_Reason) FROM Gold.Fact_Patient_Lapse_Flow WHERE Tenant_ID = 100; IF @n < 2 OR @n > 12 BEGIN SET @e = 'V242 FAILED: the first column has ' + CAST(@n AS VARCHAR(10)) + ' nodes -- expected between 2 and 12.'; THROW 50721, @e, 1; END;
+# ==> NO PATIENT MAY BE LOST OR DUPLICATED BY A RELABELLING. <== The roll-up only rewrites a
+# string; the row count and the one-row-per-patient grain must both be exactly as they were.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, fk_Patient FROM Gold.Fact_Patient_Lapse_Flow GROUP BY Tenant_ID, fk_Patient HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V242 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) appear twice -- the grain has broken.'; THROW 50722, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow WHERE Last_Appointment_Reason IS NULL; IF @n <> 0 BEGIN SET @e = 'V242 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) have no first-column value, so they vanish from the flow.'; THROW 50723, @e, 1; END;
+
+TEST

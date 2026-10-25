@@ -16,6 +16,30 @@ INSERT INTO [Silver].[Appointment_Reason_Map] ([Reason_Text], [Category], [Sort_
     ('Routine Examination',                'Exam', 1),
     ('New Patient Examination',            'Exam', 1),
     ('Recall Examination',                 'Exam', 1),
+-- HEX is the live practice's own shorthand for a check-up and was the single largest gap
+-- in this map: 15,796 completed appointments across 3,016 patients matching nothing, so
+-- their check-ups registered as no category at all and the ownership rule in
+-- Gold.usp_Load_Dim_Patients could not see them.
+-- ==> 42% OF HEX APPOINTMENTS ARE TAKEN BY A HYGIENIST. <== That is harmless for ownership,
+-- which filters on User_Role = 'Dentist' and drops that half, but it DOES move the
+-- Exam/Hygiene split in Gold.Fact_Appointment_Journey -- hence the reload in V229.
+-- 'Hex 20' and 'Hex 30' are NOT exams despite the name -- they are 96% hygienist-performed
+-- (1,500 of 1,571 and 1,242 of 1,268), so they are timed hygiene slots. They are mapped in
+-- the Hygiene block below; mapping them here would misclassify 2,742 hygiene appointments.
+    ('HEX',                                'Exam', 1),
+-- ==> SELF-NAMED REASONS. ZERO DOWNSTREAM CHANGE, AND THE WHOLE POINT. <== The loader
+-- resolves Appointment_Reason as COALESCE(map.Category, raw text), so these two already
+-- produced exactly these strings by falling through unmapped -- which is precisely why the
+-- map looked like it was working when it was matching nothing. 31,741 and 20,793
+-- appointments at the live practice. Anything that JOINS the map (the ownership rule in
+-- Gold.usp_Load_Dim_Patients) could not see them at all until now.
+    ('Exam',                               'Exam', 1),
+    ('Continuing Treatment',                'Continuing Treatment', 3),
+-- The practice's own shorthand for a pre-operative assessment, with the proviso that the
+-- op may turn out not to be needed. 2,508 completed appointments, Principal-heavy, on a
+-- 316-day recurrence, and never charged -- it was the largest single item in the no-payer
+-- bucket (1,178 of 1,193 completed, none invoiced).
+    ('View',                               'Continuing Treatment', 3),
 -- ── Hygiene ──────────────────────────────────────────────────────────────────
     ('Hygiene',                            'Hygiene', 2),
     ('Hygiene Appointment',                'Hygiene', 2),
@@ -24,6 +48,16 @@ INSERT INTO [Silver].[Appointment_Reason_Map] ([Reason_Text], [Category], [Sort_
     ('Exam and Scale and Polish',          'Hygiene', 2),
     ('Oral Hygiene Instruction',           'Hygiene', 2),
     ('Fluoride Varnish',                   'Hygiene', 2),
+-- The practice's own hygiene slot names. 'Hex 20' and 'Hex 30' sit here rather than with
+-- HEX above: they are 96% hygienist-performed (1,500 of 1,571 and 1,242 of 1,268), so they
+-- are timed hygiene appointments, not the dentist check-up HEX denotes. All of these
+-- currently leak raw practice shorthand into a product column.
+    ('20 Scale & Polish',                  'Hygiene', 2),
+    ('30 Scale & Polish',                  'Hygiene', 2),
+    ('Routine Hygiene',                    'Hygiene', 2),
+    ('Hex 20',                             'Hygiene', 2),
+    ('Hex 30',                             'Hygiene', 2),
+    ('3 12 Hyg',                           'Hygiene', 2),
 -- ── Continuing Treatment ─────────────────────────────────────────────────────
     ('Treatment',                          'Continuing Treatment', 3),
     ('Fissure Sealant',                    'Continuing Treatment', 3),

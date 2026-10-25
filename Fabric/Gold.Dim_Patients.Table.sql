@@ -72,6 +72,30 @@ CREATE TABLE [Gold].[Dim_Patients](
     [fk_Date_Lapsed]                     [int]           NULL,
     [Lapsed_Date]                        [date]          NULL,
     [Lapsed_Reason]                      [varchar](255)  NULL,
+    -- V229: the patient lifecycle, and who their dentist actually is over time.
+    -- fk_Patient_Status -> Gold.Dim_Patient_Status (reference data, no Tenant_ID, no RLS).
+    [fk_Patient_Status]                  [int]           NULL,
+    -- ==> OWNERSHIP IS ESTABLISHED BY EXAMS, NOT BY VISITS. <== One exam with an unfamiliar
+    -- dentist plus three follow-up treatment appointments is NOT a change of dentist; those
+    -- treatments are the consequence of that single exam. A spell therefore needs TWO
+    -- CONSECUTIVE exams, and is dated from the FIRST of them -- so the history reads
+    -- correctly even though the change can only be confirmed at the second.
+    -- V233: the CURRENT allocation as surrogate keys. Dentist_Practitioner_ID and
+    -- Hygienist_Practitioner_ID above are Dentally ids and cannot join Dim_Practitioners,
+    -- so without these no patient-grain visual can follow a Practitioner or Role filter --
+    -- which is how every report filters. Allocation, not attendance: see
+    -- Last_Allocated_Dentist_Visit_Date for whether they have actually been seen.
+    [fk_Current_Dentist]                 [bigint]        NULL,
+    [fk_Current_Hygienist]               [bigint]        NULL,
+    [fk_Prior_Dentist]                   [bigint]        NULL,   -- pk_Practitioner of the previous spell; NULL = never changed
+    [fk_Date_Current_Dentist_Since]      [int]           NULL,
+    [Current_Dentist_Since_Date]         [date]          NULL,
+    [fk_Date_Last_Seen_Prior_Dentist]    [int]           NULL,
+    [Last_Seen_Prior_Dentist_Date]       [date]          NULL,
+    [Dentist_Spell_Count]                [int]           NULL,   -- qualifying spells, not appointments
+    [Has_Settled_Dentist]                [bit]           NULL,   -- 0 = never two consecutive exams with one dentist
+    [Dentist_Exam_Count]                 [int]           NULL,
+    [Exams_With_Current_Dentist]         [int]           NULL,
     [Patient_Count]                      [int]           NOT NULL,
     [DW_Created_At]                      [datetime2](6)  NOT NULL,
     [DW_Updated_At]                      [datetime2](6)  NOT NULL

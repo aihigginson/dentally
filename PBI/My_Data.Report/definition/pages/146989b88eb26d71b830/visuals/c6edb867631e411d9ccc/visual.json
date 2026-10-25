@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "c6edb867631e411d9ccc",
   "position": {
-    "x": 790,
-    "y": 128,
+    "x": 636.34812286689419,
+    "y": 126.96245733788396,
     "z": 9000,
-    "height": 212,
-    "width": 482,
+    "height": 221.160409556314,
+    "width": 635.83617747440269,
     "tabOrder": 9000
   },
   "visual": {
@@ -29,8 +29,8 @@
               "queryRef": "List Date.Month Commencing Date",
               "nativeQueryRef": "Month Commencing Date",
               "active": true,
-              "format": "MMM yyyy",
-              "displayName": "Month"
+              "displayName": "Month",
+              "format": "MMM yyyy"
             }
           ]
         },
@@ -157,6 +157,53 @@
               "expr": {
                 "Literal": {
                   "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "3D"
+                }
+              }
+            },
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "3D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "lockAspect": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }

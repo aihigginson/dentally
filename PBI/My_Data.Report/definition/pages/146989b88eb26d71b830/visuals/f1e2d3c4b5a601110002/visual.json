@@ -199,5 +199,65 @@
       ]
     }
   },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "f10f14e1d7272597417a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Hygienist"
+              }
+            },
+            "Property": "Full Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c404fa5e758f85dde404",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Date"
+              }
+            },
+            "Property": "Month Commencing Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "e7b10154ddc23c41af67",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "List Payment Plans"
+              }
+            },
+            "Property": "Payment Plan Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2519312ee457532708a2",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Measures"
+              }
+            },
+            "Property": "Cross-Charge Out"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  },
   "isHidden": true
 }
