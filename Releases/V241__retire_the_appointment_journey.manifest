@@ -1,7 +1,10 @@
 # =====================================================================
 # Release V241 -- retire the Appointment Journey
 # =====================================================================
-# Gold.Fact_Patient_Lapse_Flow (V239/V240) replaces it. The journey visual was hidden on
+# Gold.Fact_Lapsed_Patients replaces it -- via V243, which folded the short-lived
+# Fact_Patient_Lapse_Flow into the fact that already existed. The guards below named that
+# interim fact until PROD was reached: it never existed there (V239 was skipped) and no longer
+# exists anywhere, so they now check the replacement that survives. The journey visual was hidden on
 # every one of the Patient report's six bookmarks and carried isHidden at the top level, so
 # nothing on screen loses anything.
 #
@@ -46,8 +49,8 @@ EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION
 # would quietly empty Booking / This_Visit / Next_Visit on every appointment.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Silver' AND TABLE_NAME='Appointment_Journey_Attrs'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: Silver.Appointment_Journey_Attrs is gone -- it was never meant to be.'; THROW 50711, @e, 1; END;
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_APPOINTMENT_JOURNEY'; IF @n <> 0 BEGIN SET @e = 'V241 FAILED: the journey load is still registered and the nightly chain will call a dropped proc.'; THROW 50712, @e, 1; END;
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_PATIENT_LAPSE_FLOW'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: the replacement load is not registered, so the flow fact will go stale.'; THROW 50713, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_LAPSED_PATIENTS'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: the replacement load is not registered, so the lapsing fact will go stale.'; THROW 50713, @e, 1; END;
 # The replacement must still be there and populated after all that.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Patient_Lapse_Flow; IF @n = 0 BEGIN SET @e = 'V241 FAILED: the lapse flow fact is empty.'; THROW 50714, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients; IF @n = 0 BEGIN SET @e = 'V241 FAILED: the lapsing fact is empty.'; THROW 50714, @e, 1; END;
 
 TEST
