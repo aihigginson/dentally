@@ -1,53 +1,71 @@
 {
   "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "width": 900,
-  "height": 500,
   "padding": {
-    "top": 34,
-    "bottom": 12,
+    "top": 20,
+    "bottom": 8,
     "left": 150,
-    "right": 160
+    "right": 168
   },
   "signals": [
     {
+      "name": "width",
+      "update": "max(260, containerSize()[0] - 318)"
+    },
+    {
+      "name": "height",
+      "update": "max(180, containerSize()[1] - 28)"
+    },
+    {
+      "name": "nW",
+      "value": 16
+    },
+    {
       "name": "cDNA",
-      "value": "#B05252"
+      "value": "#C0392B"
     },
     {
       "name": "cCancPatient",
-      "value": "#C2874A"
+      "value": "#E8820C"
     },
     {
       "name": "cCancPractice",
-      "value": "#8A5A2B"
+      "value": "#C2185B"
     },
     {
       "name": "cCancOther",
-      "value": "#A99383"
+      "value": "#9E9E9E"
     },
     {
       "name": "cRecallNotSet",
-      "value": "#776B70"
+      "value": "#B8A023"
     },
     {
       "name": "cRecallNotSent",
-      "value": "#8A8E92"
+      "value": "#795548"
     },
     {
       "name": "cFirstReminder",
-      "value": "#8AB5B2"
+      "value": "#00897B"
     },
     {
       "name": "cSecondReminder",
-      "value": "#338AAA"
+      "value": "#1565C0"
     },
     {
       "name": "cUnknownAct",
-      "value": "#B0C4CE"
+      "value": "#B0BEC5"
+    },
+    {
+      "name": "cHeaderText",
+      "value": "#15425F"
+    },
+    {
+      "name": "cLabelText",
+      "value": "#2F3A45"
     },
     {
       "name": "cNodeBar",
-      "value": "#1A527A"
+      "value": "#15425F"
     },
     {
       "name": "cNodeBarAlt",
@@ -59,19 +77,7 @@
     },
     {
       "name": "cFlowHover",
-      "value": "#A894D8"
-    },
-    {
-      "name": "cHeaderText",
-      "value": "#1A527A"
-    },
-    {
-      "name": "cLabelText",
-      "value": "#6B7280"
-    },
-    {
-      "name": "nW",
-      "value": 14
+      "value": "#6B4FA8"
     },
     {
       "name": "nS",
@@ -794,7 +800,7 @@
         },
         "update": {
           "fillOpacity": {
-            "signal": "hov == null && hovNode == null ? 0.35 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.18 : 0.05) : (indata('cohort_edges', 'key', datum.key) ? 0.18 : 0.05)"
+            "signal": "hov == null && hovNode == null ? 0.45 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.62 : 0.07) : (indata('cohort_edges', 'key', datum.key) ? 0.62 : 0.07)"
           },
           "tooltip": {
             "signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}"
@@ -880,7 +886,61 @@
             "signal": "datum.si === 0 ? 'right' : 'left'"
           },
           "fontSize": {
-            "value": 10
+            "value": 11
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fill": {
+            "value": "#FFFFFF"
+          },
+          "limit": {
+            "value": 146
+          },
+          "fontWeight": {
+            "value": 500
+          },
+          "stroke": {
+            "value": "#FFFFFF"
+          },
+          "strokeWidth": {
+            "value": 3.5
+          },
+          "strokeJoin": {
+            "value": "round"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "datum.lab + ' (' + datum.display_tot + ')'"
+          },
+          "opacity": {
+            "signal": "(datum.y1 - datum.y0) >= 9 ? 1 : 0"
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {
+        "data": "node_display"
+      },
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4"
+          },
+          "y": {
+            "signal": "(datum.y0 + datum.y1) / 2"
+          },
+          "baseline": {
+            "value": "middle"
+          },
+          "align": {
+            "signal": "datum.si === 0 ? 'right' : 'left'"
+          },
+          "fontSize": {
+            "value": 11
           },
           "fontFamily": {
             "value": "Segoe UI"
@@ -889,7 +949,10 @@
             "signal": "cLabelText"
           },
           "limit": {
-            "value": 150
+            "value": 146
+          },
+          "fontWeight": {
+            "value": 500
           }
         },
         "update": {
@@ -897,7 +960,7 @@
             "signal": "datum.lab + ' (' + datum.display_tot + ')'"
           },
           "opacity": {
-            "signal": "(datum.y1 - datum.y0) >= 4 ? 1 : 0"
+            "signal": "(datum.y1 - datum.y0) >= 9 ? 1 : 0"
           }
         }
       }
@@ -910,7 +973,7 @@
             "signal": "0"
           },
           "y": {
-            "value": -22
+            "value": -8
           },
           "text": {
             "value": "Last Appointment Reason"
@@ -919,7 +982,7 @@
             "value": "bold"
           },
           "fontSize": {
-            "value": 11
+            "value": 12
           },
           "fontFamily": {
             "value": "Segoe UI"
@@ -941,7 +1004,7 @@
             "signal": "dx"
           },
           "y": {
-            "value": -22
+            "value": -8
           },
           "text": {
             "value": "Last Activity"
@@ -950,7 +1013,7 @@
             "value": "bold"
           },
           "fontSize": {
-            "value": 11
+            "value": 12
           },
           "fontFamily": {
             "value": "Segoe UI"
@@ -972,7 +1035,7 @@
             "signal": "dx * 2"
           },
           "y": {
-            "value": -22
+            "value": -8
           },
           "text": {
             "value": "Current Status"
@@ -981,7 +1044,7 @@
             "value": "bold"
           },
           "fontSize": {
-            "value": 11
+            "value": 12
           },
           "fontFamily": {
             "value": "Segoe UI"
@@ -995,5 +1058,10 @@
         }
       }
     }
-  ]
+  ],
+  "autosize": {
+    "type": "none",
+    "contains": "padding"
+  },
+  "background": "transparent"
 }
