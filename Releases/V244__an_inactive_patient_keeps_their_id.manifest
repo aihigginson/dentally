@@ -1,0 +1,56 @@
+# =====================================================================
+# Release V244 -- an inactive patient's surname becomes their Dentally id
+# =====================================================================
+# V013 replaced an inactive patient's name with the literal 'Inactive Patient'. Right on
+# privacy and useless in practice: 20,827 patients at the live tenant share that one name.
+#
+#   - Any list of them COLLAPSES. A Power BI table groups identical rows, so the 3,467
+#     patients behind the new lapsing diagram rendered as 2,095 rows. Email and phone do not
+#     rescue it; they are NULLed by the same rule (2,097).
+#   - A practice that wanted to act on one had nothing to look them up by.
+#
+# Last_Name becomes '(ID: 1231231)'. Full_Name is CONCAT_WS(' ', First_Name, Last_Name) in
+# Gold.usp_Load_Dim_Patients, so it composes to 'Inactive (ID: 1231231)' with no change there.
+# The whole fix is one CASE arm in Silver.
+#
+# ---------------------------------------------------------------------
+# ==> THE MINIMISATION IS UNCHANGED. <==
+# ---------------------------------------------------------------------
+# The id is not personal data: it is the practice's own key for a record they still hold in
+# Dentally. Name, date of birth, email, mobile and home phone stay NULLed for inactive
+# patients exactly as before, and the guards below re-assert every one of them. This release
+# makes a row findable, it does not make it identifiable.
+#
+# ---------------------------------------------------------------------
+# THIS TOUCHES EVERY PATIENT NAME IN THE PRODUCT.
+# ---------------------------------------------------------------------
+# Last_Name is in Silver's change hash, so all 20,827 rows per tenant refresh and cascade into
+# Dim_Patients. Nothing keys off the old literal -- it appears nowhere outside this loader's
+# own comments -- so no report, measure or filter needs changing. Anywhere that showed
+# 'Inactive Patient' will show 'Inactive (ID: ...)' instead.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Silver.usp_Load_Patients.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+# The lapsing fact carries no name, but it is rebuilt here so the page is consistent the
+# moment the release finishes rather than at the next nightly chain.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE OLD PLACEHOLDER MUST BE GONE. <== If any survive, the refresh did not reach them and
+# the collapse this release exists to fix is still there.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE Full_Name = 'Inactive Patient'; IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) still read Inactive Patient.'; THROW 50750, @e, 1; END;
+# Every inactive patient must now carry their id, and no active patient may.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE Active = 0 AND pk_Patient > 0 AND Full_Name NOT LIKE 'Inactive (ID: %)'; IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' inactive patient(s) are not named Inactive (ID: ...).'; THROW 50751, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE Active = 1 AND Full_Name LIKE 'Inactive (ID: %)'; IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' ACTIVE patient(s) have been anonymised.'; THROW 50752, @e, 1; END;
+# ==> THE WHOLE POINT: ONE NAME PER PATIENT. <== A name shared by two inactive patients would
+# collapse them back into one row and the fix would be cosmetic only.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, Full_Name FROM Gold.Dim_Patients WHERE Active = 0 AND pk_Patient > 0 GROUP BY Tenant_ID, Full_Name HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' inactive name(s) are shared by more than one patient -- lists would still collapse.'; THROW 50753, @e, 1; END;
+# ==> MINIMISATION RE-ASSERTED. <== Making a row findable must not have made it identifiable.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Silver.Patients WHERE Active = 0 AND (Date_Of_Birth IS NOT NULL OR Email_Address IS NOT NULL OR Mobile_Phone IS NOT NULL OR Home_Phone IS NOT NULL OR Preferred_Name IS NOT NULL); IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' inactive patient(s) carry PII -- V013 minimisation has been broken.'; THROW 50754, @e, 1; END;
+# An active patient's name must be untouched by all this.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients WHERE Active = 1 AND pk_Patient > 0 AND NULLIF(TRIM(ISNULL(Full_Name,'')),'') IS NULL; IF @n <> 0 BEGIN SET @e = 'V244 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' active patient(s) lost their name.'; THROW 50755, @e, 1; END;
+
+TEST

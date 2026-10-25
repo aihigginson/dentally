@@ -89,11 +89,23 @@ BEGIN
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1')
                          THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END         AS Active,
                     -- DATA MINIMISATION (V013): hold identifying/contact PII for ACTIVE patients only.
-                    -- Inactive patients are no longer contactable: their real name is replaced with the
-                    -- placeholder "Inactive Patient" (so they remain identifiable as such on reports) and
-                    -- contact details are obfuscated to NULL. Non-identifying history is retained.
+                    -- Inactive patients are no longer contactable: their real name is dropped and contact
+                    -- details are obfuscated to NULL. Non-identifying history is retained.
+                    --
+                    -- ==> THE SURNAME BECOMES THE DENTALLY ID, NOT THE WORD "Patient". <== Every inactive
+                    -- patient used to be called 'Inactive Patient' -- 20,827 of them at the live tenant
+                    -- sharing one name. Any list of them collapsed, because a Power BI table GROUPS
+                    -- identical rows: 3,467 lapsed patients rendered as 2,095. And a practice that wanted
+                    -- to act on one had nothing to look them up by.
+                    --
+                    -- The id is NOT personal data -- it is the practice's own key for a record they still
+                    -- hold in Dentally -- so this minimises exactly as much as before while making the row
+                    -- unique and actionable. Full_Name is CONCAT_WS(' ', First, Last) in
+                    -- Gold.usp_Load_Dim_Patients, so it composes to 'Inactive (ID: 1231231)' by itself.
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(First_Name,    100) ELSE 'Inactive' END AS First_Name,
-                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Last_Name,     100) ELSE 'Patient'  END AS Last_Name,
+                    CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Last_Name,     100)
+                         ELSE ISNULL('(ID: ' + CAST(TRY_CAST(ROUND(TRY_CAST(Patient_ID AS float), 0) AS int) AS VARCHAR(20)) + ')', 'Patient')
+                         END                                                                           AS Last_Name,
                     CASE WHEN LOWER(TRIM(Active)) IN ('true','1') THEN LEFT(Preferred_Name,100) END AS Preferred_Name,
                     -- V013 gating applies: DOB is an IDENTIFIER, so an inactive patient keeps none,
                     -- exactly as they keep no name, phone or email.
