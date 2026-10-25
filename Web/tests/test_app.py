@@ -2232,3 +2232,52 @@ def test_insights_returns_good_before_watch(appmod, client, monkeypatch):
     assert body['insights'][0]['Per_Working_Day'] is False
     # A missing narrative is normal, not an error: narration runs separately.
     assert body['insights'][0]['Narrative'] is None
+
+
+def test_insights_hides_itself_across_several_practices(appmod, client, monkeypatch):
+    """==> A LOGIN SPANNING PRACTICES GETS NOTHING, DELIBERATELY. <==
+
+    The rows are ranked PER TENANT. Returning them all gave each practice's six interleaved
+    and unlabelled -- measured at 17 cards in a six-card strip, because all three tenants
+    hold the same week. There is no honest combined ranking to show, so the strip stays
+    hidden until one practice is selected.
+    """
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@analytically.info', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: (1, 1, [11, 12, 100], None))
+
+    class _Cur:
+        def execute(self, *a, **k):
+            raise AssertionError('the warehouse must not be queried for several practices')
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
+    body = client.get('/api/insights').get_json()
+    assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}
+
+
+def test_the_insight_strip_uses_authfetch(appmod):
+    """==> A BARE fetch() HERE IS INVISIBLE, NOT BROKEN. <==
+
+    Auth in this app is a BEARER TOKEN, not a cookie, and authFetch is also what carries
+    X-Acting-Client. loadInsights shipped calling fetch() directly: every request 401'd, the
+    strip hid itself on the non-ok response, and nothing reached the server log either --
+    so the cards were simply absent with no error anywhere. Asserted in the page source
+    because there is no other signal when this regresses.
+    """
+    import io
+    import os
+    import re
+    page = io.open(os.path.join(os.path.dirname(appmod.__file__), 'index.html'),
+                   encoding='utf-8').read()
+    start = page.find('async function loadInsights')
+    assert start != -1, 'loadInsights has moved or been renamed'
+    body = page[start:].split('\n    }')[0]
+    assert "authFetch('/api/insights')" in body
+    # The bare call is the bug: the 'h' guard lets authFetch through and nothing else.
+    assert not re.search(r"[^h]fetch\('/api/insights'", body)

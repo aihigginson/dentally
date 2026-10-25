@@ -1836,9 +1836,16 @@ def insights():
         if not tids:
             conn.close()
             return jsonify({'week': None, 'insights': []})
+        # ==> ONE PRACTICE, OR NOTHING. <== The rows are ranked PER TENANT, so a login that spans
+        # several practices does not get a combined top three -- it gets each practice's six,
+        # interleaved, unlabelled. Measured: all three tenants hold the same week, so this
+        # returned 17 cards in a six-card strip. There is no honest cross-practice ranking to
+        # show here (the same reason group targets are still unresolved), so the strip stays
+        # hidden until a practice is selected rather than printing a pile nobody can read.
+        if len(tids) > 1:
+            conn.close()
+            return jsonify({'week': None, 'insights': [], 'reason': 'multiple-practices'})
         placeholders = ','.join('?' * len(tids))
-        # One week only. Rows are per tenant, so an accountant across several practices would
-        # otherwise get each practice's six interleaved with no way to tell them apart.
         cur.execute(
             f"SELECT TOP 1 Week_Commencing_Date FROM Gold.Aggregate_Practice_Insights "
             f"WHERE Tenant_ID IN ({placeholders}) ORDER BY Week_Commencing_Date DESC", tids)

@@ -2483,7 +2483,11 @@
         const strip = document.getElementById('home-insights');
         if (!strip) return;
         try {
-            const r = await fetch('/api/insights', { credentials: 'same-origin' });
+            // ==> authFetch, NOT fetch. <== Auth here is a BEARER TOKEN, not a cookie, and
+            // authFetch is also what carries X-Acting-Client, so a bare fetch gets a 401
+            // and -- because the strip hides itself on any non-ok -- fails completely
+            // silently. That is exactly how this shipped invisible the first time.
+            const r = await authFetch('/api/insights');
             if (!r.ok) { strip.hidden = true; return; }
             const data = await r.json();
             const rows = (data && data.insights) || [];
