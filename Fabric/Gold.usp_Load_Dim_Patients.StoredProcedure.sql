@@ -267,7 +267,12 @@ BEGIN
         -- Any attendance at all. Feeds the ARCHIVE test, which is the only rung that asks
         -- whether this patient has any relationship with the practice on record.
         DROP TABLE IF EXISTS #attend;
-        SELECT a.Tenant_ID, a.Patient_ID, COUNT(*) AS Visits
+        -- ==> THE DATE, NOT JUST THE COUNT. <== Without it the recall rungs below cannot ask
+        -- whether the patient has been in since we reminded them, which is the whole of the
+        -- question "did they respond". State = 'Completed' and on or before today, so a future
+        -- booking, a cancellation and a DNA all correctly fail to clear a recall.
+        SELECT a.Tenant_ID, a.Patient_ID, COUNT(*) AS Visits,
+               MAX(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE)) AS Last_Attended_Date
         INTO   #attend
         FROM   Silver.Appointments a
         WHERE  a.State = 'Completed'
@@ -426,10 +431,21 @@ BEGIN
                  WHEN s.First_Appointment_Date IS NULL
                       AND s.Next_Appointment_Date IS NULL            THEN  9
                  WHEN s.Next_Appointment_Date IS NOT NULL            THEN  1
+                 -- ==> ATTENDING IS RESPONDING. <== Both rungs now require that the patient
+                 -- has NOT been in since the reminder. Without this, 463 of Maple's 1,210
+                 -- at-risk patients had attended within six months -- 1,406 Completed
+                 -- appointments against 22 cancellations -- and were still reported as
+                 -- silent. An attender falls through to the recall-date rungs below, which
+                 -- judge them on their recall rather than on a reminder already answered.
                  WHEN ISNULL(rc.Reminder_Sent, 0) = 1
+                      AND (at.Last_Attended_Date IS NULL
+                           OR at.Last_Attended_Date <= rc.Last_Reminded_Date)
                       AND DATEDIFF(DAY, rc.Last_Reminded_Date, @Today) > 60
                                                                      THEN  6
-                 WHEN ISNULL(rc.Reminder_Sent, 0) = 1                THEN  5
+                 WHEN ISNULL(rc.Reminder_Sent, 0) = 1
+                      AND (at.Last_Attended_Date IS NULL
+                           OR at.Last_Attended_Date <= rc.Last_Reminded_Date)
+                                                                     THEN  5
                  WHEN s.Dentist_Recall_Date IS NULL                  THEN  3
                  WHEN s.Dentist_Recall_Date <= @Today                THEN  4
                  ELSE                                                       2

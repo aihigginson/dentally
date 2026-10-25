@@ -1,0 +1,58 @@
+# =====================================================================
+# Release V245 -- attending a recall IS responding to it
+# =====================================================================
+# ==> 463 OF MAPLE'S 1,210 "AT RISK" PATIENTS HAD ATTENDED IN THE LAST SIX MONTHS. <==
+# Of the appointments on their recorded last-appointment date, 1,406 were Completed against
+# 22 cancelled and 3 DNA. They came in. They were still being reported as not having answered
+# their recall -- including, as it turns out, a practitioner's own family.
+#
+# The rung tested the AGE OF THE REMINDER and nothing else:
+#
+#     WHEN Reminder_Sent = 1 AND DATEDIFF(DAY, Last_Reminded_Date, @Today) > 60 THEN 6
+#
+# So a patient reminded in June who walked in in August, and did not book a next appointment
+# on the way out, was still "reminded more than two months ago with no response". Attending is
+# the most unambiguous response there is.
+#
+# #attend already found completed visits -- it counted them and discarded the dates, so the
+# ladder had nothing to compare against. It now keeps the latest, and BOTH recall rungs (5 and
+# 6) require that the patient has not attended since the reminder.
+#
+# ---------------------------------------------------------------------
+# ATTENDED, NOT SCHEDULED.
+# ---------------------------------------------------------------------
+# #attend is State = 'Completed' with a start date on or before today. A booking that has not
+# happened yet cannot clear a recall, and neither can a cancellation or a did-not-attend.
+#
+# ---------------------------------------------------------------------
+# NO LAPSED FIGURE MOVES.
+# ---------------------------------------------------------------------
+# The lapsed rungs (7 LAPSED_NO_VISIT_24M, 8 LAPSED_SET_INACTIVE) are tested BEFORE the recall
+# rungs, so nothing that was lapsed can be reclassified by this. [Lapsed Patients] and
+# [Net Patient Growth] read Fact_Metric_Actuals and are untouched regardless. What moves is
+# the Recall Unanswered rung, downwards, which is the correction.
+#
+# Patients leaving rung 6 land on rungs 2, 3 or 4 -- all of them the Active category -- and
+# are judged on their recall date rather than on a reminder they have already answered.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Dim_Patients.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Dim_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE WHOLE POINT, RE-DERIVED FROM THE APPOINTMENTS THEMSELVES. <== Not a remembered
+# number: this asks Silver.Appointments again whether any at-risk patient has a COMPLETED
+# visit after the reminder that condemned them.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); DROP TABLE IF EXISTS #rc; SELECT z.Tenant_ID, z.Patient_ID, z.Last_Reminded_Date INTO #rc FROM (SELECT r.Tenant_ID, CAST(r.Patient_ID AS INT) AS Patient_ID, COALESCE(TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''),10) AS DATE), TRY_CAST(LEFT(NULLIF(TRIM(r.First_Reminder_Sent_At),''),10) AS DATE)) AS Last_Reminded_Date, ROW_NUMBER() OVER (PARTITION BY r.Tenant_ID, CAST(r.Patient_ID AS INT) ORDER BY r.Due_Date DESC, r.Id DESC) AS rn FROM Silver.Recalls r WHERE r.Patient_ID IS NOT NULL) z WHERE z.rn = 1; DROP TABLE IF EXISTS #at; SELECT a.Tenant_ID, a.Patient_ID, MAX(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''),10) AS DATE)) AS Last_Attended_Date INTO #at FROM Silver.Appointments a WHERE a.State = 'Completed' AND a.Patient_ID IS NOT NULL AND TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time),''),10) AS DATE) <= CAST(SYSUTCDATETIME() AS DATE) GROUP BY a.Tenant_ID, a.Patient_ID; SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status JOIN #rc rc ON rc.Tenant_ID = p.Tenant_ID AND rc.Patient_ID = p.Patient_ID JOIN #at at ON at.Tenant_ID = p.Tenant_ID AND at.Patient_ID = p.Patient_ID WHERE s.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M' AND at.Last_Attended_Date > rc.Last_Reminded_Date; DROP TABLE IF EXISTS #rc; DROP TABLE IF EXISTS #at; IF @n <> 0 BEGIN SET @e = 'V245 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' at-risk patient(s) attended AFTER their reminder.'; THROW 50760, @e, 1; END;
+# ==> NO LAPSED PATIENT MAY HAVE BEEN RECLASSIFIED. <== Rungs 7 and 8 are tested first, so
+# this must be zero by construction -- and if it ever is not, a customer-facing figure moved.
+EXEC     DECLARE @f INT, @d2 INT, @e VARCHAR(4000); SELECT @f = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.pk_Patient > 0 AND s.Status_Code IN ('LAPSED_SET_INACTIVE','LAPSED_NO_VISIT_24M'); SELECT @d2 = SUM(Is_Lapsed) FROM Gold.Fact_Lapsed_Patients; IF @f <> @d2 BEGIN SET @e = 'V245 FAILED: the ladder says ' + CAST(@f AS VARCHAR(10)) + ' lapsed but the fact says ' + CAST(@d2 AS VARCHAR(10)) + '.'; THROW 50761, @e, 1; END;
+# The at-risk rung must still exist and still be populated -- a fix that emptied it would be
+# as wrong as the bug.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE p.Tenant_ID = 100 AND s.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M'; IF @n = 0 BEGIN SET @e = 'V245 FAILED: the at-risk rung is now empty -- the guard has become the bug.'; THROW 50762, @e, 1; END;
+# A patient who has never attended cannot be excluded by an attendance test.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Dim_Patients p JOIN Gold.Dim_Patient_Status s ON s.pk_Patient_Status = p.fk_Patient_Status WHERE s.Status_Code = 'RECALL_SENT_NO_REPLY_GT2M' AND p.First_Appointment_Date IS NULL AND p.Next_Appointment_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V245 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' never-attended patient(s) are on the at-risk rung; rung 9 should hold them.'; THROW 50763, @e, 1; END;
+
+TEST
