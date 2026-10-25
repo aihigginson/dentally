@@ -170,6 +170,70 @@
           "update": "pbiCrossFilterClear()"
         }
       ]
+    },
+    {
+      "name": "selNid",
+      "value": null,
+      "on": [
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "node"
+          },
+          "update": "datum.nid"
+        },
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "ribbon"
+          },
+          "update": "null"
+        },
+        {
+          "events": {
+            "source": "view",
+            "type": "mouseup",
+            "filter": [
+              "!event.item || (event.item.mark.name !== 'node' && event.item.mark.name !== 'ribbon')"
+            ]
+          },
+          "update": "null"
+        }
+      ]
+    },
+    {
+      "name": "selLabel",
+      "value": "",
+      "on": [
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "node"
+          },
+          "update": "datum.lab"
+        },
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "ribbon"
+          },
+          "update": "slice(datum.srcID, 2) + ' to ' + slice(datum.tgtID, 2)"
+        },
+        {
+          "events": {
+            "source": "view",
+            "type": "mouseup",
+            "filter": [
+              "!event.item || (event.item.mark.name !== 'node' && event.item.mark.name !== 'ribbon')"
+            ]
+          },
+          "update": "''"
+        }
+      ]
     }
   ],
   "data": [
@@ -925,10 +989,10 @@
             "value": "pointer"
           },
           "stroke": {
-            "signal": "hovNode != null && datum.nid === hovNode.nid ? '#101820' : null"
+            "signal": "selNid === datum.nid ? '#101820' : (hovNode != null && datum.nid === hovNode.nid ? '#101820' : null)"
           },
           "strokeWidth": {
-            "signal": "hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0"
+            "signal": "selNid === datum.nid ? 2 : (hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0)"
           }
         }
       },
@@ -1122,6 +1186,43 @@
           },
           "align": {
             "value": "center"
+          }
+        }
+      }
+    },
+    {
+      "name": "selcaption",
+      "type": "text",
+      "encode": {
+        "enter": {
+          "x": {
+            "signal": "-140"
+          },
+          "y": {
+            "signal": "height + 6"
+          },
+          "align": {
+            "value": "left"
+          },
+          "baseline": {
+            "value": "top"
+          },
+          "fontSize": {
+            "value": 11
+          },
+          "fontFamily": {
+            "value": "Segoe UI"
+          },
+          "fontWeight": {
+            "value": "bold"
+          },
+          "fill": {
+            "signal": "cHeaderText"
+          }
+        },
+        "update": {
+          "text": {
+            "signal": "selLabel === '' ? '' : 'Filtered to ' + selLabel + '  --  open Lapsing List to see these patients, or click the background to clear'"
           }
         }
       }
