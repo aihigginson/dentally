@@ -1811,6 +1811,69 @@ def _insight_numbers(text):
     return set(re.findall(r'\d+(?:\.\d+)?', (text or '').replace(',', '')))
 
 
+@app.route('/api/insights')
+def insights():
+    """The six highlights for the Home screen: three Good, three Watch.
+
+    ==> THE RANKING IS NOT MADE HERE. <== Gold.Aggregate_Practice_Insights already holds it,
+    weighted by 4-week movement x Area_Weight. This reads the LATEST week it has and hands the
+    rows over; it does not re-rank, re-weight or filter by anything but the tenant.
+
+    Narrative may be empty -- it is written separately and only when a key is configured --
+    so the card must stand on its figures alone. That is deliberate: a highlight with no
+    sentence is still a highlight.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        if not tids:
+            conn.close()
+            return jsonify({'week': None, 'insights': []})
+        placeholders = ','.join('?' * len(tids))
+        # One week only. Rows are per tenant, so an accountant across several practices would
+        # otherwise get each practice's six interleaved with no way to tell them apart.
+        cur.execute(
+            f"SELECT TOP 1 Week_Commencing_Date FROM Gold.Aggregate_Practice_Insights "
+            f"WHERE Tenant_ID IN ({placeholders}) ORDER BY Week_Commencing_Date DESC", tids)
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'week': None, 'insights': []})
+        week = row[0]
+        cur.execute(
+            f"SELECT Direction, Rank_In_Direction, Display_Name, Section, Metric, Format_Type, "
+            f"       Per_Working_Day, Value_Now, Value_Before, Relative_Change, Target_Value, "
+            f"       Last_Year_Change, Narrative "
+            f"FROM   Gold.Aggregate_Practice_Insights "
+            f"WHERE  Tenant_ID IN ({placeholders}) AND Week_Commencing_Date = ? "
+            f"ORDER BY CASE WHEN Direction = 'Good' THEN 0 ELSE 1 END, Rank_In_Direction",
+            (*tids, week))
+        cols = [c[0] for c in cur.description]
+        out = []
+        for r in cur.fetchall():
+            d = dict(zip(cols, r))
+            for k in ('Value_Now', 'Value_Before', 'Relative_Change', 'Target_Value',
+                      'Last_Year_Change'):
+                d[k] = float(d[k]) if d[k] is not None else None
+            d['Per_Working_Day'] = bool(d['Per_Working_Day'])
+            out.append(d)
+        conn.close()
+        return jsonify({'week': week.isoformat() if hasattr(week, 'isoformat') else str(week),
+                        'insights': out})
+    except Exception as e:
+        app.logger.warning('insights read failed: %s', e)
+        # ==> A FAILURE HERE MUST NOT COST THE HOME SCREEN ITS REPORT. <== The cards sit above
+        # the embed; an empty list hides the strip and leaves everything else working.
+        return jsonify({'week': None, 'insights': []})
+
+
 @app.route('/api/insights/narrate', methods=['POST'])
 def insights_narrate():
     """Write the plain-English line for each unnarrated insight row.
