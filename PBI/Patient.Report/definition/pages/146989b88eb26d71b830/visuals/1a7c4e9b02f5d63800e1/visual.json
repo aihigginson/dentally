@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "1a7c4e9b02f5d63800e1",
   "position": {
-    "x": 728,
+    "x": 608,
     "y": 80.1670146137787,
     "z": 10,
     "height": 519.749478079332,
-    "width": 552,
+    "width": 672,
     "tabOrder": 1
   },
   "visual": {
@@ -15,20 +15,6 @@
       "queryState": {
         "Values": {
           "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Lapsed Patients"
-                    }
-                  },
-                  "Property": "bk Patient ID"
-                }
-              },
-              "queryRef": "_Lapsed Patients.bk Patient ID",
-              "nativeQueryRef": "bk Patient ID"
-            },
             {
               "field": {
                 "Column": {
@@ -56,6 +42,34 @@
               },
               "queryRef": "_Lapsed Patients.Last Activity",
               "nativeQueryRef": "Last Activity"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Last Appointment Date"
+                }
+              },
+              "queryRef": "List Patients.Last Appointment Date",
+              "nativeQueryRef": "Last Appointment Date"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Standard Payment Plan"
+                }
+              },
+              "queryRef": "List Patients.Standard Payment Plan",
+              "nativeQueryRef": "Standard Payment Plan"
             },
             {
               "field": {
@@ -206,21 +220,6 @@
           },
           "selector": {
             "metadata": "List Patients.Total Paid"
-          }
-        }
-      ]
-    },
-    "visualContainerObjects": {
-      "title": [
-        {
-          "properties": {
-            "text": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Patients behind the diagram'"
-                }
-              }
-            }
           }
         }
       ]

@@ -304,7 +304,7 @@
         },
         {
           "type": "formula",
-          "expr": "\"Last Appointment Reason = \" + datum['Last Appointment Reason']",
+          "expr": "\"Appointment = \" + datum['Last Appointment Reason']",
           "as": "flabel"
         }
       ]
@@ -355,7 +355,7 @@
         },
         {
           "type": "formula",
-          "expr": "\"Last Activity = \" + datum['Last Activity']",
+          "expr": "\"Activity = \" + datum['Last Activity']",
           "as": "flabel"
         }
       ]
@@ -406,7 +406,7 @@
         },
         {
           "type": "formula",
-          "expr": "\"Current Status = \" + datum['Lapsed Type']",
+          "expr": "\"Status = \" + datum['Lapsed Type']",
           "as": "flabel"
         }
       ]
@@ -493,7 +493,7 @@
         },
         {
           "type": "formula",
-          "expr": "\"Last Appointment Reason = \" + datum['Last Appointment Reason'] + \" and \" + \"Last Activity = \" + datum['Last Activity']",
+          "expr": "\"Appointment = \" + datum['Last Appointment Reason'] + \" and \" + \"Activity = \" + datum['Last Activity']",
           "as": "flabel"
         }
       ]
@@ -540,7 +540,7 @@
         },
         {
           "type": "formula",
-          "expr": "\"Last Activity = \" + datum['Last Activity'] + \" and \" + \"Current Status = \" + datum['Lapsed Type']",
+          "expr": "\"Activity = \" + datum['Last Activity'] + \" and \" + \"Status = \" + datum['Lapsed Type']",
           "as": "flabel"
         }
       ]
@@ -1133,7 +1133,7 @@
             "value": -8
           },
           "text": {
-            "value": "Last Appointment Reason"
+            "value": "Appointment"
           },
           "fontWeight": {
             "value": "bold"
@@ -1164,7 +1164,7 @@
             "value": -8
           },
           "text": {
-            "value": "Last Activity"
+            "value": "Activity"
           },
           "fontWeight": {
             "value": "bold"
@@ -1195,7 +1195,7 @@
             "value": -8
           },
           "text": {
-            "value": "Current Status"
+            "value": "Status"
           },
           "fontWeight": {
             "value": "bold"
@@ -1247,9 +1247,12 @@
         },
         "update": {
           "text": {
-            "signal": "selLabel === '' ? '' : 'Filtered on ' + selLabel + '      (click the background to clear)'"
+            "signal": "selLabel === '' ? '' : 'Filtered on ' + selLabel"
           }
         }
+      },
+      "from": {
+        "data": "grand_ds"
       }
     }
   ],
