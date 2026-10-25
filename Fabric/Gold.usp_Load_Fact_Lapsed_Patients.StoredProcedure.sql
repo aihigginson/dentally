@@ -202,6 +202,10 @@ BEGIN
                         -- Patient page and the patient list it drills to.
                         [fk_Date_Last_Appointment] INT            NULL,
                         [Last_Appointment_Reason] VARCHAR(100)    NULL,
+                        -- What Dentally actually recorded, before the roll-up. The category
+                        -- above drives the diagram; this drives the list, where "Broken Tooth"
+                        -- says something "Other" does not.
+                        [Last_Appointment_Reason_Detail] VARCHAR(200) NULL,
                         [Last_Activity]           VARCHAR(50)     NULL,
                         -- Private / NHS / Plan / Other. Plan membership is a capitation rate,
                         -- not a name -- fk_Payment_Plan names the plan, this categorises it.
@@ -214,7 +218,7 @@ BEGIN
                         (Tenant_ID, bk_Patient_ID, fk_Patient, fk_Practitioner, fk_Practice_Site,
                          fk_Payment_Plan, fk_Date_Lapsed, fk_Patient_Status, Lapsed_Type,
                          Lapsed_Reason, Lapsed_Date, Is_Lapsed, fk_Date_Last_Appointment,
-                         Last_Appointment_Reason, Last_Activity, Patient_Category,
+                         Last_Appointment_Reason, Last_Appointment_Reason_Detail, Last_Activity, Patient_Category,
                          Lapsed_Patient_Count, DW_Created_At)
                 SELECT  q.Tenant_ID, q.bk_Patient_ID, q.fk_Patient,
                         ISNULL(dpr.pk_Practitioner, -1),
@@ -234,6 +238,10 @@ BEGIN
                         CASE WHEN la.fk_Patient IS NULL     THEN 'No Appointment'
                              WHEN rcat.Category IS NOT NULL THEN la.Appointment_Reason
                              ELSE 'Other' END,
+                        -- The same row, un-rolled-up. 'No Appointment' is repeated rather than
+                        -- left NULL so a list never shows a blank cell for a real state.
+                        CASE WHEN la.fk_Patient IS NULL THEN 'No Appointment'
+                             ELSE NULLIF(TRIM(la.Appointment_Reason), '') END,
                         -- ==> AN APPOINTMENT EVENT BEATS A RECALL STATE. <== A DNA or a
                         -- cancellation is something that HAPPENED; a recall state is a thing
                         -- that did not. Where both exist the event wins, and only patients with

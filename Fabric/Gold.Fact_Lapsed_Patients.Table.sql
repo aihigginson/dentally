@@ -47,6 +47,10 @@ CREATE TABLE [Gold].[Fact_Lapsed_Patients] (
         -- Patient page and the patient list it drills to.
         [fk_Date_Last_Appointment] INT            NULL,
         [Last_Appointment_Reason] VARCHAR(100)    NULL,
+        -- What Dentally actually recorded, before the roll-up. The category
+        -- above drives the diagram; this drives the list, where "Broken Tooth"
+        -- says something "Other" does not.
+        [Last_Appointment_Reason_Detail] VARCHAR(200) NULL,
         [Last_Activity]           VARCHAR(50)     NULL,
         -- Private / NHS / Plan / Other. Plan membership is a capitation rate,
         -- not a name -- fk_Payment_Plan names the plan, this categorises it.

@@ -1,0 +1,47 @@
+# =====================================================================
+# Release V246 -- the detail list keeps the real appointment reason
+# =====================================================================
+# V242 rolled Last_Appointment_Reason up to a category because the DIAGRAM needs it: 40
+# distinct reasons at the live tenant, 35 of them under ten patients, is 35 sub-pixel nodes
+# nobody can read. That was right for the alluvial and wrong for the list underneath it --
+# "Broken Tooth" tells a practice something that "Other" does not.
+#
+# So the fact now carries both. Last_Appointment_Reason stays the category and the alluvial is
+# untouched; Last_Appointment_Reason_Detail carries whatever Dentally actually recorded.
+# Clicking Exam on the diagram lists the raw reasons that roll up to Exam, which is the point.
+#
+# No second lookup: the raw value was already in #last_appt, sitting beside the CASE that
+# replaced it. One extra projected column, not another join.
+#
+# ---------------------------------------------------------------------
+# 'No Appointment' APPEARS IN BOTH COLUMNS, DELIBERATELY.
+# ---------------------------------------------------------------------
+# A patient with no completed appointment is a STATE, not an uncategorised reason. Repeating
+# it rather than leaving the detail NULL means the list never shows a blank cell where there
+# is a real answer.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Fact_Lapsed_Patients.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Lapsed_Patients.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Lapsed_Patients @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE DETAIL MUST ACTUALLY BE MORE DETAILED. <== If the new column had been wired to the
+# same rolled-up expression it would pass every other check here and be perfectly useless.
+EXEC     DECLARE @c INT, @d2 INT, @e VARCHAR(4000); SELECT @c = COUNT(DISTINCT Last_Appointment_Reason), @d2 = COUNT(DISTINCT Last_Appointment_Reason_Detail) FROM Gold.Fact_Lapsed_Patients WHERE Tenant_ID = 100; IF @d2 <= @c BEGIN SET @e = 'V246 FAILED: the detail column has ' + CAST(@d2 AS VARCHAR(10)) + ' values against the category''s ' + CAST(@c AS VARCHAR(10)) + ' -- it is not more detailed.'; THROW 50770, @e, 1; END;
+# Every row must have one, or the list shows blanks where the diagram shows a node.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Last_Appointment_Reason_Detail IS NULL; IF @n <> 0 BEGIN SET @e = 'V246 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) have no appointment reason detail.'; THROW 50771, @e, 1; END;
+# ==> THE CATEGORY MUST NOT HAVE MOVED. <== The alluvial binds it, and V242's roll-up rule is
+# what keeps its first column readable.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(DISTINCT f.Last_Appointment_Reason) FROM Gold.Fact_Lapsed_Patients f WHERE f.Last_Appointment_Reason NOT IN ('Other','No Appointment') AND NOT EXISTS (SELECT 1 FROM Silver.Appointment_Reason_Map m WHERE m.Category = f.Last_Appointment_Reason); IF @n <> 0 BEGIN SET @e = 'V246 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' uncategorised reason(s) reach the category column.'; THROW 50772, @e, 1; END;
+# A detail that is not 'No Appointment' must belong to a patient who actually had one.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Lapsed_Patients WHERE Last_Appointment_Reason_Detail <> 'No Appointment' AND (fk_Date_Last_Appointment IS NULL OR fk_Date_Last_Appointment = -1); IF @n <> 0 BEGIN SET @e = 'V246 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) name a reason for an appointment that did not happen.'; THROW 50773, @e, 1; END;
+# The view the model reads must expose it, or the report binds nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Lapsed Patients' AND COLUMN_NAME = 'Last Appointment Reason Detail'; IF @n <> 1 BEGIN SET @e = 'V246 FAILED: the PBI view does not expose the detail column.'; THROW 50774, @e, 1; END;
+# The grain is untouched by all this.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, fk_Patient FROM Gold.Fact_Lapsed_Patients GROUP BY Tenant_ID, fk_Patient HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V246 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' patient(s) appear twice.'; THROW 50775, @e, 1; END;
+
+TEST

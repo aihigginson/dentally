@@ -37,12 +37,12 @@
                       "Entity": "_Lapsed Patients"
                     }
                   },
-                  "Property": "Last Appointment Reason"
+                  "Property": "Last Appointment Reason Detail"
                 }
               },
-              "queryRef": "_Lapsed Patients.Last Appointment Reason",
-              "nativeQueryRef": "Last Appointment Reason",
-              "displayName": "Appointment"
+              "queryRef": "_Lapsed Patients.Last Appointment Reason Detail",
+              "nativeQueryRef": "Last Appointment Reason Detail",
+              "displayName": "Appointment Reason"
             },
             {
               "field": {
@@ -188,13 +188,13 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "125D"
+                  "Value": "160D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "_Lapsed Patients.Last Appointment Reason"
+            "metadata": "_Lapsed Patients.Last Appointment Reason Detail"
           }
         },
         {
