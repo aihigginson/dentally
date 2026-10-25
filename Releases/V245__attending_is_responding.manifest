@@ -21,8 +21,13 @@
 # ---------------------------------------------------------------------
 # ATTENDED, NOT SCHEDULED.
 # ---------------------------------------------------------------------
-# #attend is State = 'Completed' with a start date on or before today. A booking that has not
-# happened yet cannot clear a recall, and neither can a cancellation or a did-not-attend.
+# #attend is State = 'Completed' with a start date on or before today, so a cancellation or a
+# did-not-attend cannot clear a recall.
+#
+# A FUTURE BOOKING DOES CLEAR ONE, and always did -- at rung 1 (ACTIVE_BOOKED), which is
+# tested before every recall rung and reads an uncancelled appointment after today. An earlier
+# draft of this header said the opposite; it was describing the #attend filter as though it
+# were the ladder. Only the prose was wrong, never the code.
 #
 # ---------------------------------------------------------------------
 # NO LAPSED FIGURE MOVES.

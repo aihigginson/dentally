@@ -269,8 +269,12 @@ BEGIN
         DROP TABLE IF EXISTS #attend;
         -- ==> THE DATE, NOT JUST THE COUNT. <== Without it the recall rungs below cannot ask
         -- whether the patient has been in since we reminded them, which is the whole of the
-        -- question "did they respond". State = 'Completed' and on or before today, so a future
-        -- booking, a cancellation and a DNA all correctly fail to clear a recall.
+        -- question "did they respond". Completed and on or before today, so a cancellation or
+        -- a DNA cannot clear a recall.
+        --
+        -- A FUTURE BOOKING DOES CLEAR ONE -- but not here. That is rung 1 (ACTIVE_BOOKED),
+        -- tested before any recall rung, off an uncancelled appointment after today. This
+        -- table answers only "have they walked in since", which is the other half.
         SELECT a.Tenant_ID, a.Patient_ID, COUNT(*) AS Visits,
                MAX(TRY_CAST(LEFT(NULLIF(TRIM(a.Start_Time), ''), 10) AS DATE)) AS Last_Attended_Date
         INTO   #attend
