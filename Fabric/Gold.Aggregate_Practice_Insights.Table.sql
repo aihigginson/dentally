@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Aggregate_Practice_Insights] ******/
+﻿/****** Object:  Table [Gold].[Aggregate_Practice_Insights] ******/
 --------------------------------------------------------------------
 --  Table  :  Gold.Aggregate_Practice_Insights
 --  Author :  AIH
@@ -64,11 +64,13 @@ CREATE TABLE [Gold].[Aggregate_Practice_Insights](
     [Value_Before]          [decimal](18,4) NULL,
     [Relative_Change]       [decimal](18,6) NULL,       -- signed, as a fraction
     [Target_Value]          [decimal](18,4) NULL,       -- context only, may be NULL
-    -- ==> THE SAME MOVE A YEAR AGO, SO SEASONAL IS NOT MISTAKEN FOR NEW. <== Average Plan
-    -- Value climbs every autumn as patients return from holiday and book treatment rather
-    -- than check-ups. Reporting that as a win each September would cost the panel its
-    -- credibility. NULL where there is no comparable year.
-    [Last_Year_Change]      [decimal](18,6) NULL,
+    -- ==> THERE IS NO YEAR-ON-YEAR COLUMN, AND THAT IS A DECISION. <== One lived here to
+    -- separate "this is new" from "this happens every autumn". The panel reports RECENT
+    -- MOVEMENT -- four weeks against the four before -- so a year-ago window was never
+    -- answering its question, and on the real data it could not answer the seasonal one
+    -- either: tenant 100's lapsed_deactivated went 31 -> 357 over the same two windows last
+    -- year, = +1052%, correct off a base of 31 and pure noise, being a one-off tidy-up in
+    -- Sept/Oct 2025. Seasonality needs several prior years; one cannot stand in for them.
     [Narrative]             [varchar](600)  NULL,       -- written later, never required
     [DW_Created_At]         [datetime2](6)  NOT NULL,
     [DW_Updated_At]         [datetime2](6)  NOT NULL

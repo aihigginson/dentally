@@ -2196,7 +2196,7 @@ def test_insights_returns_good_before_watch(appmod, client, monkeypatch):
         description = [('Direction',), ('Rank_In_Direction',), ('Display_Name',), ('Section',),
                        ('Metric',), ('Format_Type',), ('Per_Working_Day',), ('Value_Now',),
                        ('Value_Before',), ('Relative_Change',), ('Target_Value',),
-                       ('Last_Year_Change',), ('Narrative',)]
+                       ('Narrative',)]
 
         def __init__(self):
             self._first = True
@@ -2211,9 +2211,9 @@ def test_insights_returns_good_before_watch(appmod, client, monkeypatch):
             # Returned in the order the ORDER BY produces, which is what is asserted below.
             return [
                 ('Good',  1, 'New Patients',    'Acquisition', 'new_patients', 'number',
-                 False, 12.0, 9.0, 0.33, None, None, None),
+                 False, 12.0, 9.0, 0.33, None, None),
                 ('Watch', 1, 'Overdue Recalls', 'Retention',   'overdue',      'number',
-                 False, 144.0, 120.0, 0.20, None, None, 'Up a fifth on last month.'),
+                 False, 144.0, 120.0, 0.20, None, 'Up a fifth on last month.'),
             ]
 
     class _Conn:

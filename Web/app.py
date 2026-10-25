@@ -1857,7 +1857,7 @@ def insights():
         cur.execute(
             f"SELECT Direction, Rank_In_Direction, Display_Name, Section, Metric, Format_Type, "
             f"       Per_Working_Day, Value_Now, Value_Before, Relative_Change, Target_Value, "
-            f"       Last_Year_Change, Narrative "
+            f"       Narrative "
             f"FROM   Gold.Aggregate_Practice_Insights "
             f"WHERE  Tenant_ID IN ({placeholders}) AND Week_Commencing_Date = ? "
             f"ORDER BY CASE WHEN Direction = 'Good' THEN 0 ELSE 1 END, Rank_In_Direction",
@@ -1866,8 +1866,7 @@ def insights():
         out = []
         for r in cur.fetchall():
             d = dict(zip(cols, r))
-            for k in ('Value_Now', 'Value_Before', 'Relative_Change', 'Target_Value',
-                      'Last_Year_Change'):
+            for k in ('Value_Now', 'Value_Before', 'Relative_Change', 'Target_Value'):
                 d[k] = float(d[k]) if d[k] is not None else None
             d['Per_Working_Day'] = bool(d['Per_Working_Day'])
             out.append(d)
@@ -1887,7 +1886,15 @@ def insights_narrate():
 
     The ranking is NOT the model's to make -- it is already in the table. This only turns
     the figures into a sentence, and refuses any sentence carrying a number it was not
-    given. Shared-secret auth; fails closed if MONITOR_KEY is unset."""
+    given. Shared-secret auth; fails closed if MONITOR_KEY is unset.
+
+    ==> NOTHING YEAR-ON-YEAR REACHES THE SENTENCE, BECAUSE THE PANEL IS ABOUT RECENT
+    MOVEMENT. <== A year-ago comparator was supplied here and removed: four weeks against
+    the four before is the question, and a window from a year ago does not answer it. It
+    could not answer the seasonal question either -- tenant 100's lapsed_deactivated went
+    31 -> 357 over the same two windows last year, = +1052%, arithmetically fine off a base
+    of 31 and pure noise, being a one-off tidy-up in Sept/Oct 2025. The figure is also no
+    longer an allowed number, so a sentence that quotes one is rejected outright."""
     if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
     if not INSIGHT_API_KEY:
@@ -1902,7 +1909,7 @@ def insights_narrate():
         cur.execute("""
             SELECT pk_Insight, Tenant_ID, Direction, Rank_In_Direction, Display_Name,
                    Section, Format_Type, Per_Working_Day, Value_Now, Value_Before,
-                   Relative_Change, Target_Value, Last_Year_Change
+                   Relative_Change, Target_Value
             FROM   Gold.Aggregate_Practice_Insights
             WHERE  Narrative IS NULL
             ORDER  BY Tenant_ID, Direction, Rank_In_Direction""")
@@ -1922,11 +1929,6 @@ def insights_narrate():
             if r.Target_Value is not None:
                 facts.append('Their target: %s'
                              % _fmt_metric_value(r.Target_Value, r.Format_Type, False))
-            if r.Last_Year_Change is not None:
-                facts.append('Over the SAME four weeks last year it moved %+.0f%%'
-                             % (float(r.Last_Year_Change) * 100))
-            else:
-                facts.append('There is no comparable period last year')
 
             prompt = (
                 "You are writing one sentence for a dental practice owner's weekly summary.\n\n"
@@ -1934,8 +1936,6 @@ def insights_narrate():
                 "\n\nWrite ONE sentence, at most 30 words, in British English.\n"
                 "Rules:\n"
                 "- Use ONLY the figures above. Do not calculate, estimate or invent any number.\n"
-                "- If the same move happened last year, say so plainly -- a seasonal rise is not "
-                "an achievement and a seasonal fall is not a crisis.\n"
                 "- No greeting, no preamble, no exclamation marks, no advice to 'keep it up'.\n"
                 "- Plain and specific. Say what moved and what it means, nothing more.")
 
