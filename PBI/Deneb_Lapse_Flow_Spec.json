@@ -9,11 +9,11 @@
   "signals": [
     {
       "name": "width",
-      "update": "max(260, containerSize()[0] - 318)"
+      "update": "max(240, containerSize()[0])"
     },
     {
       "name": "height",
-      "update": "max(180, containerSize()[1] - 46)"
+      "update": "max(180, containerSize()[1])"
     },
     {
       "name": "nW",
@@ -213,7 +213,7 @@
             "type": "mouseup",
             "markname": "node"
           },
-          "update": "datum.lab"
+          "update": "datum.flabel"
         },
         {
           "events": {
@@ -221,7 +221,7 @@
             "type": "mouseup",
             "markname": "ribbon"
           },
-          "update": "slice(datum.srcID, 2) + ' to ' + slice(datum.tgtID, 2)"
+          "update": "datum.flabel"
         },
         {
           "events": {
@@ -301,6 +301,11 @@
           "type": "formula",
           "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\"",
           "as": "fexpr"
+        },
+        {
+          "type": "formula",
+          "expr": "\"Last Appointment Reason = \" + datum['Last Appointment Reason']",
+          "as": "flabel"
         }
       ]
     },
@@ -347,6 +352,11 @@
           "type": "formula",
           "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
           "as": "fexpr"
+        },
+        {
+          "type": "formula",
+          "expr": "\"Last Activity = \" + datum['Last Activity']",
+          "as": "flabel"
         }
       ]
     },
@@ -393,6 +403,11 @@
           "type": "formula",
           "expr": "\"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
           "as": "fexpr"
+        },
+        {
+          "type": "formula",
+          "expr": "\"Current Status = \" + datum['Lapsed Type']",
+          "as": "flabel"
         }
       ]
     },
@@ -475,6 +490,11 @@
           "type": "formula",
           "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\" + \" && \" + \"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
           "as": "fexpr"
+        },
+        {
+          "type": "formula",
+          "expr": "\"Last Appointment Reason = \" + datum['Last Appointment Reason'] + \" and \" + \"Last Activity = \" + datum['Last Activity']",
+          "as": "flabel"
         }
       ]
     },
@@ -517,6 +537,11 @@
           "type": "formula",
           "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\" + \" && \" + \"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
           "as": "fexpr"
+        },
+        {
+          "type": "formula",
+          "expr": "\"Last Activity = \" + datum['Last Activity'] + \" and \" + \"Current Status = \" + datum['Lapsed Type']",
+          "as": "flabel"
         }
       ]
     },
@@ -1222,7 +1247,7 @@
         },
         "update": {
           "text": {
-            "signal": "selLabel === '' ? '' : 'Filtered to ' + selLabel + '  --  open Lapsing List to see these patients, or click the background to clear'"
+            "signal": "selLabel === '' ? '' : 'Filtered on ' + selLabel + '      (click the background to clear)'"
           }
         }
       }

@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
   "name": "1a7c4e9b02f5d63800e1",
   "position": {
-    "x": 904,
+    "x": 728,
     "y": 80.1670146137787,
     "z": 10,
     "height": 519.749478079332,
-    "width": 376,
+    "width": 552,
     "tabOrder": 1
   },
   "visual": {
@@ -15,6 +15,20 @@
       "queryState": {
         "Values": {
           "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Lapsed Patients"
+                    }
+                  },
+                  "Property": "bk Patient ID"
+                }
+              },
+              "queryRef": "_Lapsed Patients.bk Patient ID",
+              "nativeQueryRef": "bk Patient ID"
+            },
             {
               "field": {
                 "Column": {
@@ -48,14 +62,28 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "_Lapsed Patients"
+                      "Entity": "List Patients"
                     }
                   },
-                  "Property": "Lapsed Type"
+                  "Property": "Email Address"
                 }
               },
-              "queryRef": "_Lapsed Patients.Lapsed Type",
-              "nativeQueryRef": "Lapsed Type"
+              "queryRef": "List Patients.Email Address",
+              "nativeQueryRef": "Email Address"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Mobile Phone"
+                }
+              },
+              "queryRef": "List Patients.Mobile Phone",
+              "nativeQueryRef": "Mobile Phone"
             }
           ]
         }
