@@ -210,6 +210,24 @@
                 "mode": "hidden"
               }
             }
+          },
+          "1a7c4e9b02f5d63800d1": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "1a7c4e9b02f5d63800d2": {
+            "singleVisual": {
+              "visualType": "actionButton",
+              "objects": {},
+              "display": {
+                "mode": "hidden"
+              }
+            }
           }
         }
       }
