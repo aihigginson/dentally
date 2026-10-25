@@ -102,3 +102,4 @@
 - [The csx owns only the _Measures table](the-csx-owns-only-the-measures-table.md) — fact tables carry hand-made measures reports bind to; sweeping them would have deleted 9 live ones.
 - [Fact_Lapsed_Patients is the lapsing fact](lapsed-patients-is-the-lapsing-fact.md) — I built a near-duplicate; the customer-facing lapsed figures come from _Metric Actuals, not this fact.
 - [A bookmark lists the visuals it applies to](a-bookmark-lists-the-visuals-it-applies-to.md) — targetVisualNames; a new visual not on it ignores the bookmark and stays hidden, silently.
+- [A short action button needs container padding](a-short-action-button-needs-container-padding.md) — default padding eats a 28px button; it renders as a clickable line of its fill colour.
