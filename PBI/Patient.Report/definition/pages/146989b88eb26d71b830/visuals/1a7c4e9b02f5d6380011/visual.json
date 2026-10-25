@@ -6,7 +6,7 @@
     "y": 80.1670146137787,
     "z": 0,
     "height": 519.749478079332,
-    "width": 1280,
+    "width": 896,
     "tabOrder": 0
   },
   "visual": {
@@ -169,7 +169,7 @@
             "viewportWidth": {
               "expr": {
                 "Literal": {
-                  "Value": "1280D"
+                  "Value": "896D"
                 }
               }
             }
