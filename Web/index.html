@@ -2017,7 +2017,13 @@
                 const d = sectionSubnavData[sectionKey];
                 let label = bm;
                 try {
-                    const all = await report.bookmarksManager.getBookmarks();
+                    // ==> getBookmarks() RETURNS GROUPS, NOT A FLAT LIST. <== A grouped
+                    // bookmark is a CHILD, so a flat .find() never matches it and the
+                    // breadcrumb falls back to showing the raw GUID. The Patient report
+                    // groups its five tabs so the sixth stays off the navigator, which is
+                    // exactly when this bites. flattenBookmarks already exists for the
+                    // seeding call a few lines up -- this is the one place that missed it.
+                    const all = flattenBookmarks(await report.bookmarksManager.getBookmarks());
                     label = (all.find(b => b.name === bm) || {}).displayName || bm;
                 } catch (err) { /* fall back to the internal name */ }
                 noteBookmark(sectionKey, bm, label, d ? d.activePage : null);

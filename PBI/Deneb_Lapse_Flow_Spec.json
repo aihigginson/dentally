@@ -21,39 +21,39 @@
     },
     {
       "name": "cDNA",
-      "value": "#C0392B"
+      "value": "#A33A32"
     },
     {
       "name": "cCancPatient",
-      "value": "#E8820C"
+      "value": "#C07B3A"
     },
     {
       "name": "cCancPractice",
-      "value": "#C2185B"
+      "value": "#9B4B6B"
     },
     {
       "name": "cCancOther",
-      "value": "#9E9E9E"
+      "value": "#8A8E92"
     },
     {
       "name": "cRecallNotSet",
-      "value": "#B8A023"
+      "value": "#8A7A33"
     },
     {
       "name": "cRecallNotSent",
-      "value": "#795548"
+      "value": "#6B5B8A"
     },
     {
       "name": "cFirstReminder",
-      "value": "#00897B"
+      "value": "#4E8F86"
     },
     {
       "name": "cSecondReminder",
-      "value": "#1565C0"
+      "value": "#336C99"
     },
     {
       "name": "cUnknownAct",
-      "value": "#B0BEC5"
+      "value": "#A8B2B8"
     },
     {
       "name": "cHeaderText",
@@ -857,7 +857,7 @@
         },
         "update": {
           "fillOpacity": {
-            "signal": "hov == null && hovNode == null ? 0.45 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.62 : 0.07) : (indata('cohort_edges', 'key', datum.key) ? 0.62 : 0.07)"
+            "signal": "hov == null && hovNode == null ? 0.5 : hovNode != null ? (datum.srcID === hovNode.nid || datum.tgtID === hovNode.nid ? 0.62 : 0.07) : (indata('cohort_edges', 'key', datum.key) ? 0.62 : 0.07)"
           },
           "tooltip": {
             "signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}"
