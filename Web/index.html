@@ -662,14 +662,31 @@
 
     <!-- ── TREATMENT ── -->
     <section class="section active" id="section-home">
-        <!-- ==> THE WEEKLY HIGHLIGHT STRIP WAS HERE AND WAS WITHDRAWN. <== Six cards, three
-             going well and three to watch, ranked by 4-week movement x Area_Weight. Do not
-             rebuild it as it was: Area_Weight exists for the five Home AREA HEADERS, 16 of
-             the 44 active metrics carry no weight and silently default to 5, and a practice
-             -grain rate move can be pure clinician mix -- the "Average Plan Value +33%" card
-             was two clinicians doing bigger work on FEWER plans. Gold.Aggregate_Practice_
-             Insights, /api/insights and the narrator all still exist; the display does not.
-             Parked pending a model that can carry cause and effect. -->
+        <!-- ==> THE WEEKLY HIGHLIGHT STRIP WAS HERE. THE DISPLAY WAS APPROVED; THE HEADLINES
+             WERE NOT. <== Six cards above the report, three going well and three to watch.
+             The owner's verdict was explicit: the strip itself was liked, the headlines in it
+             were "totally meh and noise". So this is NOT a design to redo -- restore it as it
+             stood and feed it something better:
+
+                 git show dac6dab:Web/index.html
+
+             carries the markup, the .insight* CSS and loadInsights()/_insightValue()/
+             _insightChange() verbatim. Gold.Aggregate_Practice_Insights, /api/insights and
+             the narrator were never removed, and their tests still run.
+
+             What must NOT come back is the ranking. It scored 4-week movement x Area_Weight,
+             and Area_Weight exists for the five Home AREA HEADERS, not for judging what
+             merits examination -- 16 of the 44 active metrics carry no weight at all and the
+             loader defaults them to 5, so every one became eligible to headline. A
+             practice-grain rate move can also be pure clinician MIX: the "Average Plan Value
+             +33%" card was Craig Jack at 160 plans -> 139 for 24,700 -> 53,137 and Tessa
+             Clarke at 68 -> 65 for 9,369 -> 28,021 -- two clinicians doing bigger work on
+             FEWER plans, reading as the practice improving.
+
+             Cause and effect is not in the metadata and cannot be derived from it. The form
+             the owner wants is forward-looking -- cancellations now, lapsing later;
+             implantologist diary now, revenue later -- which is a temporal model, not a
+             column. Parked for ML. -->
         <div class="embed-slot embed-full" id="embed-home">Please Wait...</div>
     </section>
 
