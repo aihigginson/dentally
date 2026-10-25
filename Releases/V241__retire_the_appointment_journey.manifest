@@ -45,9 +45,15 @@ EXEC     EXEC Meta.usp_Create_Gold_Views;
 
 # --- guards -------------------------------------------------------------------------------
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('Fact_Appointment_Journey','vw_Fact_Appointment_Journey','_Appointment Journey'); IF @n <> 0 BEGIN SET @e = 'V241 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' journey object(s) survive.'; THROW 50710, @e, 1; END;
-# ==> THE SILVER TABLE MUST SURVIVE. <== Fact_Appointments reads it; dropping it by mistake
-# would quietly empty Booking / This_Visit / Next_Visit on every appointment.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Silver' AND TABLE_NAME='Appointment_Journey_Attrs'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: Silver.Appointment_Journey_Attrs is gone -- it was never meant to be.'; THROW 50711, @e, 1; END;
+# ==> NOTHING MAY BE LEFT READING A TABLE THAT IS GONE. <== Gold.usp_Load_Fact_Appointments
+# reads Silver.Appointment_Journey_Attrs for Booking / This_Visit / Next_Visit, so dropping it
+# by mistake would quietly empty three columns on every appointment.
+#
+# Stated as "the table must exist" this guard was FALSE ON PROD, where that loader is a
+# version which never referenced it and the table was never created -- and it stopped the
+# release after the drops above had already run. The invariant that is true in both places is
+# the conditional one: if anything still reads it, it had better be there.
+EXEC     DECLARE @r INT, @t INT, @e VARCHAR(4000); SELECT @r = COUNT(*) FROM sys.sql_modules WHERE definition LIKE '%Appointment_Journey_Attrs%'; SELECT @t = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Silver' AND TABLE_NAME='Appointment_Journey_Attrs'; IF @r > 0 AND @t <> 1 BEGIN SET @e = 'V241 FAILED: ' + CAST(@r AS VARCHAR(10)) + ' procedure(s) read Silver.Appointment_Journey_Attrs but the table is gone.'; THROW 50711, @e, 1; END;
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_APPOINTMENT_JOURNEY'; IF @n <> 0 BEGIN SET @e = 'V241 FAILED: the journey load is still registered and the nightly chain will call a dropped proc.'; THROW 50712, @e, 1; END;
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_LAPSED_PATIENTS'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: the replacement load is not registered, so the lapsing fact will go stale.'; THROW 50713, @e, 1; END;
 # The replacement must still be there and populated after all that.
