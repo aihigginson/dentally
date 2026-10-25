@@ -28,9 +28,9 @@
 # ---------------------------------------------------------------------
 # WHAT IS *NOT* RETIRED.
 # ---------------------------------------------------------------------
-# Silver.Appointment_Journey_Attrs is a DIFFERENT object and stays: Gold.usp_Load_Fact_
-# Appointments reads it for Booking / This_Visit / Next_Visit, and Check_Row_Counts.sql
-# monitors it. Only the Gold fact, its view, and its load registration go.
+# Silver.Appointment_Journey_Attrs is a DIFFERENT object and is NOT dropped here -- though as
+# it turns out it exists in neither environment and nothing reads it. Only the Gold fact, its
+# view, its load registration and its RI rules go.
 # ---------------------------------------------------------------------
 
 DEPLOY   Fabric\Audit.Process_Config.Data.sql
@@ -49,14 +49,17 @@ EXEC     EXEC Meta.usp_Create_Gold_Views;
 
 # --- guards -------------------------------------------------------------------------------
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('Fact_Appointment_Journey','vw_Fact_Appointment_Journey','_Appointment Journey'); IF @n <> 0 BEGIN SET @e = 'V241 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' journey object(s) survive.'; THROW 50710, @e, 1; END;
-# ==> NOTHING MAY BE LEFT READING A TABLE THAT IS GONE. <== Gold.usp_Load_Fact_Appointments
-# reads Silver.Appointment_Journey_Attrs for Booking / This_Visit / Next_Visit, so dropping it
-# by mistake would quietly empty three columns on every appointment.
+# ==> NOTHING MAY BE LEFT READING A TABLE THAT IS GONE. <==
 #
-# Stated as "the table must exist" this guard was FALSE ON PROD, where that loader is a
-# version which never referenced it and the table was never created -- and it stopped the
-# release after the drops above had already run. The invariant that is true in both places is
-# the conditional one: if anything still reads it, it had better be there.
+# This guard once read "Silver.Appointment_Journey_Attrs MUST exist", on the belief that
+# Gold.usp_Load_Fact_Appointments still read it for Booking / This_Visit / Next_Visit. It does
+# not, and has not for some time: the only mention left anywhere is a change-history line in
+# that loader recording that it used to. The table exists in NEITHER environment, so the
+# assertion was false on PROD and stopped this release after its drops had already run.
+#
+# Restated as the invariant rather than one environment's shape: if anything still reads the
+# table, the table must be there. Trivially satisfied today in both places, and it is what
+# would catch a future loader starting to read something that had been dropped.
 EXEC     DECLARE @r INT, @t INT, @e VARCHAR(4000); SELECT @r = COUNT(*) FROM sys.sql_modules WHERE definition LIKE '%Appointment_Journey_Attrs%'; SELECT @t = COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Silver' AND TABLE_NAME='Appointment_Journey_Attrs'; IF @r > 0 AND @t <> 1 BEGIN SET @e = 'V241 FAILED: ' + CAST(@r AS VARCHAR(10)) + ' procedure(s) read Silver.Appointment_Journey_Attrs but the table is gone.'; THROW 50711, @e, 1; END;
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_APPOINTMENT_JOURNEY'; IF @n <> 0 BEGIN SET @e = 'V241 FAILED: the journey load is still registered and the nightly chain will call a dropped proc.'; THROW 50712, @e, 1; END;
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Audit.Process_Config WHERE Process_Code = 'GOLD_AGG_LAPSED_PATIENTS'; IF @n <> 1 BEGIN SET @e = 'V241 FAILED: the replacement load is not registered, so the lapsing fact will go stale.'; THROW 50713, @e, 1; END;
