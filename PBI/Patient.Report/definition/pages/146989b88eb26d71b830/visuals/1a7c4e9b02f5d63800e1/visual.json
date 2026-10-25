@@ -37,6 +37,21 @@
                       "Entity": "_Lapsed Patients"
                     }
                   },
+                  "Property": "Last Appointment Reason"
+                }
+              },
+              "queryRef": "_Lapsed Patients.Last Appointment Reason",
+              "nativeQueryRef": "Last Appointment Reason",
+              "displayName": "Appointment"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Lapsed Patients"
+                    }
+                  },
                   "Property": "Last Activity"
                 }
               },
@@ -95,6 +110,20 @@
                       "Entity": "List Patients"
                     }
                   },
+                  "Property": "Mobile Phone"
+                }
+              },
+              "queryRef": "List Patients.Mobile Phone",
+              "nativeQueryRef": "Mobile Phone"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
                   "Property": "Email Address"
                 }
               },
@@ -109,11 +138,25 @@
                       "Entity": "List Patients"
                     }
                   },
-                  "Property": "Mobile Phone"
+                  "Property": "Marketing Consent"
                 }
               },
-              "queryRef": "List Patients.Mobile Phone",
-              "nativeQueryRef": "Mobile Phone"
+              "queryRef": "List Patients.Marketing Consent",
+              "nativeQueryRef": "Marketing Consent"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "List Patients"
+                    }
+                  },
+                  "Property": "Total Paid"
+                }
+              },
+              "queryRef": "List Patients.Total Paid",
+              "nativeQueryRef": "Total Paid"
             }
           ]
         }
@@ -145,13 +188,13 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "110D"
+                  "Value": "125D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "List Patients.Last Appointment Date"
+            "metadata": "_Lapsed Patients.Last Appointment Reason"
           }
         },
         {
@@ -159,13 +202,41 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "100D"
+                  "Value": "130D"
                 }
               }
             }
           },
           "selector": {
-            "metadata": "_Lapsed Patients.Lapsed Date"
+            "metadata": "_Lapsed Patients.Last Activity"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "120D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Lapsed Patients.Lapsed Type"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "110D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "List Patients.Last Appointment Date"
           }
         },
         {
@@ -201,7 +272,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "260D"
+                  "Value": "200D"
                 }
               }
             }
@@ -229,7 +300,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "110D"
+                  "Value": "60D"
                 }
               }
             }
