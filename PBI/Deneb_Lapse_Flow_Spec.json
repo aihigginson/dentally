@@ -138,6 +138,38 @@
           "update": "null"
         }
       ]
+    },
+    {
+      "name": "pbiCrossFilterSelection",
+      "value": [],
+      "on": [
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "node"
+          },
+          "update": "pbiCrossFilterApply(event, event.item.datum.fexpr)"
+        },
+        {
+          "events": {
+            "source": "scope",
+            "type": "mouseup",
+            "markname": "ribbon"
+          },
+          "update": "pbiCrossFilterApply(event, event.item.datum.fexpr)"
+        },
+        {
+          "events": {
+            "source": "view",
+            "type": "mouseup",
+            "filter": [
+              "!event.item || (event.item.mark.name !== 'node' && event.item.mark.name !== 'ribbon')"
+            ]
+          },
+          "update": "pbiCrossFilterClear()"
+        }
+      ]
     }
   ],
   "data": [
@@ -200,6 +232,11 @@
           "type": "formula",
           "expr": "datum.lab==='Exam'?0:datum.lab==='Hygiene'?1:datum.lab==='Continuing Treatment'?2:datum.lab==='Emergency'?3:datum.lab==='Review'?4:datum.lab==='Other'?5:datum.lab==='No Appointment'?6:7",
           "as": "sort_key"
+        },
+        {
+          "type": "formula",
+          "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\"",
+          "as": "fexpr"
         }
       ]
     },
@@ -241,6 +278,11 @@
           "type": "formula",
           "expr": "datum.lab==='DNA'?0:datum.lab==='Cancellation Patient'?1:datum.lab==='Cancellation Practice'?2:datum.lab==='Cancellation Other'?3:datum.lab==='Recall Not Set'?4:datum.lab==='Recall Not Sent'?5:datum.lab==='1st Reminder'?6:datum.lab==='2nd Reminder'?7:8",
           "as": "sort_key"
+        },
+        {
+          "type": "formula",
+          "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
+          "as": "fexpr"
         }
       ]
     },
@@ -282,6 +324,11 @@
           "type": "formula",
           "expr": "datum.lab==='Set as inactive'?0:datum.lab==='Calculated as inactive'?1:datum.lab==='At Risk'?2:3",
           "as": "sort_key"
+        },
+        {
+          "type": "formula",
+          "expr": "\"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
+          "as": "fexpr"
         }
       ]
     },
@@ -359,6 +406,11 @@
           "type": "formula",
           "expr": "datum['Last Activity']",
           "as": "colorKey"
+        },
+        {
+          "type": "formula",
+          "expr": "\"datum['Last Appointment Reason'] === '\" + datum['Last Appointment Reason'] + \"'\" + \" && \" + \"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\"",
+          "as": "fexpr"
         }
       ]
     },
@@ -396,6 +448,11 @@
           "type": "formula",
           "expr": "datum['Last Activity']",
           "as": "colorKey"
+        },
+        {
+          "type": "formula",
+          "expr": "\"datum['Last Activity'] === '\" + datum['Last Activity'] + \"'\" + \" && \" + \"datum['Lapsed Type'] === '\" + datum['Lapsed Type'] + \"'\"",
+          "as": "fexpr"
         }
       ]
     },
@@ -806,7 +863,8 @@
             "signal": "{'From': slice(datum.srcID, 2), 'To': slice(datum.tgtID, 2), 'Patients': datum.flow}"
           }
         }
-      }
+      },
+      "name": "ribbon"
     },
     {
       "type": "path",
@@ -854,6 +912,9 @@
           },
           "cornerRadius": {
             "value": 2
+          },
+          "cursor": {
+            "value": "pointer"
           }
         },
         "update": {
@@ -870,7 +931,8 @@
             "signal": "hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0"
           }
         }
-      }
+      },
+      "name": "node"
     },
     {
       "type": "text",
