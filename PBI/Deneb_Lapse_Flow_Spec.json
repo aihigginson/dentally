@@ -172,8 +172,8 @@
       ]
     },
     {
-      "name": "selNid",
-      "value": null,
+      "name": "selKey",
+      "value": "",
       "on": [
         {
           "events": {
@@ -189,39 +189,7 @@
             "type": "mouseup",
             "markname": "ribbon"
           },
-          "update": "null"
-        },
-        {
-          "events": {
-            "source": "view",
-            "type": "mouseup",
-            "filter": [
-              "!event.item || (event.item.mark.name !== 'node' && event.item.mark.name !== 'ribbon')"
-            ]
-          },
-          "update": "null"
-        }
-      ]
-    },
-    {
-      "name": "selLabel",
-      "value": "",
-      "on": [
-        {
-          "events": {
-            "source": "scope",
-            "type": "mouseup",
-            "markname": "node"
-          },
-          "update": "datum.flabel"
-        },
-        {
-          "events": {
-            "source": "scope",
-            "type": "mouseup",
-            "markname": "ribbon"
-          },
-          "update": "datum.flabel"
+          "update": "datum.key"
         },
         {
           "events": {
@@ -902,6 +870,19 @@
           "as": "display_tot"
         }
       ]
+    },
+    {
+      "name": "selcap",
+      "source": [
+        "nodes",
+        "edges"
+      ],
+      "transform": [
+        {
+          "type": "filter",
+          "expr": "selKey !== '' && (datum.nid === selKey || datum.key === selKey)"
+        }
+      ]
     }
   ],
   "scales": [
@@ -1014,10 +995,10 @@
             "value": "pointer"
           },
           "stroke": {
-            "signal": "selNid === datum.nid ? '#101820' : (hovNode != null && datum.nid === hovNode.nid ? '#101820' : null)"
+            "signal": "selKey === datum.nid ? '#101820' : (hovNode != null && datum.nid === hovNode.nid ? '#101820' : null)"
           },
           "strokeWidth": {
-            "signal": "selNid === datum.nid ? 2 : (hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0)"
+            "signal": "selKey === datum.nid ? 2 : (hovNode != null && datum.nid === hovNode.nid ? 1.5 : 0)"
           }
         }
       },
@@ -1247,12 +1228,12 @@
         },
         "update": {
           "text": {
-            "signal": "selLabel === '' ? '' : 'Filtered on ' + selLabel"
+            "signal": "'Filtered on ' + datum.flabel"
           }
         }
       },
       "from": {
-        "data": "grand_ds"
+        "data": "selcap"
       }
     }
   ],

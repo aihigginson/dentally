@@ -1860,10 +1860,29 @@
     function noteBookmark(key, name, displayName, pageName) {
         const trail = crumbTrail(key);
         if (!trail || !name) return;
-        // a view replaces the view before it; it does not stack on it
-        while (trail.length && trail[trail.length - 1].kind === 'bookmark') trail.pop();
+        // ==> A TAB REPLACES; A DETAIL VIEW STACKS. <== A report that groups its bookmarks is
+        // saying which of them are tabs: the grouped ones are what the navigator draws, and a
+        // bookmark OUTSIDE every group is a detail reached from one of them. So a tab pops the
+        // whole view trail as before, and a detail view pops only other details -- which is
+        // what turns "Patient > Full Screen" into "Patient > Lapsing > Full Screen".
+        // A report with no groups has no detail views, so every bookmark is a tab and this
+        // behaves exactly as it always did.
+        const tabs = sectionSubnavData[key] && sectionSubnavData[key].tabBookmarks;
+        const isTab = !tabs || !tabs.size || tabs.has(name);
+        while (trail.length && trail[trail.length - 1].kind === 'bookmark'
+               && (isTab || !tabs.has(trail[trail.length - 1].name))) trail.pop();
         trail.push({ kind: 'bookmark', name, displayName: displayName || name, pageName });
         if (key === activeSection) renderBreadcrumb(key);
+    }
+
+    // Which bookmarks are TABS, i.e. children of a group? getBookmarks() nests them, so the
+    // ones with a parent are the navigator's; anything top-level with no children is a detail.
+    function groupedBookmarkNames(list, out) {
+        out = out || new Set();
+        (list || []).forEach(b => {
+            if (b.children && b.children.length) b.children.forEach(c => out.add(c.name));
+        });
+        return out;
     }
 
     // Bookmark groups nest, so flatten before anyone takes "the first one".
@@ -1995,10 +2014,14 @@
         // "My Data > Revenue & Mix" instead of naming the report and stopping.
         (async () => {
             try {
-                const all = flattenBookmarks(await report.bookmarksManager.getBookmarks());
+                const raw = await report.bookmarksManager.getBookmarks();
+                const all = flattenBookmarks(raw);
                 const d = sectionSubnavData[sectionKey];
                 if (!d || !all.length) return;
                 d.bookmarks = all;
+                // Captured from the RAW list: flattening throws away the one thing that says
+                // which bookmarks are tabs and which are details hanging off them.
+                d.tabBookmarks = groupedBookmarkNames(raw);
                 if (!(d.trail || []).some(t => t.kind === 'bookmark')) {
                     noteBookmark(sectionKey, all[0].name, all[0].displayName, d.activePage);
                 }
