@@ -3,17 +3,17 @@
   "padding": {
     "top": 20,
     "bottom": 26,
-    "left": 150,
+    "left": 14,
     "right": 168
   },
   "signals": [
     {
       "name": "width",
-      "update": "max(240, containerSize()[0])"
+      "update": "max(240, containerSize()[0] - 2)"
     },
     {
       "name": "height",
-      "update": "max(180, containerSize()[1])"
+      "update": "max(180, containerSize()[1] - 2)"
     },
     {
       "name": "nW",
@@ -1012,7 +1012,7 @@
       "encode": {
         "enter": {
           "x": {
-            "signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4"
+            "signal": "datum.x + nW + 5"
           },
           "y": {
             "signal": "(datum.y0 + datum.y1) / 2"
@@ -1021,7 +1021,7 @@
             "value": "middle"
           },
           "align": {
-            "signal": "datum.si === 0 ? 'right' : 'left'"
+            "value": "left"
           },
           "fontSize": {
             "value": 11
@@ -1033,7 +1033,7 @@
             "value": "#FFFFFF"
           },
           "limit": {
-            "value": 146
+            "signal": "datum.si === 2 ? 158 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
@@ -1066,7 +1066,7 @@
       "encode": {
         "enter": {
           "x": {
-            "signal": "datum.si === 0 ? datum.x - 4 : datum.x + nW + 4"
+            "signal": "datum.x + nW + 5"
           },
           "y": {
             "signal": "(datum.y0 + datum.y1) / 2"
@@ -1075,7 +1075,7 @@
             "value": "middle"
           },
           "align": {
-            "signal": "datum.si === 0 ? 'right' : 'left'"
+            "value": "left"
           },
           "fontSize": {
             "value": 11
@@ -1087,7 +1087,7 @@
             "signal": "cLabelText"
           },
           "limit": {
-            "value": 146
+            "signal": "datum.si === 2 ? 158 : max(60, dx - nW - 14)"
           },
           "fontWeight": {
             "value": 500
@@ -1129,7 +1129,7 @@
             "signal": "cHeaderText"
           },
           "align": {
-            "value": "center"
+            "value": "left"
           }
         }
       }
@@ -1160,7 +1160,7 @@
             "signal": "cHeaderText"
           },
           "align": {
-            "value": "center"
+            "value": "left"
           }
         }
       }
@@ -1191,7 +1191,7 @@
             "signal": "cHeaderText"
           },
           "align": {
-            "value": "center"
+            "value": "left"
           }
         }
       }
@@ -1202,7 +1202,7 @@
       "encode": {
         "enter": {
           "x": {
-            "signal": "-140"
+            "signal": "0"
           },
           "y": {
             "signal": "height + 9"
