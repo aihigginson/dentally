@@ -34,6 +34,7 @@ import os
 import struct
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pyodbc
@@ -328,6 +329,49 @@ def load(cn, env, usage, funnel, dry, days, window_start):
                          % (exp_u, exp_f, u, f))
 
 
+PROCESS_NAME = 'sales_monitor'
+
+
+def _log_run(cn, env, started, status, error=None, rows=None, options=None):
+    """Write one Audit.Process_Execution_Log row, so this job is visible where every other
+    process already is.
+
+    ==> THE MONITOR EMAILS FAILED ROWS FROM THAT TABLE. <== Writing here is the whole of the
+    alerting: there is no second mechanism to build, and this job had none, which is why it
+    failed every run from 19/10 to 26/10 with its status plainly Failed in Azure and nobody
+    heard. A SUCCEEDED row matters as much as a FAILED one -- the monitor's heartbeat check
+    reads the last success, so a job that stops running entirely is caught by its silence.
+
+    BEST EFFORT, like its twin in appdb_sync. The table is on the Fabric capacity, so a
+    capacity outage is the one failure it cannot record -- that case is left to the job's
+    non-zero exit, which Azure records. An error here is swallowed rather than allowed to
+    replace the real one in the traceback.
+    """
+    own = None
+    try:
+        if cn is None:
+            own = _wh(env)
+            cn = own
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        cn.cursor().execute(
+            "INSERT INTO Audit.Process_Execution_Log "
+            "(Run_UUID, Process_Name, Process_Type, Start_Time, End_Time, Duration_Seconds, "
+            " Num_Of_Records, Status, Error_Message, Database_Name, Executed_By, Run_Date, "
+            " Process_Options) "
+            "VALUES (?, ?, 'JOB', ?, ?, ?, ?, ?, ?, 'WH_Dentally', 'caj-sales-monitor', ?, ?)",
+            str(uuid.uuid4()), PROCESS_NAME, started, now,
+            (now - started).total_seconds(), rows, status,
+            (str(error)[:8000] if error else None), now.date(), options)
+    except Exception as e:                                  # noqa: BLE001 -- see docstring
+        print('WARNING: could not write Audit.Process_Execution_Log: ' + str(e)[:200])
+    finally:
+        if own is not None:
+            try:
+                own.close()
+            except Exception:
+                pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('env', choices=sorted(WAREHOUSES))
@@ -336,20 +380,34 @@ def main():
     a = ap.parse_args()
 
     print('sales-monitor [%s]  window %dd  app %s' % (a.env, a.days, CONTAINER_APP[a.env]))
-    cn = _wh(a.env)
+    started = datetime.now(timezone.utc).replace(tzinfo=None)
+    cn = None
+    try:
+        cn = _wh(a.env)
 
-    # ONE window_start for extract and load alike. Deriving it twice is how the billing source
-    # came to disagree with the delete it is verified against.
-    window_start = (datetime.now(timezone.utc) - timedelta(days=a.days)).date()
+        # ONE window_start for extract and load alike. Deriving it twice is how the billing
+        # source came to disagree with the delete it is verified against.
+        window_start = (datetime.now(timezone.utc) - timedelta(days=a.days)).date()
 
-    usage = usage_rows(a.env, a.days)
-    funnel = (funnel_log_rows(a.env, a.days) + funnel_kv_rows(a.env)
-              + funnel_billing_rows(a.env, cn, window_start))
+        usage = usage_rows(a.env, a.days)
+        funnel = (funnel_log_rows(a.env, a.days) + funnel_kv_rows(a.env)
+                  + funnel_billing_rows(a.env, cn, window_start))
 
-    print('  extracted      usage=%d rows  funnel=%d rows' % (len(usage), len(funnel)))
-    practice = [r for r in usage if r[3] == 0]
-    print('  usage by PRACTICE users (not us): %d of %d row(s)' % (len(practice), len(usage)))
-    load(cn, a.env, usage, funnel, a.dry_run, a.days, window_start)
+        print('  extracted      usage=%d rows  funnel=%d rows' % (len(usage), len(funnel)))
+        practice = [r for r in usage if r[3] == 0]
+        print('  usage by PRACTICE users (not us): %d of %d row(s)'
+              % (len(practice), len(usage)))
+        load(cn, a.env, usage, funnel, a.dry_run, a.days, window_start)
+    except BaseException as e:
+        # ==> BaseException, BECAUSE THE LOAD GUARD RAISES SystemExit. <== That is the exact
+        # failure this job spent eight days in, and `except Exception` would have let it past
+        # unlogged -- reporting nothing for the one fault we already know it hits.
+        _log_run(cn, a.env, started, 'FAILED', error=e,
+                 options='env=%s days=%d%s' % (a.env, a.days,
+                                               ' dry-run' if a.dry_run else ''))
+        raise
+    _log_run(cn, a.env, started, 'SUCCEEDED',
+             options='env=%s days=%d%s' % (a.env, a.days, ' dry-run' if a.dry_run else ''))
     cn.close()
     return 0
 
