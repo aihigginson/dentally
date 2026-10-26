@@ -55,6 +55,7 @@
 - [Maple's targets are hand-set — never seed over them](maple-targets-are-hand-set-never-seed-over-them.md) — all 334 rows are the owner's; the seeder has never run. A dry run is not state.
 - [My Data is unfiltered for vendor accounts by design](my-data-is-unfiltered-for-vendor-accounts-by-design.md) — no practitioner linked = aggregate + free slicer, so support can reproduce bugs. Not a defect.
 - [Sales monitor shape, and the deferred card stages](sales-monitor-shape-and-deferred-card-stages.md) — Sales.* → Gold → PBI Affiliates; card stages wait for a real card. Do not build them blind.
+- [Container job failures are unmonitored](container-job-failures-are-unmonitored.md) — nothing alerts on them; sales-monitor-dev ran red 8 days unseen, and appdb_sync reports Succeeded while failing.
 - [A table projection takes no displayName](a-table-projection-takes-no-displayname.md) — renaming a measure in a tableEx drops the column silently; cards are fine.
 - [Pipeline deploy clears the model's connection](pipeline-deploy-clears-the-models-connection.md) — and ships dev's parameters; deployment rules are the fix, PBI Dentally is the reference.
 - [Sunday is dev's weekly build day](sunday-is-devs-weekly-build-day.md) — two builds in one 24h window; the capacity figure is a trailing total, not a live reading.
