@@ -30,6 +30,8 @@
 - [Get Data bakes a literal endpoint into the model](get-data-bakes-a-literal-endpoint-into-the-model.md) — a table added that way ignores pServer and does not repoint on promotion.
 - [A detail table needs a column, not a measure](a-detail-table-needs-a-column-not-a-measure.md) — a measure kills auto-exist and multiplies the rows out.
 - [Never deploy an Input.* table in a release](never-deploy-an-input-table-in-a-release.md) — those files start with DROP TABLE and Input.* is owner-curated data.
+- [Bronze.Recalls cannot be dropped](bronze-recalls-cannot-be-dropped.md) — its DDL starts with DROP TABLE and Stage holds only the latest batch; 45,241 rows gone on DEV.
+- [Dentally's "first reminder" is really the latest](dentally-first-reminder-is-really-the-latest.md) — proven by GUID; only the reminders array is honest, and it is newest-first.
 - [Input.* rows live in the AppDB, now Azure SQL](input-rows-live-in-the-appdb-now-azure-sql.md) — the sync full-refreshes the warehouse copy; .env.example points at a dead host.
 - [Capitation is an estimate, not observed income](capitation-is-an-estimate-not-observed-income.md) — reconstructed from free exams; the real figures are the plan provider's spreadsheets.
 - [Fabric collation is case-sensitive](fabric-collation-is-case-sensitive.md) — Latin1_General_100_BIN2_UTF8; LIKE and = do not ignore case.
