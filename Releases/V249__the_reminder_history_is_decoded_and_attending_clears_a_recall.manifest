@@ -23,9 +23,26 @@
 # staged rows, every value 0 to 6 -- which is also how the decode was checked: 292 recalls
 # produced 735 reminders, and the contact-count distribution predicts 735 precisely.
 #
-# Rows ingested before this release have no array, so First/Second come back NULL --
-# UNKNOWN, which beats the latest reminder wearing the label of the first. Last_Reminder_Sent_Date
-# falls back to last_reminded_at and is therefore answerable on every chased recall.
+# ==> BUT READING THE ARRAY *ALONE* WAS WRONG IN THE OTHER DIRECTION. <== The DEMO SEEDER
+# writes genuinely distinct scalars (first reminder 42 days before due, second 14), so
+# ignoring them turned 24,000 rows of correct demo data into NULLs. Second_Reminder_Sent_At
+# is the exact discriminator -- the seeder populates it, Dentally never does on any row -- so
+# where it is present both scalars can be read as written. Falling back in order:
+#
+#     1. the decoded array            ground truth
+#     2. the scalars, IF the second is populated   the source fills both honestly
+#     3. Times_Contacted = 1          one reminder, so the latest IS the first -- by definition
+#     4. NULL                         genuinely unknown, which beats a wrong date
+#
+# Coverage on DEV after this: tenants 11 and 12 fully restored (11,293/11,293 and
+# 13,762/13,762 with a first reminder, zero same-day). Tenant 100 goes from 267 to 1,815 of
+# 7,394 on rule 3 alone. Its remaining 5,777 second-reminder dates need a FULL re-ingest --
+# the feed is DELTA (updated_after), so a recall last touched months ago never re-lands and
+# the gap does NOT fill in on its own. Backfill is a one-off Ingest_Dentally run with
+# full_refresh=True, only_entities=["recalls"], only_tenant="100".
+#
+# Last_Reminder_Sent_Date falls back to last_reminded_at and is answerable on every chased
+# recall, which is why the Day Book list shows it alongside the other two.
 #
 # ==> Recall_Status NO LONGER READS THE DATE KEYS. <== Those now resolve from the array and
 # would be absent on most of the history, stripping '1st/2nd Reminder' off the Retention tab.
@@ -112,6 +129,11 @@ EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_R
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = TRY_CAST(a.Recalls_To_Action AS INT) FROM Gold.Aggregate_Site_Practitioner_Current a JOIN Gold.Dim_Practitioners p ON p.pk_Practitioner = a.fk_Practitioner WHERE a.Tenant_ID = 100 AND p.Full_Name = 'David Mason'; IF @n IS NULL OR @n >= 182 BEGIN SET @e = 'V249 FAILED: David Mason still reads ' + CAST(ISNULL(@n,-1) AS VARCHAR(10)) + ' recalls to action, against 182 before and 155 expected.'; THROW 50808, @e, 1; END;
 # The view the model binds must expose both new columns, or the report shows nothing new.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Recalls' AND COLUMN_NAME IN ('Last Reminder Sent Date','Has Attended Since Due'); IF @n <> 2 BEGIN SET @e = 'V249 FAILED: the PBI view exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 2 new columns.'; THROW 50809, @e, 1; END;
+# ==> THE DEMO TENANTS MUST NOT LOSE THEIR REMINDER DATES. <== Reading the array alone
+# blanked 24,000 correct rows for tenants 11 and 12, whose seeder DOES populate the
+# scalars properly. They have no array at all, so this is the only check that the
+# fallback chain actually fires.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID IN (11,12) AND Times_Contacted >= 2 AND (First_Reminder_Sent_Date IS NULL OR Second_Reminder_Sent_Date IS NULL); IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' demo recall(s) lost a reminder date -- the scalar fallback is not firing.'; THROW 50811, @e, 1; END;
 # The grain is untouched by all of this.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, bk_Recall_ID FROM Gold.Fact_Recalls GROUP BY Tenant_ID, bk_Recall_ID HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) appear twice.'; THROW 50810, @e, 1; END;
 

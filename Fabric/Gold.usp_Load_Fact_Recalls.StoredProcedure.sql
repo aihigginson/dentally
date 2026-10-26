@@ -136,11 +136,30 @@ BEGIN
             ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) AS Times_Contacted,
             CAST(r.Due_Date AS DATE)                                        AS Due_Date,
             TRY_CAST(r.Run_Date AS DATE)                                    AS Run_Date,
-            -- ==> FROM THE ARRAY, NOT THE SCALARS. <== See #rem above: the scalar
-            -- first_/second_reminder_* fields name the LATEST reminder, not the first and
-            -- not the second, which is why these two columns read identically before.
-            rm.First_Sent                                                   AS First_Reminder_Sent_Date,
-            rm.Second_Sent                                                  AS Second_Reminder_Sent_Date,
+            -- ==> THE ARRAY FIRST, THEN THE SCALARS *ONLY WHERE THEY CAN BE TRUSTED*. <==
+            -- Reading the array alone was wrong in both directions. Dentally's scalars name
+            -- the LATEST reminder, so trusting them gave two identical columns; but the DEMO
+            -- SEEDER writes genuinely distinct ones (first 42 days before due, second 14),
+            -- so ignoring them turned correct demo data into 24,000 NULLs.
+            --
+            -- Second_Reminder_Sent_At is the discriminator, and it is exact: the seeder
+            -- populates it, Dentally never does on any row. So a populated second reminder
+            -- means this source fills both fields honestly and they can be read as written.
+            --
+            -- Last resort, and true by definition: a recall chased EXACTLY once has one
+            -- reminder, so the latest contact IS the first. That alone answers 1,617 of the
+            -- live practice's recalls that no array has reached.
+            COALESCE(
+                rm.First_Sent,
+                CASE WHEN NULLIF(TRIM(r.Second_Reminder_Sent_At),'') IS NOT NULL
+                     THEN TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE) END,
+                CASE WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) = 1
+                     THEN TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE) END)
+                                                                            AS First_Reminder_Sent_Date,
+            COALESCE(
+                rm.Second_Sent,
+                TRY_CAST(NULLIF(TRIM(r.Second_Reminder_Sent_At),'') AS DATE))
+                                                                            AS Second_Reminder_Sent_Date,
             -- The latest chase. Falls back to last_reminded_at, which IS reliable and is
             -- present on every row -- so this one column is always answerable even for
             -- recalls ingested before the array was landed.
@@ -246,8 +265,13 @@ BEGIN
                                       AND rm.bk_Recall_ID = CAST(r.Id AS VARCHAR(255))
         LEFT JOIN #att att                ON att.Tenant_ID    = r.Tenant_ID
                                       AND att.fk_Patient  = dpat.pk_Patient
-        LEFT JOIN Gold.Dim_Date dd_fr     ON dd_fr.Full_Date  = rm.First_Sent
-        LEFT JOIN Gold.Dim_Date dd_sr     ON dd_sr.Full_Date  = rm.Second_Sent
+        LEFT JOIN Gold.Dim_Date dd_fr     ON dd_fr.Full_Date  = COALESCE(rm.First_Sent,
+                                                 CASE WHEN NULLIF(TRIM(r.Second_Reminder_Sent_At),'') IS NOT NULL
+                                                      THEN TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE) END,
+                                                 CASE WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) = 1
+                                                      THEN TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE) END)
+        LEFT JOIN Gold.Dim_Date dd_sr     ON dd_sr.Full_Date  = COALESCE(rm.Second_Sent,
+                                                 TRY_CAST(NULLIF(TRIM(r.Second_Reminder_Sent_At),'') AS DATE))
         LEFT JOIN Gold.Dim_Date dd_lr     ON dd_lr.Full_Date  = COALESCE(rm.Last_Sent,
                                                  TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE))
         WHERE r.Id IS NOT NULL;
