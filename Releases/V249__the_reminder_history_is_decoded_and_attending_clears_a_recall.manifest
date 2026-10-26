@@ -107,9 +107,14 @@ EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Sit
 EXEC     EXEC Meta.usp_Create_Gold_Views;
 
 # --- guards -------------------------------------------------------------------------------
-# ==> THE WHOLE POINT: THE TWO DATES MUST STOP BEING THE SAME DATE. <== A fix that left them
-# equal would pass every other check here and change nothing on the screen that prompted it.
-EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE First_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date IS NOT NULL AND First_Reminder_Sent_Date = Second_Reminder_Sent_Date; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) still show the same date for the first and second reminder.'; THROW 50800, @e, 1; END;
+# ==> THE WHOLE POINT: THE TWO DATES MUST STOP BEING THE SAME VALUE BY ACCIDENT. <== A fix
+# that left them equal would pass every other check here and change nothing on the screen that
+# prompted it. But equality is NOT banned, because it is sometimes real: recall
+# b612b373 was chased by Email at 16:07:10 and SMS at 16:07:39 on 2021-01-27 -- one chase, two
+# channels, two distinct reminder ids, one calendar day. The invariant is therefore that a
+# same-day pair must be BACKED by two decoded reminders on that date. The old bug fails this
+# instantly: its dates were equal because both read the latest reminder, with nothing behind them.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls r WHERE r.First_Reminder_Sent_Date IS NOT NULL AND r.Second_Reminder_Sent_Date IS NOT NULL AND r.First_Reminder_Sent_Date = r.Second_Reminder_Sent_Date AND (SELECT COUNT(*) FROM Silver.Recall_Reminders rr WHERE rr.Tenant_ID = r.Tenant_ID AND rr.bk_Recall_ID = r.bk_Recall_ID AND CAST(rr.Sent_At AS DATE) = r.First_Reminder_Sent_Date) < 2; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) show the same first and second reminder date with no two reminders behind it -- the scalars are being read again.'; THROW 50800, @e, 1; END;
 # A second reminder cannot predate the first.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE First_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date < First_Reminder_Sent_Date; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' second reminder(s) predate their first.'; THROW 50801, @e, 1; END;
 # A second reminder with no first is impossible; it would mean the sequence was built wrong.
