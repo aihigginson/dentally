@@ -96,10 +96,19 @@ DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedur
 DEPLOY   Fabric\Audit.Process_Config.Data.sql
 DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
 
-# Load order is BRONZE -> SILVER child -> GOLD fact -> GOLD agg, the same order the new
-# Process_Dependency rows give the pipeline. Fact_Recalls reads Silver.Recall_Reminders, so
-# running it first would leave every true reminder date NULL for a whole build.
+# Load order is BRONZE -> SILVER.Recalls -> SILVER child -> GOLD fact -> GOLD agg, the same
+# order the new Process_Dependency rows give the pipeline. Fact_Recalls reads
+# Silver.Recall_Reminders, so running it first would leave every true reminder date NULL.
+#
+# ==> SILVER.Recalls IS IN THIS LIST, AND WAS MISSING FROM IT. <== Fact_Recalls reads
+# Silver.Recalls for Times_Contacted, Status and Due_Date, but the reminder dates come from
+# Silver.Recall_Reminders, which reads BRONZE directly. Omitting the Silver.Recalls reload
+# therefore built Gold from a stale Silver while the dates came from fresh Bronze -- caught on
+# DEV as two recalls labelled '1st Reminder' (Times_Contacted 1, from old Silver) that carried
+# two reminder dates (from the new array). Silver and the child must be reloaded TOGETHER or
+# the row contradicts itself.
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Recalls @Tenant_ID=NULL,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Recalls @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Recall_Reminders @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Recalls @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
@@ -139,6 +148,11 @@ EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION
 # scalars properly. They have no array at all, so this is the only check that the
 # fallback chain actually fires.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID IN (11,12) AND Times_Contacted >= 2 AND (First_Reminder_Sent_Date IS NULL OR Second_Reminder_Sent_Date IS NULL); IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' demo recall(s) lost a reminder date -- the scalar fallback is not firing.'; THROW 50811, @e, 1; END;
+# ==> A ROW MUST NOT CONTRADICT ITSELF. <== Times_Contacted comes from Silver.Recalls and the
+# reminder dates from the array via Bronze; reload one without the other and a recall reads
+# '1st Reminder' while showing two reminder dates. These two are how that was found.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Second_Reminder_Sent_Date IS NOT NULL AND Times_Contacted < 2; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) carry a second-reminder date without having been chased twice -- Silver.Recalls is out of step with the array.'; THROW 50812, @e, 1; END;
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls r JOIN Bronze.Recalls b ON b.Tenant_ID = r.Tenant_ID AND CAST(b.ID AS VARCHAR(255)) = r.bk_Recall_ID WHERE r.Times_Contacted <> ISNULL(CAST(ROUND(TRY_CAST(b.Times_Contacted AS FLOAT),0) AS INT),0); IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) disagree with Bronze on Times_Contacted -- Silver was not reloaded.'; THROW 50813, @e, 1; END;
 # The grain is untouched by all of this.
 EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, bk_Recall_ID FROM Gold.Fact_Recalls GROUP BY Tenant_ID, bk_Recall_ID HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) appear twice.'; THROW 50810, @e, 1; END;
 
