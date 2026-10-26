@@ -85,7 +85,9 @@
 - [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
-- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.
+- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — SUPERSEDED: the ranking was rejected outright; kept for the alternatives already ruled out.
+- [Insight panel parked for ML](insight-panel-parked-for-ml.md) — the DISPLAY was approved, the movement ranking rejected; restore the strip from dac6dab.
+- [Revenue metrics move with clinician mix](revenue-metrics-move-with-clinician-mix.md) — the implantologist spikes them; decompose by practitioner before calling it performance.
 - [Treatment plan acceptance is unknowable](treatment-plan-acceptance-is-unknowable.md) — Accepted_At is hardcoded NULL; plans are not deleted, but no plan can be shown as accepted or declined.
 - [Overnight pause kept despite flaky cron](overnight-pause-kept-despite-flaky-cron.md) — SETTLED: the saving wins; owner checks the site each morning, `gh workflow run capacity-schedule.yml` fixes it.
 - [An unmapped reason reads as itself](an-unmapped-reason-reads-as-itself.md) — Appointment_Reason falls back to raw text, so the map was recognising 29.5% and looked fine; join the map to judge coverage.
