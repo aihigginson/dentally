@@ -107,6 +107,21 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Last Reminder Sent Date"
+                }
+              },
+              "queryRef": "_Recalls.Last Reminder Sent Date",
+              "nativeQueryRef": "Last Reminder Sent Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
                       "Entity": "List Patients"
                     }
                   },
@@ -182,6 +197,20 @@
           },
           "selector": {
             "metadata": "_Recalls.Second Reminder Sent Date"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "103.15702005673637D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Recalls.Last Reminder Sent Date"
           }
         }
       ]
