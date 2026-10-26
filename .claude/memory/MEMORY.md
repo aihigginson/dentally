@@ -84,6 +84,8 @@
 - [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
 - [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
 - [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.
+- [Recalls To Action lives in three places](recalls-to-action-lives-in-three-places.md) — aggregate column, DAX measure AND the detail page's own filters; miss one and summary disagrees with detail.
+- [Fabric REST cannot pass an array notebook parameter](fabric-rest-cannot-pass-an-array-notebook-parameter.md) — only_entities fails via jobs/instances; use the UI. Includes the recalls backfill recipe.
 - [sys.* cannot join a user table in Fabric](sys-views-cannot-join-user-tables-in-fabric.md) — and SELECT INTO #temp FROM sys.* fails too; the RI check is the control, do not duplicate it.
 - [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
