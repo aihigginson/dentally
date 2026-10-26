@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Recalls] @Tenant_ID=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Bronze].[usp_Load_Recalls] @Tenant_ID=1, @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Bronze.usp_Load_Recalls
 --  Author           :  AIH
@@ -18,6 +18,10 @@
 --                            actioned cycles) -- Dentally deletes a recall on reattendance so history
 --                            has no ongoing value; keeps Bronze + downstream Fact_Recalls at ~2 rows/patient
 --    *09     29/07/2026  AIH Capture Updated_At from Stage so the ingest can pull recalls incrementally
+--    *10     26/10/2026  AIH Carry the reminders JSON array from Stage. The scalar
+--                            first_/second_reminder_* fields are mislabelled by Dentally
+--                            (first_reminder_id = the NEWEST reminder); the array is the
+--                            only source for a true first/second. Silver decodes it.
 --                            (updated_after watermark) instead of a full load -- see build_Ingest WM dict
 ---------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS [Bronze].[usp_Load_Recalls]
@@ -61,6 +65,9 @@ BEGIN
             , LEFT(first_reminder_id,         255)            AS First_Reminder_ID
             , LEFT(second_reminder_id,        255)            AS Second_Reminder_ID
             , LEFT(updated_at,                255)            AS Updated_At
+            -- Not LEFT(...,255): 255 cuts the JSON mid-element and OPENJSON then
+            -- rejects the whole array. Stage caps at 8000, so this matches its source.
+            , LEFT(reminders,                8000)            AS Reminders
         INTO #src
         FROM Stage.Recalls
         -- @Tenant_ID NULL = every ACTIVE REGISTERED tenant present in Stage. Stage is an
@@ -91,6 +98,7 @@ BEGIN
             , tgt.Workflow_Stage_ID       = src.Workflow_Stage_ID
             , tgt.First_Reminder_ID       = src.First_Reminder_ID
             , tgt.Second_Reminder_ID      = src.Second_Reminder_ID
+            , tgt.Reminders               = src.Reminders
             , tgt.Updated_At              = src.Updated_At
             , tgt.DW_Loaded_At            = SYSUTCDATETIME()
         FROM Bronze.Recalls AS tgt
@@ -104,7 +112,7 @@ BEGIN
             Second_Reminder_Sent_At, Second_Reminder_Type,
             Last_Reminded_At, Latest_Reminder_Type,
             Times_Contacted, Run_Date, Workflow_Status, Workflow_Stage_ID,
-            First_Reminder_ID, Second_Reminder_ID,
+            First_Reminder_ID, Second_Reminder_ID, Reminders,
             Updated_At,
             DW_Loaded_At
         )
@@ -115,7 +123,7 @@ BEGIN
             src.Second_Reminder_Sent_At, src.Second_Reminder_Type,
             src.Last_Reminded_At, src.Latest_Reminder_Type,
             src.Times_Contacted, src.Run_Date, src.Workflow_Status, src.Workflow_Stage_ID,
-            src.First_Reminder_ID, src.Second_Reminder_ID,
+            src.First_Reminder_ID, src.Second_Reminder_ID, src.Reminders,
             src.Updated_At,
             SYSUTCDATETIME()
         FROM #src AS src

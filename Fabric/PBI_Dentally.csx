@@ -2390,11 +2390,19 @@ add("DNAs Not Rebooked",
 // Deliberately filtered HERE and not in Is_In_Scope: that flag also feeds the Retention
 // Outlook denominators in usp_Load_Fact_KPI_Snapshot, and narrowing a denominator to
 // flatter a conversion rate is the V197 mistake. This measure is the pair's only consumer.
+// ==> AND ATTENDING CLEARS IT. <== Is Booked means "has a FUTURE appointment", so a patient
+// who simply turned up never left the worklist. 350 of 1,594 on the live tenant (22%) had
+// attended on or after the due date. Has Attended Since Due is computed in Fact_Recalls so
+// this measure and Aggregate_Site_Practitioner_Current.Recalls_To_Action -- the column the
+// Day Book GRID actually binds -- cannot drift apart on the definition. They already did:
+// the grid showed David Mason 182 while this measure returned 210, because the aggregate
+// also filters to effectively-active patients and this does not.
 add("Recalls To Action",
     @"CALCULATE(
     COUNTROWS('_Recalls'),
     '_Recalls'[Retention Outlook In Scope] = 1,
     '_Recalls'[Is Booked] = FALSE(),
+    '_Recalls'[Has Attended Since Due] = FALSE(),
     NOT '_Recalls'[Status] IN { ""Completed"", ""Booked"" }
 )",
     "#,##0");

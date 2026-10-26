@@ -1,0 +1,118 @@
+# =====================================================================
+# Release V249 -- the reminder history is decoded, and attending clears a recall
+# =====================================================================
+# Two fixes to Fact_Recalls in one release because they edit the same loader, and a manifest
+# deploys a file's CURRENT state -- separating them would be a fiction.
+#
+# ---------------------------------------------------------------------
+# 1. "FIRST REMINDER SENT DATE" WAS NEVER THE FIRST REMINDER.
+# ---------------------------------------------------------------------
+# ==> PROVEN BY GUID, NOT INFERRED. <== Dentally sets first_reminder_id to the NEWEST
+# reminder's id on 267 of 267 staged recalls that have any reminder, and to the genuine first
+# only on the 69 that have exactly one. first_reminder_sent_at equals last_reminded_at to
+# sub-second rounding on every row; second_reminder_sent_at and second_reminder_id are never
+# populated at all.
+#
+# So the column showed the MOST RECENT chase under the label of the first, and V247's
+# second-reminder fallback -- derived from last_reminded_at -- reproduced the same value.
+# Both columns read identically on all 5,777 of the live practice's multi-reminder recalls.
+# That is what the owner saw on the Day Book screen.
+#
+# The `reminders` array is the only honest source. It was landed in Stage all along and
+# dropped at the Stage -> Bronze MERGE. times_contacted equals its length EXACTLY on all 292
+# staged rows, every value 0 to 6 -- which is also how the decode was checked: 292 recalls
+# produced 735 reminders, and the contact-count distribution predicts 735 precisely.
+#
+# Rows ingested before this release have no array, so First/Second come back NULL --
+# UNKNOWN, which beats the latest reminder wearing the label of the first. Last_Reminder_Sent_Date
+# falls back to last_reminded_at and is therefore answerable on every chased recall.
+#
+# ==> Recall_Status NO LONGER READS THE DATE KEYS. <== Those now resolve from the array and
+# would be absent on most of the history, stripping '1st/2nd Reminder' off the Retention tab.
+# It counts Times_Contacted instead, which is present on every row. Verified on DEV: 3,355
+# recalls still read '2nd Reminder', against 3,356 before.
+#
+# ---------------------------------------------------------------------
+# 2. ATTENDING NOW CLEARS A RECALL.
+# ---------------------------------------------------------------------
+# V222 excluded recalls DENTALLY had closed. V245 made attendance count as responding -- but
+# only for the At Risk ladder in Dim_Patients, and the reasoning was never carried across to
+# this fact. The #rc comment in usp_Load_Aggregate_Site_Practitioner_Current described the
+# hole in its own words ("so attending could never clear a recall") and stopped there.
+#
+# Measured on the live tenant: 350 of the 1,594 recalls on Day Book worklists (22%) belonged
+# to patients who had attended ON OR AFTER the due date. Per practitioner, before -> after:
+#
+#     Stephen Roberts  206 -> 162     Tessa Clarke  165 -> 140
+#     David Mason      182 -> 155     Craig Jack    146 -> 117
+#     Mark McAfee      138 -> 117
+#
+# The forward-booking half was NOT at fault and is unchanged: of the whole population, zero
+# had a future appointment. Is_Booked was doing its job.
+#
+# BOTH consumers are fixed together. They had already drifted -- the grid read 182 for David
+# Mason from Aggregate_Site_Practitioner_Current while the DAX measure returned 210, because
+# the aggregate also filters to effectively-active patients. The flag is computed once in the
+# fact so the two cannot disagree about the DEFINITION again.
+#
+# ---------------------------------------------------------------------
+# WHY Bronze.Recalls.Table.sql IS NOT DEPLOYED HERE.
+# ---------------------------------------------------------------------
+# ==> IT OPENS WITH DROP TABLE AND CANNOT BE REBUILT. <== Unlike every other Bronze table:
+# Stage.Recalls holds the latest batch only (292 rows against 45,241), the loader's dedupe
+# keeps one cycle per patient per type, and the DEMO TENANTS ARE SEEDED STRAIGHT INTO BRONZE
+# and never appear in Stage. Deploying it to DEV while writing this release emptied 45,241
+# rows in a second, recoverable only because Silver.Recalls mirrors it 1:1 and was not
+# dropped. The column is added with ALTER TABLE below, which was proven on DEV to preserve
+# rows. The DDL file states the shape for Check_Schema_Drift; it is not a deployment step.
+# ---------------------------------------------------------------------
+
+# --- Bronze: add the column WITHOUT dropping the table ---------------------------------------
+EXEC     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='Bronze' AND TABLE_NAME='Recalls' AND COLUMN_NAME='Reminders') ALTER TABLE Bronze.Recalls ADD Reminders VARCHAR(8000) NULL;
+
+DEPLOY   Fabric\Bronze.usp_Load_Recalls.StoredProcedure.sql
+DEPLOY   Fabric\Silver.Recall_Reminders.Table.sql
+DEPLOY   Fabric\Silver.usp_Load_Recall_Reminders.StoredProcedure.sql
+DEPLOY   Fabric\Gold.Fact_Recalls.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Fact_Recalls.StoredProcedure.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+DEPLOY   Fabric\Audit.Process_Config.Data.sql
+DEPLOY   Fabric\Audit.Process_Dependency.Data.sql
+
+# Load order is BRONZE -> SILVER child -> GOLD fact -> GOLD agg, the same order the new
+# Process_Dependency rows give the pipeline. Fact_Recalls reads Silver.Recall_Reminders, so
+# running it first would leave every true reminder date NULL for a whole build.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Bronze.usp_Load_Recalls @Tenant_ID=NULL,@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Silver.usp_Load_Recall_Reminders @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Fact_Recalls @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE WHOLE POINT: THE TWO DATES MUST STOP BEING THE SAME DATE. <== A fix that left them
+# equal would pass every other check here and change nothing on the screen that prompted it.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE First_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date IS NOT NULL AND First_Reminder_Sent_Date = Second_Reminder_Sent_Date; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) still show the same date for the first and second reminder.'; THROW 50800, @e, 1; END;
+# A second reminder cannot predate the first.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE First_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date IS NOT NULL AND Second_Reminder_Sent_Date < First_Reminder_Sent_Date; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' second reminder(s) predate their first.'; THROW 50801, @e, 1; END;
+# A second reminder with no first is impossible; it would mean the sequence was built wrong.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Second_Reminder_Sent_Date IS NOT NULL AND First_Reminder_Sent_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) have a second reminder and no first.'; THROW 50802, @e, 1; END;
+# ==> THE DECODE MUST AGREE WITH THE CONTACT COUNT. <== times_contacted equals the array
+# length exactly in the source, so a recall carrying an array must produce that many rows.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT r.Tenant_ID, r.ID FROM Bronze.Recalls r JOIN (SELECT Tenant_ID, bk_Recall_ID, COUNT(*) AS c FROM Silver.Recall_Reminders GROUP BY Tenant_ID, bk_Recall_ID) m ON m.Tenant_ID = r.Tenant_ID AND m.bk_Recall_ID = CAST(r.ID AS VARCHAR(255)) WHERE ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT),0) AS INT),0) <> m.c) x; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) decoded a different number of reminders than times_contacted reports.'; THROW 50803, @e, 1; END;
+# Reminder_Seq must start at 1 and have no gaps, or "second" means nothing.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, bk_Recall_ID FROM Silver.Recall_Reminders GROUP BY Tenant_ID, bk_Recall_ID HAVING MIN(Reminder_Seq) <> 1 OR MAX(Reminder_Seq) <> COUNT(*)) x; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) have a broken reminder sequence.'; THROW 50804, @e, 1; END;
+# ==> THE RETENTION TAB MUST NOT HAVE LOST ITS LABELS. <== Recall_Status moved off the date
+# keys onto Times_Contacted precisely so this could not happen; check that it did not.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Tenant_ID = 100 AND Recall_Status = '2nd Reminder'; IF @n < 3000 BEGIN SET @e = 'V249 FAILED: only ' + CAST(@n AS VARCHAR(10)) + ' recall(s) read 2nd Reminder, against 3,356 before this release.'; THROW 50805, @e, 1; END;
+# Every chased recall must still be able to answer "when did you last chase this?".
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Fact_Recalls WHERE Times_Contacted >= 1 AND Last_Reminder_Sent_Date IS NULL; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' chased recall(s) have no last-reminder date.'; THROW 50806, @e, 1; END;
+# ==> AND THE WORKLIST MUST ACTUALLY HAVE SHRUNK. <== The flag could be computed correctly and
+# wired into neither consumer, which is exactly the shape of the bug being fixed.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = TRY_CAST(a.Recalls_To_Action AS INT) FROM Gold.Aggregate_Site_Practitioner_Current a JOIN Gold.Dim_Practitioners p ON p.pk_Practitioner = a.fk_Practitioner WHERE a.Tenant_ID = 100 AND p.Full_Name = 'David Mason'; IF @n IS NULL OR @n >= 182 BEGIN SET @e = 'V249 FAILED: David Mason still reads ' + CAST(ISNULL(@n,-1) AS VARCHAR(10)) + ' recalls to action, against 182 before and 155 expected.'; THROW 50808, @e, 1; END;
+# The view the model binds must expose both new columns, or the report shows nothing new.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = '_Recalls' AND COLUMN_NAME IN ('Last Reminder Sent Date','Has Attended Since Due'); IF @n <> 2 BEGIN SET @e = 'V249 FAILED: the PBI view exposes ' + CAST(@n AS VARCHAR(10)) + ' of the 2 new columns.'; THROW 50809, @e, 1; END;
+# The grain is untouched by all of this.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, bk_Recall_ID FROM Gold.Fact_Recalls GROUP BY Tenant_ID, bk_Recall_ID HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V249 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' recall(s) appear twice.'; THROW 50810, @e, 1; END;
+
+TEST

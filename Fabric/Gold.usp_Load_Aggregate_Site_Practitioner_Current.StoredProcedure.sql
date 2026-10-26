@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Practitioner_Current] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Practitioner_Current] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Site_Practitioner_Current
 --  Author           :  AIH
@@ -206,7 +206,14 @@ BEGIN
         --
         -- Excludes the TERMINAL statuses rather than listing the actionable ones, so a
         -- status Dentally adds later appears on the worklist instead of vanishing from it.
+        -- ==> AND ATTENDING CLEARS IT TOO. <== The paragraph above described this hole and
+        -- stopped short of closing it: Is_Booked means "has a FUTURE appointment", so a
+        -- patient who simply turned up stayed on the worklist for ever. Measured on the live
+        -- tenant: 350 of 1,594 (22%) had attended on or after the due date -- David Mason's
+        -- 182 was really 155. V245 already settled the principle for the At Risk ladder in
+        -- Dim_Patients; this is the same rule, finally applied to the same question here.
         WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0
+          AND ISNULL(r.Has_Attended_Since_Due, 0) = 0
           AND LOWER(LTRIM(RTRIM(ISNULL(r.Status,'')))) NOT IN ('completed','booked')
         GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner;
 
