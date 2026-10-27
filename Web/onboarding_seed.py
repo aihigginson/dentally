@@ -860,6 +860,9 @@ def main(argv=None):
     ap.add_argument('--tenant', type=int, required=True)
     ap.add_argument('--apply', action='store_true',
                     help='write to the AppDB (default is a dry run)')
+    ap.add_argument('--no-sync', action='store_true',
+                    help='skip the appdb_sync run that carries the write to the warehouse '
+                         '(the rows then sit in the AppDB until something else syncs them)')
     ap.add_argument('--fy', type=int, default=None)
     ap.add_argument('--principal', type=int, default=None, metavar='PRACTITIONER_ID',
                     help='name the principal when the account lookup cannot (a practice with '
@@ -879,11 +882,35 @@ def main(argv=None):
             print('DRY RUN -- nothing written. Re-run with --apply to write.\n')
             return 0
         written = apply_plan(ac.cursor(), plan)
-        print('WROTE roles=%(roles)d pay=%(pay)d plans=%(plans)d targets=%(targets)d\n' % written)
-        print('==> A BUILD MUST RUN BEFORE THE CUSTOMER SEES THIS. <== Input.* reaches the\n'
-              '    warehouse through Meta.usp_Sync_Input_From_AppDB, and targets do not reach\n'
-              '    Gold.Fact_Daily_Targets until the build after that.\n')
-        return 0
+        print('WROTE roles=%(roles)d pay=%(pay)d plans=%(plans)d targets=%(targets)d\n'
+              % written)
+        if not any(written.values()):
+            print('    Nothing to write -- every value was already set. Skipping the sync.\n')
+            return 0
+        if args.no_sync:
+            print('    --no-sync: these rows are in the AppDB ONLY. Run\n'
+                  '    `python appdb_sync.py full` before the next build or they will not\n'
+                  '    reach the warehouse in time for it.\n')
+            return 0
+
+        # ==> A SEED THAT HAS NOT BEEN SYNCED IS NOT A SEED. <== The rows land in the AppDB, and
+        # Gold reads WH_Dentally.Input.*. The scheduled job (caj-appdb-sync-prod) does carry
+        # them, but only between 07:00 and 18:00 -- seed at 19:00 and nothing stages until the
+        # next morning, which is AFTER that night's build, so the reports stay empty for an
+        # extra day with nothing to say why. Running it here removes the window entirely.
+        print('SYNC  AppDB -> Input_Stage -> warehouse Input.*')
+        import appdb_sync
+        rc = appdb_sync.main('full')
+        if rc:
+            # ==> THE SEED ITSELF IS FINE. <== Saying "failed" here would send someone looking
+            # for a half-written AppDB that does not exist. The rows are committed; only the
+            # copy out of them did not happen, and re-running the sync is the whole fix.
+            print('\n==> THE SEED LANDED BUT THE SYNC DID NOT (exit %d). <== The rows are in\n'
+                  '    the AppDB and are not lost. Re-run `python appdb_sync.py full`; do NOT\n'
+                  '    re-run the seed, which would find the values already there and write\n'
+                  '    nothing.\n' % rc)
+            return rc
+        print('  synced.\n')
     finally:
         conn.close()
         ac.close()

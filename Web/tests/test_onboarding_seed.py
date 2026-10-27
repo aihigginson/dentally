@@ -635,3 +635,38 @@ def test_the_capacity_half_never_needed_the_dedupe():
     import inspect
     src = inspect.getsource(seed.fetch_capacity_inputs)
     assert 'a.fk_Practitioner <> -1' in src
+
+
+# ── chaining the sync ─────────────────────────────────────────────────────────
+
+def test_appdb_sync_can_be_driven_in_process():
+    """The seeder calls appdb_sync.main('full') rather than shelling out, so a failure comes
+    back as a return code it can explain. The argv default has to survive -- the container job
+    runs `python appdb_sync.py access` and must be unaffected."""
+    import inspect
+    import appdb_sync
+    sig = inspect.signature(appdb_sync.main)
+    assert 'mode' in sig.parameters
+    assert sig.parameters['mode'].default is None
+    assert "sys.argv[1] if len(sys.argv) > 1 else 'check'" in inspect.getsource(appdb_sync.main)
+
+
+def test_the_seed_runs_the_sync_itself():
+    """==> A SEED THAT HAS NOT BEEN SYNCED IS NOT A SEED. <== The rows land in the AppDB and
+    Gold reads WH_Dentally.Input.*. The scheduled job only runs 07:00-18:00, so seeding at 19:00
+    left the rows unstaged until after that night's build -- reports empty for an extra day with
+    nothing on screen to say why."""
+    import inspect
+    src = inspect.getsource(seed.main)
+    assert "appdb_sync.main('full')" in src
+    assert '--no-sync' in inspect.getsource(seed)
+
+
+def test_a_failed_sync_does_not_report_the_seed_as_failed():
+    """The rows are committed; only the copy out of them did not happen. Calling that a failed
+    seed sends someone hunting a half-written AppDB that does not exist, and a re-run of the
+    seed would find the values already there and write nothing."""
+    import inspect
+    src = inspect.getsource(seed.main)
+    assert 'THE SEED LANDED BUT THE SYNC DID NOT' in src
+    assert 'do NOT' in src and 're-run the seed' in src

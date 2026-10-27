@@ -654,8 +654,11 @@ def _log_run(tgt_cn, mode, started, status, error=None, rows=None):
                 pass
 
 
-def main():
-    mode = (sys.argv[1] if len(sys.argv) > 1 else 'check').lower()
+def main(mode=None):
+    """`mode` lets another script chain this in-process (onboarding_seed.py does). Left as None
+    it reads argv exactly as before, so the container job's `python appdb_sync.py access` is
+    untouched."""
+    mode = (mode or (sys.argv[1] if len(sys.argv) > 1 else 'check')).lower()
     if mode not in ('access', 'full', 'copy', 'check'):
         print(__doc__)
         return 2
