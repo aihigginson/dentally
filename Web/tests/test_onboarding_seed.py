@@ -106,6 +106,50 @@ def test_locums_are_spotted_by_name_because_nothing_else_says_so():
     assert seed.is_locum(None) is False
 
 
+# ── find_principal: the one lookup that only ever runs on a brand-new tenant ──
+
+class _Cur(object):
+    """Two queries in order: the tenant's app accounts, then the practitioner match."""
+
+    def __init__(self, accounts, matches):
+        self.accounts, self.matches, self._n = accounts, matches, 0
+
+    def execute(self, sql, *args):
+        self._n += 1
+        return self
+
+    def fetchall(self):
+        return self.accounts if self._n == 1 else self.matches
+
+
+def test_the_signup_is_matched_on_email_not_on_practitioner_name():
+    """==> Audit.usp_Provision_Tenant INSERTS Practitioner_Full_Name AS NULL. <== It runs at
+    STEP 0 of onboarding, before any Dentally data exists, so it cannot name a practitioner even
+    in principle. A lookup keyed on that column returns None on the single run this exists for,
+    and every dentist silently defaults to Associate."""
+    cur = _Cur([('craig@maple.example', None)], [(11620,)])
+    assert seed.find_principal(cur, 100) == 11620
+
+
+def test_several_accounts_means_we_cannot_tell_which_came_first():
+    """The live practice: six accounts, three matching a dentist. None is the honest answer."""
+    cur = _Cur([('a@x.example', None), ('b@x.example', None)], [(11620,)])
+    assert seed.find_principal(cur, 100) is None
+
+
+def test_an_office_manager_signup_yields_no_principal():
+    """Their email matches no active dentist. The owner: we cannot assign Principal to any."""
+    cur = _Cur([('office@maple.example', None)], [])
+    assert seed.find_principal(cur, 100) is None
+
+
+def test_an_ambiguous_match_is_refused_rather_than_guessed():
+    """Two dentists sharing a practice mailbox. Picking one at random assigns a role, an FTE
+    band and a target set to the wrong person."""
+    cur = _Cur([('reception@maple.example', None)], [(11620,), (11619,)])
+    assert seed.find_principal(cur, 100) is None
+
+
 # ── Step 2: FTE ───────────────────────────────────────────────────────────────
 
 def _weeks(pid, hours_per_week, n_weeks):

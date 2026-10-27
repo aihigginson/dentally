@@ -147,29 +147,39 @@ def find_principal(cur, tenant_id):
     onboarding, so permission level tells us nothing (and on the live practice every account was
     bulk-created at the migration date, so account age tells us nothing either).
 
+    ==> MATCH ON EMAIL, NOT ON Practitioner_Full_Name. <== Audit.usp_Provision_Tenant inserts the
+    signup with Practitioner_Full_Name = NULL and User_UPN = @Principal_Email, and it runs at
+    STEP 0 of onboarding -- BEFORE any Dentally data exists, so it could not name a practitioner
+    even in principle. A lookup keyed on that column finds nobody on the one run that matters.
+    The full name is still accepted as a fallback, for a practice where an admin has since linked
+    accounts by hand.
+
     Security.Application_Users keys on Client_ID, not Tenant_ID -- one client can own several
-    practices -- so the tenant is resolved through Audit.Tenants.
+    practices -- so the tenant resolves through Audit.Tenants.
 
     Returns a practitioner_id, or None. ==> None IS A LEGITIMATE ANSWER, NOT A FAILURE. <== The
-    signup may be the office manager rather than a dentist, or the practice may already have
+    signup may be the office manager rather than a dentist, or the practice may already carry
     several accounts and nothing says which came first. A practice with no principal has every
     dentist default to Associate, which the owner accepted as close enough. The live practice
-    returns None for exactly this reason: it has six accounts, four of them linked.
+    returns None for the second reason: six accounts, three of them matching a dentist.
     """
     cur.execute(
-        "SELECT u.Practitioner_Full_Name FROM Security.Application_Users u "
+        "SELECT u.User_UPN, u.Practitioner_Full_Name FROM Security.Application_Users u "
         "JOIN   Audit.Tenants t ON t.Client_ID = u.Client_ID "
-        "WHERE  t.Tenant_ID = ? AND u.Practitioner_Full_Name IS NOT NULL "
-        "   AND LTRIM(RTRIM(u.Practitioner_Full_Name)) <> ''", tenant_id)
-    names = {r[0].strip() for r in cur.fetchall() if r[0]}
-    if len(names) != 1:
+        "WHERE  t.Tenant_ID = ?", tenant_id)
+    accounts = [tuple(r) for r in cur.fetchall()]
+    if len(accounts) != 1:
         return None
+    upn, full_name = accounts[0]
+
     cur.execute(
         "SELECT Practitioner_ID FROM Gold.Dim_Practitioners "
-        "WHERE Tenant_ID = ? AND Active = 1 AND LOWER(ISNULL(Role,'')) = 'dentist' "
-        "  AND LOWER(LTRIM(RTRIM(Full_Name))) = LOWER(?)", (tenant_id, names.pop()))
-    row = cur.fetchone()
-    return int(row[0]) if row else None
+        "WHERE  Tenant_ID = ? AND Active = 1 AND LOWER(ISNULL(Role,'')) = 'dentist' "
+        "   AND (LOWER(LTRIM(RTRIM(ISNULL(Email,'')))) = LOWER(LTRIM(RTRIM(ISNULL(?, '')))) "
+        "    OR  LOWER(LTRIM(RTRIM(ISNULL(Full_Name,'')))) = LOWER(LTRIM(RTRIM(ISNULL(?, ''))))) ",
+        (tenant_id, upn or '', full_name or ''))
+    rows = cur.fetchall()
+    return int(rows[0][0]) if len(rows) == 1 else None
 
 
 def derive_roles(rows, principal_id=None):
