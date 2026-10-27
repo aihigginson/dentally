@@ -66,6 +66,18 @@ CLINICAL_ROLES = ('dentist', 'hygienist', 'orthodontist', 'specialist', 'therapi
 CAPACITY_METRICS = ('private_revenue', 'total_revenue')
 CAPITATION_METRIC = 'plan_capitation_revenue'
 
+# ==> total_revenue IS COMPUTED, NEVER READ BACK. <== Verified on the live practice, on
+# site-deduped figures (see _PRACTICE_ROWS -- the raw rows read exactly double):
+#     private 1,431,999 + capitation 602,270 + NHS 117,863 = 2,152,132
+#     against a total_revenue of 2,152,132, to the pound.
+# That matters because only the CAPITATION half of Fact_Revenue is gated on Cutover_Date,
+# which onboarding sets after the build. Right after STEP 5 the private and NHS actuals are
+# already correct and total_revenue is short by the whole capitation figure. Deriving the
+# total from its own actuals there seeds it low, silently, in the direction that flatters
+# the practice -- and that is what forced the seed into two passes straddling STEP 6.
+# Composing it instead removes the dependency altogether: one pass, run whenever.
+REVENUE_INPUTS = ('private_revenue', 'nhs_revenue')
+
 BLOCK_REASONS = ('NOT WORKING', 'Not working', 'Lunch', 'Annual Leave', 'Bank Holiday',
                  'Training Course', 'Meeting', 'Medical appointment', 'Other')
 
@@ -372,7 +384,12 @@ def parse_sample(sample):
 
 
 def fetch_capacity_inputs(cur, tenant_id, hist_start, asof, fwd_end):
-    """Per practitioner: trailing Worked_Hours, forward Worked_Hours, and trailing revenue."""
+    """Per practitioner: trailing Worked_Hours, forward Worked_Hours, and trailing revenue.
+
+    Revenue comes back keyed by metric. Only private_revenue and nhs_revenue are read -- both
+    are correct the moment the build finishes. total_revenue is composed from them plus the
+    capitation estimate (see REVENUE_INPUTS).
+    """
     cur.execute(
         "SELECT p.Practitioner_ID, "
         "       SUM(CASE WHEN dd.Full_Date <  ? THEN d.wh END), "
@@ -392,15 +409,47 @@ def fetch_capacity_inputs(cur, tenant_id, hist_start, asof, fwd_end):
         "JOIN   Gold.Dim_Practitioners p ON p.pk_Practitioner = a.fk_Practitioner "
         "WHERE  a.Tenant_ID = ? AND a.fk_Practitioner <> -1 "
         "   AND a.Metric IN (%s) AND dd.Full_Date >= ? AND dd.Full_Date < ? "
-        "GROUP BY p.Practitioner_ID, a.Metric" % ','.join('?' * len(CAPACITY_METRICS)),
-        (tenant_id,) + CAPACITY_METRICS + (hist_start, asof))
+        "GROUP BY p.Practitioner_ID, a.Metric" % ','.join('?' * len(REVENUE_INPUTS)),
+        (tenant_id,) + REVENUE_INPUTS + (hist_start, asof))
     revenue = {}
     for pid, metric, total in cur.fetchall():
         revenue.setdefault(metric, {})[int(pid)] = float(total or 0)
     return hours, revenue
 
 
-def derive_capacity_targets(roles, fte, hours, revenue, excluded=()):
+def compose_total_revenue(revenue):
+    """private + NHS, per practitioner. The capitation third is added separately, because it
+    is a FORECAST (plan patients x the seeded rate) rather than a rate applied to rostered
+    hours -- scaling it by the forward rota would be wrong."""
+    out = {}
+    for metric in REVENUE_INPUTS:
+        for pid, value in revenue.get(metric, {}).items():
+            out[pid] = out.get(pid, 0.0) + value
+    return out
+
+
+def fetch_plan_patients_by_dentist(cur, tenant_id, plan_ids):
+    """{practitioner_id: plan patients they own} -- so capitation lands on a role, not just the
+    practice, and total_revenue still reconciles across levels.
+
+    Capitation is credited to the patient's own dentist, so hygienists own none of it. The
+    hygienist cross-charge would move some across, but that is an estimate on an estimate and
+    is left out of the seed.
+    """
+    if not plan_ids:
+        return {}
+    cur.execute(
+        "SELECT p.Practitioner_ID, COUNT(*) "
+        "FROM   Gold.Dim_Patients pt "
+        "JOIN   Gold.Dim_Practitioners p ON p.pk_Practitioner = pt.fk_Current_Dentist "
+        "WHERE  pt.Tenant_ID = ? AND ISNULL(pt.Active,1) = 1 "
+        "   AND pt.Payment_Plan_ID IN (%s) "
+        "GROUP BY p.Practitioner_ID" % ','.join('?' * len(plan_ids)),
+        (tenant_id,) + tuple(plan_ids))
+    return {int(r[0]): int(r[1]) for r in cur.fetchall()}
+
+
+def derive_capacity_targets(roles, fte, hours, revenue, excluded=(), additions=None):
     """forward Worked_Hours x 0.98 x (historical revenue / historical Worked_Hours), per role.
 
     ==> THE ROLE VALUE IS STORED PER-FTE, NOT AS THE CAPACITY. <== Input.Targets holds one row
@@ -412,6 +461,10 @@ def derive_capacity_targets(roles, fte, hours, revenue, excluded=()):
     nothing in the warehouse enforces that they agree, and the live practice's hand-entered set
     is 30% out between its own levels.
 
+    `additions` is money that does NOT scale with rostered hours -- the capitation forecast,
+    which is plan patients times a rate, not a rate applied to time. It is added to the role's
+    capacity BEFORE the per-FTE division so Practice still reconciles to the role rows.
+
     Returns [(target_level, value)], Practice first, or [] if there is no usable rate.
     """
     per_role = {}
@@ -421,17 +474,19 @@ def derive_capacity_targets(roles, fte, hours, revenue, excluded=()):
         hist_wh, fwd_wh = hours.get(pid, (0.0, 0.0))
         if fwd_wh <= 0:
             continue
-        agg = per_role.setdefault(role, {'hist': 0.0, 'fwd': 0.0, 'rev': 0.0, 'fte': 0.0})
+        agg = per_role.setdefault(
+            role, {'hist': 0.0, 'fwd': 0.0, 'rev': 0.0, 'fte': 0.0, 'add': 0.0})
         agg['hist'] += hist_wh
         agg['fwd'] += fwd_wh
         agg['rev'] += revenue.get(pid, 0.0)
         agg['fte'] += fte.get(pid, 0.0)
+        agg['add'] += (additions or {}).get(pid, 0.0)
 
     out, practice_total = [], 0.0
     for role, agg in sorted(per_role.items()):
         if agg['hist'] <= 0 or agg['fte'] <= 0:
             continue
-        capacity = agg['fwd'] * LEAVE_FACTOR * (agg['rev'] / agg['hist'])
+        capacity = agg['fwd'] * LEAVE_FACTOR * (agg['rev'] / agg['hist']) + agg['add']
         if capacity <= 0:
             continue
         practice_total += capacity
@@ -454,6 +509,33 @@ def fetch_plan_patient_count(cur, tenant_id, plan_ids):
     return int(row[0]) if row else 0
 
 
+# ==> A PRACTICE-LEVEL ROW IS WRITTEN ONCE PER SITE, WITH THE SAME VALUE. <== On the live
+# practice (two sites) every fk_Practitioner = -1 metric appears twice on the same date,
+# carrying an identical figure, so a plain SUM reads exactly double: private_revenue came out
+# at 2,863,998 against a true 1,431,999. Nothing flags it -- the number is merely wrong, and
+# wrong in the direction that looks like a healthy practice.
+#
+# Deduping has to survive a second shape, though. A rate metric splits its numerator and
+# denominator across TWO rows at the SAME site (revenue_per_clinical_hour writes revenue on one
+# and hours on the other), so "one row per date" would silently drop the denominator. Hence the
+# two steps: SUM within a site to pair num with den, then MAX across sites to drop the copy.
+#
+# The per-practitioner rows are singular and need none of this, which is why the capacity
+# targets were never affected.
+
+_PRACTICE_ROWS = """
+SELECT s.Metric, s.fk_Date, MAX(s.sn) AS num, MAX(s.sd) AS den
+FROM ( SELECT a.Metric, a.fk_Date, a.fk_Practice_Site,
+              SUM(a.Numerator) AS sn, SUM(a.Denominator) AS sd
+       FROM   Gold.Fact_Metric_Actuals a
+       JOIN   Gold.Dim_Date dd ON dd.pk_Date = a.fk_Date
+       WHERE  a.Tenant_ID = ? AND a.fk_Practitioner = -1
+          AND dd.Full_Date >= ? AND dd.Full_Date < ? {extra}
+       GROUP BY a.Metric, a.fk_Date, a.fk_Practice_Site ) s
+GROUP BY s.Metric, s.fk_Date
+"""
+
+
 def fetch_practice_actuals(cur, tenant_id, hist_start, asof):
     """Trailing practice-level actuals, keyed by metric, for the size-dependent targets.
 
@@ -462,15 +544,12 @@ def fetch_practice_actuals(cur, tenant_id, hist_start, asof):
     default for a COUNT or a VALUE: seeding "active patients 6,000" into a practice with 1,800
     gives them a target they can never hit and a report that looks broken.
 
-    Returns {metric: (numerator, denominator)} summed over the window.
+    Returns {metric: (numerator, denominator)} summed over the window, deduped per _PRACTICE_ROWS.
     """
     cur.execute(
-        "SELECT a.Metric, SUM(a.Numerator), SUM(a.Denominator) "
-        "FROM   Gold.Fact_Metric_Actuals a "
-        "JOIN   Gold.Dim_Date dd ON dd.pk_Date = a.fk_Date "
-        "WHERE  a.Tenant_ID = ? AND a.fk_Practitioner = -1 "
-        "   AND dd.Full_Date >= ? AND dd.Full_Date < ? "
-        "GROUP BY a.Metric", (tenant_id, hist_start, asof))
+        "SELECT d.Metric, SUM(d.num), SUM(d.den) FROM ( "
+        + _PRACTICE_ROWS.format(extra='') + " ) d GROUP BY d.Metric",
+        (tenant_id, hist_start, asof))
     return {r[0]: (float(r[1] or 0), float(r[2] or 0)) for r in cur.fetchall()}
 
 
@@ -482,43 +561,51 @@ def fetch_practice_snapshots(cur, tenant_id, hist_start, asof):
     target in the millions, which is why these are fetched separately rather than folded into
     the aggregate above.
 
-    Returns {metric: (numerator, denominator)} on each metric's own most recent day -- metrics
-    stop on different dates, so one shared MAX would silently drop the others.
+    Each metric takes its own most recent day -- metrics stop on different dates, so one shared
+    MAX would silently drop the others.
     """
     cur.execute(
-        "SELECT x.Metric, x.Numerator, x.Denominator FROM ( "
-        "  SELECT a.Metric, a.Numerator, a.Denominator, "
-        "         ROW_NUMBER() OVER (PARTITION BY a.Metric ORDER BY dd.Full_Date DESC) AS rn "
-        "  FROM   Gold.Fact_Metric_Actuals a "
-        "  JOIN   Gold.Dim_Date dd ON dd.pk_Date = a.fk_Date "
-        "  WHERE  a.Tenant_ID = ? AND a.fk_Practitioner = -1 "
-        "     AND dd.Full_Date >= ? AND dd.Full_Date < ? AND a.Numerator IS NOT NULL ) x "
+        "SELECT x.Metric, x.num, x.den FROM ( "
+        "  SELECT d.Metric, d.num, d.den, "
+        "         ROW_NUMBER() OVER (PARTITION BY d.Metric ORDER BY d.fk_Date DESC) AS rn "
+        "  FROM ( " + _PRACTICE_ROWS.format(extra='AND a.Numerator IS NOT NULL') + " ) d ) x "
         "WHERE x.rn = 1", (tenant_id, hist_start, asof))
     return {r[0]: (float(r[1] or 0), float(r[2] or 0)) for r in cur.fetchall()}
 
 
 def derive_targets(definitions, roles, fte, hours, revenue, plan_patients,
-                   practice_actuals, snapshots=None, excluded=(), have_rate=True):
+                   practice_actuals, snapshots=None, excluded=(), have_rate=True,
+                   capitation_by_dentist=None):
     """Four classes of target row, in priority order.
 
-    1. Capacity-derived -- the two revenue metrics, Practice and per role
+    1. Capacity-derived -- forward rota x historical rate, Practice and per role
     2. Calculated       -- plan capitation = GBP 35 x plan patients x 12 months
     3. Fixed            -- every percentage, from the curated Sample_Value
-    4. Measured         -- remaining counts and values, from the practice's own trailing actual
+    4. Measured         -- remaining counts and values, from the practice's own trailing figure
 
-    NHS targets are not seeded at all: they come from the Dentally contract via
+    NHS targets are not seeded: they come from the Dentally contract via
     Silver.Practitioner_Contract_Targets and need nothing from us.
     """
+    capitation_by_dentist = capitation_by_dentist or {}
+    annual_capitation = {pid: n * PLAN_MONTHLY_DEFAULT * 12
+                         for pid, n in capitation_by_dentist.items()}
     out = []
     for key, fmt, target_type, _xfte, _by_role, sample in sorted(definitions):
         if key.startswith('nhs_'):
             continue
 
         if key in CAPACITY_METRICS:
-            if have_rate:
-                for level, value in derive_capacity_targets(
-                        roles, fte, hours, revenue.get(key, {}), excluded):
-                    out.append((key, level, value))
+            if not have_rate:
+                continue
+            if key == 'total_revenue':
+                # private + NHS scaled by the forward rota, plus the capitation forecast,
+                # which is a headcount times a rate and must NOT be scaled by hours.
+                rev, adds = compose_total_revenue(revenue), annual_capitation
+            else:
+                rev, adds = revenue.get(key, {}), None
+            for level, value in derive_capacity_targets(
+                    roles, fte, hours, rev, excluded, additions=adds):
+                out.append((key, level, value))
             continue
 
         if key == CAPITATION_METRIC:
@@ -623,8 +710,9 @@ def build_plan(cur, tenant_id, asof=None, fy=None, principal_id=None):
                 if pid not in locums}
 
     plan.plans = derive_plans(fetch_plan_signal(cur, tenant_id, hist_start, asof))
-    plan_patients = fetch_plan_patient_count(
-        cur, tenant_id, [p[0] for p in plan.plans])
+    plan_ids = [p[0] for p in plan.plans]
+    plan_patients = fetch_plan_patient_count(cur, tenant_id, plan_ids)
+    by_dentist = fetch_plan_patients_by_dentist(cur, tenant_id, plan_ids)
     plan.note('%d capitation plan(s) identified, %d plan patients.'
               % (len(plan.plans), plan_patients))
 
@@ -638,7 +726,7 @@ def build_plan(cur, tenant_id, asof=None, fy=None, principal_id=None):
         fetch_metric_definitions(cur), plan.roles, plan.fte, hours, revenue,
         plan_patients, fetch_practice_actuals(cur, tenant_id, hist_start, asof),
         snapshots=fetch_practice_snapshots(cur, tenant_id, hist_start, asof),
-        excluded=locums, have_rate=have_rate)
+        excluded=locums, have_rate=have_rate, capitation_by_dentist=by_dentist)
     plan.fy = fy
     return plan
 
@@ -658,31 +746,21 @@ def _default_fy(asof):
     return asof.year + 1 if asof.month >= 4 else asof.year
 
 
-def apply_plan(acur, plan, actor=SEED_ACTOR, phase='all'):
-    """Write to the AppDB.
-
-    ==> THE TWO PHASES EXIST BECAUSE OF A CIRCULARITY IN THE ONBOARDING RUN. <== The seeded plan
-    rates feed Fact_Revenue's capitation half, which feeds Fact_Metric_Actuals, which is where
-    the revenue TARGETS get their rate from. Writing both at once derives total_revenue from
-    actuals that do not yet carry any capitation, and seeds it low.
-
-      phase='rates'   -- roles, FTE, associate percentages, plan rates
-      phase='targets' -- targets only, after the Gold re-run has picked the rates up
-      phase='all'     -- both, correct only when capitation is already computed
-
-    Orchestrate_Onboarding's STEP 6 is the re-run that sits between them. ==> NEVER OVERWRITES. <== Each step reads what is already there and
+def apply_plan(acur, plan, actor=SEED_ACTOR):
+    """Write to the AppDB. ==> NEVER OVERWRITES. <== Each step reads what is already there and
     writes only the keys that are absent, so a re-run after the customer has edited their own
     settings leaves those edits alone.
 
     The AppDB connection must be autocommit -- without it a write rolls back silently while the
-    caller reports success."""
+    caller reports success.
+
+    ONE pass. An earlier version split into 'rates' and 'targets' phases either side of
+    Orchestrate_Onboarding's STEP 6, because the seeded plan rates feed the capitation that
+    total_revenue was being derived from. Composing total_revenue instead (see REVENUE_INPUTS)
+    removed that dependency, and with it the only reason to run this twice.
+    """
     written = {'roles': 0, 'pay': 0, 'plans': 0, 'targets': 0}
     t = plan.tenant_id
-    do_rates = phase in ('all', 'rates')
-    do_targets = phase in ('all', 'targets')
-
-    if not do_rates:
-        return _apply_targets(acur, plan, actor, written) if do_targets else written
 
     acur.execute("SELECT Practitioner_ID FROM Input.Practitioner_Role WHERE Tenant_ID = ?", t)
     have = {int(r[0]) for r in acur.fetchall()}
@@ -717,13 +795,6 @@ def apply_plan(acur, plan, actor=SEED_ACTOR, phase='all'):
             "VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", rows)
         written['plans'] = len(rows)
 
-    if not do_targets:
-        return written
-    return _apply_targets(acur, plan, actor, written)
-
-
-def _apply_targets(acur, plan, actor, written):
-    t = plan.tenant_id
     acur.execute("SELECT Metric, Target_Level FROM Input.Targets WHERE Tenant_ID = ? AND FY = ?",
                  (t, plan.fy))
     have = {(r[0], r[1]) for r in acur.fetchall()}
@@ -790,10 +861,6 @@ def main(argv=None):
     ap.add_argument('--apply', action='store_true',
                     help='write to the AppDB (default is a dry run)')
     ap.add_argument('--fy', type=int, default=None)
-    ap.add_argument('--phase', choices=('all', 'rates', 'targets'), default='all',
-                    help="'rates' before Orchestrate_Onboarding STEP 6, 'targets' after it -- "
-                         "the seeded plan rates feed the capitation that the revenue targets "
-                         "are then derived from")
     ap.add_argument('--principal', type=int, default=None, metavar='PRACTITIONER_ID',
                     help='name the principal when the account lookup cannot (a practice with '
                          'several accounts already provisioned)')
@@ -811,7 +878,7 @@ def main(argv=None):
         if not args.apply:
             print('DRY RUN -- nothing written. Re-run with --apply to write.\n')
             return 0
-        written = apply_plan(ac.cursor(), plan, phase=args.phase)
+        written = apply_plan(ac.cursor(), plan)
         print('WROTE roles=%(roles)d pay=%(pay)d plans=%(plans)d targets=%(targets)d\n' % written)
         print('==> A BUILD MUST RUN BEFORE THE CUSTOMER SEES THIS. <== Input.* reaches the\n'
               '    warehouse through Meta.usp_Sync_Input_From_AppDB, and targets do not reach\n'

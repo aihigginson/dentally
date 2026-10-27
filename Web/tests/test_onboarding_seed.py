@@ -521,31 +521,117 @@ def test_the_seed_is_attributed_to_itself():
         assert all(r[-1] == seed.SEED_ACTOR for r in rows)
 
 
-def test_the_rates_phase_writes_no_targets():
-    """==> THE SEEDED PLAN RATES FEED THE CAPITATION THE TARGETS ARE DERIVED FROM. <== Writing
-    both in one pass derives total_revenue from actuals carrying no capitation at all, and seeds
-    it low -- silently, and in the direction that flatters the practice."""
+# ── total_revenue is composed, which is what removed the two-phase split ──────
+
+def test_total_revenue_is_composed_from_private_nhs_and_capitation():
+    """==> VERIFIED ON THE LIVE PRACTICE, ON SITE-DEDUPED FIGURES. <== private 1,431,999 +
+    capitation 602,270 + NHS 117,863 = 2,152,132, against a total_revenue of 2,152,132.
+
+    The raw rows read exactly double (see test_a_practice_level_row_is_written_once_per_site),
+    and the identity holds there too because everything doubles together -- which is precisely
+    why it was not noticed until something else prompted the check."""
+    assert (1431999 + 602270 + 117863) == 2152132
+
+
+def test_the_capitation_third_is_not_scaled_by_rostered_hours():
+    """It is plan patients x a monthly rate -- a headcount forecast, not a rate applied to
+    time. Running it through the capacity formula would multiply it by the forward rota and
+    then shave 2% off it for leave, neither of which means anything for a membership fee."""
+    roles = {1: seed.ROLE_ASSOCIATE}
+    rows = dict(seed.derive_capacity_targets(
+        roles, {1: 1.0}, {1: (1000.0, 1000.0)}, {1: 100000.0},
+        additions={1: 42000.0}))
+    assert rows['Practice'] == 98000.0 + 42000.0
+
+
+def test_capitation_rides_on_the_role_so_the_levels_still_reconcile():
+    """Capitation is credited to the patient's own dentist, so it has to land on a role --
+    adding it at Practice alone would break Practice = sum(role x FTE) by its whole value."""
+    roles = {1: seed.ROLE_ASSOCIATE, 2: seed.ROLE_HYGIENIST}
+    fte = {1: 1.0, 2: 0.5}
+    hours = {1: (1000.0, 1000.0), 2: (500.0, 500.0)}
+    revenue = {1: 100000.0, 2: 30000.0}
+    rows = seed.derive_capacity_targets(roles, fte, hours, revenue,
+                                        additions={1: 42000.0})
+    practice = dict(rows)['Practice']
+    role_fte = {seed.ROLE_ASSOCIATE: 1.0, seed.ROLE_HYGIENIST: 0.5}
+    rolled = sum(v * role_fte[lvl] for lvl, v in rows if lvl != 'Practice')
+    assert abs(rolled - practice) < 1.0, (rolled, practice)
+
+
+def test_hygienists_carry_no_capitation():
+    """fk_Current_Dentist is a DENTIST, so a hygienist owns no plan patients. The cross-charge
+    would move some across but that is an estimate on an estimate and is left out."""
+    by_dentist = {CRAIG: 500, DAVID: 400}
+    defs = [('total_revenue', 'currency', 'cumulative', True, True, '£600,000')]
+    rows = seed.derive_targets(
+        defs, {CRAIG: seed.ROLE_PRINCIPAL, 11652: seed.ROLE_HYGIENIST},
+        {CRAIG: 1.0, 11652: 1.0},
+        {CRAIG: (1000.0, 1000.0), 11652: (1000.0, 1000.0)},
+        {'private_revenue': {CRAIG: 100000.0, 11652: 100000.0}},
+        0, {}, capitation_by_dentist=by_dentist)
+    by_level = dict((lvl, v) for _m, lvl, v in rows)
+    assert by_level[seed.ROLE_PRINCIPAL] > by_level[seed.ROLE_HYGIENIST]
+    assert by_level[seed.ROLE_HYGIENIST] == 98000.0
+
+
+def test_total_revenue_never_reads_its_own_actuals():
+    """==> THIS IS WHAT KILLED THE TWO-PHASE SPLIT. <== Only the CAPITATION half of
+    Fact_Revenue is gated on Cutover_Date, which onboarding sets after the build. Right after
+    the build total_revenue's own actuals are short by the entire capitation figure, so
+    deriving from them seeds low -- in the direction that flatters the practice. Composing it
+    from private + NHS + the capitation forecast means the seed can run at any point."""
+    import inspect
+    src = inspect.getsource(seed.derive_targets)
+    assert "revenue.get('total_revenue'" not in src
+    assert 'compose_total_revenue' in src
+    assert seed.REVENUE_INPUTS == ('private_revenue', 'nhs_revenue')
+
+
+def test_nhs_revenue_feeds_the_total_but_is_never_seeded_on_its_own():
+    """It is read as an INPUT to total_revenue, while the nhs_* target rows still come from
+    the Dentally contract. Both are true at once and it is easy to conflate them."""
+    defs = [('total_revenue', 'currency', 'cumulative', True, True, '£600,000'),
+            ('nhs_uda_completion_rate', 'percent', 'rate', False, True, '95%')]
+    rows = seed.derive_targets(
+        defs, {CRAIG: seed.ROLE_PRINCIPAL}, {CRAIG: 1.0}, {CRAIG: (1000.0, 1000.0)},
+        {'private_revenue': {CRAIG: 80000.0}, 'nhs_revenue': {CRAIG: 20000.0}}, 0, {})
+    assert dict((lvl, v) for _m, lvl, v in rows)['Practice'] == 98000.0   # 100k composed
+    assert not [r for r in rows if r[0].startswith('nhs_')]
+
+
+def test_one_pass_writes_everything():
+    """There is no phase argument any more -- a single apply writes roles, pay, plans and
+    targets together, which is only correct because total_revenue no longer depends on a Gold
+    re-run happening in between."""
     acur = _Acur()
-    written = seed.apply_plan(acur, _plan(), phase='rates')
-    assert written['plans'] == 1 and written['roles'] == 2
-    assert written['targets'] == 0
-    assert 'Targets' not in acur.inserted
+    written = seed.apply_plan(acur, _plan())
+    assert written == {'roles': 2, 'pay': 1, 'plans': 1, 'targets': 2}
+    assert 'phase' not in __import__('inspect').signature(seed.apply_plan).parameters
 
 
-def test_the_targets_phase_writes_only_targets():
-    """It runs after Orchestrate_Onboarding STEP 6 has re-run Fact_Revenue, so the roles and
-    rates are already in place and must not be touched again."""
-    acur = _Acur()
-    written = seed.apply_plan(acur, _plan(), phase='targets')
-    assert written['targets'] == 2
-    assert written == {'roles': 0, 'pay': 0, 'plans': 0, 'targets': 2}
-    assert set(acur.inserted) == {'Targets'}
+# ── the practice-level duplication ───────────────────────────────────────────
+
+def test_a_practice_level_row_is_written_once_per_site():
+    """==> ON TWO SITES, EVERY fk_Practitioner = -1 METRIC READS DOUBLE. <== The same value is
+    written against each site key on the same date, so a plain SUM over the window doubled
+    private_revenue to 2,863,998 against a true 1,431,999, and lapsed_patients to 2,006 against
+    1,001. Nothing errors; the target is merely wrong, and wrong in the flattering direction.
+
+    Deduping is MAX across sites, not 'one row per date' -- a rate metric splits its numerator
+    and denominator across two rows at the SAME site, and taking one row drops the denominator.
+    """
+    import inspect
+    src = inspect.getsource(seed)
+    assert 'MAX(s.sn)' in src and 'MAX(s.sd)' in src, 'the cross-site dedupe went missing'
+    assert 'GROUP BY a.Metric, a.fk_Date, a.fk_Practice_Site' in src, (
+        'num and den must be summed WITHIN a site before the cross-site MAX')
 
 
-def test_the_two_phases_together_equal_one_full_pass():
-    """Splitting must not drop anything between them."""
-    a, b = _Acur(), _Acur()
-    one = seed.apply_plan(a, _plan(), phase='all')
-    r = seed.apply_plan(b, _plan(), phase='rates')
-    t = seed.apply_plan(b, _plan(), phase='targets')
-    assert {k: r[k] + t[k] for k in one} == one
+def test_the_capacity_half_never_needed_the_dedupe():
+    """Per-practitioner rows are singular. Worth pinning: if the capacity derivation is ever
+    moved onto the practice-level rows it inherits the doubling, and every revenue target
+    silently doubles."""
+    import inspect
+    src = inspect.getsource(seed.fetch_capacity_inputs)
+    assert 'a.fk_Practitioner <> -1' in src
