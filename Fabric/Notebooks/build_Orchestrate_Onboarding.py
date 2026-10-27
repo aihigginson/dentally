@@ -1,24 +1,10 @@
 """
-build_Orchestrate_Onboarding.py -- generator for the onboarding notebook PAIR (Fabric).
+build_Orchestrate_Onboarding.py -- generator for Orchestrate_Onboarding.ipynb (Fabric).
 Edit THIS, run `python build_Orchestrate_Onboarding.py` to regenerate. Never hand-edit the .ipynb.
 
-==> ONBOARDING IS THREE STEPS, AND THE MIDDLE ONE IS NOT A NOTEBOOK. <==
-
-  Orchestrate_Onboarding_1   provision -> pull -> build -> set Cutover_Date
-  (then, by hand)            Web/onboarding_seed.py  -- derive the customer's metadata
-  Orchestrate_Onboarding_3   rebuild everything that depends on that metadata, refresh
-
-The seam is real rather than cosmetic: 1 is everything Dentally gives us, 2 is everything we
-INFER, and 3 is everything that depends on the inference. A new practice has no roles, FTE,
-associate percentages, plan rates or targets and Dentally holds none of them, so without step 2
-the Day Book shows no targets, practitioner profitability cannot compute and plan capitation
-reads zero -- which is most of what a new customer looks at first.
-
-Step 2 stays a script because it writes the AppDB, whose staging half (Input_Stage.*) is filled
-by a container job rather than a stored procedure a notebook could call. Splitting the notebook
-means the manual step sits BETWEEN two runs instead of inside one, so nobody has to re-enter a
-notebook and re-run a single cell. If it is ever automated, it becomes Orchestrate_Onboarding_2
-calling a web-app endpoint and neither 1 nor 3 changes.
+Orchestrate_Onboarding (design: .claude/plans/onboarding-delta-build-architecture.md) -- a forced
+single-tenant, from-the-top build for onboarding a real practice or rebuilding one from the frozen
+snapshot. No full-vs-delta branching; the clean slate comes from the pre-clear.
 
   STEP 1  clear      Audit.usp_Clear_Tenant_Data (data only; keeps registration/RLS/targets/config)
   STEP 2  populate   source=api    -> Ingest_Dentally FULL pull (tpi/plans date-windowed)
@@ -31,10 +17,20 @@ calling a web-app endpoint and neither 1 nor 3 changes.
                      a fixed 30s wait was too short and the whole build loaded 0 rows. This is
                      deterministic: it waits exactly until the data is visible, then no longer.
   STEP 5  build      Orchestrate_Build build-only (run_stage_ingest=False) -> Bronze..Gold + refresh.
-  STEP 6  cutover    Set Audit.Tenants.Cutover_Date. Needs only Silver.Treatment_Plans, NOT the
-                     seeded metadata, so it closes notebook 1 rather than opening notebook 3.
-  STEP 7  republish  (notebook 3) re-run the facts and aggs that read Input.*, rebuild the target
-                     facts, regenerate the views, refresh the model.
+  STEP 6  cutover    Set Audit.Tenants.Cutover_Date + re-run the Gold it gates.
+
+==> THIS NOTEBOOK IS STEP 1 OF 3, AND IT DOES NOT END WITH A PRESENTABLE TENANT. <==
+
+  1. this notebook            build the data Dentally gives us
+  2. Web/onboarding_seed.py   derive the metadata it does NOT (roles, FTE, associate %,
+                              plan rates, targets) -- without it every target is blank and
+                              plan capitation reads zero
+  3. the overnight build      the REGULAR all-tenants nightly. Its DAG already rebuilds
+                              everything that reads Input.*, so running it is both the
+                              republish AND the test that the new tenant is picked up.
+
+Step 2 is a script rather than a notebook because it writes the AppDB, whose staging half
+(Input_Stage.*) is filled by a container job, not a stored procedure a notebook could call.
 
 Freeze is api-only (frozen IS a restore). Validate Gold before you TRUST a source=frozen restore.
 Synthetic T11/T12 never use this (seed_onelake -> Orchestrate_Build build-only).
@@ -277,53 +273,83 @@ mssparkutils.notebook.run("Orchestrate_Build", build_timeout, {
 print("  build complete.")
 ''', False),
 
-    # 6b -- STEP 6: set Cutover_Date ------------------------------------------
-    # Cutover_Date needs Silver.Treatment_Plans and nothing else -- in particular NOT the seeded
-    # metadata -- so it belongs at the end of notebook 1. Fact_Revenue's capitation half is gated
-    # on it AND on the plan rates step 2 has yet to write, so re-running the facts here would
-    # still produce nothing; that is notebook 3's job.
-    (r'''print("\nSTEP 6  SET tenant Cutover_Date (MIN updated_at of Treatment Plans)")
-# Cutover_Date = the tenant's Dentally go-live (updated_at is stamped by Dentally, not migrated
-# history). Single source of truth for downstream cutover logic (plan capitation, the ingest cold
-# floor). Set it here, once the build has populated Silver.Treatment_Plans.
+    # 6b -- STEP 6: set Cutover_Date + refresh capitation-gated Gold -----------
+    (r'''print("\nSTEP 6  SET tenant Cutover_Date (MIN updated_at of Treatment Plans) + refresh capitation-gated Gold")
+# Cutover_Date = the tenant's Dentally go-live (updated_at is stamped by Dentally, not migrated history).
+# Single source of truth for downstream cutover logic (plan capitation, the ingest cold floor). Set it
+# here, once the build has populated Silver.Treatment_Plans.
 cur.execute("EXEC Audit.usp_Set_Tenant_Cutover @Tenant_ID = " + str(tenant_id))
 cur.execute("SELECT Cutover_Date FROM Audit.Tenants WHERE Tenant_ID = " + str(tenant_id))
 _row = cur.fetchone()
 print("  Audit.Tenants.Cutover_Date = " + str(_row[0] if _row else None))
+
+# Fact_Revenue's capitation half is gated on Cutover_Date, which was NULL during STEP 5's build (first
+# onboarding of this tenant), so its capitation came out empty. Re-run it + the aggs that read it so
+# capitation + target actuals are correct at the end of onboarding.
+for _sp in ["Gold.usp_Load_Fact_Revenue",
+            "Gold.usp_Load_Fact_Metric_Actuals",
+            "Gold.usp_Load_Aggregate_Practitioner_Contribution"]:
+    cur.execute("DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC " + _sp
+                + " @Mode='PROD', @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;")
+    print("  re-ran " + _sp)
+cur.execute("EXEC Meta.usp_Create_Gold_Views")
+print("  Gold views regenerated (capitation now from go-live only).")
 ''', False),
 
-    # 7 -- hand over to step 2 ------------------------------------------------
-    # ==> THE TENANT IS NOT PRESENTABLE YET. <== Gold is built and correct, but every target is
-    # blank and plan capitation reads zero, because none of that lives in Dentally. Step 2
-    # derives it. Printed rather than run: it writes the AppDB, whose staging half is a
-    # container job, not a stored procedure this notebook could call.
+    # 7 -- done ----------------------------------------------------------------
+    # ==> THE TENANT IS BUILT BUT NOT PRESENTABLE. <== It has no roles, FTE, associate
+    # percentages, plan rates or targets, because Dentally holds none of them -- so the Day Book
+    # shows no targets, practitioner profitability cannot compute, and plan capitation reads
+    # zero. That is most of what a new customer looks at first.
+    #
+    # Three steps, each at the same level, no re-entering this notebook:
+    #   1. this notebook          2. Web/onboarding_seed.py          3. the overnight build
+    #
+    # Step 3 is the REGULAR all-tenants nightly, not a bespoke republish. Its DAG already
+    # carries everything that reads the seeded metadata -- Meta.usp_Sync_Input_From_AppDB at
+    # SILVER, Fact_Revenue at GOLD_FACT, Fact_Metric_Actuals / Fact_Daily_Targets / the
+    # contribution agg at GOLD_AGG -- so running it IS the test that the new tenant is picked
+    # up. A hand-written republish list here would be a second copy of Audit.Process_Dependency
+    # and would silently stop covering anything added to the DAG later.
     (r'''print("\n" + "=" * 70)
-print("STEP 1 OF 3 COMPLETE for tenant " + str(tenant_id) + " -- data is built, metadata is not.")
+print("BUILD COMPLETE for tenant " + str(tenant_id) + " -- data is built, metadata is not.")
 print("=" * 70)
 if source == "api" and freeze_after_pull:
     print("  Stage snapshot frozen to init_stage_* (deltas may now overwrite stage_*).")
 print("  VALIDATE Gold first (Check_Stage_Duplicates.sql; scan the Ingest log for")
 print("  'WINDOW(S) UNRESOLVED'; spot-check counts).")
 print("")
-print("  Reports are NOT presentable yet: no targets, no roles, no FTE, no plan rates,")
-print("  and plan capitation reads zero. None of that exists in Dentally.")
+print("  ==> DO NOT RELEASE TO THE CUSTOMER YET. <== Every target is blank and plan")
+print("  capitation reads zero. None of that lives in Dentally; step 2 derives it.")
 print("")
 print("-" * 70)
-print("NEXT -- STEP 2 OF 3, by hand (it writes the AppDB, not the warehouse):")
+print("STEP 2 -- seed the metadata (writes the AppDB, not the warehouse)")
 print("-" * 70)
-print("")
-print("  cd Web      # APPDB_SERVER / APPDB_DB required. Web/.env.example is STALE --")
-print("              # live is sql-analytically.database.windows.net / AppDB-<env>")
+print("  cd Web     # APPDB_SERVER / APPDB_DB required. Web/.env.example is STALE --")
+print("             # live is sql-analytically.database.windows.net / AppDB-<env>")
 print("")
 print("  python onboarding_seed.py --tenant " + str(tenant_id) + "            # DRY RUN -- read it")
 print("  python onboarding_seed.py --tenant " + str(tenant_id) + " --apply    # then write it")
 print("  python appdb_sync.py full                     # AppDB -> warehouse Input.*")
 print("")
-print("  Read the dry run before applying. It derives roles, FTE, associate %, plan")
-print("  rates and targets on BEST ENDEAVOURS -- plausible, not accurate. Nothing it")
-print("  writes is ever overwritten on a re-run, so the customer's edits always win.")
+print("  Read the dry run before applying. Roles, FTE, associate %, plan rates and")
+print("  targets are derived on BEST ENDEAVOURS -- plausible, not accurate. Nothing it")
+print("  writes is overwritten on a re-run, so the customer's edits always win.")
 print("")
-print("  THEN run Orchestrate_Onboarding_3 to republish.")
+print("-" * 70)
+print("STEP 3 -- let the OVERNIGHT all-tenants build run (or trigger it)")
+print("-" * 70)
+print("  Nothing bespoke to run. The nightly DAG already rebuilds everything that")
+print("  reads Input.*, so watching it pick this tenant up IS the test that it has.")
+print("")
+print("  Then open the reports as the customer would and check they look ALIVE:")
+print("  targets on the Day Book, plan capitation non-zero, profitability populated.")
+print("  Still empty? The seed did not land -- check Input.Targets for this tenant.")
+print("")
+print("  ==> TELL THEM THE METADATA IS ESTIMATED. <== It was derived from their own")
+print("  data, not supplied by them: close enough to make the reports work, wrong in")
+print("  the details, and the plan rates especially are all one flat monthly figure.")
+print("  Settings is where they correct it.")
 print("=" * 70)
 conn.close()
 ''', False),
@@ -331,116 +357,9 @@ conn.close()
 ]
 
 
-# ==> NOTEBOOK 3 RE-RUNS ONLY WHAT READS Input.*. <== Fact_Revenue's capitation half (plan
-# rates + Cutover_Date), Aggregate_Practitioner_Contribution (associate percentages), and the
-# target facts (Input.Targets). Fact_Metric_Actuals sits between them -- it reads Fact_Revenue,
-# so it has to follow it rather than run alongside.
-CELLS_3 = [
-    # 0 -- parameters ----------------------------------------------------------
-    (r'''# Parameters -- Fabric overrides at runtime.
-tenant_id      = 100          # the practice just seeded by step 2
-warehouse_name = "WH_Dentally"
-build_timeout  = 14400        # s -- Bronze..Gold + model refresh
-refresh_model  = True         # refresh the semantic model at the end
-''', True),
-
-    # 1 -- connect -------------------------------------------------------------
-    (r'''import struct
-import pyodbc
-import sempy.fabric as fabric
-
-_ws_id = fabric.get_workspace_id()
-_whs   = fabric.FabricRestClient().get("/v1/workspaces/" + _ws_id + "/warehouses").json()["value"]
-_wh    = next((w for w in _whs if w["displayName"] == warehouse_name), None)
-if _wh is None:
-    raise RuntimeError("Warehouse '" + warehouse_name + "' not found in workspace " + _ws_id)
-endpoint = _wh["properties"]["connectionString"]
-
-_tok    = mssparkutils.credentials.getToken("https://database.windows.net/")
-_tb     = _tok.encode("UTF-16-LE")
-_struct = struct.pack("<I" + str(len(_tb)) + "s", len(_tb), _tb)
-conn = pyodbc.connect(
-    "Driver={ODBC Driver 18 for SQL Server};Server=" + endpoint + ",1433;Database=" + warehouse_name
-    + ";Encrypt=yes;TrustServerCertificate=no;", attrs_before={1256: _struct})
-conn.autocommit = True
-cur = conn.cursor()
-print("ONBOARDING step 3 of 3 -- tenant " + str(tenant_id))
-print("Connected to " + warehouse_name + " @ " + endpoint)
-''', False),
-
-    # 2 -- refuse to run against an unseeded tenant ----------------------------
-    # ==> RUNNING THIS WITHOUT STEP 2 REPUBLISHES THE SAME EMPTY REPORTS. <== It would succeed,
-    # take fifteen minutes, and change nothing -- the failure mode that wastes an afternoon
-    # before anyone thinks to check whether the seed actually ran.
-    (r'''print("\nCHECK  the tenant has been seeded (step 2) and the sync has landed it")
-cur.execute("SELECT (SELECT COUNT(*) FROM Input.Targets WHERE Tenant_ID = ?), "
-            "       (SELECT COUNT(*) FROM Input.Practitioner_Role WHERE Tenant_ID = ?), "
-            "       (SELECT COUNT(*) FROM Input.Plan_Capitation_Rate WHERE Tenant_ID = ?)",
-            tenant_id, tenant_id, tenant_id)
-_t, _r, _p = cur.fetchone()
-print("  Input.Targets=" + str(_t) + "  Practitioner_Role=" + str(_r)
-      + "  Plan_Capitation_Rate=" + str(_p))
-if _t == 0 and _r == 0:
-    raise RuntimeError(
-        "Tenant " + str(tenant_id) + " has no seeded metadata in the WAREHOUSE Input.* tables. "
-        "Either step 2 has not run (cd Web; python onboarding_seed.py --tenant "
-        + str(tenant_id) + " --apply) or it ran but was never synced across "
-        "(python appdb_sync.py full). Republishing now would change nothing.")
-print("  seeded -- proceeding.")
-''', False),
-
-    # 3 -- STEP 7: republish ---------------------------------------------------
-    # ==> THIS DELEGATES TO Orchestrate_Build RATHER THAN NAMING THE PROCEDURES. <== An earlier
-    # draft re-ran a hand-written list (Fact_Revenue -> Fact_Metric_Actuals -> the aggs -> the
-    # target facts). That list is a second copy of the DAG's ordering, and the DAG is the single
-    # source of truth -- Audit.Process_Dependency, not a literal here. A procedure added to the
-    # DAG later would silently stop being re-run on onboarding, and nothing would say so.
-    #
-    # The build is idempotent with the ingests off: Bronze re-reads the Stage rows step 1 already
-    # pulled, META_SYNC_INPUT copies Input_Stage.* into the warehouse, and every fact that reads
-    # Input.* rebuilds in dependency order -- Fact_Revenue's capitation half included, which
-    # produced nothing during step 1 because neither the plan rates nor Cutover_Date existed yet.
-    #
-    # It costs a full Bronze..Gold pass on a run that already took hours for the API pull.
-    (r'''print("\nSTEP 7  REBUILD Bronze..Gold so every fact picks up the seeded Input.*")
-# Ingests OFF -- step 1 already pulled, and Stage still holds it. The parameter names matter:
-# run_dentally_ingest / run_xero_ingest are what Orchestrate_Build actually reads. A name it
-# does not define is injected as a harmless new variable and changes nothing, so a typo here
-# would quietly run a full Dentally pull a second time.
-mssparkutils.notebook.run("Orchestrate_Build", build_timeout, {
-    "full_refresh":           False,
-    "run_dentally_ingest":    False,
-    "run_xero_ingest":        False,
-    "refresh_semantic_model": refresh_model,
-})
-print("  rebuild complete" + (" (model refreshed)" if refresh_model else " (model NOT refreshed)"))
-''', False),
-
-    # 4 -- done ----------------------------------------------------------------
-    (r'''print("\n" + "=" * 70)
-print("ONBOARDING COMPLETE for tenant " + str(tenant_id) + ".")
-print("=" * 70)
-print("  Open the reports as the customer would and check they look ALIVE:")
-print("    - the Day Book shows targets, not blanks")
-print("    - plan capitation revenue is non-zero")
-print("    - practitioner profitability is populated")
-print("  If any of those are still empty, step 2 did not land -- check")
-print("  Input.Targets / Input.Plan_Capitation_Rate for this tenant.")
-print("")
-print("  ==> TELL THEM THE METADATA IS ESTIMATED. <== Roles, FTE, associate % and plan")
-print("  rates were DERIVED from their Dentally data, not supplied by them. They are")
-print("  close enough to make the reports work and wrong in the details -- the plan")
-print("  rates especially, which are all seeded at one flat monthly figure.")
-print("  Settings is where they correct it, and nothing they change is overwritten.")
-print("=" * 70)
-conn.close()
-''', False),
-]
-
-
-def _notebook(cells_spec):
+def build():
     cells = []
-    for src, is_params in cells_spec:
+    for src, is_params in CELLS:
         cells.append({
             "cell_type": "code",
             "execution_count": None,
@@ -448,7 +367,7 @@ def _notebook(cells_spec):
             "outputs": [],
             "source": src.splitlines(keepends=True),
         })
-    return {
+    nb = {
         "cells": cells,
         "metadata": {
             "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
@@ -456,20 +375,11 @@ def _notebook(cells_spec):
         },
         "nbformat": 4, "nbformat_minor": 4,
     }
-
-
-def build():
-    here = os.path.dirname(os.path.abspath(__file__))
-    written = []
-    for name, spec in (("Orchestrate_Onboarding_1.ipynb", CELLS),
-                       ("Orchestrate_Onboarding_3.ipynb", CELLS_3)):
-        out = os.path.join(here, name)
-        with open(out, "w", encoding="utf-8") as f:
-            json.dump(_notebook(spec), f, indent=1); f.write("\n")
-        written.append(out)
-    return written
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Orchestrate_Onboarding.ipynb")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(nb, f, indent=1); f.write("\n")
+    return out
 
 
 if __name__ == "__main__":
-    for _p in build():
-        print("Wrote", _p)
+    print("Wrote", build())
