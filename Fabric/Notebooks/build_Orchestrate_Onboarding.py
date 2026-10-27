@@ -283,12 +283,52 @@ print("  Gold views regenerated (capitation now from go-live only).")
 ''', False),
 
     # 7 -- done ----------------------------------------------------------------
+    # ==> THE SEED IS NOT OPTIONAL POLISH; WITHOUT IT THE REPORTS LOOK BROKEN. <== A new practice
+    # has no roles, FTE, associate percentages, plan rates or targets, and Dentally holds none of
+    # them -- so the Day Book shows no targets, practitioner profitability cannot compute, and
+    # plan capitation reads zero. That is most of what a new customer looks at first.
+    #
+    # It is PRINTED, not run. The seeder lives in Web/ and writes the AppDB, whose staging half
+    # (Input_Stage.*) is filled by a container job rather than a stored procedure this notebook
+    # could call. Onboarding is provisioned by hand anyway, so the recipe belongs in front of
+    # whoever is running this.
+    #
+    # ==> THE TWO PHASES STRADDLE STEP 6 ON PURPOSE. <== Seeded plan rates feed Fact_Revenue's
+    # capitation half, which feeds Fact_Metric_Actuals, which is where the revenue TARGETS take
+    # their rate -- and STEP 6 is the re-run that closes that loop. One pass either side of it is
+    # wrong: before, total_revenue is derived from actuals carrying no capitation and seeds low;
+    # after, STEP 6 had no rates to use and capitation stays zero until the next nightly build.
     (r'''print("\n" + "=" * 66)
 print("Onboarding complete for tenant " + str(tenant_id) + ".")
 if source == "api" and freeze_after_pull:
     print("  Stage snapshot already frozen to init_stage_* (deltas may now overwrite stage_*).")
 print("  VALIDATE Gold (Check_Stage_Duplicates.sql; scan the Ingest log for 'WINDOW(S) UNRESOLVED';")
-print("  spot-check counts + reports). Then it's live for nightly deltas.")
+print("  spot-check counts + reports).")
+print("")
+print("-" * 66)
+print("SEED THE CUSTOMER METADATA -- the reports carry no targets until you do.")
+print("-" * 66)
+print("  Roles, FTE, associate %, plan rates and targets, derived from the data just")
+print("  built. Dry run first: it writes nothing and prints what it would.")
+print("")
+print("  cd Web    # needs APPDB_SERVER / APPDB_DB. Web/.env.example is STALE -- the")
+print("            # live AppDB is sql-analytically.database.windows.net / AppDB-<env>")
+print("")
+print("  1. python onboarding_seed.py --tenant " + str(tenant_id) + "    # dry run, read it")
+print("  2. python onboarding_seed.py --tenant " + str(tenant_id) + " --apply --phase rates")
+print("  3. python appdb_sync.py full")
+print("  4. RE-RUN STEP 6 of this notebook      # capitation now has rates to use")
+print("  5. python onboarding_seed.py --tenant " + str(tenant_id) + " --apply --phase targets")
+print("  6. python appdb_sync.py full, then Gold.usp_Load_Fact_Daily_Targets and")
+print("     Meta.usp_Create_Gold_Views, then refresh the semantic model")
+print("")
+print("  Steps 2 and 5 straddle STEP 6 because the seeded plan rates feed the capitation")
+print("  the revenue targets are derived from. Doing both in one pass seeds total_revenue")
+print("  low, silently, in the direction that flatters the practice.")
+print("")
+print("  The seed is BEST ENDEAVOURS. Tell the customer the figures are estimates and")
+print("  that Settings is where they correct them. A re-run never overwrites a value that")
+print("  is already there, so their edits always win.")
 print("=" * 66)
 conn.close()
 ''', False),
