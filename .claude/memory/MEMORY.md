@@ -75,6 +75,7 @@
 - [A vw_ override silently drops new columns](a-vw-override-silently-drops-new-columns.md) — vw_Dim_Patients lists columns by hand; a new one reaches Gold and never PBI.
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
+- [Three things are called open plans or courses](three-things-are-called-open-plans-or-courses.md) — a worklist column and two KPIs, three definitions in three places; check which before editing.
 - [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
 - [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.
 - [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.

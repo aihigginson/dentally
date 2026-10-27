@@ -34,6 +34,24 @@
 # gives 73 / 62 / 55 / 52 / 47 for the top five, matching the aggregate column exactly.
 #
 # ---------------------------------------------------------------------
+# SCHEDULE > UTILISATION MOVES WITH IT, DELIBERATELY.
+# ---------------------------------------------------------------------
+# The same column appears in that page's pivot beside Cancellations To Rebook, DNAs To
+# Rebook, Recalls To Action and Days Until Next 30 Free -- the same worklist set. Both screens
+# bind the ONE column, so they cannot diverge without splitting it in two. Owner's call: it
+# follows the Day Book.
+#
+# ---------------------------------------------------------------------
+# THE TWO KPIs ARE A DIFFERENT THING ENTIRELY AND ARE NOT TOUCHED.
+# ---------------------------------------------------------------------
+# ==> THREE SIMILAR NAMES, THREE DEFINITIONS, ONE OF THEM CHANGING HERE. <==
+#   Open Plans (this)                   Aggregate_Site_Practitioner_Current -> List Practitioners
+#   open_courses (KPI)                  Fact_KPI_Snapshot -- DATE-based: started <= D, not
+#                                       ended, not completed. Never reads Course_Status at all.
+#   Open Courses Without Appointment    DAX on _Treatment Plans, Course Status = the one value.
+# Only the first moves. The KPI pair keeps meaning exactly what it meant.
+#
+# ---------------------------------------------------------------------
 # A KNOWN, SEPARATE DISAGREEMENT IS NOT ADDRESSED HERE.
 # ---------------------------------------------------------------------
 # The Day Book tile counts COURSES; the open_courses_without_appt metric counts PATIENTS, so
