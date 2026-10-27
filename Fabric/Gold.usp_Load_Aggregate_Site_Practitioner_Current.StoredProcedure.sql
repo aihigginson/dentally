@@ -176,7 +176,15 @@ BEGIN
         INTO #op
         FROM Gold.Fact_Treatment_Plans tp
         JOIN #act ap ON ap.pk_Patient = tp.fk_Patient
-        WHERE tp.Course_Status IN ('In Progress', 'Open - No Appointment')
+        -- ==> OPEN PLANS MEANS THE ONES WITH NOTHING BOOKED. <== This counted
+        -- 'In Progress' too, which is a course already underway with an appointment in
+        -- the diary -- not work to chase. The Day Book list is a worklist, so it carries
+        -- only the courses nobody has booked anything for.
+        --
+        -- The detail page's own filters say the same thing, on BOTH its visuals, and must
+        -- move with this or the summary and the detail disagree -- which is precisely how
+        -- Recalls To Action came to read 155 against 182.
+        WHERE tp.Course_Status = 'Open - No Appointment'
         GROUP BY tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1), tp.fk_Practitioner;
 
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt

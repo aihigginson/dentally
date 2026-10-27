@@ -279,13 +279,6 @@
                     [
                       {
                         "Literal": {
-                          "Value": "'In Progress'"
-                        }
-                      }
-                    ],
-                    [
-                      {
-                        "Literal": {
                           "Value": "'Open - No Appointment'"
                         }
                       }
