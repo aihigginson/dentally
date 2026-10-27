@@ -1723,10 +1723,20 @@ MONITOR_NUDGE_COOLDOWN_HOURS = int(os.environ.get('MONITOR_NUDGE_COOLDOWN_HOURS'
 SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
 
 
-def _monitor_email_body(proc, ing, since):
+def _monitor_email_body(proc, ing, since, stale_refresh=None):
     # 'since' is the previous report's watermark, so this lists THIS build's real errors only --
     # already-reported rows and already-fixed token 401s are filtered out by the caller.
     lines = [f"Warehouse health check ({APP_ENV}) — new failures since {since}.\n"]
+    # First, because a model nobody refreshed makes every figure below it a day old or worse.
+    if stale_refresh:
+        lines.append("*** THE SEMANTIC MODEL WAS NOT REFRESHED AFTER THE LAST BUILD ***")
+        lines.append(f"  last build   : {stale_refresh['last_build']}")
+        behind = stale_refresh['days_behind']
+        lines.append(f"  last refresh : {stale_refresh['last_refresh']}"
+                     + (f"   ({behind} day(s) behind)" if behind else ""))
+        lines.append("  The reports are serving whatever the model last held. The build still")
+        lines.append("  reports success, because it closes its parent run BEFORE refreshing.")
+        lines.append("")
     if proc:
         lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
         for r in proc[:20]:
@@ -2044,6 +2054,30 @@ def monitor_health():
             "GROUP BY Tenant_ID", since)
         bad_token_tenants = sorted(r[0] for r in cur.fetchall()
                                    if r[1] is not None and (r[2] is None or r[2] < r[1]))
+
+        # ==> A BUILD THAT DOES NOT REFRESH THE MODEL IS INVISIBLE WITHOUT THIS. <== The build
+        # writes PARENT_CLOSED SUCCEEDED BEFORE the refresh cell runs, so a refresh that
+        # refuses or throws leaves the build reporting clean. That is exactly what happened
+        # from 20/10 to 26/10: the endpoint gate threw on a bad column name, REFRESH_DONE
+        # stopped dead, and the reports served whatever the model last held -- seven nights,
+        # noticed only when a human saw yesterday's date on the Day Book.
+        #
+        # No grace window, deliberately. The monitor is poked by the build's own Summary cell
+        # immediately after the refresh, so tonight's failure is caught tonight; a grace long
+        # enough to cover someone poking the monitor mid-build would suppress exactly that.
+        cur.execute(
+            "SELECT MAX(CASE WHEN Phase = 'BUILD_DONE'   THEN Logged_At END), "
+            "       MAX(CASE WHEN Phase = 'REFRESH_DONE' THEN Logged_At END) "
+            "FROM   Audit.Ingest_Log WHERE Entity = 'Orchestrate_Build'")
+        row = cur.fetchone()
+        last_build, last_refresh = (row[0], row[1]) if row else (None, None)
+        stale_refresh = None
+        if last_build is not None and (last_refresh is None or last_refresh < last_build):
+            stale_refresh = {
+                'last_build': str(last_build),
+                'last_refresh': str(last_refresh) if last_refresh else 'never',
+                'days_behind': (last_build - last_refresh).days if last_refresh else None,
+            }
         conn.close()
         # One recipient per bad-token tenant: the practice's MAIN account (Input.Billing_Contact, AppDB).
         primary = {tid: _tenant_primary_email(tid) for tid in bad_token_tenants}
@@ -2064,7 +2098,8 @@ def monitor_health():
         suppressed = len(ing) - len(real_ing)
         # real_ing has already had the resolved 401s removed, so anything still in it is a live
         # error and worth an email -- including a 401 that carries no tenant.
-        actionable = bool(proc) or bool(bad_token_tenants) or bool(real_ing)
+        actionable = (bool(proc) or bool(bad_token_tenants) or bool(real_ing)
+                      or stale_refresh is not None)
 
         total = len(proc) + len(real_ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.
@@ -2073,8 +2108,11 @@ def monitor_health():
         if emails_on:
             if actionable:
                 _send_email(MONITOR_NOTIFY,
-                            f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
-                            _monitor_email_body(proc, real_ing, report_since))
+                            ("MODEL NOT REFRESHED since "
+                         + stale_refresh['last_refresh'] if stale_refresh else
+                         f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h"),
+                            _monitor_email_body(proc, real_ing, report_since,
+                                                stale_refresh))
             if bad_token_tenants:
                 # Per-tenant cooldown: never nudge the same practice twice inside
                 # MONITOR_NUDGE_COOLDOWN_HOURS, so overlapping triggers (manual + delayed cron, a
@@ -2112,6 +2150,7 @@ def monitor_health():
                         'ingest_failures': len(real_ing), 'failures': total,
                         'report_since': report_since, 'resolved_401_suppressed': suppressed,
                         'bad_token_tenants': bad_token_tenants,
+                        'stale_refresh': stale_refresh,
                         'principals_notified': len(notified), 'emails_enabled': emails_on})
     except Exception as e:
         return _server_error(e, 'monitor-health')
