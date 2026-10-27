@@ -658,8 +658,19 @@ def _default_fy(asof):
     return asof.year + 1 if asof.month >= 4 else asof.year
 
 
-def apply_plan(acur, plan, actor=SEED_ACTOR):
-    """Write to the AppDB. ==> NEVER OVERWRITES. <== Each step reads what is already there and
+def apply_plan(acur, plan, actor=SEED_ACTOR, phase='all'):
+    """Write to the AppDB.
+
+    ==> THE TWO PHASES EXIST BECAUSE OF A CIRCULARITY IN THE ONBOARDING RUN. <== The seeded plan
+    rates feed Fact_Revenue's capitation half, which feeds Fact_Metric_Actuals, which is where
+    the revenue TARGETS get their rate from. Writing both at once derives total_revenue from
+    actuals that do not yet carry any capitation, and seeds it low.
+
+      phase='rates'   -- roles, FTE, associate percentages, plan rates
+      phase='targets' -- targets only, after the Gold re-run has picked the rates up
+      phase='all'     -- both, correct only when capitation is already computed
+
+    Orchestrate_Onboarding's STEP 6 is the re-run that sits between them. ==> NEVER OVERWRITES. <== Each step reads what is already there and
     writes only the keys that are absent, so a re-run after the customer has edited their own
     settings leaves those edits alone.
 
@@ -667,6 +678,11 @@ def apply_plan(acur, plan, actor=SEED_ACTOR):
     caller reports success."""
     written = {'roles': 0, 'pay': 0, 'plans': 0, 'targets': 0}
     t = plan.tenant_id
+    do_rates = phase in ('all', 'rates')
+    do_targets = phase in ('all', 'targets')
+
+    if not do_rates:
+        return _apply_targets(acur, plan, actor, written) if do_targets else written
 
     acur.execute("SELECT Practitioner_ID FROM Input.Practitioner_Role WHERE Tenant_ID = ?", t)
     have = {int(r[0]) for r in acur.fetchall()}
@@ -701,6 +717,13 @@ def apply_plan(acur, plan, actor=SEED_ACTOR):
             "VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", rows)
         written['plans'] = len(rows)
 
+    if not do_targets:
+        return written
+    return _apply_targets(acur, plan, actor, written)
+
+
+def _apply_targets(acur, plan, actor, written):
+    t = plan.tenant_id
     acur.execute("SELECT Metric, Target_Level FROM Input.Targets WHERE Tenant_ID = ? AND FY = ?",
                  (t, plan.fy))
     have = {(r[0], r[1]) for r in acur.fetchall()}
@@ -767,6 +790,10 @@ def main(argv=None):
     ap.add_argument('--apply', action='store_true',
                     help='write to the AppDB (default is a dry run)')
     ap.add_argument('--fy', type=int, default=None)
+    ap.add_argument('--phase', choices=('all', 'rates', 'targets'), default='all',
+                    help="'rates' before Orchestrate_Onboarding STEP 6, 'targets' after it -- "
+                         "the seeded plan rates feed the capitation that the revenue targets "
+                         "are then derived from")
     ap.add_argument('--principal', type=int, default=None, metavar='PRACTITIONER_ID',
                     help='name the principal when the account lookup cannot (a practice with '
                          'several accounts already provisioned)')
@@ -784,7 +811,7 @@ def main(argv=None):
         if not args.apply:
             print('DRY RUN -- nothing written. Re-run with --apply to write.\n')
             return 0
-        written = apply_plan(ac.cursor(), plan)
+        written = apply_plan(ac.cursor(), plan, phase=args.phase)
         print('WROTE roles=%(roles)d pay=%(pay)d plans=%(plans)d targets=%(targets)d\n' % written)
         print('==> A BUILD MUST RUN BEFORE THE CUSTOMER SEES THIS. <== Input.* reaches the\n'
               '    warehouse through Meta.usp_Sync_Input_From_AppDB, and targets do not reach\n'

@@ -519,3 +519,33 @@ def test_the_seed_is_attributed_to_itself():
     seed.apply_plan(acur, _plan())
     for rows in acur.inserted.values():
         assert all(r[-1] == seed.SEED_ACTOR for r in rows)
+
+
+def test_the_rates_phase_writes_no_targets():
+    """==> THE SEEDED PLAN RATES FEED THE CAPITATION THE TARGETS ARE DERIVED FROM. <== Writing
+    both in one pass derives total_revenue from actuals carrying no capitation at all, and seeds
+    it low -- silently, and in the direction that flatters the practice."""
+    acur = _Acur()
+    written = seed.apply_plan(acur, _plan(), phase='rates')
+    assert written['plans'] == 1 and written['roles'] == 2
+    assert written['targets'] == 0
+    assert 'Targets' not in acur.inserted
+
+
+def test_the_targets_phase_writes_only_targets():
+    """It runs after Orchestrate_Onboarding STEP 6 has re-run Fact_Revenue, so the roles and
+    rates are already in place and must not be touched again."""
+    acur = _Acur()
+    written = seed.apply_plan(acur, _plan(), phase='targets')
+    assert written['targets'] == 2
+    assert written == {'roles': 0, 'pay': 0, 'plans': 0, 'targets': 2}
+    assert set(acur.inserted) == {'Targets'}
+
+
+def test_the_two_phases_together_equal_one_full_pass():
+    """Splitting must not drop anything between them."""
+    a, b = _Acur(), _Acur()
+    one = seed.apply_plan(a, _plan(), phase='all')
+    r = seed.apply_plan(b, _plan(), phase='rates')
+    t = seed.apply_plan(b, _plan(), phase='targets')
+    assert {k: r[k] + t[k] for k in one} == one
