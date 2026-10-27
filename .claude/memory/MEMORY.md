@@ -111,3 +111,4 @@
 - [Fact_Lapsed_Patients is the lapsing fact](lapsed-patients-is-the-lapsing-fact.md) — I built a near-duplicate; the customer-facing lapsed figures come from _Metric Actuals, not this fact.
 - [A bookmark lists the visuals it applies to](a-bookmark-lists-the-visuals-it-applies-to.md) — targetVisualNames; a new visual not on it ignores the bookmark and stays hidden, silently.
 - [A short action button needs container padding](a-short-action-button-needs-container-padding.md) — default padding eats a 28px button; it renders as a clickable line of its fill colour.
+- [A parameterised batch cannot create a temp table](a-parameterised-batch-cannot-create-a-temp-table.md) — pyodbc routes params via sp_executesql; the #temp dies with the call, and the error names the reader.
