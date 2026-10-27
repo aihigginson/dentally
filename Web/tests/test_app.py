@@ -2155,3 +2155,113 @@ def test_hierarchy_get_is_reached_by_staff(appmod, client, monkeypatch):
         RuntimeError('reached the body')))
     r = client.get('/api/admin/hierarchy')
     assert r.status_code == 500          # past the gate, failed on the stubbed connection
+
+
+# ==> THE HOME STRIP THAT CONSUMED THESE WAS WITHDRAWN; THE ROUTE IS PARKED, NOT DELETED. <==
+# The ranking multiplied 4-week movement by Area_Weight -- a column that exists for the Home
+# page's five AREA HEADERS -- and 16 of the 44 active metrics carry no weight at all, so they
+# default to 5 and became eligible to headline. A practice-grain rate move can also be pure
+# clinician mix: the "Average Plan Value +33%" card was two clinicians doing bigger work on
+# FEWER plans. These tests keep the endpoint honest until there is a display worth the data.
+def test_insights_requires_auth(client):
+    """The highlights are tenant data, so the route sits behind the same gate as the rest.
+
+    The real _auth does the rejecting here rather than a stub, so this breaks if the route
+    ever stops calling it.
+    """
+    assert client.get('/api/insights').status_code == 401
+
+
+def test_insights_survives_a_warehouse_failure(appmod, client, monkeypatch):
+    """==> THE STRIP MUST NEVER COST THE HOME SCREEN ITS REPORT. <==
+
+    The cards sit ABOVE the embed. A 500 here would be a broken panel on top of a working
+    report; an empty list hides the strip and leaves Home exactly as it was. That trade is
+    the reason the route swallows its own exception, so it is the thing worth pinning.
+    """
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError('warehouse down')))
+    r = client.get('/api/insights')
+    assert r.status_code == 200
+    assert r.get_json() == {'week': None, 'insights': []}
+
+
+def test_insights_returns_good_before_watch(appmod, client, monkeypatch):
+    """Good first, then Watch, each in its own rank order.
+
+    The ORDER is the product decision -- three things going well, then three to watch -- and
+    it is made in SQL, not in the page. A regression here would reshuffle the strip silently.
+    """
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: (1, 1, [100], None))
+
+    import datetime
+
+    class _Cur:
+        description = [('Direction',), ('Rank_In_Direction',), ('Display_Name',), ('Section',),
+                       ('Metric',), ('Format_Type',), ('Per_Working_Day',), ('Value_Now',),
+                       ('Value_Before',), ('Relative_Change',), ('Target_Value',),
+                       ('Narrative',)]
+
+        def __init__(self):
+            self._first = True
+
+        def execute(self, *a, **k):
+            return self
+
+        def fetchone(self):
+            return (datetime.date(2026, 10, 12),)
+
+        def fetchall(self):
+            # Returned in the order the ORDER BY produces, which is what is asserted below.
+            return [
+                ('Good',  1, 'New Patients',    'Acquisition', 'new_patients', 'number',
+                 False, 12.0, 9.0, 0.33, None, None),
+                ('Watch', 1, 'Overdue Recalls', 'Retention',   'overdue',      'number',
+                 False, 144.0, 120.0, 0.20, None, 'Up a fifth on last month.'),
+            ]
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
+    body = client.get('/api/insights').get_json()
+    assert body['week'] == '2026-10-12'
+    assert [i['Direction'] for i in body['insights']] == ['Good', 'Watch']
+    # Decimals are cast for JSON, and the flag comes back a real bool rather than 0/1.
+    assert body['insights'][0]['Value_Now'] == 12.0
+    assert body['insights'][0]['Per_Working_Day'] is False
+    # A missing narrative is normal, not an error: narration runs separately.
+    assert body['insights'][0]['Narrative'] is None
+
+
+def test_insights_hides_itself_across_several_practices(appmod, client, monkeypatch):
+    """==> A LOGIN SPANNING PRACTICES GETS NOTHING, DELIBERATELY. <==
+
+    The rows are ranked PER TENANT. Returning them all gave each practice's six interleaved
+    and unlabelled -- measured at 17 cards in a six-card strip, because all three tenants
+    hold the same week. There is no honest combined ranking to show, so the strip stays
+    hidden until one practice is selected.
+    """
+    monkeypatch.setattr(appmod, '_auth', lambda: ('admin@analytically.info', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: (1, 1, [11, 12, 100], None))
+
+    class _Cur:
+        def execute(self, *a, **k):
+            raise AssertionError('the warehouse must not be queried for several practices')
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
+    body = client.get('/api/insights').get_json()
+    assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}

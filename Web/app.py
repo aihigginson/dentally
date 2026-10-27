@@ -1723,10 +1723,20 @@ MONITOR_NUDGE_COOLDOWN_HOURS = int(os.environ.get('MONITOR_NUDGE_COOLDOWN_HOURS'
 SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info')
 
 
-def _monitor_email_body(proc, ing, since):
+def _monitor_email_body(proc, ing, since, stale_refresh=None):
     # 'since' is the previous report's watermark, so this lists THIS build's real errors only --
     # already-reported rows and already-fixed token 401s are filtered out by the caller.
     lines = [f"Warehouse health check ({APP_ENV}) — new failures since {since}.\n"]
+    # First, because a model nobody refreshed makes every figure below it a day old or worse.
+    if stale_refresh:
+        lines.append("*** THE SEMANTIC MODEL WAS NOT REFRESHED AFTER THE LAST BUILD ***")
+        lines.append(f"  last build   : {stale_refresh['last_build']}")
+        behind = stale_refresh['days_behind']
+        lines.append(f"  last refresh : {stale_refresh['last_refresh']}"
+                     + (f"   ({behind} day(s) behind)" if behind else ""))
+        lines.append("  The reports are serving whatever the model last held. The build still")
+        lines.append("  reports success, because it closes its parent run BEFORE refreshing.")
+        lines.append("")
     if proc:
         lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
         for r in proc[:20]:
@@ -1811,13 +1821,90 @@ def _insight_numbers(text):
     return set(re.findall(r'\d+(?:\.\d+)?', (text or '').replace(',', '')))
 
 
+@app.route('/api/insights')
+def insights():
+    """The six highlights for the Home screen: three Good, three Watch.
+
+    ==> THE RANKING IS NOT MADE HERE. <== Gold.Aggregate_Practice_Insights already holds it,
+    weighted by 4-week movement x Area_Weight. This reads the LATEST week it has and hands the
+    rows over; it does not re-rank, re-weight or filter by anything but the tenant.
+
+    Narrative may be empty -- it is written separately and only when a key is configured --
+    so the card must stand on its figures alone. That is deliberate: a highlight with no
+    sentence is still a highlight.
+    """
+    upn, err = _auth()
+    if err:
+        return err
+    try:
+        conn = _fabric_conn()
+        cur = conn.cursor()
+        _, client_id, tids, _ = _get_user_info(cur, upn)
+        if client_id is None:
+            conn.close()
+            return jsonify({'error': 'Forbidden'}), 403
+        if not tids:
+            conn.close()
+            return jsonify({'week': None, 'insights': []})
+        # ==> ONE PRACTICE, OR NOTHING. <== The rows are ranked PER TENANT, so a login that spans
+        # several practices does not get a combined top three -- it gets each practice's six,
+        # interleaved, unlabelled. Measured: all three tenants hold the same week, so this
+        # returned 17 cards in a six-card strip. There is no honest cross-practice ranking to
+        # show here (the same reason group targets are still unresolved), so the strip stays
+        # hidden until a practice is selected rather than printing a pile nobody can read.
+        if len(tids) > 1:
+            conn.close()
+            return jsonify({'week': None, 'insights': [], 'reason': 'multiple-practices'})
+        placeholders = ','.join('?' * len(tids))
+        cur.execute(
+            f"SELECT TOP 1 Week_Commencing_Date FROM Gold.Aggregate_Practice_Insights "
+            f"WHERE Tenant_ID IN ({placeholders}) ORDER BY Week_Commencing_Date DESC", tids)
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'week': None, 'insights': []})
+        week = row[0]
+        cur.execute(
+            f"SELECT Direction, Rank_In_Direction, Display_Name, Section, Metric, Format_Type, "
+            f"       Per_Working_Day, Value_Now, Value_Before, Relative_Change, Target_Value, "
+            f"       Narrative "
+            f"FROM   Gold.Aggregate_Practice_Insights "
+            f"WHERE  Tenant_ID IN ({placeholders}) AND Week_Commencing_Date = ? "
+            f"ORDER BY CASE WHEN Direction = 'Good' THEN 0 ELSE 1 END, Rank_In_Direction",
+            (*tids, week))
+        cols = [c[0] for c in cur.description]
+        out = []
+        for r in cur.fetchall():
+            d = dict(zip(cols, r))
+            for k in ('Value_Now', 'Value_Before', 'Relative_Change', 'Target_Value'):
+                d[k] = float(d[k]) if d[k] is not None else None
+            d['Per_Working_Day'] = bool(d['Per_Working_Day'])
+            out.append(d)
+        conn.close()
+        return jsonify({'week': week.isoformat() if hasattr(week, 'isoformat') else str(week),
+                        'insights': out})
+    except Exception as e:
+        app.logger.warning('insights read failed: %s', e)
+        # ==> A FAILURE HERE MUST NOT COST THE HOME SCREEN ITS REPORT. <== The cards sit above
+        # the embed; an empty list hides the strip and leaves everything else working.
+        return jsonify({'week': None, 'insights': []})
+
+
 @app.route('/api/insights/narrate', methods=['POST'])
 def insights_narrate():
     """Write the plain-English line for each unnarrated insight row.
 
     The ranking is NOT the model's to make -- it is already in the table. This only turns
     the figures into a sentence, and refuses any sentence carrying a number it was not
-    given. Shared-secret auth; fails closed if MONITOR_KEY is unset."""
+    given. Shared-secret auth; fails closed if MONITOR_KEY is unset.
+
+    ==> NOTHING YEAR-ON-YEAR REACHES THE SENTENCE, BECAUSE THE PANEL IS ABOUT RECENT
+    MOVEMENT. <== A year-ago comparator was supplied here and removed: four weeks against
+    the four before is the question, and a window from a year ago does not answer it. It
+    could not answer the seasonal question either -- tenant 100's lapsed_deactivated went
+    31 -> 357 over the same two windows last year, = +1052%, arithmetically fine off a base
+    of 31 and pure noise, being a one-off tidy-up in Sept/Oct 2025. The figure is also no
+    longer an allowed number, so a sentence that quotes one is rejected outright."""
     if not MONITOR_KEY or not hmac.compare_digest(request.headers.get('X-Monitor-Key', ''), MONITOR_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
     if not INSIGHT_API_KEY:
@@ -1832,7 +1919,7 @@ def insights_narrate():
         cur.execute("""
             SELECT pk_Insight, Tenant_ID, Direction, Rank_In_Direction, Display_Name,
                    Section, Format_Type, Per_Working_Day, Value_Now, Value_Before,
-                   Relative_Change, Target_Value, Last_Year_Change
+                   Relative_Change, Target_Value
             FROM   Gold.Aggregate_Practice_Insights
             WHERE  Narrative IS NULL
             ORDER  BY Tenant_ID, Direction, Rank_In_Direction""")
@@ -1852,11 +1939,6 @@ def insights_narrate():
             if r.Target_Value is not None:
                 facts.append('Their target: %s'
                              % _fmt_metric_value(r.Target_Value, r.Format_Type, False))
-            if r.Last_Year_Change is not None:
-                facts.append('Over the SAME four weeks last year it moved %+.0f%%'
-                             % (float(r.Last_Year_Change) * 100))
-            else:
-                facts.append('There is no comparable period last year')
 
             prompt = (
                 "You are writing one sentence for a dental practice owner's weekly summary.\n\n"
@@ -1864,8 +1946,6 @@ def insights_narrate():
                 "\n\nWrite ONE sentence, at most 30 words, in British English.\n"
                 "Rules:\n"
                 "- Use ONLY the figures above. Do not calculate, estimate or invent any number.\n"
-                "- If the same move happened last year, say so plainly -- a seasonal rise is not "
-                "an achievement and a seasonal fall is not a crisis.\n"
                 "- No greeting, no preamble, no exclamation marks, no advice to 'keep it up'.\n"
                 "- Plain and specific. Say what moved and what it means, nothing more.")
 
@@ -1974,6 +2054,30 @@ def monitor_health():
             "GROUP BY Tenant_ID", since)
         bad_token_tenants = sorted(r[0] for r in cur.fetchall()
                                    if r[1] is not None and (r[2] is None or r[2] < r[1]))
+
+        # ==> A BUILD THAT DOES NOT REFRESH THE MODEL IS INVISIBLE WITHOUT THIS. <== The build
+        # writes PARENT_CLOSED SUCCEEDED BEFORE the refresh cell runs, so a refresh that
+        # refuses or throws leaves the build reporting clean. That is exactly what happened
+        # from 20/10 to 26/10: the endpoint gate threw on a bad column name, REFRESH_DONE
+        # stopped dead, and the reports served whatever the model last held -- seven nights,
+        # noticed only when a human saw yesterday's date on the Day Book.
+        #
+        # No grace window, deliberately. The monitor is poked by the build's own Summary cell
+        # immediately after the refresh, so tonight's failure is caught tonight; a grace long
+        # enough to cover someone poking the monitor mid-build would suppress exactly that.
+        cur.execute(
+            "SELECT MAX(CASE WHEN Phase = 'BUILD_DONE'   THEN Logged_At END), "
+            "       MAX(CASE WHEN Phase = 'REFRESH_DONE' THEN Logged_At END) "
+            "FROM   Audit.Ingest_Log WHERE Entity = 'Orchestrate_Build'")
+        row = cur.fetchone()
+        last_build, last_refresh = (row[0], row[1]) if row else (None, None)
+        stale_refresh = None
+        if last_build is not None and (last_refresh is None or last_refresh < last_build):
+            stale_refresh = {
+                'last_build': str(last_build),
+                'last_refresh': str(last_refresh) if last_refresh else 'never',
+                'days_behind': (last_build - last_refresh).days if last_refresh else None,
+            }
         conn.close()
         # One recipient per bad-token tenant: the practice's MAIN account (Input.Billing_Contact, AppDB).
         primary = {tid: _tenant_primary_email(tid) for tid in bad_token_tenants}
@@ -1994,7 +2098,8 @@ def monitor_health():
         suppressed = len(ing) - len(real_ing)
         # real_ing has already had the resolved 401s removed, so anything still in it is a live
         # error and worth an email -- including a 401 that carries no tenant.
-        actionable = bool(proc) or bool(bad_token_tenants) or bool(real_ing)
+        actionable = (bool(proc) or bool(bad_token_tenants) or bool(real_ing)
+                      or stale_refresh is not None)
 
         total = len(proc) + len(real_ing)
         # PROD ONLY: never email real customers (or the operator) from a non-prod app.
@@ -2003,8 +2108,11 @@ def monitor_health():
         if emails_on:
             if actionable:
                 _send_email(MONITOR_NOTIFY,
-                            f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h",
-                            _monitor_email_body(proc, real_ing, report_since))
+                            ("MODEL NOT REFRESHED since "
+                         + stale_refresh['last_refresh'] if stale_refresh else
+                         f"Warehouse health: {total} failure(s) in the last {MONITOR_WINDOW_HOURS}h"),
+                            _monitor_email_body(proc, real_ing, report_since,
+                                                stale_refresh))
             if bad_token_tenants:
                 # Per-tenant cooldown: never nudge the same practice twice inside
                 # MONITOR_NUDGE_COOLDOWN_HOURS, so overlapping triggers (manual + delayed cron, a
@@ -2042,6 +2150,7 @@ def monitor_health():
                         'ingest_failures': len(real_ing), 'failures': total,
                         'report_since': report_since, 'resolved_401_suppressed': suppressed,
                         'bad_token_tenants': bad_token_tenants,
+                        'stale_refresh': stale_refresh,
                         'principals_notified': len(notified), 'emails_enabled': emails_on})
     except Exception as e:
         return _server_error(e, 'monitor-health')

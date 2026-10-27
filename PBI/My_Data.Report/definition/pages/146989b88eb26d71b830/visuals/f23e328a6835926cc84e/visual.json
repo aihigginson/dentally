@@ -321,7 +321,7 @@
                     [
                       {
                         "Literal": {
-                          "Value": "'Credit'"
+                          "Value": "'Debit'"
                         }
                       }
                     ]
@@ -347,6 +347,5 @@
         "type": "Advanced"
       }
     ]
-  },
-  "isHidden": true
+  }
 }

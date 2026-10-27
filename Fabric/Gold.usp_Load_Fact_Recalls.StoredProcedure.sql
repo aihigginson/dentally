@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Recalls] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Recalls] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Recalls
 --  Author           :  AIH
@@ -80,6 +80,35 @@ BEGIN
         ) x
         WHERE rn = 1;
 
+        -- ── The TRUE reminder dates ──────────────────────────────────────────────
+        -- ==> THE SCALAR FIELDS ARE MISLABELLED AND CANNOT BE USED. <== Dentally sets
+        -- first_reminder_id to the NEWEST reminder's GUID -- 267 of 267 staged recalls with
+        -- any reminder -- and never populates second_reminder_* at all. Silver.Recall_Reminders
+        -- decodes the array, where Reminder_Seq 1 is genuinely the first chase.
+        -- Rows ingested before the array was landed have no entry here, so first and second
+        -- come back NULL: unknown, which is the honest answer, rather than the latest
+        -- reminder wearing the label of the first.
+        DROP TABLE IF EXISTS #rem;
+        SELECT Tenant_ID,
+               bk_Recall_ID,
+               CAST(MIN(CASE WHEN Reminder_Seq = 1 THEN Sent_At END) AS DATE) AS First_Sent,
+               CAST(MIN(CASE WHEN Reminder_Seq = 2 THEN Sent_At END) AS DATE) AS Second_Sent,
+               CAST(MAX(Sent_At) AS DATE)                                     AS Last_Sent
+        INTO   #rem
+        FROM   Silver.Recall_Reminders
+        GROUP BY Tenant_ID, bk_Recall_ID;
+
+        -- ── Attendance, so that turning up can answer a recall ───────────────────
+        -- Keyed on the patient's LAST COMPLETED appointment. Compared against the recall's
+        -- own Due_Date below, because a visit before the recall fell due answers nothing.
+        DROP TABLE IF EXISTS #att;
+        SELECT a.Tenant_ID, a.fk_Patient, MAX(d.Full_Date) AS Last_Attended
+        INTO   #att
+        FROM   Gold.Fact_Appointments a
+        JOIN   Gold.Dim_Date d ON d.pk_Date = a.fk_Date_Start
+        WHERE  a.Is_Completed = 1
+        GROUP BY a.Tenant_ID, a.fk_Patient;
+
         SELECT
             r.Tenant_ID                                                     AS Tenant_ID,
             r.Id                                                            AS bk_Recall_ID,
@@ -107,7 +136,43 @@ BEGIN
             ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) AS Times_Contacted,
             CAST(r.Due_Date AS DATE)                                        AS Due_Date,
             TRY_CAST(r.Run_Date AS DATE)                                    AS Run_Date,
-            TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE)     AS First_Reminder_Sent_Date,
+            -- ==> THE ARRAY FIRST, THEN THE SCALARS *ONLY WHERE THEY CAN BE TRUSTED*. <==
+            -- Reading the array alone was wrong in both directions. Dentally's scalars name
+            -- the LATEST reminder, so trusting them gave two identical columns; but the DEMO
+            -- SEEDER writes genuinely distinct ones (first 42 days before due, second 14),
+            -- so ignoring them turned correct demo data into 24,000 NULLs.
+            --
+            -- Second_Reminder_Sent_At is the discriminator, and it is exact: the seeder
+            -- populates it, Dentally never does on any row. So a populated second reminder
+            -- means this source fills both fields honestly and they can be read as written.
+            --
+            -- Last resort, and true by definition: a recall chased EXACTLY once has one
+            -- reminder, so the latest contact IS the first. That alone answers 1,617 of the
+            -- live practice's recalls that no array has reached.
+            COALESCE(
+                rm.First_Sent,
+                CASE WHEN NULLIF(TRIM(r.Second_Reminder_Sent_At),'') IS NOT NULL
+                     THEN TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE) END,
+                CASE WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) = 1
+                     THEN TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE) END)
+                                                                            AS First_Reminder_Sent_Date,
+            COALESCE(
+                rm.Second_Sent,
+                TRY_CAST(NULLIF(TRIM(r.Second_Reminder_Sent_At),'') AS DATE))
+                                                                            AS Second_Reminder_Sent_Date,
+            -- The latest chase. Falls back to last_reminded_at, which IS reliable and is
+            -- present on every row -- so this one column is always answerable even for
+            -- recalls ingested before the array was landed.
+            COALESCE(rm.Last_Sent,
+                     TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE))
+                                                                            AS Last_Reminder_Sent_Date,
+            -- ==> ATTENDING IS RESPONDING. <== The same rule V245 applied to the At Risk
+            -- ladder, finally carried across to the recall worklist it was always missing
+            -- from. A patient seen on or after the due date has answered the recall, whether
+            -- or not Dentally closed the record and whether or not they rebooked.
+            CAST(CASE WHEN att.Last_Attended IS NOT NULL AND r.Due_Date IS NOT NULL
+                       AND att.Last_Attended >= CAST(r.Due_Date AS DATE) THEN 1
+                      ELSE 0 END AS BIT)                                    AS Has_Attended_Since_Due,
             CASE WHEN r.Due_Date IS NOT NULL
                       AND NULLIF(TRIM(r.Status),'') NOT IN ('booked','completed')
                  THEN DATEDIFF(DAY, r.Due_Date, @Today)
@@ -157,9 +222,17 @@ BEGIN
             END                                                             AS Overdue_Band,
             -- Recall_Status: single actionable label in precedence order
             CASE
+                -- ==> COUNT THE CONTACTS; DO NOT TEST THE DATE KEYS. <== These branches
+                -- read dd_sr/dd_fr, which now resolve from the array -- absent on every
+                -- recall ingested before it was landed. Keying the label on those would
+                -- strip '1st/2nd Reminder' off most of the history the Retention tab shows.
+                -- Times_Contacted is present on every row and equals the array length
+                -- EXACTLY on all 292 staged recalls, every value 0 to 6.
                 WHEN na.Patient_ID IS NOT NULL  THEN 'Booked'
-                WHEN dd_sr.pk_Date > 0          THEN '2nd Reminder'
-                WHEN dd_fr.pk_Date > 0          THEN '1st Reminder'
+                WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) >= 2
+                                                THEN '2nd Reminder'
+                WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) = 1
+                                                THEN '1st Reminder'
                 WHEN r.Due_Date < @Today        THEN 'Overdue'
                 ELSE                                 'Not Yet Due'
             END                                                             AS Recall_Status,
@@ -188,10 +261,23 @@ BEGIN
         LEFT JOIN Gold.Dim_Date dd_ab     ON dd_ab.Full_Date  = TRY_CAST(NULLIF(TRIM(na.Pending_At),'') AS DATE)
         LEFT JOIN Gold.Dim_Date dd_due    ON dd_due.Full_Date = CAST(r.Due_Date AS DATE)
         LEFT JOIN Gold.Dim_Date dd_run    ON dd_run.Full_Date = TRY_CAST(r.Run_Date AS DATE)
-        LEFT JOIN Gold.Dim_Date dd_fr     ON dd_fr.Full_Date  = TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE)
-        LEFT JOIN Gold.Dim_Date dd_sr     ON dd_sr.Full_Date  = TRY_CAST(NULLIF(TRIM(r.Second_Reminder_Sent_At),'') AS DATE)
-        LEFT JOIN Gold.Dim_Date dd_lr     ON dd_lr.Full_Date  = TRY_CAST(NULLIF(TRIM(r.Last_Reminded_At),'') AS DATE)
+        LEFT JOIN #rem rm                 ON rm.Tenant_ID     = r.Tenant_ID
+                                      AND rm.bk_Recall_ID = CAST(r.Id AS VARCHAR(255))
+        LEFT JOIN #att att                ON att.Tenant_ID    = r.Tenant_ID
+                                      AND att.fk_Patient  = dpat.pk_Patient
+        LEFT JOIN Gold.Dim_Date dd_fr     ON dd_fr.Full_Date  = COALESCE(rm.First_Sent,
+                                                 CASE WHEN NULLIF(TRIM(r.Second_Reminder_Sent_At),'') IS NOT NULL
+                                                      THEN TRY_CAST(NULLIF(TRIM(r.First_Reminder_Sent_At),'') AS DATE) END,
+                                                 CASE WHEN ISNULL(CAST(ROUND(TRY_CAST(r.Times_Contacted AS FLOAT), 0) AS INT), 0) = 1
+                                                      THEN TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE) END)
+        LEFT JOIN Gold.Dim_Date dd_sr     ON dd_sr.Full_Date  = COALESCE(rm.Second_Sent,
+                                                 TRY_CAST(NULLIF(TRIM(r.Second_Reminder_Sent_At),'') AS DATE))
+        LEFT JOIN Gold.Dim_Date dd_lr     ON dd_lr.Full_Date  = COALESCE(rm.Last_Sent,
+                                                 TRY_CAST(LEFT(NULLIF(TRIM(r.Last_Reminded_At),''), 10) AS DATE))
         WHERE r.Id IS NOT NULL;
+
+        DROP TABLE #rem;
+        DROP TABLE #att;
 
         -- Remove rows no longer in source
         DELETE tgt
@@ -222,6 +308,9 @@ BEGIN
             Due_Date                 = src.Due_Date,
             Run_Date                 = src.Run_Date,
             First_Reminder_Sent_Date = src.First_Reminder_Sent_Date,
+            Second_Reminder_Sent_Date = src.Second_Reminder_Sent_Date,
+            Last_Reminder_Sent_Date  = src.Last_Reminder_Sent_Date,
+            Has_Attended_Since_Due   = src.Has_Attended_Since_Due,
             Days_Overdue             = src.Days_Overdue,
             Is_In_Scope              = src.Is_In_Scope,
             Is_Reminder_Sent         = src.Is_Reminder_Sent,
@@ -261,6 +350,9 @@ BEGIN
            ISNULL(CAST(tgt.[Due_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Run_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[First_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Second_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Last_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[Has_Attended_Since_Due] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Days_Overdue]           AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
@@ -298,6 +390,9 @@ BEGIN
            ISNULL(CAST(src.[Due_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Run_Date]               AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[First_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Second_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Last_Reminder_Sent_Date] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[Has_Attended_Since_Due] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Days_Overdue]           AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_In_Scope]              AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[Is_Reminder_Sent]         AS VARCHAR(500)), ''),
@@ -323,7 +418,9 @@ BEGIN
             fk_Date_First_Reminder, fk_Date_Second_Reminder, fk_Date_Last_Reminded,
             Appointment_ID, Recall_Type, Recall_Method, Status, Workflow_Status, Workflow_Stage_ID,
             First_Reminder_Type, Second_Reminder_Type, Latest_Reminder_Type,
-            Times_Contacted, Due_Date, Run_Date, First_Reminder_Sent_Date, Days_Overdue,
+            Times_Contacted, Due_Date, Run_Date, First_Reminder_Sent_Date,
+            Second_Reminder_Sent_Date, Last_Reminder_Sent_Date,
+            Has_Attended_Since_Due, Days_Overdue,
             Is_In_Scope, Is_Reminder_Sent, Is_Booked_Via_Recall, Is_Booked,
             Retention_Outlook_In_Scope, Retention_Outlook_Booked,
             Overdue_Band, Recall_Status,
@@ -337,7 +434,9 @@ BEGIN
             src.fk_Date_First_Reminder, src.fk_Date_Second_Reminder, src.fk_Date_Last_Reminded,
             src.Appointment_ID, src.Recall_Type, src.Recall_Method, src.Status, src.Workflow_Status, src.Workflow_Stage_ID,
             src.First_Reminder_Type, src.Second_Reminder_Type, src.Latest_Reminder_Type,
-            src.Times_Contacted, src.Due_Date, src.Run_Date, src.First_Reminder_Sent_Date, src.Days_Overdue,
+            src.Times_Contacted, src.Due_Date, src.Run_Date, src.First_Reminder_Sent_Date,
+            src.Second_Reminder_Sent_Date, src.Last_Reminder_Sent_Date,
+            src.Has_Attended_Since_Due, src.Days_Overdue,
             src.Is_In_Scope, src.Is_Reminder_Sent, src.Is_Booked_Via_Recall, src.Is_Booked,
             src.Retention_Outlook_In_Scope, src.Retention_Outlook_Booked,
             src.Overdue_Band, src.Recall_Status,

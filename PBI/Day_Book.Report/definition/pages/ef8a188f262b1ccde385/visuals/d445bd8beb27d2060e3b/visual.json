@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.10.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "d445bd8beb27d2060e3b",
   "position": {
     "x": 0,
     "y": 0,
     "z": 0,
-    "height": 491,
-    "width": 991.53583617747438,
+    "height": 490.95563139931738,
+    "width": 1089.9317406143346,
     "tabOrder": 0
   },
   "visual": {
@@ -92,6 +92,36 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Second Reminder Sent Date"
+                }
+              },
+              "queryRef": "_Recalls.Second Reminder Sent Date",
+              "nativeQueryRef": "Second Reminder Sent Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Recalls"
+                    }
+                  },
+                  "Property": "Last Reminder Sent Date"
+                }
+              },
+              "queryRef": "_Recalls.Last Reminder Sent Date",
+              "nativeQueryRef": "Last Reminder Sent Date",
+              "format": "dd/MM/yyyy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
                       "Entity": "List Patients"
                     }
                   },
@@ -154,6 +184,62 @@
           "selector": {
             "metadata": "_Recalls.First Reminder Sent Date"
           }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "87.8219209821754D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Recalls.Second Reminder Sent Date"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "89.35543088963149D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Recalls.Last Reminder Sent Date"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "87.96245811609629D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "_Recalls.Recall Type"
+          }
+        },
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "72.30716578011904D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "List Patients.Patient Value 3yr"
+          }
         }
       ]
     },
@@ -179,6 +265,26 @@
               "expr": {
                 "Literal": {
                   "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "6D"
                 }
               }
             }
@@ -281,6 +387,61 @@
                           }
                         },
                         "Property": "Is Booked"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "false"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      },
+      {
+        "name": "c58e2fb17a04496d8e23",
+        "ordinal": 3,
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Has Attended Since Due"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "r",
+              "Entity": "_Recalls",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "r"
+                          }
+                        },
+                        "Property": "Has Attended Since Due"
                       }
                     }
                   ],
@@ -532,6 +693,34 @@
           ]
         },
         "howCreated": "User"
+      },
+      {
+        "name": "2572db19e16e4a5cb440",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Second Reminder Sent Date"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "05b071841d1f0ebd86af",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "_Recalls"
+              }
+            },
+            "Property": "Last Reminder Sent Date"
+          }
+        },
+        "type": "Categorical"
       }
     ],
     "filterSortOrder": "Custom"

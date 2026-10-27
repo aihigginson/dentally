@@ -30,6 +30,8 @@
 - [Get Data bakes a literal endpoint into the model](get-data-bakes-a-literal-endpoint-into-the-model.md) — a table added that way ignores pServer and does not repoint on promotion.
 - [A detail table needs a column, not a measure](a-detail-table-needs-a-column-not-a-measure.md) — a measure kills auto-exist and multiplies the rows out.
 - [Never deploy an Input.* table in a release](never-deploy-an-input-table-in-a-release.md) — those files start with DROP TABLE and Input.* is owner-curated data.
+- [Bronze.Recalls cannot be dropped](bronze-recalls-cannot-be-dropped.md) — its DDL starts with DROP TABLE and Stage holds only the latest batch; 45,241 rows gone on DEV.
+- [Dentally's "first reminder" is really the latest](dentally-first-reminder-is-really-the-latest.md) — proven by GUID; only the reminders array is honest, and it is newest-first.
 - [Input.* rows live in the AppDB, now Azure SQL](input-rows-live-in-the-appdb-now-azure-sql.md) — the sync full-refreshes the warehouse copy; .env.example points at a dead host.
 - [Capitation is an estimate, not observed income](capitation-is-an-estimate-not-observed-income.md) — reconstructed from free exams; the real figures are the plan provider's spreadsheets.
 - [Fabric collation is case-sensitive](fabric-collation-is-case-sensitive.md) — Latin1_General_100_BIN2_UTF8; LIKE and = do not ignore case.
@@ -55,6 +57,7 @@
 - [Maple's targets are hand-set — never seed over them](maple-targets-are-hand-set-never-seed-over-them.md) — all 334 rows are the owner's; the seeder has never run. A dry run is not state.
 - [My Data is unfiltered for vendor accounts by design](my-data-is-unfiltered-for-vendor-accounts-by-design.md) — no practitioner linked = aggregate + free slicer, so support can reproduce bugs. Not a defect.
 - [Sales monitor shape, and the deferred card stages](sales-monitor-shape-and-deferred-card-stages.md) — Sales.* → Gold → PBI Affiliates; card stages wait for a real card. Do not build them blind.
+- [Container job failures are unmonitored](container-job-failures-are-unmonitored.md) — nothing alerts on them; sales-monitor-dev ran red 8 days unseen, and appdb_sync reports Succeeded while failing.
 - [A table projection takes no displayName](a-table-projection-takes-no-displayname.md) — renaming a measure in a tableEx drops the column silently; cards are fine.
 - [Pipeline deploy clears the model's connection](pipeline-deploy-clears-the-models-connection.md) — and ships dev's parameters; deployment rules are the fix, PBI Dentally is the reference.
 - [Sunday is dev's weekly build day](sunday-is-devs-weekly-build-day.md) — two builds in one 24h window; the capacity figure is a trailing total, not a live reading.
@@ -72,6 +75,7 @@
 - [A vw_ override silently drops new columns](a-vw-override-silently-drops-new-columns.md) — vw_Dim_Patients lists columns by hand; a new one reaches Gold and never PBI.
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
+- [Three things are called open plans or courses](three-things-are-called-open-plans-or-courses.md) — a worklist column and two KPIs, three definitions in three places; check which before editing.
 - [Home tile target precision pattern](home-tile-target-precision-pattern.md) — referenceLabelValue + valuePrecision; copy the field id from referenceLabel, never invent it.
 - [The demo's bad numbers are the pitch](the-demos-bad-numbers-are-the-pitch.md) — unflattering metrics are deliberate sales material; ask if a figure is implausible or merely unflattering.
 - [Site keys are fine; Fact_Metric_Actuals is not](site-keys-are-fine-metric-actuals-is-not.md) — transactional facts all resolve a site; the scorecard metrics write -1 and cannot follow a site selection.
@@ -81,11 +85,15 @@
 - [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
 - [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
 - [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.
+- [Recalls To Action lives in three places](recalls-to-action-lives-in-three-places.md) — aggregate column, DAX measure AND the detail page's own filters; miss one and summary disagrees with detail.
+- [Fabric REST cannot pass an array notebook parameter](fabric-rest-cannot-pass-an-array-notebook-parameter.md) — only_entities fails via jobs/instances; use the UI. Includes the recalls backfill recipe.
 - [sys.* cannot join a user table in Fabric](sys-views-cannot-join-user-tables-in-fabric.md) — and SELECT INTO #temp FROM sys.* fails too; the RI check is the control, do not duplicate it.
 - [Payment_Allocations has never ingested](payment-allocations-has-never-ingested.md) — empty for every tenant; the loaders log SUCCEEDED with 0 rows, so cash cannot be line-attributed.
 - [Maple prices a course on one line](maple-prices-a-course-on-one-line.md) — component steps invoice at 0.00; why the invoice-date basis moves no money here, and why that does not generalise.
 - [Patient-dentist assignment is back-dated](patient-dentist-assignment-is-back-dated.md) — capitation credits every month of a spell to today's dentist; historical per-practitioner plan revenue is wrong when a list changes hands.
-- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — 4-week movement x Area_Weight; distance-from-target and week-on-week were both tried and rejected on evidence.
+- [Rank insights on weighted movement](rank-insights-on-weighted-movement.md) — SUPERSEDED: the ranking was rejected outright; kept for the alternatives already ruled out.
+- [Insight panel parked for ML](insight-panel-parked-for-ml.md) — the DISPLAY was approved, the movement ranking rejected; restore the strip from dac6dab.
+- [Revenue metrics move with clinician mix](revenue-metrics-move-with-clinician-mix.md) — the implantologist spikes them; decompose by practitioner before calling it performance.
 - [Treatment plan acceptance is unknowable](treatment-plan-acceptance-is-unknowable.md) — Accepted_At is hardcoded NULL; plans are not deleted, but no plan can be shown as accepted or declined.
 - [Overnight pause kept despite flaky cron](overnight-pause-kept-despite-flaky-cron.md) — SETTLED: the saving wins; owner checks the site each morning, `gh workflow run capacity-schedule.yml` fixes it.
 - [An unmapped reason reads as itself](an-unmapped-reason-reads-as-itself.md) — Appointment_Reason falls back to raw text, so the map was recognising 29.5% and looked fine; join the map to judge coverage.

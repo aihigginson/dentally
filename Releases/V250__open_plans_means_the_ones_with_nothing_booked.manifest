@@ -1,0 +1,79 @@
+# =====================================================================
+# Release V250 -- Open Plans means the ones with nothing booked
+# =====================================================================
+# The Day Book's Open Plans column counted Course_Status IN ('In Progress',
+# 'Open - No Appointment'). 'In Progress' is a course already underway with an appointment in
+# the diary -- it is work in hand, not work to chase. The Day Book list is a worklist, so it
+# now carries only the courses nobody has booked anything for.
+#
+# Owner's call. Measured on the live tenant: 402 plans are 'Open - No Appointment' against
+# 152 'In Progress', so the column falls by roughly a quarter once the Day Book's
+# effectively-active filter is also applied -- e.g. Maxine Adie 11 -> 8, Katie Roddy 11 -> 8,
+# Ian Hunt 6 -> 5.
+#
+# ---------------------------------------------------------------------
+# THE RULE LIVES IN THREE PLACES AND ALL THREE MOVE TOGETHER.
+# ---------------------------------------------------------------------
+# ==> THIS IS THE SHAPE THAT SPLIT Recalls To Action 155 AGAINST 182. <== The grid binds the
+# aggregate COLUMN; the detail page the drillthrough lands on carries its OWN filters, on BOTH
+# its visuals. Changing the aggregate alone leaves the detail reporting the old number.
+#
+#   1. Gold.usp_Load_Aggregate_Site_Practitioner_Current, the #op block   <- in this manifest
+#   2. Day Book "Open Plan Details" table 2791ed9d2e0e2c076750            <- REPORT, see below
+#   3. Day Book "Open Plan Details" card  adec1a94696b5e70a2b5            <- REPORT, see below
+#
+# There is no DAX measure in this one: Open Plans is a column on PBI.List Practitioners fed
+# from the aggregate, the same as Recalls To Action.
+#
+# ==> THE REPORT MUST BE REPUBLISHED. <== Items 2 and 3 are report filters, not model or
+# warehouse. A model refresh will NOT move them, and until the Day Book is republished the
+# detail page will keep showing the old, larger figure against a corrected summary.
+#
+# Verified on DEV that the two agree once both are applied -- the detail page's filter set
+# replicated in SQL against Fact_Treatment_Plans joined to vw_Effectively_Active_Patients
+# gives 73 / 62 / 55 / 52 / 47 for the top five, matching the aggregate column exactly.
+#
+# ---------------------------------------------------------------------
+# SCHEDULE > UTILISATION MOVES WITH IT, DELIBERATELY.
+# ---------------------------------------------------------------------
+# The same column appears in that page's pivot beside Cancellations To Rebook, DNAs To
+# Rebook, Recalls To Action and Days Until Next 30 Free -- the same worklist set. Both screens
+# bind the ONE column, so they cannot diverge without splitting it in two. Owner's call: it
+# follows the Day Book.
+#
+# ---------------------------------------------------------------------
+# THE TWO KPIs ARE A DIFFERENT THING ENTIRELY AND ARE NOT TOUCHED.
+# ---------------------------------------------------------------------
+# ==> THREE SIMILAR NAMES, THREE DEFINITIONS, ONE OF THEM CHANGING HERE. <==
+#   Open Plans (this)                   Aggregate_Site_Practitioner_Current -> List Practitioners
+#   open_courses (KPI)                  Fact_KPI_Snapshot -- DATE-based: started <= D, not
+#                                       ended, not completed. Never reads Course_Status at all.
+#   Open Courses Without Appointment    DAX on _Treatment Plans, Course Status = the one value.
+# Only the first moves. The KPI pair keeps meaning exactly what it meant.
+#
+# ---------------------------------------------------------------------
+# A KNOWN, SEPARATE DISAGREEMENT IS NOT ADDRESSED HERE.
+# ---------------------------------------------------------------------
+# The Day Book tile counts COURSES; the open_courses_without_appt metric counts PATIENTS, so
+# the two will still differ. That is the pre-existing split, deliberately left alone.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Site_Practitioner_Current.StoredProcedure.sql
+
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Site_Practitioner_Current @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+EXEC     EXEC Meta.usp_Create_Gold_Views;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE WHOLE POINT: 'In Progress' MUST BE OUT. <== The column is a plain count, so the only
+# way to prove the rule changed is to re-derive it and compare. If any practitioner's stored
+# figure still matches the OLD definition where the two differ, the loader did not take.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Site_Practitioner_Current a JOIN (SELECT tp.fk_Practitioner, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, tp.Tenant_ID, COUNT(*) AS c FROM Gold.Fact_Treatment_Plans tp JOIN Gold.vw_Effectively_Active_Patients ap ON ap.pk_Patient = tp.fk_Patient WHERE tp.Course_Status IN ('In Progress','Open - No Appointment') GROUP BY tp.fk_Practitioner, ISNULL(tp.fk_Practice_Site,-1), tp.Tenant_ID) old ON old.Tenant_ID = a.Tenant_ID AND old.fk_Practitioner = a.fk_Practitioner AND old.fk_Site = a.fk_Site WHERE TRY_CAST(a.Open_Plans AS INT) = old.c AND old.c <> (SELECT COUNT(*) FROM Gold.Fact_Treatment_Plans t2 JOIN Gold.vw_Effectively_Active_Patients a2 ON a2.pk_Patient = t2.fk_Patient WHERE t2.Tenant_ID = a.Tenant_ID AND t2.fk_Practitioner = a.fk_Practitioner AND ISNULL(t2.fk_Practice_Site,-1) = a.fk_Site AND t2.Course_Status = 'Open - No Appointment'); IF @n <> 0 BEGIN SET @e = 'V250 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) still match the OLD Open Plans definition -- In Progress is still being counted.'; THROW 50820, @e, 1; END;
+# And the stored figure must equal the NEW definition everywhere, which is the positive test.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Site_Practitioner_Current a JOIN (SELECT tp.Tenant_ID, tp.fk_Practitioner, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, COUNT(*) AS c FROM Gold.Fact_Treatment_Plans tp JOIN Gold.vw_Effectively_Active_Patients ap ON ap.pk_Patient = tp.fk_Patient WHERE tp.Course_Status = 'Open - No Appointment' GROUP BY tp.Tenant_ID, tp.fk_Practitioner, ISNULL(tp.fk_Practice_Site,-1)) nw ON nw.Tenant_ID = a.Tenant_ID AND nw.fk_Practitioner = a.fk_Practitioner AND nw.fk_Site = a.fk_Site WHERE ISNULL(TRY_CAST(a.Open_Plans AS INT),0) <> nw.c; IF @n <> 0 BEGIN SET @e = 'V250 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) disagree with the Open - No Appointment count.'; THROW 50821, @e, 1; END;
+# The other Day Book counts must not have moved -- this release touches one block of one loader.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Site_Practitioner_Current WHERE Tenant_ID = 100 AND TRY_CAST(Recalls_To_Action AS INT) IS NULL; IF @n <> 0 BEGIN SET @e = 'V250 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) lost their Recalls To Action figure.'; THROW 50822, @e, 1; END;
+# The view the grid binds must still expose the column.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'PBI' AND TABLE_NAME = 'List Practitioners' AND COLUMN_NAME = 'Open Plans'; IF @n <> 1 BEGIN SET @e = 'V250 FAILED: PBI.List Practitioners no longer exposes Open Plans.'; THROW 50823, @e, 1; END;
+
+TEST

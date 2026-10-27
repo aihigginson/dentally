@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Gold].[Fact_Recalls]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -29,7 +29,19 @@ CREATE TABLE [Gold].[Fact_Recalls](
 	[Times_Contacted]        [int]           NULL,
 	[Due_Date]               [date]          NULL,
 	[Run_Date]               [date]          NULL,
-	[First_Reminder_Sent_Date] [date]        NULL,  -- date the first recall reminder was sent
+	-- ==> ALL THREE COME FROM Silver.Recall_Reminders, NOT THE DENTALLY SCALARS. <==
+	-- first_reminder_sent_at carries the LATEST reminder, not the first, and
+	-- second_reminder_sent_at is never populated -- so these two read identically until
+	-- the array was decoded. NULL where the recall predates the array landing: unknown,
+	-- which beats the latest reminder wearing the label of the first.
+	[First_Reminder_Sent_Date] [date]        NULL,  -- the FIRST chase (Reminder_Seq = 1)
+	[Second_Reminder_Sent_Date][date]        NULL,  -- the SECOND chase (Reminder_Seq = 2)
+	-- The latest chase. Falls back to Last_Reminded_At, so this one is always answerable.
+	[Last_Reminder_Sent_Date]  [date]        NULL,
+	-- ==> ATTENDING IS RESPONDING. <== Patient was seen on or after Due_Date, so the recall
+	-- is answered whether or not Dentally closed it and whether or not they rebooked. Both
+	-- Day Book consumers exclude it; see V245, which applied the same rule to At Risk.
+	[Has_Attended_Since_Due]   [bit]         NULL,
 	[Days_Overdue]           [int]           NULL,
 	-- Pre-computed flags: replace heavy DAX set operations in Retention Outlook
 	[Is_In_Scope]            [bit]           NULL,  -- first reminder sent OR due within [-24m, +1m] of ETL run

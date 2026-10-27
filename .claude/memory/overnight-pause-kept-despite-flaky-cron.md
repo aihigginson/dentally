@@ -8,16 +8,25 @@ metadata:
   modified: 2026-10-22T08:19:03.738Z
 ---
 
-The capacity schedule pauses overnight and resumes at 06:00 UK via a GitHub Actions
-`schedule` cron. GitHub cron is best-effort: on the first night live it fired 3 of 8
-expected runs and **neither** resume cron ran, so PROD showed the maintenance page from
-midnight until it was resumed by hand at 09:20.
+The capacity schedule pauses overnight and resumes at 06:00 UK. GitHub cron is best-effort:
+on the first night live it fired 3 of 8 expected runs and **neither** resume cron ran, so
+PROD showed the maintenance page from midnight until it was resumed by hand at 09:20.
+
+**UPDATE 2026-10-23: the GitHub `schedule` trigger is gone and is not coming back.** Measured
+over 09–23/10, not one of fourteen scheduled firings ran on time. The schedule now runs as the
+Container Apps Job **`caj-capacity-schedule-prod`**, hourly at :45, from `Web/capacity_schedule.py`
+— and it fires to the minute. Verified 26/10 in the activity log: suspend 23:46, resume 05:45,
+F2 at 17:45, F4 at 21:45, every day without a miss. So a missing morning is now unlikely, and
+"the site is down" is much more likely to be something else — check `az fabric capacity show`
+before assuming the schedule failed, because the Metrics app lies about state
+([[metrics-app-health-is-live-compute-is-a-nightly-import]]).
 
 The owner's decision: **keep the pause.** The saving matters more than the risk while there
 is one customer, and they will check the site in a morning now they know it is temperamental.
 
-Recovery is one command from the repo folder -- no arguments, it derives the target SKU from
-the current UK time itself:
+The workflow survives as the MANUAL lever for when the capacity is in the wrong state and you
+want it fixed now. One command from the repo folder -- no arguments, it derives the target SKU
+from the current UK time itself:
 
     gh workflow run capacity-schedule.yml
 

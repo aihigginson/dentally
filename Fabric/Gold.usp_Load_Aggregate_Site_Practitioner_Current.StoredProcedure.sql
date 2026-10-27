@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Practitioner_Current] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Site_Practitioner_Current] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Site_Practitioner_Current
 --  Author           :  AIH
@@ -176,7 +176,15 @@ BEGIN
         INTO #op
         FROM Gold.Fact_Treatment_Plans tp
         JOIN #act ap ON ap.pk_Patient = tp.fk_Patient
-        WHERE tp.Course_Status IN ('In Progress', 'Open - No Appointment')
+        -- ==> OPEN PLANS MEANS THE ONES WITH NOTHING BOOKED. <== This counted
+        -- 'In Progress' too, which is a course already underway with an appointment in
+        -- the diary -- not work to chase. The Day Book list is a worklist, so it carries
+        -- only the courses nobody has booked anything for.
+        --
+        -- The detail page's own filters say the same thing, on BOTH its visuals, and must
+        -- move with this or the summary and the detail disagree -- which is precisely how
+        -- Recalls To Action came to read 155 against 182.
+        WHERE tp.Course_Status = 'Open - No Appointment'
         GROUP BY tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1), tp.fk_Practitioner;
 
         SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
@@ -206,7 +214,14 @@ BEGIN
         --
         -- Excludes the TERMINAL statuses rather than listing the actionable ones, so a
         -- status Dentally adds later appears on the worklist instead of vanishing from it.
+        -- ==> AND ATTENDING CLEARS IT TOO. <== The paragraph above described this hole and
+        -- stopped short of closing it: Is_Booked means "has a FUTURE appointment", so a
+        -- patient who simply turned up stayed on the worklist for ever. Measured on the live
+        -- tenant: 350 of 1,594 (22%) had attended on or after the due date -- David Mason's
+        -- 182 was really 155. V245 already settled the principle for the At Risk ladder in
+        -- Dim_Patients; this is the same rule, finally applied to the same question here.
         WHERE r.Retention_Outlook_In_Scope = 1 AND r.Is_Booked = 0
+          AND ISNULL(r.Has_Attended_Since_Due, 0) = 0
           AND LOWER(LTRIM(RTRIM(ISNULL(r.Status,'')))) NOT IN ('completed','booked')
         GROUP BY r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1), r.fk_Practitioner;
 

@@ -29,6 +29,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_PRACTITIONERS', 'SILVER_PRACTITIONER_CONTRACT_TARGETS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_PRACTITIONERS', 'SILVER_PRACTITIONERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_RECALLS', 'SILVER_RECALLS', 'DATA', 1, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_RECALLS', 'SILVER_RECALL_REMINDERS', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_SITES', 'SILVER_SITES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_SUNDRIES', 'SILVER_SUNDRIES', 'DATA', 1, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('BRONZE_TREATMENT_APPOINTMENTS', 'SILVER_TREATMENT_APPOINTMENTS', 'DATA', 1, 1);
@@ -93,6 +94,7 @@ INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Depe
 -- loaded after the patients would leave the fk NULL for a whole day.
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('GOLD_DIM_PRACTITIONERS', 'GOLD_DIM_PATIENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_RECALLS', 'GOLD_FACT_RECALLS', 'DATA', 3, 1);
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_RECALL_REMINDERS', 'GOLD_FACT_RECALLS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_SITES', 'GOLD_DIM_PRACTICE_SITES', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_APPOINTMENTS', 'GOLD_FACT_TREATMENT_APPOINTMENTS', 'DATA', 3, 1);
 INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active) VALUES ('SILVER_TREATMENT_APPOINTMENTS', 'GOLD_FACT_TREATMENT_PLANS', 'DATA', 3, 1);

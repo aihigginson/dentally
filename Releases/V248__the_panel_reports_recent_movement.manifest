@@ -1,0 +1,61 @@
+# =====================================================================
+# Release V248 -- the panel reports recent movement, so year-on-year comes out
+# =====================================================================
+# Gold.Aggregate_Practice_Insights carried Last_Year_Change: the same two 28-day windows a
+# year earlier, so a sentence could separate "this is new" from "this happens every autumn".
+#
+# ==> A WINDOW FROM A YEAR AGO IS NOT RECENT MOVEMENT. <== The panel's question is four weeks
+# against the four before. Year-on-year answers a different question, and it was never the
+# one being asked -- the owner's call, and it is a conceptual point, not a tuning problem.
+#
+# ---------------------------------------------------------------------
+# IT COULD NOT ANSWER THE SEASONAL QUESTION EITHER, AND THE BASE WAS FINE.
+# ---------------------------------------------------------------------
+# Measured on tenant 100, lapsed_deactivated summed per 28-day window at practice grain:
+#
+#   this year   prior  12  ->  now  31     = +158%
+#   last year   prior  31  ->  now 357     = +1052%
+#
+# So the +1052% was arithmetically correct off a base of 31 -- NOT a small-base artefact,
+# which is what a materiality floor would have been built to catch, and the reason no floor
+# was added here. 357 deactivations in four weeks was a one-off tidy-up in Sept/Oct 2025.
+#
+# A year-on-year figure assumes last year's window was NORMAL and has no way to test that
+# assumption. One piece of housekeeping poisons the comparator permanently while still
+# reading as a finding. Seasonality needs several prior years; a single one cannot stand in.
+#
+# ---------------------------------------------------------------------
+# WINDOWS 3 AND 4 GO WITH IT.
+# ---------------------------------------------------------------------
+# They existed only to feed this column, so #daily no longer scans a year of history and
+# #wd no longer counts working days it will never divide by. The RANKING is untouched:
+# Score is 4-week movement x Area_Weight and never read the year-ago windows. Verified on
+# DEV -- the same six metrics in the same order before and after, 17 rows across 3 tenants.
+#
+# The narrative prompt in the web app drops it in the same change, and because the figure is
+# no longer in the facts it is no longer an allowed number: a sentence quoting one is now
+# rejected outright by the existing invented-number guard.
+# ---------------------------------------------------------------------
+
+DEPLOY   Fabric\Gold.Aggregate_Practice_Insights.Table.sql
+DEPLOY   Fabric\Gold.usp_Load_Aggregate_Practice_Insights.StoredProcedure.sql
+
+# Nothing schedules this aggregate yet, so the release runs its own consumer.
+EXEC     DECLARE @i BIGINT,@u BIGINT,@d BIGINT; EXEC Gold.usp_Load_Aggregate_Practice_Insights @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+
+# --- guards -------------------------------------------------------------------------------
+# ==> THE COLUMN MUST BE GONE, NOT MERELY UNUSED. <== Leaving it in place as a NULL column is
+# how it gets wired back in; the whole point is that the instrument is wrong.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'Gold' AND TABLE_NAME = 'Aggregate_Practice_Insights' AND COLUMN_NAME = 'Last_Year_Change'; IF @n <> 0 BEGIN SET @e = 'V248 FAILED: Last_Year_Change is still on the table.'; THROW 50790, @e, 1; END;
+# ==> AND THE PANEL MUST STILL BE A PANEL. <== Removing the join could have cost rows just as
+# easily as a column, and an empty Home strip is the failure mode nobody sees (it hides
+# itself). Three Good and three Watch for the live tenant, or this release did harm.
+EXEC     DECLARE @g INT, @w INT, @e VARCHAR(4000); SELECT @g = SUM(CASE WHEN Direction = 'Good' THEN 1 ELSE 0 END), @w = SUM(CASE WHEN Direction = 'Watch' THEN 1 ELSE 0 END) FROM Gold.Aggregate_Practice_Insights WHERE Tenant_ID = 100; IF ISNULL(@g,0) <> 3 OR ISNULL(@w,0) <> 3 BEGIN SET @e = 'V248 FAILED: tenant 100 has ' + CAST(ISNULL(@g,0) AS VARCHAR(10)) + ' Good and ' + CAST(ISNULL(@w,0) AS VARCHAR(10)) + ' Watch, expected 3 and 3.'; THROW 50791, @e, 1; END;
+# Ranks must be 1,2,3 in each direction -- a broken ROW_NUMBER would still give six rows.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights WHERE Rank_In_Direction NOT BETWEEN 1 AND 3; IF @n <> 0 BEGIN SET @e = 'V248 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) carry a rank outside 1-3.'; THROW 50792, @e, 1; END;
+# Every row must still carry the movement the panel is actually about.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM Gold.Aggregate_Practice_Insights WHERE Value_Now IS NULL OR Value_Before IS NULL OR Relative_Change IS NULL; IF @n <> 0 BEGIN SET @e = 'V248 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' row(s) have no recent movement to report.'; THROW 50793, @e, 1; END;
+# One week, one tenant, one direction, one rank -- the grain the app relies on.
+EXEC     DECLARE @n INT, @e VARCHAR(4000); SELECT @n = COUNT(*) FROM (SELECT Tenant_ID, Week_Commencing_Date, Direction, Rank_In_Direction FROM Gold.Aggregate_Practice_Insights GROUP BY Tenant_ID, Week_Commencing_Date, Direction, Rank_In_Direction HAVING COUNT(*) > 1) x; IF @n <> 0 BEGIN SET @e = 'V248 FAILED: ' + CAST(@n AS VARCHAR(10)) + ' duplicate rank(s).'; THROW 50794, @e, 1; END;
+
+TEST
