@@ -111,7 +111,10 @@ BEGIN
         -- when the last one does. Keep it in step with the revenue block in
         -- Gold.usp_Load_Fact_Metric_Actuals -- a metric collapsed there and not added here
         -- loses its insight silently, which is exactly the failure this comment exists to stop.
-        WHERE  ( a.Metric IN ('total_revenue', 'nhs_revenue', 'private_revenue')      -- collapsed
+        WHERE  ( a.Metric IN ('total_revenue', 'nhs_revenue', 'private_revenue',
+                             'dna_rate', 'book_before_you_leave', 'cancellation_frequency',
+                             'short_notice_cancellation_rate', 'patient_tracked_in_surgery',
+                             'exam_ratio', 'diary_fill', 'chair_utilisation')             -- collapsed
                  OR (a.fk_Practitioner = -1 AND a.fk_Practice_Site = -1) )            -- still sliced
           AND  d.Full_Date BETWEEN @Pre_From AND @Now_To
         -- ==> ONE ROW PER DATE, GUARANTEED. <== #snap picks the row matching the window's
