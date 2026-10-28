@@ -17,6 +17,20 @@ snapshot. No full-vs-delta branching; the clean slate comes from the pre-clear.
                      a fixed 30s wait was too short and the whole build loaded 0 rows. This is
                      deterministic: it waits exactly until the data is visible, then no longer.
   STEP 5  build      Orchestrate_Build build-only (run_stage_ingest=False) -> Bronze..Gold + refresh.
+  STEP 6  cutover    Set Audit.Tenants.Cutover_Date + re-run the Gold it gates.
+
+==> THIS NOTEBOOK IS STEP 1 OF 3, AND IT DOES NOT END WITH A PRESENTABLE TENANT. <==
+
+  1. this notebook            build the data Dentally gives us
+  2. Web/onboarding_seed.py   derive the metadata it does NOT (roles, FTE, associate %,
+                              plan rates, targets) -- without it every target is blank and
+                              plan capitation reads zero
+  3. the overnight build      the REGULAR all-tenants nightly. Its DAG already rebuilds
+                              everything that reads Input.*, so running it is both the
+                              republish AND the test that the new tenant is picked up.
+
+Step 2 is a script rather than a notebook because it writes the AppDB, whose staging half
+(Input_Stage.*) is filled by a container job, not a stored procedure a notebook could call.
 
 Freeze is api-only (frozen IS a restore). Validate Gold before you TRUST a source=frozen restore.
 Synthetic T11/T12 never use this (seed_onelake -> Orchestrate_Build build-only).
@@ -283,15 +297,66 @@ print("  Gold views regenerated (capitation now from go-live only).")
 ''', False),
 
     # 7 -- done ----------------------------------------------------------------
-    (r'''print("\n" + "=" * 66)
-print("Onboarding complete for tenant " + str(tenant_id) + ".")
+    # ==> THE TENANT IS BUILT BUT NOT PRESENTABLE. <== It has no roles, FTE, associate
+    # percentages, plan rates or targets, because Dentally holds none of them -- so the Day Book
+    # shows no targets, practitioner profitability cannot compute, and plan capitation reads
+    # zero. That is most of what a new customer looks at first.
+    #
+    # Three steps, each at the same level, no re-entering this notebook:
+    #   1. this notebook          2. Web/onboarding_seed.py          3. the overnight build
+    #
+    # Step 3 is the REGULAR all-tenants nightly, not a bespoke republish. Its DAG already
+    # carries everything that reads the seeded metadata -- Meta.usp_Sync_Input_From_AppDB at
+    # SILVER, Fact_Revenue at GOLD_FACT, Fact_Metric_Actuals / Fact_Daily_Targets / the
+    # contribution agg at GOLD_AGG -- so running it IS the test that the new tenant is picked
+    # up. A hand-written republish list here would be a second copy of Audit.Process_Dependency
+    # and would silently stop covering anything added to the DAG later.
+    (r'''print("\n" + "=" * 70)
+print("BUILD COMPLETE for tenant " + str(tenant_id) + " -- data is built, metadata is not.")
+print("=" * 70)
 if source == "api" and freeze_after_pull:
-    print("  Stage snapshot already frozen to init_stage_* (deltas may now overwrite stage_*).")
-print("  VALIDATE Gold (Check_Stage_Duplicates.sql; scan the Ingest log for 'WINDOW(S) UNRESOLVED';")
-print("  spot-check counts + reports). Then it's live for nightly deltas.")
-print("=" * 66)
+    print("  Stage snapshot frozen to init_stage_* (deltas may now overwrite stage_*).")
+print("  VALIDATE Gold first (Check_Stage_Duplicates.sql; scan the Ingest log for")
+print("  'WINDOW(S) UNRESOLVED'; spot-check counts).")
+print("")
+print("  ==> DO NOT RELEASE TO THE CUSTOMER YET. <== Every target is blank and plan")
+print("  capitation reads zero. None of that lives in Dentally; step 2 derives it.")
+print("")
+print("-" * 70)
+print("STEP 2 -- seed the metadata (writes the AppDB, not the warehouse)")
+print("-" * 70)
+print("  cd Web     # APPDB_SERVER / APPDB_DB required. Web/.env.example is STALE --")
+print("             # live is sql-analytically.database.windows.net / AppDB-<env>")
+print("")
+print("  python onboarding_seed.py --tenant " + str(tenant_id) + "            # DRY RUN -- read it")
+print("  python onboarding_seed.py --tenant " + str(tenant_id) + " --apply    # then write it")
+print("")
+print("  --apply runs appdb_sync itself, so the rows reach the warehouse in the same")
+print("  command. The scheduled sync only runs 07:00-18:00; seeding at 19:00 used to")
+print("  leave them unstaged until after that night's build.")
+print("")
+print("  Read the dry run before applying. Roles, FTE, associate %, plan rates and")
+print("  targets are derived on BEST ENDEAVOURS -- plausible, not accurate. Nothing it")
+print("  writes is overwritten on a re-run, so the customer's edits always win.")
+print("")
+print("-" * 70)
+print("STEP 3 -- let the OVERNIGHT all-tenants build run (or trigger it)")
+print("-" * 70)
+print("  Nothing bespoke to run. The nightly DAG already rebuilds everything that")
+print("  reads Input.*, so watching it pick this tenant up IS the test that it has.")
+print("")
+print("  Then open the reports as the customer would and check they look ALIVE:")
+print("  targets on the Day Book, plan capitation non-zero, profitability populated.")
+print("  Still empty? The seed did not land -- check Input.Targets for this tenant.")
+print("")
+print("  ==> TELL THEM THE METADATA IS ESTIMATED. <== It was derived from their own")
+print("  data, not supplied by them: close enough to make the reports work, wrong in")
+print("  the details, and the plan rates especially are all one flat monthly figure.")
+print("  Settings is where they correct it.")
+print("=" * 70)
 conn.close()
 ''', False),
+
 ]
 
 
