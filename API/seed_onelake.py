@@ -109,8 +109,31 @@ def main():
                         help='Comma-separated tenant IDs to seed (default: 11,12)')
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev',
                         help='Target OneLake environment (default: dev)')
+    parser.add_argument('--partial', action='store_true',
+                        help='allow seeding a SUBSET of the known tenants. Every write is a '
+                             'full overwrite, so the omitted tenants lose their staged rows '
+                             'and any column unique to them is dropped from the schema.')
     args = parser.parse_args()
     tenant_ids = [int(t.strip()) for t in args.tenants.split(',')]
+
+    # ==> EVERY WRITE IS A FULL OVERWRITE, SO A PARTIAL LIST DESTROYS THE REST. <== write_stage
+    # replaces the whole table and sets the Delta schema from the frame it is given, by design
+    # (V011 data minimisation). Passing a subset therefore does two things nobody wants: the
+    # omitted tenants lose their staged rows, and any column only THEY had is dropped from the
+    # schema -- which breaks the Stage views outright, since those declare a fixed column list
+    # and then have "more column names specified than columns defined".
+    #
+    # That is not a hypothetical: seeding 21,22,23,24 alone wiped 11 and 12 from Stage and broke
+    # four views. Recovery is simply to run them all, which is what this insists on.
+    known = sorted(SEED_TENANTS)
+    missing = [t for t in known if t not in tenant_ids]
+    if missing and not args.partial:
+        print('REFUSED: every write is a full table overwrite, so seeding a subset would drop')
+        print('         tenant(s) %s from Stage and shrink the schema the Stage views expect.'
+              % ', '.join(str(t) for t in missing))
+        print('         Seed them all:  --tenants %s' % ','.join(str(t) for t in known))
+        print('         Or pass --partial if you really mean to leave the others out.')
+        sys.exit(2)
 
     # ==> A TEST TENANT MUST NEVER REACH PROD. <== Every synthetic tenant is numbered below
     # 100 by convention; 100 and up are real practices. Seeding a test tenant into the prod
