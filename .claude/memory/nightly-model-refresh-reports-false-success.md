@@ -1,50 +1,55 @@
 ---
 name: nightly-model-refresh-reports-false-success
-description: The 22:00 model refresh completes in ~9s and reports success without publishing; ~30-45s is a real one.
-metadata: 
+description: "SOLVED 2026-10-28: sempy's refresh_dataset defaults to type=Automatic, which refreshes nothing in ~6s and reports success. Pass refresh_type='full'."
+metadata:
   node_type: memory
   type: project
   originSessionId: 421e1bb0-9c87-4cc3-8b8f-dd6c97f09bdd
-  modified: 2026-10-20T11:59:07.164Z
+  modified: 2026-10-28T08:01:14.398Z
 ---
 
-PROD `PBI Dentally` refreshes nightly, reports **Completed**, lists all **57 tables** as
-processed — and can publish nothing. Found 2026-10-20, after Maple appeared stale since
-12 Oct while the warehouse was perfectly current.
+**CAUSE FOUND 2026-10-28: `fabric.refresh_dataset()` defaults to `refresh_type="automatic"`.**
+In the Enhanced Refresh API, `Automatic` means "refresh only what the incremental policy says
+needs it". With nothing it considers stale it reports **all 57 objects Completed in ~6 seconds**
+and the data does not move — and Fabric records that as a successful refresh, because on its own
+terms it is.
 
-**The tell is DURATION.** A real refresh of that model takes **30-45 seconds**. The
-nightly ones were taking **9-15 seconds**. PROD holds more data than DEV, so a PROD
-refresh finishing in a quarter of DEV's time is the alarm.
+Proven from the PROD refresh history for a single day, same model, same API:
 
-Cause is `Fabric/Notebooks/Orchestrate_Build.ipynb` cell 11, which already warns about
-itself in its own comments:
+```
+2026-10-27 22:27  ViaEnhancedApi  type=Automatic   6s   model stayed on 2026-10-26
+2026-10-27 08:05  ViaEnhancedApi  type=Full       22s   landed
+2026-10-27 07:38  ViaEnhancedApi  type=Full       30s   landed
+```
 
-* `fabric.refresh_dataset(...)` is **fire and forget** — it requests a refresh and
-  returns, and the notebook logs `REFRESH_DONE` whatever happens afterwards.
-* It waits a FIXED `refresh_settle_seconds` for the SQL endpoint to catch up with the
-  warehouse commit. When the endpoint has not caught up, the refresh reads the old
-  snapshot, finds nothing changed, finishes in seconds and honestly reports success.
+**Fix:** `fabric.refresh_dataset(dataset=..., workspace=..., refresh_type="full")` in
+`Orchestrate_Build` cell 13. Applied to DEV and promoted 2026-10-28. ==> UNPROVEN IN PROD AS OF
+WRITING. <== It had not yet run a night.
 
-**Symptom to recognise:** facts look fine but everything "relative to today" is days
-behind, because `List Date` / `List Date Unconstrained` keep an old `Relative Day`
-anchor. The Day Book's forward grid filters `Relative Day > 0`, so a stale anchor makes
-it open on a date a week in the past — which reads as "the data stopped refreshing".
+**The duration tell still works and is still the fastest check.** A real refresh of PROD
+`PBI Dentally` takes 30-45s; 6-15s published nothing. Get it from the refresh history, and for a
+`ViaEnhancedApi` row `GET /refreshes/{requestId}` returns the `type` — which is what settled this
+after status, `refreshType` and the 57-object list were all green and all useless.
 
-**Immediate unblock:** refresh the model by hand. That fixed it on 2026-10-20.
+**Symptom to recognise:** facts look fine but everything "relative to today" is days behind,
+because `List Date` keeps an old `Relative Day` anchor. The Day Book's forward grid filters
+`Relative Day > 0`, so a stale anchor opens it on a date in the past.
 
-**Stopgap in place since 2026-10-20:** the owner added a **07:00 scheduled refresh** as a
-catch-all, so a 22:00 refresh that published nothing gets a second chance hours later when
-the endpoint has caught up. It hides the symptom, not the fault, and the duration tell
-still works on it: a 07:00 run finishing in ~9s published nothing either. Proper fix
-deferred behind more urgent work — do not re-raise it unprompted.
+**Immediate unblock:** refresh by hand. The history shows OnDemand refreshes propping PROD up on
+25, 26, 27 and 28 Oct, which is why the model read current while `REFRESH_DONE` had not been
+logged since 19 Oct.
 
-**Do not diagnose this from refresh status.** Status, `refreshType`, and the processed
-object list were all green and all useless here. Check, in order: the warehouse view
-(`SELECT MAX(Full_Date) FROM PBI.[List Date] WHERE [Relative Day] = 0`), then refresh
-DURATION in the history, then the deployed report definition. Same family as
-[[piping-to-tail-hides-the-exit-code]] and [[a-silent-except-froze-patient-stats]].
+**STILL OPEN — the settle loop dies silently.** Separate fault. On 20-26 Oct the build logged
+`REFRESH_SETTLE` and then NOTHING: no `REFRESH_START`, no `REFRESH_ENDPOINT_STALE`, no
+`COMPLETE`, no `MONITOR`. A timeout would log the stale path, so `_endpoint_anchor()` is throwing
+inside the wait loop and taking the rest of the cell with it. Seven nights, intermittent — the
+27th got through. ==> DEFERRED BY THE OWNER 2026-10-28 to see whether `full` alone stabilises it;
+do not re-raise unprompted. <== The fix is to guard `_endpoint_anchor()` so a throw logs and falls
+through, same shape as the `refresh_error` try/except already around the monitor poke.
 
-Fix not yet applied: poll `list_refresh_requests` until the request completes, gate on
-the endpoint having caught up rather than on a sleep, and assert after refresh that the
-model's anchor equals today. Remember [[fabric-is-canonical-for-notebooks-and-pipelines]] —
-the edit belongs in Fabric, not the repo copy.
+The model-anchor assertion added earlier (`REFRESH_STALE` / `REFRESH_FAILED` when the model's
+`Relative Day = 0` date does not equal the warehouse's) is what caught all of this. Keep it.
+
+Same family as [[piping-to-tail-hides-the-exit-code]] and [[a-silent-except-froze-patient-stats]]:
+a wrapper reporting success for work that did not happen. Edits belong in Fabric, not the repo
+copy — [[fabric-is-canonical-for-notebooks-and-pipelines]].
