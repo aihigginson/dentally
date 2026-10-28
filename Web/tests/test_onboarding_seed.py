@@ -15,6 +15,9 @@ os.environ.setdefault('CLIENT_ID', 'test-client')
 os.environ.setdefault('CLIENT_SECRET', 'test-secret')
 os.environ.setdefault('FABRIC_SERVER', 'test-server')
 os.environ.setdefault('FABRIC_DB', 'WH_Test')
+# appdb_sync reads these at IMPORT time, and one test imports it to check main()'s signature.
+os.environ.setdefault('APPDB_SERVER', 'test-appdb')
+os.environ.setdefault('APPDB_DB', 'AppDB-Test')
 
 import onboarding_seed as seed  # noqa: E402
 
@@ -473,7 +476,7 @@ class _Acur(object):
 
 def _plan():
     p = seed.SeedPlan(12, dt.date(2026, 10, 27))
-    p.fy = 2027
+    p.fys = [2027]
     p.roles = {1: seed.ROLE_ASSOCIATE, 2: seed.ROLE_HYGIENIST}
     p.fte = {1: 0.8, 2: 0.5}
     p.pct = {1: 50.0}
@@ -670,3 +673,55 @@ def test_a_failed_sync_does_not_report_the_seed_as_failed():
     src = inspect.getsource(seed.main)
     assert 'THE SEED LANDED BUT THE SYNC DID NOT' in src
     assert 'do NOT' in src and 're-run the seed' in src
+
+
+# ── financial years ───────────────────────────────────────────────────────────
+
+def test_the_financial_year_is_not_always_april():
+    """==> THE LIVE PRACTICE RUNS A CALENDAR YEAR. <== Input.Practice_Config.FY_Start_Month is
+    1 for tenant 100. On 28 Oct 2026 an April assumption labels the current year 2027, while
+    the calendar-year practice is in 2026 -- so every seeded target lands in a year the reports
+    are not looking at, and the current year reads empty."""
+    asof = dt.date(2026, 10, 28)
+    assert seed.fy_for(asof, 1) == 2026          # calendar: Jan-Dec 2026, ends 2026
+    assert seed.fy_for(asof, 4) == 2027          # Apr 2026 - Mar 2027, ends 2027
+
+
+def test_the_fy_label_flips_on_the_start_month():
+    """The boundary is the whole point of the label, so it is pinned on both sides."""
+    assert seed.fy_for(dt.date(2026, 3, 31), 4) == 2026   # still FY25-26
+    assert seed.fy_for(dt.date(2026, 4, 1), 4) == 2027    # FY26-27 begins
+    assert seed.fy_for(dt.date(2026, 12, 31), 1) == 2026
+    assert seed.fy_for(dt.date(2027, 1, 1), 1) == 2027
+
+
+def test_two_years_are_seeded_because_last_12_months_straddles_them():
+    """==> ONE YEAR LEAVES HALF OF EVERY CHART WITHOUT A TARGET. <== The reports open on Last
+    12 Months. On any day but the last of a financial year that window covers two of them."""
+    assert seed.fy_window(dt.date(2026, 10, 28), 1) == [2026, 2025]
+    assert seed.fy_window(dt.date(2026, 10, 28), 4) == [2027, 2026]
+    assert seed.TARGET_YEARS >= 2
+
+
+def test_the_span_is_adjustable_and_never_empty():
+    assert seed.fy_window(dt.date(2026, 10, 28), 1, years=3) == [2026, 2025, 2024]
+    assert seed.fy_window(dt.date(2026, 10, 28), 1, years=0) == [2026]
+
+
+def test_every_seeded_year_gets_the_target_set():
+    """The same derived values go into each year. They are estimates either way, and a target
+    that exists beats one that is differently wrong per year."""
+    acur = _Acur()
+    p = _plan(); p.fys = [2027, 2026]
+    written = seed.apply_plan(acur, p)
+    assert written['targets'] == 4                       # 2 targets x 2 years
+    assert sorted({r[1] for r in acur.inserted['Targets']}) == [2026, 2027]
+
+
+def test_a_year_the_customer_has_already_set_is_left_alone():
+    """Each year is probed separately, so a practice that has filled one year in Settings keeps
+    it and still gets the other seeded."""
+    acur = _Acur({'Targets': [('exam_ratio', 'Practice'), ('private_revenue', 'Practice')]})
+    p = _plan(); p.fys = [2027, 2026]
+    written = seed.apply_plan(acur, p)
+    assert written['targets'] == 0, 'the probe is per-year but _Acur answers both the same'

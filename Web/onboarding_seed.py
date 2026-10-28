@@ -86,6 +86,17 @@ ROLE_ASSOCIATE = 'Associate'
 ROLE_SPECIALIST = 'Associate Specialist'
 ROLE_HYGIENIST = 'Hygienist'
 
+TARGET_YEARS = 2
+"""How many financial years of targets to write, counting back from the current one.
+
+==> ONE YEAR IS NOT ENOUGH. <== The reports open on Last 12 Months, and that window straddles
+two financial years on every day of the year except the last. Seeding only the current FY
+leaves the earlier part of every chart with no target to compare against -- which looks like
+the product is broken rather than like a year that has only just started.
+
+The same derived values are written to each year. They are estimates either way, and a target
+that exists is worth more here than one that is differently wrong per year."""
+
 SEED_ACTOR = 'onboarding-seed'
 
 
@@ -661,6 +672,7 @@ class SeedPlan(object):
         self.pct = {}
         self.plans = []
         self.targets = []
+        self.fys = []
         self.names = {}
         self.skipped = []
         self.notes = []
@@ -672,11 +684,15 @@ class SeedPlan(object):
         self.skipped.append(text)
 
 
-def build_plan(cur, tenant_id, asof=None, fy=None, principal_id=None):
+def build_plan(cur, tenant_id, asof=None, fy=None, principal_id=None,
+               years=TARGET_YEARS):
     """Derive everything. Reads only -- nothing is written here."""
     asof = asof or dt.date.today()
-    fy = fy or _default_fy(asof)
     plan = SeedPlan(tenant_id, asof)
+    start_month = fetch_fy_start_month(cur, tenant_id)
+    plan.fys = [fy] if fy else fy_window(asof, start_month, years)
+    plan.note('Financial year starts in month %d; seeding FY %s.'
+              % (start_month, ', '.join(str(y) for y in plan.fys)))
 
     hist_start = asof - dt.timedelta(days=RATE_WINDOW_DAYS)
     fwd_end = asof + dt.timedelta(days=RATE_WINDOW_DAYS)
@@ -727,7 +743,6 @@ def build_plan(cur, tenant_id, asof=None, fy=None, principal_id=None):
         plan_patients, fetch_practice_actuals(cur, tenant_id, hist_start, asof),
         snapshots=fetch_practice_snapshots(cur, tenant_id, hist_start, asof),
         excluded=locums, have_rate=have_rate, capitation_by_dentist=by_dentist)
-    plan.fy = fy
     return plan
 
 
@@ -741,9 +756,40 @@ def _history_days(cur, tenant_id, asof):
     return int(row[0]) if row and row[0] is not None else 0
 
 
-def _default_fy(asof):
-    """FY END year, as the app writes it (2027 = FY 2026-27)."""
-    return asof.year + 1 if asof.month >= 4 else asof.year
+def fetch_fy_start_month(cur, tenant_id):
+    """The tenant's financial year start month, 1-12.
+
+    ==> IT IS NOT ALWAYS APRIL. <== Input.Practice_Config carries it per tenant and the live
+    practice runs a CALENDAR year (1). Assuming April there puts every target a whole year out:
+    on 28 Oct 2026 an April assumption labels the current year 2027, while the calendar-year
+    practice is in 2026 and finds nothing. Defaulting to 4 matches Gold.vw_Dim_Date, so a
+    tenant with no row labels the same way the warehouse does.
+    """
+    try:
+        cur.execute("SELECT MIN(ISNULL(FY_Start_Month, 4)) FROM Input.Practice_Config "
+                    "WHERE Tenant_ID = ?", tenant_id)
+        row = cur.fetchone()
+        if row and row[0]:
+            return int(row[0])
+    except Exception:
+        pass
+    return 4
+
+
+def fy_for(asof, start_month):
+    """The FY END year label the app writes, e.g. 2027 = FY 2026-27.
+
+    A year beginning in month m runs to the day before month m of the next calendar year, so it
+    ENDS in the following year -- unless it starts in January, where it ends the same December.
+    """
+    year = asof.year if asof.month >= start_month else asof.year - 1
+    return year + 1 if start_month > 1 else year
+
+
+def fy_window(asof, start_month, years=TARGET_YEARS):
+    """The FY labels to seed: the current one and the years before it, newest first."""
+    current = fy_for(asof, start_month)
+    return [current - n for n in range(max(1, years))]
 
 
 def apply_plan(acur, plan, actor=SEED_ACTOR):
@@ -795,11 +841,17 @@ def apply_plan(acur, plan, actor=SEED_ACTOR):
             "VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", rows)
         written['plans'] = len(rows)
 
-    acur.execute("SELECT Metric, Target_Level FROM Input.Targets WHERE Tenant_ID = ? AND FY = ?",
-                 (t, plan.fy))
-    have = {(r[0], r[1]) for r in acur.fetchall()}
-    rows = [(t, plan.fy, metric, level, value, actor)
-            for metric, level, value in plan.targets if (metric, level) not in have]
+    # ==> THE SAME TARGET SET GOES INTO EVERY SEEDED YEAR. <== Last 12 Months straddles two
+    # financial years, so a single year leaves half of every chart with nothing to compare
+    # against. Each year is probed separately: a customer who has already set one year keeps it
+    # and still gets the other seeded.
+    rows = []
+    for fy in plan.fys:
+        acur.execute("SELECT Metric, Target_Level FROM Input.Targets "
+                     "WHERE Tenant_ID = ? AND FY = ?", (t, fy))
+        have = {(r[0], r[1]) for r in acur.fetchall()}
+        rows += [(t, fy, metric, level, value, actor)
+                 for metric, level, value in plan.targets if (metric, level) not in have]
     if rows:
         acur.executemany(
             "INSERT INTO Input.Targets "
@@ -812,8 +864,9 @@ def apply_plan(acur, plan, actor=SEED_ACTOR):
 
 def format_plan(plan):
     """What the dry run prints."""
+    fys = ', '.join(str(y) for y in getattr(plan, 'fys', [])) or '?'
     out = ['', 'ONBOARDING SEED -- tenant %d, as at %s, FY %s'
-           % (plan.tenant_id, plan.asof, getattr(plan, 'fy', '?')), '=' * 72]
+           % (plan.tenant_id, plan.asof, fys), '=' * 72]
     for n in plan.notes:
         out.append('  * ' + n)
 
@@ -831,7 +884,7 @@ def format_plan(plan):
     for _pid, name, monthly, cross in plan.plans:
         out.append('  %-30s %8.2f /month   cross-charge %6.2f' % (name[:30], monthly, cross))
 
-    out += ['', 'TARGETS (FY %s)' % getattr(plan, 'fy', '?'), '-' * 72]
+    out += ['', 'TARGETS (written to FY %s)' % fys, '-' * 72]
     for metric, level, value in plan.targets:
         out.append('  %-32s %-22s %14s' % (metric, level, '{:,.2f}'.format(value)))
 
@@ -863,7 +916,11 @@ def main(argv=None):
     ap.add_argument('--no-sync', action='store_true',
                     help='skip the appdb_sync run that carries the write to the warehouse '
                          '(the rows then sit in the AppDB until something else syncs them)')
-    ap.add_argument('--fy', type=int, default=None)
+    ap.add_argument('--fy', type=int, default=None,
+                    help='pin ONE financial year instead of the default span')
+    ap.add_argument('--years', type=int, default=TARGET_YEARS,
+                    help='how many financial years to seed, counting back from '
+                         'the current one (default %d)' % TARGET_YEARS)
     ap.add_argument('--principal', type=int, default=None, metavar='PRACTITIONER_ID',
                     help='name the principal when the account lookup cannot (a practice with '
                          'several accounts already provisioned)')
@@ -876,7 +933,7 @@ def main(argv=None):
     ac = appmod._appdb_conn(autocommit=True)
     try:
         plan = build_plan(conn.cursor(), args.tenant, fy=args.fy,
-                          principal_id=args.principal)
+                          principal_id=args.principal, years=args.years)
         print(format_plan(plan))
         if not args.apply:
             print('DRY RUN -- nothing written. Re-run with --apply to write.\n')
