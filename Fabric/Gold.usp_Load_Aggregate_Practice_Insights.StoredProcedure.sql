@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0,@u BIGINT=0,@d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practice_Insights] @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0,@u BIGINT=0,@d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practice_Insights] @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Practice_Insights
 --  Author           :  AIH
@@ -99,8 +99,20 @@ BEGIN
         INTO   #daily
         FROM   [Gold].[Fact_Metric_Actuals] a
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
-        WHERE  a.fk_Practitioner = -1
-          AND  a.fk_Practice_Site = -1
+        -- ==> TWO GRAINS LIVE HERE AT ONCE, AND THIS IS THE SEAM. <== Fact_Metric_Actuals is
+        -- being migrated from three disjoint slices per metric -- a (-1,-1) practice total, a
+        -- per-site row and a per-practitioner row -- to ONE row per (site, practitioner) that
+        -- the hierarchy rolls up. A metric that has moved no longer HAS a (-1,-1) row, so the
+        -- old filter would read nothing for it and the insight would quietly vanish; a metric
+        -- that has not moved would TRIPLE if summed without the filter.
+        --
+        -- So the list below is read by summing and everything else still takes the slice. It is
+        -- a migration seam, not a design: it shrinks as metrics move and this whole CASE goes
+        -- when the last one does. Keep it in step with the revenue block in
+        -- Gold.usp_Load_Fact_Metric_Actuals -- a metric collapsed there and not added here
+        -- loses its insight silently, which is exactly the failure this comment exists to stop.
+        WHERE  ( a.Metric IN ('total_revenue', 'nhs_revenue', 'private_revenue')      -- collapsed
+                 OR (a.fk_Practitioner = -1 AND a.fk_Practice_Site = -1) )            -- still sliced
           AND  d.Full_Date BETWEEN @Pre_From AND @Now_To
         -- ==> ONE ROW PER DATE, GUARANTEED. <== #snap picks the row matching the window's
         -- last date, so two rows sharing that date silently double everything downstream --
