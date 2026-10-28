@@ -83,11 +83,6 @@ BEGIN
         FROM   [Gold].[Dim_Date]
         WHERE  Full_Date BETWEEN @Pre_From AND @Pre_To AND Is_Working_Day_England = 1;
 
-        -- ==> THE SAME FIGURE IS WRITTEN TWICE: ONCE AT SITE -1 AND ONCE AT THE REAL SITE. <==
-        -- fk_Practitioner = -1 alone is NOT the practice row. Filtering on the practitioner
-        -- only and summing doubled every count (a rate survived it, since numerator and
-        -- denominator doubled together, which is exactly why it went unnoticed). The practice
-        -- grain is BOTH keys at -1.
         DROP TABLE IF EXISTS #daily;
         SELECT a.Tenant_ID,
                a.Metric,
@@ -99,31 +94,14 @@ BEGIN
         INTO   #daily
         FROM   [Gold].[Fact_Metric_Actuals] a
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
-        -- ==> TWO GRAINS LIVE HERE AT ONCE, AND THIS IS THE SEAM. <== Fact_Metric_Actuals is
-        -- being migrated from three disjoint slices per metric -- a (-1,-1) practice total, a
-        -- per-site row and a per-practitioner row -- to ONE row per (site, practitioner) that
-        -- the hierarchy rolls up. A metric that has moved no longer HAS a (-1,-1) row, so the
-        -- old filter would read nothing for it and the insight would quietly vanish; a metric
-        -- that has not moved would TRIPLE if summed without the filter.
+        -- ==> EVERY METRIC IS NOW WRITTEN ONCE, SO EVERY METRIC IS SUMMED. <== Fact_Metric_Actuals
+        -- holds one row per (site, practitioner) and the practice figure is a SUM over it. The
+        -- old filter took the (-1,-1) 'practice total' slice, which no longer exists for anything;
+        -- leaving it in place would have read nothing at all.
         --
-        -- So the list below is read by summing and everything else still takes the slice. It is
-        -- a migration seam, not a design: it shrinks as metrics move and this whole CASE goes
-        -- when the last one does. Keep it in step with the revenue block in
-        -- Gold.usp_Load_Fact_Metric_Actuals -- a metric collapsed there and not added here
-        -- loses its insight silently, which is exactly the failure this comment exists to stop.
-        -- ==> THE SEAM IS NOW INVERTED: EVERYTHING IS SUMMED EXCEPT ONE. <== Every metric in
-        -- Fact_Metric_Actuals is written once, at (site, practitioner), so the practice figure
-        -- is a SUM over it and the old 'take the -1 slice' filter would now read nothing.
-        --
-        -- active_patients is the exception, and deliberately so: it is written by TWO blocks --
-        -- the weekly KPI snapshot, which carries 157 dates of site-level history, and the
-        -- current patient roster, which carries practitioner detail for ONE date. They overlap
-        -- on that date, so summing both would count it twice. Taking the snapshot rows
-        -- (practitioner = -1) keeps the history intact and the number right. Until the two are
-        -- reconciled into one source this line is what stops them colliding.
-        WHERE  ( a.Metric <> 'active_patients'
-                 OR a.fk_Practitioner = -1 )
-          AND  d.Full_Date BETWEEN @Pre_From AND @Now_To
+        -- active_patients was the last exception and is no longer one: it has a single source
+        -- again (the weekly snapshot, now carrying the dentist), so it sums like the rest.
+        WHERE  d.Full_Date BETWEEN @Pre_From AND @Now_To
         -- ==> ONE ROW PER DATE, GUARANTEED. <== #snap picks the row matching the window's
         -- last date, so two rows sharing that date silently double everything downstream --
         -- which is what the rank guard caught the moment the year-ago join multiplied them
