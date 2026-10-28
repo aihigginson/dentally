@@ -3591,102 +3591,122 @@ in
 }
 
 
-// ===================== RLS scope: every practice in view =====================
+// ===================== RLS scope: client and practice =====================
 {
 // =====================================================================
-// ==> THE RULE HAD ONE NARROWING LEVER AND IT WAS SPENT ON THE PRACTICE. <==
+// ==> THE NARROWING BELONGS ON THE ANCHOR, NOT ON EVERY FACT TABLE. <==
 //
-// The SCOPE half used to read ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ),
-// and the app set customData ONLY when exactly one tenant was in view. A client holding
-// several practices therefore had nothing to narrow by: picking a client moved every one of
-// the app's own screens while the report kept the caller's whole permitted set and ADDED IT
-// UP. Acting as a four-practice group showed every practice the support login could see,
-// under the group's name.
+// Every tenant-bearing table filters through
+// SELECTCOLUMNS(FILTER('Application Users', [User UPN] = USERPRINCIPALNAME()), ...), and
+// row-level security COMPOSES: cut 'Application Users' and all fifty-odd rules narrow with it.
+// So the client and practice selections are applied ONCE, on a lookup of a few rows per user,
+// instead of being re-tested per row on every fact table.
 //
-// The app now sends the acting scope as a comma-separated tenant SET -- _get_user_info has
-// already resolved the acting client's tenants from Security.Client_Tenant_Access and then
-// narrowed them by the acting practice, so the token states exactly what is in view. The rule
-// only has to test membership, which is what PATHCONTAINS does once the commas are pipes.
+// That also makes the fact rules SHORTER than they were. They lose their own
+// ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ) clause, because the anchor
+// has already removed the tenants that clause existed to remove. One comparison on a small
+// table replaces a per-row comparison on every fact -- and a first attempt that put
+// PATHCONTAINS + FORMAT([Tenant ID]) on all 49 was rightly rejected as a lot of work to do
+// per row, per visual, forever.
 //
-// ==> SENDING THE CLIENT ID INSTEAD WAS TRIED FIRST AND DOES NOT WORK. <== It needs a
-// client->tenant table in the model to resolve, i.e. a new data connection, which the service
-// principal is refused ("in addition to Write permissions on the model, make sure you also
-// have at least Use permissions on all data connections") -- and it would be a second place
-// for the access model to drift from Client_Tenant_Access. Adding [Client ID] to
-// 'Application Users' fails for the only case it is for: a support login sits on the vendor
-// client, so every one of its rows carries that one client id, and narrowing to the group
-// actually picked matches nothing and blanks the report.
+// ==> IT DEPENDS ON [Client ID] BEING THE TENANT'S CLIENT, NOT THE USER'S. <== See
+// Security.vw_User_Tenant_Access: a support login sits on the vendor client, so a user-derived
+// column would carry that one id on every row and narrowing to the client actually picked
+// would match nothing. The view reads Input.Client_Tenant, the same mapping the hierarchy
+// screen maintains.
 //
-// NARROWS, NEVER WIDENS. The USERPRINCIPALNAME set-membership half is untouched and still
-// ANDed, so a token naming a tenant the caller may not see grants nothing -- customData is an
-// assertion of SCOPE, never of permission. The || [Tenant ID] = -1 sentinel escape is kept
-// verbatim: without it every unknown-member row disappears and the fact rows that resolve to
-// it drop out of totals.
+// customData is "<client>|<tenant>", the tenant half empty when all of a client's practices
+// are in view. Blank customData leaves both halves open -- "everything I may see" -- which is
+// what a direct Desktop connection gets.
 //
-// BACK-COMPATIBLE BOTH WAYS. One tenant renders as a bare "11", byte-for-byte what the old app
-// sent, and a blank customData still means "everything I may see". So an old app against this
-// rule, and a new app against the old rule for a single practice, both behave.
+// NARROWS, NEVER WIDENS: [User UPN] = USERPRINCIPALNAME() stays first and unconditional, so no
+// token can reach a row the caller does not own. The || [Tenant ID] = -1 escape on the fact
+// rules is kept verbatim: without it every unknown-member row disappears and the fact rows
+// that resolve to it drop out of totals.
 //
-// Idempotent: expressions are compared with whitespace collapsed, so a re-run is silent unless
-// a table is genuinely still on the old rule. Placed AFTER the copy block above so a table that
-// block has just seeded from a donor is normalised in the same pass.
+// Idempotent: expressions are compared with whitespace collapsed, so a re-run is silent.
+// Runs AFTER the donor-copy block above, so a table that block just seeded is normalised in
+// the same pass.
+//
+// ==> THE MODEL MUST HAVE [Client ID] ON 'Application Users' AND BE REFRESHED. <== The column
+// is added below if missing, but a column with no data narrows to NOTHING -- every report
+// blank. Refresh that table (or the model) after running this.
 // =====================================================================
-    // The table the rule READS, and deliberately exempt: its own filter is
-    // [User UPN] == USERPRINCIPALNAME(), and a copy cut to the current scope could not answer
-    // which tenants that scope contains.
     var RLS_ANCHOR     = "Application Users";
     var RLS_TENANT_COL = "Tenant ID";
+    var RLS_CLIENT_COL = "Client ID";
 
-    var scopeRule = @"VAR _cd = CUSTOMDATA()
+    var anchor = Model.Tables.FirstOrDefault(t => t.Name == RLS_ANCHOR);
+    if (anchor == null)
+    {
+        Info("WARNING RLS: no '" + RLS_ANCHOR + "' table -- scope rules NOT applied.");
+    }
+    else
+    {
+        // The view supplies it; the model only learns about it on a schema refresh, and in a
+        // .pbix that is a manual step. Added here so the rule below cannot reference a column
+        // that does not exist, which would make the whole role fail to deploy.
+        if (!anchor.Columns.Any(c => c.Name == RLS_CLIENT_COL))
+        {
+            var col = anchor.AddDataColumn(RLS_CLIENT_COL, RLS_CLIENT_COL);
+            col.DataType = DataType.Int64;
+            Info("RLS: added '" + RLS_CLIENT_COL + "' to '" + RLS_ANCHOR
+                 + "'. REFRESH THAT TABLE before publishing -- an empty column narrows to nothing.");
+        }
+
+        var anchorRule = @"VAR _cd = CUSTOMDATA()
+VAR _sep = IFERROR( FIND( ""|"", _cd ), 0 )
+VAR _client = IF( _sep > 0, LEFT( _cd, _sep - 1 ), _cd )
+VAR _tenant = IF( _sep > 0, MID( _cd, _sep + 1, 32 ), """" )
 RETURN
-(
-    [Tenant ID] IN
-        SELECTCOLUMNS(
-            FILTER('Application Users', 'Application Users'[User UPN] = USERPRINCIPALNAME()),
-            ""Tenant ID"", 'Application Users'[Tenant ID])
-    && ( ISBLANK( _cd ) || LEN( _cd ) = 0 ||
-         PATHCONTAINS( SUBSTITUTE( _cd, "","", ""|"" ), FORMAT( [Tenant ID], ""0"" ) ) )
-)
+[User UPN] = USERPRINCIPALNAME()
+    && ( LEN( _client ) = 0 || [Client ID] = VALUE( _client ) )
+    && ( LEN( _tenant ) = 0 || [Tenant ID] = VALUE( _tenant ) )";
+
+        var factRule = @"[Tenant ID] IN
+    SELECTCOLUMNS(
+        FILTER('Application Users', 'Application Users'[User UPN] = USERPRINCIPALNAME()),
+        ""Tenant ID"", 'Application Users'[Tenant ID])
 || [Tenant ID] = -1";
 
-    Func<string, string> squash = e =>
-        string.IsNullOrWhiteSpace(e)
-            ? ""
-            : System.Text.RegularExpressions.Regex.Replace(e, @"\s+", " ").Trim();
+        Func<string, string> squash = e =>
+            string.IsNullOrWhiteSpace(e)
+                ? ""
+                : System.Text.RegularExpressions.Regex.Replace(e, @"\s+", " ").Trim();
 
-    var wantedScope = squash(scopeRule);
-    int rlsUpdated = 0, rlsAlready = 0;
+        int rlsUpdated = 0, rlsAlready = 0;
 
-    foreach (var role in Model.Roles)
-    {
-        foreach (var t in Model.Tables.OrderBy(x => x.Name))
+        foreach (var role in Model.Roles)
         {
-            if (t.Name == RLS_ANCHOR) continue;
-            if (!t.Columns.Any(c => c.Name == RLS_TENANT_COL)) continue;
-
-            var current = role.RowLevelSecurity[t];
-
-            // A tenant-bearing table with NO rule at all is a different fault, and the block
-            // above exists to seed those from a donor. Say so rather than quietly inventing one
-            // here: an unfiltered table is readable in full by every login, and that deserves a
-            // warning naming the table, not a silent fix.
-            if (string.IsNullOrWhiteSpace(current))
+            foreach (var t in Model.Tables.OrderBy(x => x.Name))
             {
-                Info("WARNING RLS " + role.Name + ": " + t.Name
-                     + " has NO filter. Add it to RLS_TABLES above -- not publishing is safer.");
-                continue;
+                var isAnchor = (t.Name == RLS_ANCHOR);
+                if (!isAnchor && !t.Columns.Any(c => c.Name == RLS_TENANT_COL)) continue;
+
+                var want = isAnchor ? anchorRule : factRule;
+                var current = role.RowLevelSecurity[t];
+
+                // A tenant-bearing table with NO rule is a different fault, and the block above
+                // exists to seed those from a donor. Warn naming it rather than quietly
+                // inventing one: an unfiltered table is readable in full by every login.
+                if (!isAnchor && string.IsNullOrWhiteSpace(current))
+                {
+                    Info("WARNING RLS " + role.Name + ": " + t.Name
+                         + " has NO filter. Add it to RLS_TABLES above -- not publishing is safer.");
+                    continue;
+                }
+
+                if (squash(current) == squash(want)) { rlsAlready++; continue; }
+
+                role.RowLevelSecurity[t] = want;
+                rlsUpdated++;
             }
-
-            if (squash(current) == wantedScope) { rlsAlready++; continue; }
-
-            role.RowLevelSecurity[t] = scopeRule;
-            rlsUpdated++;
         }
-    }
 
-    if (rlsUpdated > 0)
-        Info("RLS scope: " + rlsUpdated + " table(s) moved to the tenant-SET rule ("
-             + rlsAlready + " already current).");
+        if (rlsUpdated > 0)
+            Info("RLS scope: " + rlsUpdated + " rule(s) updated (" + rlsAlready
+                 + " already current). Narrowing is on '" + RLS_ANCHOR + "'.");
+    }
 }
 
 

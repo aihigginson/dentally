@@ -473,25 +473,27 @@ def embed_token():
         # app's own screens when it switched client, while the reports kept the caller's whole
         # permitted set and added it up -- the group total that started this.
         #
-        # ==> SO IT CARRIES THE WHOLE SCOPE, AS A SET. <== Not the client id: the model would
-        # then need a client->tenant table to resolve it, and that is a new table in a model
-        # whose service principal may write metadata but not add data connections. tids IS the
-        # acting client's tenant set -- _get_user_info already resolved it, narrowed by the
-        # acting client and then by the acting practice -- so sending the set says exactly what
-        # is in view and the rule needs only a membership test.
+        # ==> SO IT NAMES BOTH: "<client>|<tenant>". <== The tenant half is empty when all of a
+        # client's practices are in view.
         #
-        # Comma separated; the rule turns it into a PATHCONTAINS path. One tenant renders as a
-        # bare "11", which is byte-for-byte what the old single-tenant form sent, so the change
-        # is back-compatible in both directions during a deploy.
+        # The model applies BOTH halves on 'Application Users' alone, whose [Client ID] is the
+        # TENANT's client (Security.vw_User_Tenant_Access reads Input.Client_Tenant). Row-level
+        # security composes, so narrowing that one small lookup narrows every tenant-bearing
+        # table through the SELECTCOLUMNS(FILTER(...)) they all share -- no per-row test on any
+        # fact table, and their rules get shorter rather than longer.
         #
-        # It remains an assertion of SCOPE, never of permission. tids cannot contain a tenant
-        # the caller is not entitled to, and the rule keeps its USERPRINCIPALNAME
-        # set-membership test alongside this, so the model proves it again rather than
-        # trusting the token.
-        identity['customData'] = ','.join(str(t) for t in tids)
+        # Sending the resolved tenant SET instead was tried and rejected: it moved the work to
+        # a PATHCONTAINS + FORMAT([Tenant ID]) on all 49 fact tables, which is a lot of work to
+        # repeat per row, per visual, forever, to answer something a lookup already knows.
+        #
+        # It remains an assertion of SCOPE, never of permission: [User UPN] = USERPRINCIPALNAME()
+        # stays first and unconditional in the rule, so a token cannot reach a row the caller
+        # does not own. Blank customData means "everything I may see" and is what a direct
+        # Desktop connection gets.
+        identity['customData'] = '%s|%s' % (client_id, tids[0] if len(tids) == 1 else '')
         token_body = {'accessLevel': 'View', 'identities': [identity]}
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s scope=%s",
-                        upn, REPORT_ROLES, report_name, client_id, identity['customData'])
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s scope=%s",
+                        upn, REPORT_ROLES, report_name, identity['customData'])
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
