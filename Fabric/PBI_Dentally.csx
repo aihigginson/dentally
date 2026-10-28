@@ -2347,9 +2347,22 @@ add("DNA Rate",
     SUM('Aggregate Site Patient Practitioner Daily'[Appointments]))",
     "#,##0.0%");
 
-// Days until next available slot — MIN across practitioners
+// ==> AVERAGE ACROSS PRACTITIONERS, NOT MIN. <== This was MIN, which answers "could ANYONE see a
+// patient soon" -- so one clinician with a gap tomorrow made the whole practice read 1 however
+// booked the rest were, and the figure improved whenever a quiet practitioner was added. The
+// question the tile is actually asking is how long a patient typically waits, which is the
+// average. On the demo practice this is the difference between reading 1 and reading the
+// double-digit number that tells the real story.
+//
+// AVERAGE ignores blanks, and a practitioner with NO 30-minute gap anywhere in the forward diary
+// is blank rather than large -- so the fully-booked are dropped from the average instead of
+// weighing it down. That understates the wait and is the known limitation here; fixing it means
+// giving "never" a capped value in Aggregate_Site_Practitioner_Current, not changing this measure.
+//
+// Still a per-practitioner figure underneath: the column is attached to the HOME-site row only,
+// so a site or group roll-up averages each clinician once rather than once per site they touch.
 add("Days Until Next 30 Minute Free",
-    @"MIN('Aggregate Site Practitioner Current'[Days Until Next 30 Mins])",
+    @"AVERAGE('Aggregate Site Practitioner Current'[Days Until Next 30 Mins])",
     "#,##0");
 
 // -- Day Book grid drill-counts: per-practitioner counts that MATCH each detail page's filter, so
