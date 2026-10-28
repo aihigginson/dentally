@@ -1,0 +1,19 @@
+# Dependencies for the OneLake seeders (seed_onelake.py, generate_data.py).
+#
+# ==> DELIBERATELY NOT IN requirements.txt. <== That file is what the deployed API installs,
+# and none of this belongs in a running container -- these are laptop-only tools for writing
+# synthetic tenants into the DEV lakehouse. Keeping them apart stops pyarrow and deltalake
+# being pulled into an image that will never generate a patient.
+#
+# seed_onelake.py's docstring used to claim these were "already installed", which was true on
+# one machine and nowhere else. A fresh checkout failed on `import pandas` with nothing in the
+# repo saying what to install.
+#
+#   python -m pip install -r requirements-seed.txt
+#
+# Unpinned on purpose: this is a dev tool run by hand, and the Delta writer wants to track
+# whatever the Fabric lakehouse currently accepts rather than a version frozen a year ago.
+pandas
+pyarrow
+deltalake
+azure-identity

@@ -7,8 +7,10 @@ Usage:
     python API/seed_onelake.py --tenants 11        # single tenant
     python API/seed_onelake.py --tenants 11,12      # subset
 
-Requirements (already installed):
-    deltalake, pyarrow, pandas, azure-identity
+Requirements:
+    python -m pip install -r requirements-seed.txt
+    (deltalake, pyarrow, pandas, azure-identity -- NOT in requirements.txt, which is what the
+     deployed API installs and has no business carrying a Delta writer)
 """
 import sys, json, os, argparse, random
 from collections import defaultdict
