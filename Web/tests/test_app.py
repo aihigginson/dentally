@@ -1917,9 +1917,10 @@ def test_the_authz_cache_does_not_serve_one_practice_answer_for_another(client, 
     looks at ONE practice. So the same person with a different practice picked was served the
     previous practice's tenant set for up to _AUTHZ_TTL.
 
-    It mattered at exactly one caller: /api/embed-token, where tids decides RLS. With two permitted
-    tenants and no single one in scope, customData is not attached and the model ADDS THE PRACTICES
-    UP -- observed on dev as Total Revenue 785,899 against Maple's own 468,703, under Maple's name.
+    It mattered at exactly one caller: /api/embed-token, where a stale tids changes what a report
+    shows -- observed on dev as Total Revenue 785,899 against Maple's own 468,703, under Maple's
+    name. The token no longer carries scope, but tids still decides the per-module access check,
+    so the cache key must still include the acting client and practice.
     """
     conns, gets = [], []
     _embed_stubs(appmod, monkeypatch, conns, gets)
@@ -2267,12 +2268,18 @@ def test_insights_hides_itself_across_several_practices(appmod, client, monkeypa
     assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}
 
 
-# ── Embed scope: the client half of customData ───────────────────────────────
-# ==> THE GROUP TOTAL BUG. <== customData could only ever name ONE practice, so a client holding
-# several had nothing to narrow the reports by: switching client moved the app's own screens
-# while the report kept the caller's whole permitted set and added it up. The scope is now a
-# FILTER on 'Application Users'[Client ID] -- the table every tenant-bearing rule resolves its
-# tenants out of -- so the token no longer carries it.
+# ── The embed identity names the PERSON, never the scope ─────────────────────
+# ==> THE GROUP TOTAL BUG, AND THE RULE THAT CAME OUT OF IT. <== The token used to carry a
+# customData naming one practice, and RLS read it. It could only ever name ONE, so a client
+# holding several had nothing to narrow the reports by: switching client moved the app's own
+# screens while the report kept the caller's whole permitted set and added it up.
+#
+# Scope is now a FILTER -- 'Application Users'[Client ID], pushed from the browser onto the
+# table every tenant-bearing rule resolves its tenants out of. The identity is back to naming
+# the person and the role, which is all it should ever have said.
+#
+# These tests pin that boundary: what may be seen AT ALL is the identity's job, what is being
+# LOOKED AT is a filter's. A customData reappearing here means the two have been confused again.
 
 def _capture_embed_identity(appmod, monkeypatch, user_info):
     """Run one embed-token request with a given _get_user_info result; return the identity sent."""
@@ -2302,23 +2309,23 @@ def _capture_embed_identity(appmod, monkeypatch, user_info):
     return posts
 
 
-def test_embed_names_the_practice_when_one_practice_is_chosen(client, appmod, monkeypatch):
+def test_embed_identity_carries_no_scope_for_one_practice(client, appmod, monkeypatch):
     posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21], False))
     assert client.get('/api/embed-token?report=revenue').status_code == 200
-    assert posts[0]['identities'][0]['customData'] == '21'
+    identity = posts[0]['identities'][0]
+    assert 'customData' not in identity
+    assert identity['username'] == 'u@x.com'
 
 
-def test_embed_names_no_practice_when_all_of_a_clients_practices_are_in_view(client, appmod,
-                                                                            monkeypatch):
+def test_embed_identity_carries_no_scope_for_a_whole_client(client, appmod, monkeypatch):
     """The case that was broken: four practices under one client.
 
-    The token says nothing about scope here. Narrowing is the browser's filter on
-    'Application Users'[Client ID]; a token that named one of the four would be wrong.
+    One practice or four, the token says the same thing. Narrowing is the browser's filter on
+    'Application Users'[Client ID] -- a token naming one of the four would be wrong, and a
+    token naming all four was the version that put a PATHCONTAINS on every fact table.
     """
     posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21, 22, 23, 24], False))
     assert client.get('/api/embed-token?report=revenue').status_code == 200
-    # No practice in view, so no practice named. The CLIENT is not expressed here at all: the
-    # browser filters 'Application Users'[Client ID], which is what narrows the reports.
     assert 'customData' not in posts[0]['identities'][0]
 
 

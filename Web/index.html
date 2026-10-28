@@ -1638,10 +1638,10 @@
     //     after 4-5 switches  dev 20.36s  prod 20.42s     THROTTLED
     //
     // Both workspaces, in lockstep: one capacity, so a staff member switching practice in DEV took
-    // the LIVE CUSTOMER to a 20-second delay. Every practice switch is a location.reload() -- which
-    // is correct, because RLS scope is baked into the embed token as customData and the existing
-    // embeds hold tokens minted for the previous practice -- so each switch paid for ten renders,
-    // and 4-5 of them exhausted the five-minute interactive budget.
+    // the LIVE CUSTOMER to a 20-second delay. Every practice switch is a location.reload() -- the
+    // acting client and practice are server-resolved and reach the reports through /api/me and the
+    // filters built from it, so a reload is the honest way to pick them up -- and each switch paid
+    // for ten renders, 4-5 of which exhausted the five-minute interactive budget.
     //
     // Off costs: moving to a section you have not visited yet is a ~3s first render instead of
     // instant. That is the whole price, and it is paid per section per session.

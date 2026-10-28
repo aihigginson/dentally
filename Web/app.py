@@ -364,12 +364,16 @@ def _authz_for(upn):
     # person with different practices picked resolve to different tenant sets, and the second was
     # being served the first one's answer for up to _AUTHZ_TTL.
     #
-    # It leaked through /api/embed-token, which is the one caller where tids decides RLS: with two
-    # permitted tenants and no single one in scope, customData is not set and the model adds the
-    # practices up. Observed on dev with a login granted tenants 11 and 100 -- Total Revenue
+    # It leaked through /api/embed-token, which is the one caller where a stale tids changes what
+    # a report shows. Observed on dev with a login granted tenants 11 and 100 -- Total Revenue
     # 785,899 against Maple's own 468,703, under Maple's name. Every other route resolves through
     # _get_user_info directly and was never affected, which is why the UI named one practice while
     # the reports showed two.
+    #
+    # The token no longer carries scope at all (the browser filters 'Application Users'[Client ID]
+    # instead), but the key stays exactly as it is: tids still decides the per-module access check
+    # below, and a cache keyed on the UPN alone would still answer one practice's question with
+    # another's.
     key = (upn, _acting_client_id(upn), _acting_tenant_id(upn))
     hit = _authz_cache.get(key)
     if hit and time.time() - hit[0] < _AUTHZ_TTL:
@@ -447,48 +451,29 @@ def embed_token():
             'roles':    REPORT_ROLES,
             'datasets': [dataset_id],
         }
-        # ==> AND IT MUST NAME THE PRACTICE, NOT JUST THE PERSON. <== RLS resolves the UPN to
-        # the set of tenants that user may see. That was the whole answer while every user
-        # could see exactly one -- but a support login on the Analytically client sees every
-        # practice, and a report given the whole set ADDS THEM UP. Two practices' revenue
-        # under one practice's name is the single worst thing this product could display.
+        # ==> THE SCOPE IS NOT IN THE TOKEN. IT IS A FILTER. <== The identity names the PERSON
+        # and nothing else; which practices they are LOOKING AT is pushed in from the browser
+        # as 'Application Users'[Client ID], alongside site, practitioner and period.
         #
-        # Site cannot do this job. 18 of the 42 active metrics have Supports_Site = 0, so a
-        # site slicer leaves those showing the combined total no matter what is selected --
-        # which is exactly how this was found.
+        # That works because 'Application Users' is the model's name for
+        # Security.vw_User_Tenant_Access, and every tenant-bearing table's rule resolves its
+        # tenants out of it. Filter it to the acting client and it holds only that client's
+        # tenants, so every fact table narrows with it -- upstream, once, for free.
         #
-        # customData carries the practice actually in scope, and the model narrows to it. Set
-        # only when the scope is UNAMBIGUOUS: one tenant means one practice. A staff login
-        # that has not picked one keeps the full permitted set, which is the deliberate
-        # "everything I can see" view rather than an accident.
+        # There used to be a customData carrying one tenant id, and an RLS clause
+        # ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ) reading it. Both are
+        # gone. It could only ever name ONE practice, so a client holding several had nothing
+        # to select, and the alternatives were all worse: widening it meant a per-row
+        # PATHCONTAINS on 49 fact tables, or a second lookup table in the model. The view
+        # carrying [Client ID] made the whole channel unnecessary.
         #
-        # It is an assertion of scope, never of permission. tids is what _get_user_info
-        # already resolved from the junction, so the token cannot name a practice the caller
-        # is not entitled to -- and the RLS rule keeps the set-membership test alongside this,
-        # so the model proves it again rather than trusting the token.
-        # ==> AND THE CLIENT TOO, BECAUSE A CLIENT CAN HOLD SEVERAL PRACTICES. <== customData
-        # used to be set ONLY when exactly one tenant was in scope, which spent the single
-        # available channel on the practice and left the CLIENT picker with nothing to narrow
-        # by. A staff login that may act as several clients therefore moved every one of the
-        # app's own screens when it switched client, while the reports kept the caller's whole
-        # permitted set and added it up -- the group total that started this.
-        #
-        # ==> THE SCOPE NO LONGER TRAVELS IN THE TOKEN AT ALL. <== It is a filter now: the
-        # browser pushes 'Application Users'[Client ID] in through setFilters alongside site,
-        # practitioner and period. 'Application Users' is the table every tenant-bearing rule
-        # resolves its tenants out of, so filtering it to the acting client narrows every fact
-        # table with it -- and the rules lost their CUSTOMDATA clause rather than gaining a
-        # per-row test.
-        #
-        # customData is kept, still naming one practice when exactly one is in view, because it
-        # costs nothing and a rule that wants it again finds it unchanged. Nothing reads it
-        # today; the client picker is NOT expressed here.
-        if len(tids) == 1:
-            identity['customData'] = str(tids[0])
+        # Don't reintroduce it as a convenience. Anything that narrows what is SHOWN belongs
+        # in setFilters; this identity is for what may be seen AT ALL, which is RLS's
+        # [User UPN] = USERPRINCIPALNAME() half and nothing else.
         token_body = {'accessLevel': 'View', 'identities': [identity]}
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s tenant=%s",
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s tenants=%s",
                         upn, REPORT_ROLES, report_name, client_id,
-                        identity.get('customData') or 'all-in-client')
+                        ','.join(str(t) for t in tids))
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
