@@ -90,6 +90,14 @@ def write_stage(records: list, table_name: str):
 # seeder can use them without pulling in pandas/pyarrow/deltalake.
 from seed_tenants import generate_xero_finance, T11, T12, SEED_TENANTS
 
+# The structural test tenants (21-24) live in their own module so that "demo data tuned to
+# look like a going concern" and "two patients, to make a wrong roll-up obvious" never get
+# confused for one another. Merged rather than redefined, so --tenants takes either kind.
+from skeleton_tenants import SKELETON_TENANTS
+# Dict-literal unpacking, not dict(a, **b): the keys are tenant IDs, and dict(**b)
+# accepts only string keys -- it raises TypeError on an int one.
+SEED_TENANTS = {**SEED_TENANTS, **SKELETON_TENANTS}
+
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
