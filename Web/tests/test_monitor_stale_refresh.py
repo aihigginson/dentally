@@ -107,18 +107,65 @@ def test_the_alarm_makes_the_run_actionable_on_its_own(appmod, client, monkeypat
     subject = sent[0][1]
     assert 'NOT REFRESHED' in subject, subject
 
-
 def test_the_email_leads_with_the_stale_model(appmod):
-    """It goes first because a model nobody refreshed makes every figure under it stale."""
+    """It goes first because it is the thing that needs acting on."""
     stale = {'last_build': '2026-10-26 22:26:00', 'last_refresh': '2026-10-19 21:31:00',
              'days_behind': 7}
     body = appmod._monitor_email_body([], [], '2026-10-26', stale)
     assert 'THE SEMANTIC MODEL WAS NOT REFRESHED' in body
     assert '7 day(s) behind' in body
-    assert body.index('NOT REFRESHED') < body.index('Investigate in Audit.Unified_Log')
+    assert body.index('NOT REFRESHED') < body.index('Audit.Unified_Log')
 
 
 def test_the_email_is_unchanged_when_the_model_is_fresh(appmod):
     """The section must not appear at all on a normal night."""
     body = appmod._monitor_email_body([], [], '2026-10-26')
     assert 'NOT REFRESHED' not in body
+
+
+def test_it_does_not_explain_what_a_stale_model_means(appmod):
+    """==> ONE PERSON READS THIS AND THEY BUILT THE SYSTEM. <== Telling them every night what
+    a stale model implies is condescending, and padding is what trains a reader to skim the
+    one mail that matters."""
+    stale = {'last_build': '2026-10-26 22:26:00', 'last_refresh': '2026-10-19 21:31:00',
+             'days_behind': 7}
+    body = appmod._monitor_email_body([], [], '2026-10-26', stale)
+    assert 'serving whatever' not in body
+    assert 'closes its parent run' not in body
+    assert len(body.strip().splitlines()) <= 7
+
+
+def test_the_401_advice_only_appears_when_there_is_a_401(appmod):
+    """Standing advice for a failure that is not in the mail is noise. It was printed on every
+    report regardless, including nights with no Dentally failure at all."""
+    quiet = appmod._monitor_email_body(
+        [{'when': '2026-10-27 01:00:00', 'name': 'x', 'error': 'disk full'}], [], '2026-10-26')
+    assert 'Settings' not in quiet
+
+    loud = appmod._monitor_email_body(
+        [], [{'when': '2026-10-27 01:00:00', 'tenant': 100, 'entity': 'patients',
+              'phase': 'FAILED', 'detail': 'HTTP 401 Unauthorized for url x'}], '2026-10-26')
+    assert 'Settings' in loud
+
+
+def test_repeated_identical_failures_collapse_to_one_line(appmod):
+    """==> 180 COPIES OF ONE MESSAGE IS NOT 180 PROBLEMS. <== appdb_sync failed every ten
+    minutes for two days on one missing table, and those rows buried the only other thing in
+    the mail. The count and the window are the facts; the message is printed once."""
+    rows = [{'when': '2026-10-25 %02d:%02d:00' % (h, m), 'name': 'appdb_sync.access',
+             'error': 'Input_Stage.Client does not exist in WH_Dentally -- deploy the DDL first'}
+            for h in (13, 14) for m in (0, 10, 20, 30, 40, 50)]
+    body = appmod._monitor_email_body(rows, [], '2026-10-24')
+    assert body.count('Input_Stage.Client') == 1
+    assert '12x' in body
+    assert '2026-10-25 13:00:00 .. 2026-10-25 14:50:00' in body
+
+
+def test_distinct_failures_are_still_listed_separately(appmod):
+    """Collapsing must not hide a second, different fault behind a noisy first one."""
+    rows = [{'when': '2026-10-25 13:00:00', 'name': 'a', 'error': 'table missing'},
+            {'when': '2026-10-25 13:10:00', 'name': 'a', 'error': 'table missing'},
+            {'when': '2026-10-25 14:00:00', 'name': 'b', 'error': 'permission denied'}]
+    body = appmod._monitor_email_body(rows, [], '2026-10-24')
+    assert 'table missing' in body and 'permission denied' in body
+    assert '2x' in body

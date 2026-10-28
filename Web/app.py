@@ -1724,40 +1724,76 @@ SUPPORT_FROM         = os.environ.get('SUPPORT_FROM', 'Support@Analytically.info
 
 
 def _monitor_email_body(proc, ing, since, stale_refresh=None):
-    # 'since' is the previous report's watermark, so this lists THIS build's real errors only --
-    # already-reported rows and already-fixed token 401s are filtered out by the caller.
+    """The night's failures, in the order they need acting on.
+
+    ==> THIS IS READ BY ONE PERSON WHO ALREADY KNOWS HOW THE SYSTEM WORKS. <== It earns its
+    place by saying what broke and when. It does NOT explain what a stale model means, and it
+    does not carry standing advice for failures that are not in it -- a fix for Dentally 401s
+    printed on a night with no 401s is noise that trains the reader to skim, and the one night
+    the mail matters they skim that too.
+
+    An earlier version ran to 30+ lines for two distinct problems, 180 of them identical copies
+    of one error. 'since' is the previous report's watermark, so already-reported rows and
+    already-fixed token 401s are filtered out by the caller.
+    """
     lines = [f"Warehouse health check ({APP_ENV}) — new failures since {since}.\n"]
-    # First, because a model nobody refreshed makes every figure below it a day old or worse.
+
     if stale_refresh:
+        behind = stale_refresh['days_behind']
         lines.append("*** THE SEMANTIC MODEL WAS NOT REFRESHED AFTER THE LAST BUILD ***")
         lines.append(f"  last build   : {stale_refresh['last_build']}")
-        behind = stale_refresh['days_behind']
         lines.append(f"  last refresh : {stale_refresh['last_refresh']}"
                      + (f"   ({behind} day(s) behind)" if behind else ""))
-        lines.append("  The reports are serving whatever the model last held. The build still")
-        lines.append("  reports success, because it closes its parent run BEFORE refreshing.")
         lines.append("")
+
     if proc:
         lines.append(f"Process_Execution_Log — {len(proc)} FAILED:")
-        for r in proc[:20]:
-            lines.append(f"  {r['when']}  {r['name'] or '(unnamed)'}  {r['error'][:160]}")
-        if len(proc) > 20:
-            lines.append(f"  … +{len(proc) - 20} more")
+        lines += _collapse_failures([(r['when'], r['name'] or '(unnamed)', r['error']) for r in proc])
         lines.append("")
+
     if ing:
-        # Group the (often many, near-identical) ingest rows by tenant + error signature.
-        groups = {}
-        for r in ing:
-            sig = (r['detail'].split(' for url')[0] or r['phase'])[:70]
-            g = groups.setdefault((r['tenant'], sig), [])
-            g.append(r['entity'])
-        lines.append(f"Ingest_Log — {len(ing)} failure row(s), {len(groups)} distinct:")
-        for (tenant, sig), entities in list(groups.items())[:20]:
-            lines.append(f"  tenant {tenant}: {len(entities)} entit{'y' if len(entities)==1 else 'ies'} — {sig}")
-            lines.append(f"      ({', '.join(entities[:8])}{' …' if len(entities) > 8 else ''})")
+        lines.append(f"Ingest_Log — {len(ing)} failure row(s):")
+        lines += _collapse_failures(
+            [(r['when'], f"tenant {r['tenant']} {r['entity']}", r['detail'] or r['phase'])
+             for r in ing])
         lines.append("")
-    lines.append("Investigate in Audit.Unified_Log. (Dentally 401s: a practice admin can refresh the token in the app under Settings → Dentally.)")
+
+    lines.append("Audit.Unified_Log.")
+    # Only when there is actually a 401 to act on.
+    if any('401' in (r.get('error') or '') for r in proc) or \
+       any('401' in (r.get('detail') or '') for r in ing):
+        lines.append("Dentally 401: a practice admin refreshes the token under Settings → Dentally.")
     return "\n".join(lines)
+
+
+def _collapse_failures(rows, limit=8):
+    """One line per DISTINCT error, with a count and the window it spans.
+
+    ==> 180 COPIES OF ONE MESSAGE IS NOT 180 PROBLEMS. <== appdb_sync failed every ten minutes
+    for two days on a missing Input_Stage table: one fault, 180 rows, and it buried the only
+    other thing in the mail. Repetition is a fact ABOUT a failure, not a reason to print it
+    again, so it collapses to a count and a first/last timestamp.
+
+    `rows` is (when, name, error). Returns the body lines.
+    """
+    groups = {}
+    for when, name, err in rows:
+        sig = (str(err or '').split(' for url')[0].strip())[:150]
+        g = groups.setdefault((name, sig), {'n': 0, 'first': when, 'last': when})
+        g['n'] += 1
+        g['first'] = min(g['first'], when)
+        g['last'] = max(g['last'], when)
+
+    out = []
+    for (name, sig), g in list(groups.items())[:limit]:
+        if g['n'] == 1:
+            out.append(f"  {g['last']}  {name}  {sig}")
+        else:
+            out.append(f"  {g['n']}x  {g['first']} .. {g['last']}  {name}")
+            out.append(f"      {sig}")
+    if len(groups) > limit:
+        out.append(f"  … +{len(groups) - limit} more distinct")
+    return out
 
 
 def _tenant_primary_email(tenant_id):

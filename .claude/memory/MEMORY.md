@@ -83,7 +83,7 @@
 - [A silent except froze patient_stats](a-silent-except-froze-patient-stats.md) — an unlogged NameError stopped the feed for 3 months behind a job reporting Completed.
 - [Financial years differ per tenant](financial-years-differ-per-tenant.md) — Maple is calendar-year, the demo is April-March; a group view can only offer rolling windows.
 - [Embed token scope stops at one tenant](embed-token-scope-stops-at-one-tenant.md) — customData is only sent for a single practice; two tenants falls back to the user own RLS set. Group feature triggers it.
-- [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — ~9s = published nothing; ~30-45s is real. Status is useless; check duration.
+- [Nightly model refresh reports false success](nightly-model-refresh-reports-false-success.md) — SOLVED: sempy defaults to type=Automatic, which refreshes nothing in 6s and reports success. Settle-loop deaths still open.
 - [Day Book grid reads columns, not measures](day-book-grid-reads-columns-not-measures.md) — the summary binds to Aggregate_Site_Practitioner_Current columns; editing the same-named DAX measure changes nothing.
 - [Recalls To Action lives in three places](recalls-to-action-lives-in-three-places.md) — aggregate column, DAX measure AND the detail page's own filters; miss one and summary disagrees with detail.
 - [Fabric REST cannot pass an array notebook parameter](fabric-rest-cannot-pass-an-array-notebook-parameter.md) — only_entities fails via jobs/instances; use the UI. Includes the recalls backfill recipe.
