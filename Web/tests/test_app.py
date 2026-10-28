@@ -2265,3 +2265,67 @@ def test_insights_hides_itself_across_several_practices(appmod, client, monkeypa
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
     body = client.get('/api/insights').get_json()
     assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}
+
+
+# ── Embed scope: the client half of customData ───────────────────────────────
+# ==> THE GROUP TOTAL BUG. <== customData used to be set only when exactly ONE tenant was in
+# scope, which spent the single channel on the practice. A client holding several practices had
+# nothing to narrow the reports by, so switching client moved the app's own screens while the
+# report kept the caller's whole permitted set and added it up. customData now carries the whole
+# acting scope as a comma-separated set, which is exactly what the caller is looking at.
+
+def _capture_embed_identity(appmod, monkeypatch, user_info):
+    """Run one embed-token request with a given _get_user_info result; return the identity sent."""
+    posts = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('u@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: user_info)
+    monkeypatch.setattr(appmod, '_get_user_access', lambda cur, upn: ({'revenue': True}, None))
+    monkeypatch.setattr(appmod, '_pbi_token', lambda: 'pbi-token')
+
+    class FakeResp:
+        def __init__(self, payload):
+            self._p = payload
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self._p
+
+    monkeypatch.setattr(appmod.requests, 'get',
+                        lambda *a, **k: FakeResp({'embedUrl': 'https://e', 'datasetId': 'ds1'}))
+
+    def _post(*a, **k):
+        posts.append(k['json'])
+        return FakeResp({'token': 'embed-token'})
+
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+    return posts
+
+
+def test_embed_scope_names_client_and_practice_when_one_practice_is_chosen(client, appmod,
+                                                                          monkeypatch):
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    # A bare id, byte-for-byte what the old single-tenant form sent: back-compatible both ways.
+    assert posts[0]['identities'][0]['customData'] == '21'
+
+
+def test_embed_scope_names_the_client_when_all_its_practices_are_in_view(client, appmod,
+                                                                        monkeypatch):
+    """The case that was broken: four practices under one client.
+
+    customData must name ALL FOUR, or RLS falls back to every tenant the caller may see
+    -- which for a staff login is every practice in the warehouse, shown under the group's name.
+    """
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21, 22, 23, 24], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    assert posts[0]['identities'][0]['customData'] == '21,22,23,24'
+
+
+def test_embed_scope_is_always_attached(client, appmod, monkeypatch):
+    """Never absent. An absent customData is precisely the 'add them all up' state."""
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 11, [11, 12], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    identity = posts[0]['identities'][0]
+    assert 'customData' in identity and identity['customData'] == '11,12'
+    assert identity['roles'] == appmod.REPORT_ROLES, 'RLS role must always be attached'

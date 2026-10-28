@@ -466,12 +466,32 @@ def embed_token():
         # already resolved from the junction, so the token cannot name a practice the caller
         # is not entitled to -- and the RLS rule keeps the set-membership test alongside this,
         # so the model proves it again rather than trusting the token.
-        if len(tids) == 1:
-            identity['customData'] = str(tids[0])
+        # ==> AND THE CLIENT TOO, BECAUSE A CLIENT CAN HOLD SEVERAL PRACTICES. <== customData
+        # used to be set ONLY when exactly one tenant was in scope, which spent the single
+        # available channel on the practice and left the CLIENT picker with nothing to narrow
+        # by. A staff login that may act as several clients therefore moved every one of the
+        # app's own screens when it switched client, while the reports kept the caller's whole
+        # permitted set and added it up -- the group total that started this.
+        #
+        # ==> SO IT CARRIES THE WHOLE SCOPE, AS A SET. <== Not the client id: the model would
+        # then need a client->tenant table to resolve it, and that is a new table in a model
+        # whose service principal may write metadata but not add data connections. tids IS the
+        # acting client's tenant set -- _get_user_info already resolved it, narrowed by the
+        # acting client and then by the acting practice -- so sending the set says exactly what
+        # is in view and the rule needs only a membership test.
+        #
+        # Comma separated; the rule turns it into a PATHCONTAINS path. One tenant renders as a
+        # bare "11", which is byte-for-byte what the old single-tenant form sent, so the change
+        # is back-compatible in both directions during a deploy.
+        #
+        # It remains an assertion of SCOPE, never of permission. tids cannot contain a tenant
+        # the caller is not entitled to, and the rule keeps its USERPRINCIPALNAME
+        # set-membership test alongside this, so the model proves it again rather than
+        # trusting the token.
+        identity['customData'] = ','.join(str(t) for t in tids)
         token_body = {'accessLevel': 'View', 'identities': [identity]}
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s tenant=%s",
-                        upn, REPORT_ROLES, report_name,
-                        identity.get('customData') or 'all-permitted')
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s scope=%s",
+                        upn, REPORT_ROLES, report_name, client_id, identity['customData'])
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
