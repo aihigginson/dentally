@@ -102,6 +102,19 @@ def main():
     args = parser.parse_args()
     tenant_ids = [int(t.strip()) for t in args.tenants.split(',')]
 
+    # ==> A TEST TENANT MUST NEVER REACH PROD. <== Every synthetic tenant is numbered below
+    # 100 by convention; 100 and up are real practices. Seeding a test tenant into the prod
+    # lakehouse would put invented patients and invented revenue into a live warehouse, where
+    # they would roll up into real totals and be very hard to pick back out -- Stage has no
+    # delete step, so the rows accumulate. One mistyped --env is the whole distance between
+    # a dev refresh and that, so the refusal is here rather than in anyone's memory.
+    if args.env == 'prod':
+        synthetic = [t for t in tenant_ids if t < 100]
+        if synthetic:
+            print('REFUSED: tenant(s) %s are synthetic (< 100) and cannot be seeded to prod.'
+                  % ', '.join(str(t) for t in synthetic))
+            sys.exit(2)
+
     global WORKSPACE_GUID, LAKEHOUSE_GUID
     WORKSPACE_GUID, LAKEHOUSE_GUID = ENV_GUIDS[args.env]
     print(f"Target OneLake: {args.env}  (lakehouse {LAKEHOUSE_GUID})")
