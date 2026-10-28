@@ -3591,46 +3591,45 @@ in
 }
 
 
-// ===================== RLS scope: client and practice =====================
+// ===================== RLS: the scope comes from the client filter =====================
 {
 // =====================================================================
-// ==> THE NARROWING BELONGS ON THE ANCHOR, NOT ON EVERY FACT TABLE. <==
+// ==> THE CLIENT NARROWING IS A REPORT FILTER, NOT A RULE. <==
 //
-// Every tenant-bearing table filters through
-// SELECTCOLUMNS(FILTER('Application Users', [User UPN] = USERPRINCIPALNAME()), ...), and
-// row-level security COMPOSES: cut 'Application Users' and all fifty-odd rules narrow with it.
-// So the client and practice selections are applied ONCE, on a lookup of a few rows per user,
-// instead of being re-tested per row on every fact table.
+// 'Application Users' is the model's name for Security.vw_User_Tenant_Access, and it is what
+// every tenant-bearing table's rule resolves its tenants out of:
 //
-// That also makes the fact rules SHORTER than they were. They lose their own
-// ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ) clause, because the anchor
-// has already removed the tenants that clause existed to remove. One comparison on a small
-// table replaces a per-row comparison on every fact -- and a first attempt that put
-// PATHCONTAINS + FORMAT([Tenant ID]) on all 49 was rightly rejected as a lot of work to do
-// per row, per visual, forever.
+//     [Tenant ID] IN SELECTCOLUMNS(FILTER('Application Users', [User UPN] = USERPRINCIPALNAME()),
+//                                  "Tenant ID", 'Application Users'[Tenant ID])
 //
-// ==> IT DEPENDS ON [Client ID] BEING THE TENANT'S CLIENT, NOT THE USER'S. <== See
-// Security.vw_User_Tenant_Access: a support login sits on the vendor client, so a user-derived
-// column would carry that one id on every row and narrowing to the client actually picked
-// would match nothing. The view reads Input.Client_Tenant, the same mapping the hierarchy
-// screen maintains.
+// So filtering THAT table to the acting client leaves it holding only that client's tenants,
+// and every fact table narrows with it. The app pushes the filter in through setFilters
+// alongside site, practitioner and period -- 'Application Users'[Client ID], set from
+// /api/me, overridden by the Analytically client picker.
 //
-// customData is "<client>|<tenant>", the tenant half empty when all of a client's practices
-// are in view. Blank customData leaves both halves open -- "everything I may see" -- which is
-// what a direct Desktop connection gets.
+// ==> WHICH IS WHY THE CUSTOMDATA CLAUSE GOES. <== The fact rules carried
+// ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ), added to narrow to ONE
+// practice when the site dimension could not do it (18 of 42 metrics have Supports_Site = 0).
+// It only ever held one id, so a client with several practices had nothing to select, and
+// doing that job properly in the rules meant a per-row test on all 49 tables. The filter does
+// it upstream instead, for free, and the clause is removed rather than extended.
 //
-// NARROWS, NEVER WIDENS: [User UPN] = USERPRINCIPALNAME() stays first and unconditional, so no
-// token can reach a row the caller does not own. The || [Tenant ID] = -1 escape on the fact
-// rules is kept verbatim: without it every unknown-member row disappears and the fact rows
-// that resolve to it drop out of totals.
+// [Client ID] is the TENANT'S client -- the view reads Input.Client_Tenant, the mapping the
+// hierarchy screen maintains. The signed-in user's own client would be useless: a support
+// login sits on the vendor client, so every row would carry that one id and selecting the
+// client actually picked would match nothing.
 //
-// Idempotent: expressions are compared with whitespace collapsed, so a re-run is silent.
-// Runs AFTER the donor-copy block above, so a table that block just seeded is normalised in
-// the same pass.
+// Permission is untouched. [User UPN] = USERPRINCIPALNAME() still decides what may be seen at
+// all, and a report filter can only ever show less, so this narrows and can never widen. The
+// || [Tenant ID] = -1 escape is kept verbatim: without it every unknown-member row disappears
+// and the fact rows that resolve to it drop out of totals.
 //
-// ==> THE MODEL MUST HAVE [Client ID] ON 'Application Users' AND BE REFRESHED. <== The column
-// is added below if missing, but a column with no data narrows to NOTHING -- every report
-// blank. Refresh that table (or the model) after running this.
+// Idempotent: expressions are compared with whitespace collapsed, so a re-run is silent. Runs
+// AFTER the donor-copy block above, so a table that block just seeded is normalised too.
+//
+// ==> REFRESH 'Application Users' AFTER RUNNING THIS. <== The column is added to the model
+// here, but it holds no data until that table is processed -- and a filter on an empty column
+// matches nothing, which reads as every report suddenly being blank.
 // =====================================================================
     var RLS_ANCHOR     = "Application Users";
     var RLS_TENANT_COL = "Tenant ID";
@@ -3639,30 +3638,20 @@ in
     var anchor = Model.Tables.FirstOrDefault(t => t.Name == RLS_ANCHOR);
     if (anchor == null)
     {
-        Info("WARNING RLS: no '" + RLS_ANCHOR + "' table -- scope rules NOT applied.");
+        Info("WARNING RLS: no '" + RLS_ANCHOR + "' table -- client scope NOT available.");
     }
     else
     {
-        // The view supplies it; the model only learns about it on a schema refresh, and in a
-        // .pbix that is a manual step. Added here so the rule below cannot reference a column
-        // that does not exist, which would make the whole role fail to deploy.
         if (!anchor.Columns.Any(c => c.Name == RLS_CLIENT_COL))
         {
             var col = anchor.AddDataColumn(RLS_CLIENT_COL, RLS_CLIENT_COL);
             col.DataType = DataType.Int64;
             Info("RLS: added '" + RLS_CLIENT_COL + "' to '" + RLS_ANCHOR
-                 + "'. REFRESH THAT TABLE before publishing -- an empty column narrows to nothing.");
+                 + "'. REFRESH that table -- a filter on an empty column matches nothing.");
         }
 
-        var anchorRule = @"VAR _cd = CUSTOMDATA()
-VAR _sep = IFERROR( FIND( ""|"", _cd ), 0 )
-VAR _client = IF( _sep > 0, LEFT( _cd, _sep - 1 ), _cd )
-VAR _tenant = IF( _sep > 0, MID( _cd, _sep + 1, 32 ), """" )
-RETURN
-[User UPN] = USERPRINCIPALNAME()
-    && ( LEN( _client ) = 0 || [Client ID] = VALUE( _client ) )
-    && ( LEN( _tenant ) = 0 || [Tenant ID] = VALUE( _tenant ) )";
-
+        // The rule each tenant-bearing table should carry: permission, and the sentinel escape.
+        // Nothing about the selected scope, which now arrives as a filter on the anchor.
         var factRule = @"[Tenant ID] IN
     SELECTCOLUMNS(
         FILTER('Application Users', 'Application Users'[User UPN] = USERPRINCIPALNAME()),
@@ -3674,38 +3663,40 @@ RETURN
                 ? ""
                 : System.Text.RegularExpressions.Regex.Replace(e, @"\s+", " ").Trim();
 
+        var wantedFact = squash(factRule);
         int rlsUpdated = 0, rlsAlready = 0;
 
         foreach (var role in Model.Roles)
         {
             foreach (var t in Model.Tables.OrderBy(x => x.Name))
             {
-                var isAnchor = (t.Name == RLS_ANCHOR);
-                if (!isAnchor && !t.Columns.Any(c => c.Name == RLS_TENANT_COL)) continue;
+                // The anchor keeps its own [User UPN] = USERPRINCIPALNAME() rule untouched: it is
+                // what the others READ, and it is the table the client filter lands on.
+                if (t.Name == RLS_ANCHOR) continue;
+                if (!t.Columns.Any(c => c.Name == RLS_TENANT_COL)) continue;
 
-                var want = isAnchor ? anchorRule : factRule;
                 var current = role.RowLevelSecurity[t];
 
                 // A tenant-bearing table with NO rule is a different fault, and the block above
-                // exists to seed those from a donor. Warn naming it rather than quietly
-                // inventing one: an unfiltered table is readable in full by every login.
-                if (!isAnchor && string.IsNullOrWhiteSpace(current))
+                // exists to seed those from a donor. Warn naming it rather than quietly inventing
+                // one: an unfiltered table is readable in full by every login.
+                if (string.IsNullOrWhiteSpace(current))
                 {
                     Info("WARNING RLS " + role.Name + ": " + t.Name
                          + " has NO filter. Add it to RLS_TABLES above -- not publishing is safer.");
                     continue;
                 }
 
-                if (squash(current) == squash(want)) { rlsAlready++; continue; }
+                if (squash(current) == wantedFact) { rlsAlready++; continue; }
 
-                role.RowLevelSecurity[t] = want;
+                role.RowLevelSecurity[t] = factRule;
                 rlsUpdated++;
             }
         }
 
         if (rlsUpdated > 0)
-            Info("RLS scope: " + rlsUpdated + " rule(s) updated (" + rlsAlready
-                 + " already current). Narrowing is on '" + RLS_ANCHOR + "'.");
+            Info("RLS: CUSTOMDATA scope clause removed from " + rlsUpdated + " rule(s) ("
+                 + rlsAlready + " already current). Scope now comes from the client filter.");
     }
 }
 

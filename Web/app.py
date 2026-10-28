@@ -473,27 +473,22 @@ def embed_token():
         # app's own screens when it switched client, while the reports kept the caller's whole
         # permitted set and added it up -- the group total that started this.
         #
-        # ==> SO IT NAMES BOTH: "<client>|<tenant>". <== The tenant half is empty when all of a
-        # client's practices are in view.
+        # ==> THE SCOPE NO LONGER TRAVELS IN THE TOKEN AT ALL. <== It is a filter now: the
+        # browser pushes 'Application Users'[Client ID] in through setFilters alongside site,
+        # practitioner and period. 'Application Users' is the table every tenant-bearing rule
+        # resolves its tenants out of, so filtering it to the acting client narrows every fact
+        # table with it -- and the rules lost their CUSTOMDATA clause rather than gaining a
+        # per-row test.
         #
-        # The model applies BOTH halves on 'Application Users' alone, whose [Client ID] is the
-        # TENANT's client (Security.vw_User_Tenant_Access reads Input.Client_Tenant). Row-level
-        # security composes, so narrowing that one small lookup narrows every tenant-bearing
-        # table through the SELECTCOLUMNS(FILTER(...)) they all share -- no per-row test on any
-        # fact table, and their rules get shorter rather than longer.
-        #
-        # Sending the resolved tenant SET instead was tried and rejected: it moved the work to
-        # a PATHCONTAINS + FORMAT([Tenant ID]) on all 49 fact tables, which is a lot of work to
-        # repeat per row, per visual, forever, to answer something a lookup already knows.
-        #
-        # It remains an assertion of SCOPE, never of permission: [User UPN] = USERPRINCIPALNAME()
-        # stays first and unconditional in the rule, so a token cannot reach a row the caller
-        # does not own. Blank customData means "everything I may see" and is what a direct
-        # Desktop connection gets.
-        identity['customData'] = '%s|%s' % (client_id, tids[0] if len(tids) == 1 else '')
+        # customData is kept, still naming one practice when exactly one is in view, because it
+        # costs nothing and a rule that wants it again finds it unchanged. Nothing reads it
+        # today; the client picker is NOT expressed here.
+        if len(tids) == 1:
+            identity['customData'] = str(tids[0])
         token_body = {'accessLevel': 'View', 'identities': [identity]}
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s scope=%s",
-                        upn, REPORT_ROLES, report_name, identity['customData'])
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s tenant=%s",
+                        upn, REPORT_ROLES, report_name, client_id,
+                        identity.get('customData') or 'all-in-client')
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,

@@ -2268,12 +2268,11 @@ def test_insights_hides_itself_across_several_practices(appmod, client, monkeypa
 
 
 # ── Embed scope: the client half of customData ───────────────────────────────
-# ==> THE GROUP TOTAL BUG. <== customData used to be set only when exactly ONE tenant was in
-# scope, which spent the single channel on the practice. A client holding several practices had
-# nothing to narrow the reports by, so switching client moved the app's own screens while the
-# report kept the caller's whole permitted set and added it up. customData now names both, as
-# "<client>|<tenant>", and the model narrows on 'Application Users' alone -- RLS composes, so
-# every tenant-bearing table narrows with it and none of them gains a per-row test.
+# ==> THE GROUP TOTAL BUG. <== customData could only ever name ONE practice, so a client holding
+# several had nothing to narrow the reports by: switching client moved the app's own screens
+# while the report kept the caller's whole permitted set and added it up. The scope is now a
+# FILTER on 'Application Users'[Client ID] -- the table every tenant-bearing rule resolves its
+# tenants out of -- so the token no longer carries it.
 
 def _capture_embed_identity(appmod, monkeypatch, user_info):
     """Run one embed-token request with a given _get_user_info result; return the identity sent."""
@@ -2303,29 +2302,29 @@ def _capture_embed_identity(appmod, monkeypatch, user_info):
     return posts
 
 
-def test_embed_scope_names_client_and_practice_when_one_practice_is_chosen(client, appmod,
-                                                                          monkeypatch):
+def test_embed_names_the_practice_when_one_practice_is_chosen(client, appmod, monkeypatch):
     posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21], False))
     assert client.get('/api/embed-token?report=revenue').status_code == 200
-    assert posts[0]['identities'][0]['customData'] == '20|21'
+    assert posts[0]['identities'][0]['customData'] == '21'
 
 
-def test_embed_scope_names_the_client_when_all_its_practices_are_in_view(client, appmod,
-                                                                        monkeypatch):
+def test_embed_names_no_practice_when_all_of_a_clients_practices_are_in_view(client, appmod,
+                                                                            monkeypatch):
     """The case that was broken: four practices under one client.
 
-    customData must still name the CLIENT, or RLS falls back to every tenant the caller may see
-    -- which for a staff login is every practice in the warehouse, shown under the group's name.
+    The token says nothing about scope here. Narrowing is the browser's filter on
+    'Application Users'[Client ID]; a token that named one of the four would be wrong.
     """
     posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21, 22, 23, 24], False))
     assert client.get('/api/embed-token?report=revenue').status_code == 200
-    assert posts[0]['identities'][0]['customData'] == '20|'
+    # No practice in view, so no practice named. The CLIENT is not expressed here at all: the
+    # browser filters 'Application Users'[Client ID], which is what narrows the reports.
+    assert 'customData' not in posts[0]['identities'][0]
 
 
-def test_embed_scope_is_always_attached(client, appmod, monkeypatch):
-    """Never absent. An absent customData is precisely the 'add them all up' state."""
+def test_embed_always_attaches_the_rls_role(client, appmod, monkeypatch):
+    """Row filtering is mandatory, whatever the scope mechanism happens to be."""
     posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 11, [11, 12], False))
     assert client.get('/api/embed-token?report=revenue').status_code == 200
     identity = posts[0]['identities'][0]
-    assert 'customData' in identity and identity['customData'] == '11|'
     assert identity['roles'] == appmod.REPORT_ROLES, 'RLS role must always be attached'

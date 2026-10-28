@@ -1486,6 +1486,11 @@
         if (!meRes || !meRes.ok) return;
 
         const data = await meRes.json();
+        // The client actually in force, as the server resolved it: the user's own, or the one a
+        // staff login picked. applyFilters pushes it into 'Application Users'[Client ID], which
+        // is the table row-level security resolves every fact table's tenants out of -- so
+        // filtering it to this client is what narrows the reports to that client's practices.
+        filterState.client = (data.client_id != null) ? data.client_id : null;
         const u = document.getElementById('header-user');
         const o = document.getElementById('header-org');
         if (u && data.display_name) {
@@ -4509,7 +4514,11 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all' };
+    // client: the client whose practices the reports should show. Taken from /api/me rather than
+    // read off the picker, because the SERVER decides which client is actually in force -- the
+    // user's own, a staff override from the Analytically picker, or the demo pin -- and the
+    // header must never name one client while the reports show another.
+    const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all', client: null };
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
     const selRole     = document.getElementById('f-role');
@@ -4661,6 +4670,22 @@
     //                          — symptom: NHS ignored the date filter until changed).
     function applyFilters(report) {
         const filters = [];
+        // ==> THE CLIENT IN SCOPE, PUSHED IN LIKE EVERY OTHER FILTER. <== 'Application Users' is
+        // what row-level security reads: every tenant-bearing table's rule resolves its tenants
+        // out of it. Filtering it to the acting client therefore narrows the reports to that
+        // client's practices without a word of DAX, and without the per-row work that doing the
+        // same job inside 50 rules would cost.
+        //
+        // [Client ID] is the TENANT'S client (Security.vw_User_Tenant_Access reads
+        // Input.Client_Tenant), not the signed-in user's -- a support login sits on the vendor
+        // client, so a user-derived column would carry that one id on every row and narrowing to
+        // the client actually picked would match nothing.
+        //
+        // Scope, not permission: the rule's [User UPN] = USERPRINCIPALNAME() half still decides
+        // what may be seen at all, so this can only ever show less, never more.
+        if (filterState.client) {
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Application Users', column: 'Client ID' }, operator: 'In', values: [Number(filterState.client)], filterType: 1 });
+        }
         if (filterState.site !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
         }
