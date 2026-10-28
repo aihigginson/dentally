@@ -40,8 +40,12 @@
 --  to behave as a group could not see its second member. Nothing reported an error. Running this
 --  fixes that class of case as well as creating new ones.
 --
+--  ==> IT ALSO RETIRES THE MEMBER'S OWN CLIENT. <== Provisioning gives every tenant a client of
+--  its own, which is right while it stands alone. Folded into a group it is a PRACTICE, and
+--  leaving it in the client picker is both wrong and broken -- see step 3.
+--
 --  IDEMPOTENT. Re-running with the same members changes nothing; re-running with an extra member
---  adds it. It never removes a grant it did not make.
+--  adds it. The only grant it removes is the member's own, and only as part of folding it in.
 --
 --  To Run:
 --    EXEC Audit.usp_Form_Client_Group
@@ -100,7 +104,32 @@ BEGIN
     WHERE  NOT EXISTS (SELECT 1 FROM Security.Client_Tenant_Access a
                        WHERE a.Client_ID = @Group_Client_ID AND a.Tenant_ID = m.Tenant_ID);
 
-    ---------------------------------------------------------------- 3. report, and warn loudly
+    ---------------------------------------------------------------- 3. the member stops being a client
+    -- ==> FOLDING A PRACTICE INTO A GROUP RETIRES ITS OWN CLIENT. <== Provisioning gives every
+    -- tenant its own client, which is right while it stands alone. Once it is part of a group,
+    -- "Skeleton Alpha" is a PRACTICE, not a client, and offering it in the client picker as well
+    -- is both wrong and broken: the picker lists any client with a tenant granted to it, while
+    -- Input.Client_Tenant now says that tenant belongs to the GROUP -- so selecting it filtered
+    -- the reports to a client id that matches no row, and every tile read blank.
+    --
+    -- Revoking the self-grant is what retires it: Security.Client_Tenant_Access is what the
+    -- picker is built from, and _get_user_info will not act as a client with no active tenant.
+    -- The Security.Clients row STAYS -- Audit.Tenants.Client_ID still points at it, that is who
+    -- the practice was provisioned under, and billing and invoicing read it. Ownership is not
+    -- what is being withdrawn here; the ability to be SELECTED as a client is.
+    --
+    -- Only the member's own client, only for the tenant being folded in, and never the group
+    -- itself or the vendor client -- which owns nothing, is granted everything, and is how
+    -- support reaches any of this.
+    DELETE a
+    FROM   Security.Client_Tenant_Access a
+    JOIN   #members m       ON m.Tenant_ID = a.Tenant_ID
+    JOIN   Audit.Tenants t  ON t.Tenant_ID = m.Tenant_ID
+    WHERE  a.Client_ID = t.Client_ID            -- the client it was provisioned under
+      AND  a.Client_ID <> @Group_Client_ID      -- never the group we are forming
+      AND  a.Client_ID <> 1;                    -- never the vendor client
+
+    ---------------------------------------------------------------- 4. report, and warn loudly
     -- A member whose sites have no area still reports at site and practice level, so the loss
     -- shows up only as a group total that is quietly short. Input.Site_Area is read here, never
     -- written: if this column is not 0 the fix is in the AppDB, not in this proc.
