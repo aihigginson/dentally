@@ -640,6 +640,66 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
+        # ==> THE SELECTOR IS THE WHOLE HIERARCHY, NOT JUST SITES. <== One flat, indented list --
+        # Group, then each Region, its Areas, their Practices and those practices' Sites -- where
+        # picking ANY node resolves to the SET of practice-site records beneath it. Group is
+        # everything; a Region is every site whose region is that one. The report then shows that
+        # level's figures, and comparison reports can be built on the same selection later.
+        #
+        # ==> IT RESOLVES TO SITE KEYS BECAUSE EVERY METRIC NOW CARRIES A SITE. <== Before the
+        # Fact_Metric_Actuals grain fix a site-based selector could not have worked: 17 metrics
+        # wrote fk_Practice_Site = -1 on every row and would have ignored it. That is why this
+        # could not be built first.
+        #
+        # pk_Practice_Site, not Site_Name: two practices in a group can both have a "Central", and
+        # filtering on a label would silently pull in the other one's.
+        hierarchy = []
+        if tids:
+            cur.execute(
+                f"SELECT r.Region_Name, r.Sort_Order, a.Area_Name, a.Sort_Order, "
+                f"       t.Tenant_Name, s.pk_Practice_Site, s.Site_Name "
+                f"FROM   Input.Client_Region r "
+                f"JOIN   Input.Client_Area   a  ON a.Region_ID = r.Region_ID "
+                f"JOIN   Input.Site_Area     sa ON sa.Area_ID  = a.Area_ID "
+                f"JOIN   Gold.Dim_Practice_Sites s ON s.Tenant_ID = sa.Tenant_ID AND s.Site_ID = sa.Site_ID "
+                f"JOIN   Audit.Tenants t ON t.Tenant_ID = sa.Tenant_ID "
+                f"WHERE  r.Client_ID = ? AND s.Tenant_ID IN ({placeholders}) AND s.Site_Active = 1 "
+                f"ORDER BY r.Sort_Order, r.Region_Name, a.Sort_Order, a.Area_Name, "
+                f"         t.Tenant_Name, s.Site_Name",
+                [client_id] + list(tids),
+            )
+            rows = [{'region': r[0], 'area': r[2], 'practice': r[4],
+                     'pk': int(r[5]), 'site': r[6]} for r in cur.fetchall()]
+
+            # ==> A LEVEL THAT OFFERS NO CHOICE IS NOT SHOWN. <== A single-practice customer has
+            # one region and one area, both usually called "All", and listing them is three lines
+            # of furniture above the only thing worth picking. The test is observable rather than
+            # configured: if a level has exactly one distinct value across the client, it cannot
+            # narrow anything, so it is omitted.
+            levels = [lv for lv in ('region', 'area', 'practice')
+                      if len({r[lv] for r in rows}) > 1]
+
+            def node(depth, label, members):
+                return {'id': '%d:%s' % (depth, label), 'depth': depth, 'label': label,
+                        'sites': sorted({m['pk'] for m in members})}
+
+            if rows:
+                hierarchy.append(node(0, 'Group', rows))
+                seen = set()
+                for row in rows:
+                    path = []
+                    for lv in levels:
+                        path.append(lv)
+                        key = tuple(row[p] for p in path)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        members = [m for m in rows
+                                   if all(m[p] == row[p] for p in path)]
+                        hierarchy.append(node(len(path), row[lv], members))
+                    # the site itself is always selectable, and is the only leaf
+                    hierarchy.append(node(len(levels) + 1, row['site'], [row]))
+
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
         excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
@@ -716,7 +776,8 @@ def filters():
         except Exception:
             periods = []
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
+        return jsonify({'sites': sites, 'hierarchy': hierarchy, 'practitioners': practitioners,
+                        'roles': roles, 'periods': periods})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.

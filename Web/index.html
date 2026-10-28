@@ -4519,6 +4519,10 @@
     // user's own, a staff override from the Analytically picker, or the demo pin -- and the
     // header must never name one client while the reports show another.
     const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all', client: null };
+    // The hierarchy nodes behind the site selector: [{id, depth, label, sites:[pk,...]}].
+    // filterState.site holds 'h:<id>' for a hierarchy pick, so applyFilters can look the node up
+    // and push its site set.
+    let _hierNodes = [];
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
     const selRole     = document.getElementById('f-role');
@@ -4530,9 +4534,13 @@
     };
 
     function refreshBadge() {
+        // The hierarchy options are indented with figure-spaces and a dash so the dropdown reads
+        // as a tree; the badge wants the bare label, so strip the drawing characters back off.
+        const siteText = selSite.options[selSite.selectedIndex].text
+                             .replace(/^[\u2007\u2013\s]+/, '');
         const parts = [
             selPeriod.options[selPeriod.selectedIndex].text,
-            selSite.options[selSite.selectedIndex].text,
+            siteText,
         ];
         if (filterState.role !== 'all') parts.push(selRole.options[selRole.selectedIndex].text);
         parts.push(selPract.options[selPract.selectedIndex].text);
@@ -4588,11 +4596,31 @@
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
-                    data.sites.forEach(s => {
+                    // ==> ONE SELECTOR FOR EVERY LEVEL. <== Group, Region, Area, Practice, Site
+                    // in a single flat list, indented so the shape reads as a tree. Picking any
+                    // node resolves to the SET of practice-site records beneath it, so "North"
+                    // is every site in North and "Group" is all of them.
+                    //
+                    // A <select> cannot nest, and optgroups are not selectable -- which is the
+                    // whole point here, since a Region must be pickable. So the indent is drawn
+                    // with figure-spaces and a dash. Non-breaking by necessity: a normal space
+                    // is collapsed in an <option> by every browser.
+                    _hierNodes = data.hierarchy || [];
+                    _hierNodes.forEach(n => {
                         const o = document.createElement('option');
-                        o.value = s.id; o.textContent = s.name;
+                        o.value = 'h:' + n.id;
+                        o.textContent = (n.depth ? '\u2007'.repeat(n.depth * 2) + '\u2013 ' : '') + n.label;
                         selSite.appendChild(o);
                     });
+                    // Fall back to the plain site list if the client has no hierarchy mapped --
+                    // better a working site filter than an empty control.
+                    if (!_hierNodes.length) {
+                        data.sites.forEach(s => {
+                            const o = document.createElement('option');
+                            o.value = s.id; o.textContent = s.name;
+                            selSite.appendChild(o);
+                        });
+                    }
                     // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
                     // control can only ever be a no-op, so hiding it costs nothing.
                     //
@@ -4610,7 +4638,11 @@
                     // selection narrows the transactional pages correctly while the scorecard
                     // metrics built on that table cannot follow it. That is the thing to fix
                     // before claiming site-level KPIs; it is not a reason to hide the filter.
-                    const oneSite = (data.sites || []).length <= 1;
+                    // Hide only when the control cannot offer a choice: one node (or one site,
+                    // on the fallback path) means picking it changes nothing.
+                    const oneSite = _hierNodes.length
+                        ? _hierNodes.length <= 1
+                        : (data.sites || []).length <= 1;
                     const siteField = selSite.closest('.filter-field');
                     if (siteField) {
                         siteField.hidden = oneSite;
@@ -4686,8 +4718,23 @@
         if (filterState.client) {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Application Users', column: 'Client ID' }, operator: 'In', values: [Number(filterState.client)], filterType: 1 });
         }
+        // ==> THE SELECTION IS A SET OF SITE KEYS, WHATEVER LEVEL IT CAME FROM. <== A Region and
+        // a Site are the same kind of filter here: both resolve to the practice-site records
+        // underneath, so one code path serves every level and a new level costs nothing.
+        //
+        // pk Practice Site, not Site Name -- two practices in a group can each have a "Central",
+        // and filtering on the label would quietly pull in the other one's.
+        //
+        // This only reaches the scorecard metrics because Fact_Metric_Actuals now carries a site
+        // on every row. While 17 of them wrote -1 the selector would have moved the transactional
+        // pages and left the tiles sitting still.
         if (filterState.site !== 'all') {
-            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
+            const node = _hierNodes.find(n => ('h:' + n.id) === filterState.site);
+            if (node) {
+                filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'pk Practice Site' }, operator: 'In', values: node.sites, filterType: 1 });
+            } else {
+                filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
+            }
         }
         if (filterState.role !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Custom Role' }, operator: 'In', values: [filterState.role], filterType: 1 });
