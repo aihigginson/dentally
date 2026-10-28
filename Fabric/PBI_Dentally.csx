@@ -3591,6 +3591,105 @@ in
 }
 
 
+// ===================== RLS scope: every practice in view =====================
+{
+// =====================================================================
+// ==> THE RULE HAD ONE NARROWING LEVER AND IT WAS SPENT ON THE PRACTICE. <==
+//
+// The SCOPE half used to read ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ),
+// and the app set customData ONLY when exactly one tenant was in view. A client holding
+// several practices therefore had nothing to narrow by: picking a client moved every one of
+// the app's own screens while the report kept the caller's whole permitted set and ADDED IT
+// UP. Acting as a four-practice group showed every practice the support login could see,
+// under the group's name.
+//
+// The app now sends the acting scope as a comma-separated tenant SET -- _get_user_info has
+// already resolved the acting client's tenants from Security.Client_Tenant_Access and then
+// narrowed them by the acting practice, so the token states exactly what is in view. The rule
+// only has to test membership, which is what PATHCONTAINS does once the commas are pipes.
+//
+// ==> SENDING THE CLIENT ID INSTEAD WAS TRIED FIRST AND DOES NOT WORK. <== It needs a
+// client->tenant table in the model to resolve, i.e. a new data connection, which the service
+// principal is refused ("in addition to Write permissions on the model, make sure you also
+// have at least Use permissions on all data connections") -- and it would be a second place
+// for the access model to drift from Client_Tenant_Access. Adding [Client ID] to
+// 'Application Users' fails for the only case it is for: a support login sits on the vendor
+// client, so every one of its rows carries that one client id, and narrowing to the group
+// actually picked matches nothing and blanks the report.
+//
+// NARROWS, NEVER WIDENS. The USERPRINCIPALNAME set-membership half is untouched and still
+// ANDed, so a token naming a tenant the caller may not see grants nothing -- customData is an
+// assertion of SCOPE, never of permission. The || [Tenant ID] = -1 sentinel escape is kept
+// verbatim: without it every unknown-member row disappears and the fact rows that resolve to
+// it drop out of totals.
+//
+// BACK-COMPATIBLE BOTH WAYS. One tenant renders as a bare "11", byte-for-byte what the old app
+// sent, and a blank customData still means "everything I may see". So an old app against this
+// rule, and a new app against the old rule for a single practice, both behave.
+//
+// Idempotent: expressions are compared with whitespace collapsed, so a re-run is silent unless
+// a table is genuinely still on the old rule. Placed AFTER the copy block above so a table that
+// block has just seeded from a donor is normalised in the same pass.
+// =====================================================================
+    // The table the rule READS, and deliberately exempt: its own filter is
+    // [User UPN] == USERPRINCIPALNAME(), and a copy cut to the current scope could not answer
+    // which tenants that scope contains.
+    var RLS_ANCHOR     = "Application Users";
+    var RLS_TENANT_COL = "Tenant ID";
+
+    var scopeRule = @"VAR _cd = CUSTOMDATA()
+RETURN
+(
+    [Tenant ID] IN
+        SELECTCOLUMNS(
+            FILTER('Application Users', 'Application Users'[User UPN] = USERPRINCIPALNAME()),
+            ""Tenant ID"", 'Application Users'[Tenant ID])
+    && ( ISBLANK( _cd ) || LEN( _cd ) = 0 ||
+         PATHCONTAINS( SUBSTITUTE( _cd, "","", ""|"" ), FORMAT( [Tenant ID], ""0"" ) ) )
+)
+|| [Tenant ID] = -1";
+
+    Func<string, string> squash = e =>
+        string.IsNullOrWhiteSpace(e)
+            ? ""
+            : System.Text.RegularExpressions.Regex.Replace(e, @"\s+", " ").Trim();
+
+    var wantedScope = squash(scopeRule);
+    int rlsUpdated = 0, rlsAlready = 0;
+
+    foreach (var role in Model.Roles)
+    {
+        foreach (var t in Model.Tables.OrderBy(x => x.Name))
+        {
+            if (t.Name == RLS_ANCHOR) continue;
+            if (!t.Columns.Any(c => c.Name == RLS_TENANT_COL)) continue;
+
+            var current = role.RowLevelSecurity[t];
+
+            // A tenant-bearing table with NO rule at all is a different fault, and the block
+            // above exists to seed those from a donor. Say so rather than quietly inventing one
+            // here: an unfiltered table is readable in full by every login, and that deserves a
+            // warning naming the table, not a silent fix.
+            if (string.IsNullOrWhiteSpace(current))
+            {
+                Info("WARNING RLS " + role.Name + ": " + t.Name
+                     + " has NO filter. Add it to RLS_TABLES above -- not publishing is safer.");
+                continue;
+            }
+
+            if (squash(current) == wantedScope) { rlsAlready++; continue; }
+
+            role.RowLevelSecurity[t] = scopeRule;
+            rlsUpdated++;
+        }
+    }
+
+    if (rlsUpdated > 0)
+        Info("RLS scope: " + rlsUpdated + " table(s) moved to the tenant-SET rule ("
+             + rlsAlready + " already current).");
+}
+
+
 // =====================================================================
 // '_Measures': anything the run did not rebuild has lost its source.
 // =====================================================================
