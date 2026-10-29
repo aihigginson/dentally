@@ -49,3 +49,15 @@ WHERE NOT EXISTS (SELECT 1 FROM [Audit].[Process_Dependency] d
                   WHERE d.Prev_Process_Code = 'GOLD_FACT_NODE_TARGETS'
                     AND d.Next_Process_Code = 'GOLD_AGG_PERIOD_TARGETS');
 GO
+
+-- ==> THE GRID IS BUILT FROM DATA THE APPDB SYNC REWRITES. <== Input.Targets and the whole
+-- Input.Client_* hierarchy are owned by the AppDB and rebuilt by Meta.usp_Sync_Input_From_AppDB,
+-- which DELETEs and reloads them. The nightly order is already right by category -- the sync is
+-- SILVER, this is GOLD_AGG -- but a TARGETED rerun (Audit.usp_Run_Downstream from the sync)
+-- stopped short of the target loaders without this edge, so entering a target and rerunning the
+-- sync appeared to do nothing.
+INSERT INTO Audit.Process_Dependency (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
+SELECT 'META_SYNC_INPUT', 'GOLD_FACT_NODE_TARGETS', 'DATA', 5, 1
+WHERE NOT EXISTS (SELECT 1 FROM Audit.Process_Dependency d
+                  WHERE d.Prev_Process_Code = 'META_SYNC_INPUT'
+                    AND d.Next_Process_Code = 'GOLD_FACT_NODE_TARGETS');
