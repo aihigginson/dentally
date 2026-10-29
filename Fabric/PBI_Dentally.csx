@@ -528,74 +528,88 @@ var g = "_New Actuals (compare)";
 foreach (var m in t.Measures.Where(m => m.DisplayFolder == g).ToList()) m.Delete();
 
 // --- DAX builders (5 shapes) ------------------------------------------------------
+// ==> THESE READ ONE GRAIN NOW: ONE ROW PER (SITE, PRACTITIONER). <== Fact_Metric_Actuals used to
+// hold three disjoint slices of every metric -- a (-1,-1) practice total, a per-site row and a
+// per-practitioner row -- and these PICKED one, with [fk Practice Site] = sel_site and a pracf
+// that forced [fk Practitioner] = -1 at practice level. Neither matches anything now, which is
+// why Exam Ratio, Avg Plan Value, the retention outlooks and Overdue Recalls all read blank.
+//
+// ==> AND SELECTEDVALUE COULD NOT EXPRESS THE NEW SELECTOR ANYWAY. <== The site filter is the
+// whole hierarchy: picking a Region sends the SET of its sites, so SELECTEDVALUE falls back to
+// its -1 and matches nothing at all. TREATAS over VALUES() takes one site, many, or none (every
+// site) with no special case -- which is the point of resolving every level to a set of keys.
+//
+// The practitioner half flips from "pin to -1 unless one is chosen" to "restrict only when one
+// IS chosen". Rows legitimately carry [fk Practitioner] = -1 -- an appointment with no clinician,
+// a patient with no assigned dentist -- and those belong IN the practice and site figures, not
+// filtered out of them. The test is ISFILTERED on the columns the app actually filters (Full
+// Name, Custom Role), so a multi-select behaves like a single select.
+//
+// An explicit [fk Practitioner] = -1 pin is still correct for the genuinely
+// practitioner-agnostic metrics -- the contact-detail rates, retention outlooks and recall
+// conversions are written at the sentinel and nowhere else. Overdue Recalls was pinned the same
+// way and is NOT one of them any more: it now carries a real practitioner, so the pin would have
+// counted only the unassigned ones. Check the loader before adding a pin.
 // Cumulative: sum over the date context.
-Func<string,string> dCum = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
-VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
-VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
+Func<string,string> dCum = key => (@"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
+VAR prac_sel = ISFILTERED('List Practitioners'[Full Name]) || ISFILTERED('List Practitioners'[Custom Role])
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), NOT prac_sel || '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner]))
 RETURN
 CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""{key}"",
-    '_Metric Actuals'[fk Practice Site] = sel_site,
+    sitef,
     pracf
 )").Replace("{key}", key);
 
 // Rate over the date context: DIVIDE(sum num, sum den).
-Func<string,string> dRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
-VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
-VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
+Func<string,string> dRate = key => (@"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
+VAR prac_sel = ISFILTERED('List Practitioners'[Full Name]) || ISFILTERED('List Practitioners'[Custom Role])
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), NOT prac_sel || '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner]))
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, pracf )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, pracf )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
 // Snapshot stock: latest snapshot date in the selected period, then the value at it.
-Func<string,string> dSnap = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
-VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
-VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
+Func<string,string> dSnap = key => (@"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
+VAR prac_sel = ISFILTERED('List Practitioners'[Full Name]) || ISFILTERED('List Practitioners'[Custom Role])
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), NOT prac_sel || '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner]))
 VAR snap_fk = CALCULATE( MAX('_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, pracf )
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     '_Metric Actuals'[fk Date] = snap_fk,
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, pracf )").Replace("{key}", key);
 
 // Current-state value: ONE row per grain, read date-blind (period-independent).
-Func<string,string> dCur = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
-VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
-VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
-VAR use_practice = (sel_prac = -1) && (lvl = ""Practice"")
-VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), IF(use_practice, '_Metric Actuals'[fk Practitioner] = -1, '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner])))
+Func<string,string> dCur = key => (@"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
+VAR prac_sel = ISFILTERED('List Practitioners'[Full Name]) || ISFILTERED('List Practitioners'[Custom Role])
+VAR pracf = FILTER(ALL('_Metric Actuals'[fk Practitioner]), NOT prac_sel || '_Metric Actuals'[fk Practitioner] IN VALUES('List Practitioners'[pk Practitioner]))
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]),
     REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, pracf )").Replace("{key}", key);
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, pracf )").Replace("{key}", key);
 
 // Current-state rate: date-blind DIVIDE. currate metrics are all practitioner-AGNOSTIC (stored at
 // fk Practitioner = -1 only), so pin to -1 and IGNORE the practitioner slicer -> shows the global
 // value (greyed by the GreyP variance) instead of blanking to "No data" when a practitioner is picked.
-Func<string,string> dCurRate = key => (@"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+Func<string,string> dCurRate = key => (@"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""{key}"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""{key}"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)").Replace("{key}", key);
 
 Func<string,string,string> build = (shape, key) => {
@@ -1405,40 +1419,40 @@ add("New Patients",
 // List Date), SUMmed over the period via TREATAS. NO dim-to-dim relationship. Total + two disjoint
 // cohorts. This is the 'cum' shape; TabularEditor_MetricActuals.csx apply-mode sets the same in place.
 add("Lapsed Patients",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""lapsed_patients"",
-    '_Metric Actuals'[fk Practice Site] = sel_site,
+    sitef,
     '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
 add("Lapsed (Set Inactive)",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""lapsed_deactivated"",
-    '_Metric Actuals'[fk Practice Site] = sel_site,
+    sitef,
     '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
 
 add("Lapsed (Silently)",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE(
     SUM('_Metric Actuals'[Numerator]),
     TREATAS(VALUES('List Date'[pk Date]), '_Metric Actuals'[fk Date]),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
     '_Metric Actuals'[Metric]           = ""lapsed_calculated"",
-    '_Metric Actuals'[fk Practice Site] = sel_site,
+    sitef,
     '_Metric Actuals'[fk Practitioner]  = sel_prac
 )",
     "#,##0");
@@ -1455,47 +1469,47 @@ add("Net Patient Growth",
 // Dentist/Hygiene Recall Conversion (REACTIVE, recall-record status). All four are materialised in
 // Gold.Fact_Metric_Actuals and read date-blind (currate shape) -- retargeted by TabularEditor_MetricActuals.csx.
 add("Dentist Retention Outlook",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""dentist_retention_outlook"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 add("Hygiene Retention Outlook",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""hygiene_retention_outlook"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 add("Dentist Recall Conversion",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""dentist_recall_conversion"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 add("Hygiene Recall Conversion",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 VAR n = CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 VAR d = CALCULATE( SUM('_Metric Actuals'[Denominator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )
+    '_Metric Actuals'[Metric] = ""hygiene_recall_conversion"", sitef, '_Metric Actuals'[fk Practitioner] = -1 )
 RETURN DIVIDE(n, d)",
     "#,##0.0%");
 
@@ -1511,11 +1525,11 @@ add("At Risk Patients",
 // no reminder sent) -- a process/backlog measure of the practice's own reach-out, not patient behaviour.
 // Materialised in Fact_Metric_Actuals (date-blind current count); retargeted by MetricActuals.csx.
 add("Overdue Recalls",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""overdue_recalls"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = -1 )",
+    '_Metric Actuals'[Metric] = ""overdue_recalls"", sitef )",
     "#,##0");
 
 add("Active Patients",
@@ -2482,11 +2496,11 @@ RETURN
 // Forward Book Value — the £ companion to the % fill (confirmed forward revenue, next 7 days).
 // Display measure (no target triple; add a catalog row later if you want a £ target).
 add("Forward Book Value",
-    @"VAR sel_site = SELECTEDVALUE('List Practice Sites'[pk Practice Site], -1)
+    @"VAR sitef = TREATAS(VALUES('List Practice Sites'[pk Practice Site]), '_Metric Actuals'[fk Practice Site])
 VAR sel_prac = SELECTEDVALUE('List Practitioners'[pk Practitioner], -1)
 RETURN CALCULATE( SUM('_Metric Actuals'[Numerator]), REMOVEFILTERS('List Date'), REMOVEFILTERS('List Date Grouping'),
     TREATAS(VALUES('List Practice Sites'[Tenant ID]), '_Metric Actuals'[Tenant ID]),
-    '_Metric Actuals'[Metric] = ""forward_book_value"", '_Metric Actuals'[fk Practice Site] = sel_site, '_Metric Actuals'[fk Practitioner] = sel_prac )",
+    '_Metric Actuals'[Metric] = ""forward_book_value"", sitef, '_Metric Actuals'[fk Practitioner] = sel_prac )",
     "£#,##0");
 
 // ── Derived Target / vs-Target / BG per KPI (data-driven) ─────────────────────
