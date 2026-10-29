@@ -4804,6 +4804,19 @@
                 // one row to look at and MAX and SUM agree on it.
                 if (node.selection) {
                     filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Aggregate Period Targets', column: 'Selection' }, operator: 'In', values: [node.selection], filterType: 1 });
+                    // ==> AND THE CLIENT, BECAUSE A NODE NAME IS NOT UNIQUE. <== The table is keyed
+                    // on (Client ID, Selection) and pushing only half of it is how Skeleton Group's
+                    // 'North' came back showing Demonstration Practice's targets -- both clients
+                    // have a North, a South, a London and a Manchester, and the text matched the
+                    // wrong one. It read as plausible because the ACTUALS were right: those are
+                    // scoped by [pk Practice Site], a different filter entirely.
+                    //
+                    // The RLS tenant stamp does not cover this. Filtering 'Application Users'
+                    // narrows what RLS resolves for the tenant-bearing facts, but a report filter
+                    // does not reach inside an RLS expression's own FILTER over that table.
+                    if (filterState.client) {
+                        filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Aggregate Period Targets', column: 'Client ID' }, operator: 'In', values: [Number(filterState.client)], filterType: 1 });
+                    }
                 }
             } else {
                 filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
