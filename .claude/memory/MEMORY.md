@@ -43,6 +43,7 @@
 - [A new model table has no RLS](a-new-model-table-has-no-rls.md) — rules are per table; dev's two tenants cannot reveal a missing one, so check rather than assume.
 - [Verify aggregation changes on two tenants](verify-aggregation-changes-on-two-tenants.md) — SUM and MAX agree on one row; a group's board is where they diverge.
 - [Group target aggregation is RESOLVED](group-target-aggregation-is-unresolved.md) — Rolls_Up on Metric_Definitions; quantities up the tree, rates down.
+- [Targets are keyed on the drop-down text](targets-are-keyed-on-the-dropdown-text.md) — [Selection] includes the indent; build it from bytes and never re-base it.
 - [A rolling window straddles two financial years](a-rolling-window-straddles-two-financial-years.md) — sum each FY’s share; collapsing to one drops metrics targeted in the other.
 - [DEV targets are dummy, PROD's are real](dev-targets-are-dummy-prod-targets-are-real.md) — they have never matched by design; the gap is not evidence of a reset.
 - [NHS income is the UDA value](nhs-income-is-the-uda-value.md) — the patient's band charge is a slice of it, never income on top; V197 fixed a 3%-of-actual measure.
