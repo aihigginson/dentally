@@ -1,4 +1,4 @@
-"""
+﻿"""
 Seed_Targets_From_Actuals.py
 Seed a newly onboarded practice's targets from its own last complete financial year.
 
@@ -53,8 +53,11 @@ COVERAGE IS REPORTED, NEVER ASSUMED:
   has its whole history computed with today's metric set, so expect better. Check the number.
 
 AFTERWARDS: the targets reach the warehouse through appdb_sync (Input.Targets ->
-Input_Stage.Targets), then Gold.usp_Load_Fact_Daily_Targets and the period aggregate. Run the
+Input_Stage.Targets), then Gold.usp_Load_Fact_Node_Targets and the period aggregate. Run the
 build, or wait for the overnight one, before the board shows anything.
+
+A target entered at ANY level reaches the board: the node loader rolls quantities up the hierarchy
+and rates down it, so seeding at practice level is enough to give a group its totals.
 
 ==> ON DEV THE SYNC IS DISABLED. <== It does not run on a schedule there, so writing
 targets here changes nothing until `python Web/appdb_sync.py full` is run by hand.
@@ -300,7 +303,7 @@ def main():
     app.close()
 
     print('\nNext: appdb_sync carries these to Input_Stage.Targets -- ON DEV THE SYNC IS DISABLED, run python Web/appdb_sync.py full -- then the '
-          'build turns them into Gold.Fact_Daily_Targets and the period aggregate.')
+          'build turns them into Gold.Fact_Node_Targets and the period aggregate.')
     return 0
 
 

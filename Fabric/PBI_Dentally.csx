@@ -104,7 +104,9 @@ add("Lapse Count",
 // Per-KPI Target / vs-Target / BG blocks are generated from per-KPI specs via the
 // builder functions below. DAX is functionally identical to the previous
 // hand-written version (DAX ignores whitespace). Value measures stay bespoke.
-// All targets come from '_Daily Targets' (Fact_Daily_Targets), resolved by Target_Level.
+// All targets come from 'Aggregate Period Targets' (Gold.Aggregate_Period_Targets), resolved
+// by Target_Level and matched on Date Grouping. One row per (node, period, metric, role):
+// already apportioned to the period, so a target measure never does arithmetic on dates.
 //
 // NOTE: Tabular Editor's C# has no string interpolation (dollar-prefixed strings),
 // so templates are verbatim @"..." with {b}/{key} placeholders filled via .Replace().
@@ -134,13 +136,17 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // FTE-scaled metrics multiply the per-FTE role target by SUM(FTE) of practitioners in context.
 Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
 
-// ==> THE TARGET LOOKUP NO LONGER RE-IMPLEMENTS A RELATIONSHIP THAT ALREADY EXISTS. <==
-// Every target and variance builder used to pass
+// ==> NO BUILDER FILTERS BY DATE BY HAND. <== Every target and variance builder used to pass
 //     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date])
-// into its CALCULATE. '_Daily Targets'[fk Date] -> 'List Date'[pk Date] is an ACTIVE
-// relationship, so the period filter already propagates; the TREATAS materialised the same
-// filter by hand -- every date in the period, as a table -- against 243k rows, once per target
-// measure, ~84 times per page render.
+// into its CALCULATE, materialising every date in the period as a table against 243k daily rows,
+// once per target measure, ~84 times per page render -- duplicating a filter the active
+// relationship already propagated.
+//
+// That table is gone entirely now: targets are pre-apportioned per period in
+// Gold.Aggregate_Period_Targets, and the builders below select one by
+//     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping])
+// which is a single equality against a handful of rows. The lesson is the same one either way --
+// do not rebuild in DAX what the model or the warehouse has already resolved.
 //
 // It was measurable, not theoretical: the same report with the target measures removed renders
 // instantly on the same capacity, while the full page takes ~45s AFTER the model is loaded and
@@ -205,7 +211,7 @@ RETURN IF(
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
-// ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
+// ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
@@ -487,7 +493,7 @@ add("Open Courses Value Trend",
     "£#,##0");
 
 // Target / vs Target / BG for "Open Courses Value" are owned by the Clinical block above
-// (kpi("Open Courses Value", ...) -> target-model, FTE-aware, off _Daily Targets). Defining
+// (kpi("Open Courses Value", ...) -> target-model, FTE-aware, off Aggregate Period Targets). Defining
 // them here too created DUPLICATE measure names in the amalgamated file (both blocks share the
 // "Clinical KPIs" folder), which poisoned resolution of [Open Courses Value] / [Average Plan
 // Value]. KPI_Snapshot keeps ONLY the historical Trend series.
@@ -855,7 +861,7 @@ RETURN IF(
         ""▼ "" & FORMAT(ABS(pct), ""0.0"") & ""%""))",
     "");
 
-// Target lookup: nhs_uda_completion_rate target now from '_Daily Targets' (Fact_Daily_Targets),
+// Target lookup: nhs_uda_completion_rate target comes from 'Aggregate Period Targets', whose
 // rows carry fk Date = -1, so the page's Period (FY) slicer empties the table through
 // that relationship. REMOVEFILTERS the date/site/practitioner so it can't, and KEEP RLS
 // for the tenant (don't depend on SELECTEDVALUE('List Practice Sites'[Tenant ID]),
@@ -1038,7 +1044,11 @@ CALCULATE(
     "#,##0");
 
 // ── BG colour measures ───────────────────────────────────────────────────────
-// nhs_udas / nhs_uoas: target and band from _Daily Targets (contract-derived).
+// nhs_udas / nhs_uoas: target and band from Aggregate Period Targets, still contract-derived --
+// these two are never typed by anyone, so the period loader reads them off Gold.Fact_Contracts
+// in a branch of its own and writes them at Target Level = 'Practice', which is what the
+// filters below require. A contract overlapping only part of the window contributes only its
+// overlapping share, so the figure is deliberately not the annual contract total.
 // nhs_uda_completion_rate: target and band from _Targets (manual Input.Targets entry).
 
 add("NHS UDAs BG",
@@ -1078,7 +1088,7 @@ RETURN SWITCH(TRUE(),
 // NHS UDA delivery is a 'within' metric (Config.Metric_Definitions Range_Type='within'),
 // NOT higher-is-better: 95% is the target, the NHS doesn't penalise 95%+, and you don't
 // want to overshoot (>100% is unpaid work). So colour by DEVIATION from target in either
-// direction (same as exam_ratio's bgWithinPp), with the band = '_Daily Targets'[Variance] (pp).
+// direction (same as exam_ratio's bgWithinPp), with the band = 'Aggregate Period Targets'[Variance] (pp).
 add("NHS UDA Completion Rate BG",
     @"VAR actual = [NHS UDA Completion Rate]
 VAR target = [NHS UDA Completion Rate Target]
@@ -1187,7 +1197,8 @@ add("Patients Phone Not Captured",
 // Per-KPI Target / vs-Target / BG blocks (~40 lines each) are generated from
 // per-KPI specs via the builder functions below. DAX is functionally identical to
 // the previous hand-written version (DAX ignores whitespace). Value measures stay
-// bespoke. All targets come from '_Daily Targets' (Fact_Daily_Targets), resolved by Target_Level.
+// bespoke. All targets come from 'Aggregate Period Targets', resolved by Target_Level and
+// matched on Date Grouping.
 //
 // NOTE: Tabular Editor's C# has no string interpolation (dollar-prefixed strings),
 // so templates are verbatim @"..." with {b}/{key} placeholders filled via .Replace().
@@ -1325,7 +1336,7 @@ RETURN IF(
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
-// ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
+// ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
@@ -1768,7 +1779,7 @@ RETURN IF(
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
-// ── BG colour DAX builders (band from _Daily Targets[Variance] at the resolved level) ──
+// ── BG colour DAX builders (band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherRefF = (b, key) => (@"VAR actual = [{b}]
 VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target = [{b} Target]
@@ -2208,7 +2219,9 @@ kpi("Discounts",                 "0.0%",   tRate100("discounts"),               
 // Per-KPI Target / vs-Target / BG blocks are generated from per-KPI specs via the
 // builder functions below. DAX is functionally identical to the previous
 // hand-written version (DAX ignores whitespace). Value measures stay bespoke.
-// All targets come from '_Daily Targets' (Fact_Daily_Targets), resolved by Target_Level.
+// All targets come from 'Aggregate Period Targets' (Gold.Aggregate_Period_Targets), resolved
+// by Target_Level and matched on Date Grouping. One row per (node, period, metric, role):
+// already apportioned to the period, so a target measure never does arithmetic on dates.
 //
 // NOTE: Tabular Editor's C# has no string interpolation (dollar-prefixed strings),
 // so templates are verbatim @"..." with {b}/{key} placeholders filled via .Replace().
@@ -2269,7 +2282,7 @@ RETURN IF(
         ""▲ "" & FORMAT(diff_pp,      ""0.0"") & ""pp"",
         ""▼ "" & FORMAT(ABS(diff_pp), ""0.0"") & ""pp""))").Replace("{b}", b);
 
-// ── BG builders (target from [b Target]; band from _Daily Targets[Variance] at the resolved level) ─────────────────────────
+// ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
 VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
 VAR target   = [{b} Target]
@@ -2562,8 +2575,9 @@ RETURN IF(LEFT(raw, 2) = ""FY"", SUBSTITUTE(raw, "" (YTD)"", """"), """")",
 //    SWITCH scores / count -- a DAX table constructor { [m], [m] } is NOT valid for measures.
 Action<string,string[],int[]> areaRag = (name, bgs, weights) => {
     // ==> EVALUATE EACH CHILD MEASURE EXACTLY ONCE. <== A BG measure is not cheap -- each
-    // resolves its target out of '_Daily Targets' (~243k rows) with a TREATAS join from List
-    // Date -- and the Home page carries five of these headers over ~35 child measures. Hoisted
+    // resolves its target out of 'Aggregate Period Targets' (a few thousand rows now that the
+    // daily explosion is gone, but still a filtered scan per measure) -- and the Home page carries
+    // five of these headers over ~35 child measures. Hoisted
     // into VARs, which the engine computes once. Dropping the worst-tile cap took this from
     // three references per metric to one.
     //
@@ -2819,7 +2833,7 @@ RETURN IF ( Expected = 0, BLANK (), 1 - DIVIDE ( Positive, Expected ) )");
 //   Vega normalises: norm = min(val / 1, 2) / 2  → val=1 → target ring; val=1.2 → 20% above.
 //
 // Cumulative £ axes (Total Revenue, Private Revenue, NHS Revenue, Outstanding Inv):
-//   [X Target] from _Daily Targets is practice-wide.
+//   [X Target] from Aggregate Period Targets is practice-wide.
 //   Divide by n_prac to get per-practitioner share; individual = actual / share.
 //   AVERAGEX of the ratio = practice_actual / practice_target — meaningful for avg web.
 //   Fallback when no target: individual = actual / practice_average (vs average).

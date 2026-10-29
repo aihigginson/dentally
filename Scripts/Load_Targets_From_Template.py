@@ -1,4 +1,4 @@
-"""
+﻿"""
 Load_Targets_From_Template.py
 Loads a completed targets template into Input.Targets.
 
@@ -18,8 +18,8 @@ WHAT IS DELETED:
     Other Period_Types are untouched.
 
 AFTER LOADING:
-    1. Run Gold.usp_Load_Fact_Daily_Targets
-    2. Run Gold.usp_Load_Aggregate_Period_Targets
+    1. Run Gold.usp_Load_Fact_Node_Targets      (explodes the grid to every node)
+    2. Run Gold.usp_Load_Aggregate_Period_Targets (apportions each node to each live period)
     3. Refresh Power BI dataset
 
     (Both are in Audit.Process_Config, so the nightly build does this anyway -- run them
@@ -219,7 +219,7 @@ def main():
 
     print(f"Inserted {len(records)} rows into Input.Targets.")
     print("\nNext steps:")
-    print("  1. Run Gold.usp_Load_Fact_Daily_Targets")
+    print("  1. Run Gold.usp_Load_Fact_Node_Targets")
     print("  2. Run Gold.usp_Load_Aggregate_Period_Targets")
     print("  3. Refresh Power BI dataset")
     print("     (the nightly build runs 1 and 2 anyway)")

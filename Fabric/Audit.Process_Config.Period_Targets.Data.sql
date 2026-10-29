@@ -1,4 +1,4 @@
--- =============================================================================
+﻿-- =============================================================================
 -- Audit.Process_Config / Process_Dependency -- register GOLD_AGG_PERIOD_TARGETS
 -- =============================================================================
 -- Re-runnable: every statement is NOT EXISTS guarded, because these two tables carry the whole
@@ -29,7 +29,7 @@ GO
 INSERT INTO [Audit].[Process_Dependency]
     (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
 SELECT v.prev, 'GOLD_AGG_PERIOD_TARGETS', 'DATA', 6, 1
-FROM (VALUES ('GOLD_AGG_DAILY_TARGETS'), ('GOLD_AGG_DATE_GROUPING')) AS v(prev)
+FROM (VALUES ('GOLD_FACT_NODE_TARGETS'), ('GOLD_AGG_DATE_GROUPING')) AS v(prev)
 WHERE NOT EXISTS (SELECT 1 FROM [Audit].[Process_Dependency] d
                    WHERE d.Prev_Process_Code = v.prev
                      AND d.Next_Process_Code = 'GOLD_AGG_PERIOD_TARGETS');

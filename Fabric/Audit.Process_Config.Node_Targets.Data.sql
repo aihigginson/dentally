@@ -1,4 +1,4 @@
--- =============================================================================
+﻿-- =============================================================================
 -- Audit.Process_Config / Process_Dependency -- register GOLD_FACT_NODE_TARGETS
 -- =============================================================================
 -- Re-runnable: every statement is NOT EXISTS guarded, because these two tables carry the whole
@@ -44,8 +44,8 @@ GO
 -- nothing would guarantee the order.
 INSERT INTO [Audit].[Process_Dependency]
     (Prev_Process_Code, Next_Process_Code, Dependency_Type, Dependency_Level, Is_Active)
-SELECT 'GOLD_FACT_NODE_TARGETS', 'GOLD_AGG_DAILY_TARGETS', 'DATA', 6, 1
+SELECT 'GOLD_FACT_NODE_TARGETS', 'GOLD_AGG_PERIOD_TARGETS', 'DATA', 6, 1
 WHERE NOT EXISTS (SELECT 1 FROM [Audit].[Process_Dependency] d
                   WHERE d.Prev_Process_Code = 'GOLD_FACT_NODE_TARGETS'
-                    AND d.Next_Process_Code = 'GOLD_AGG_DAILY_TARGETS');
+                    AND d.Next_Process_Code = 'GOLD_AGG_PERIOD_TARGETS');
 GO
