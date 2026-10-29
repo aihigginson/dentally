@@ -3651,26 +3651,6 @@ in
     }
 }
 
-// =====================================================================
-// The target tables' [Tenant ID] is an ACCESS KEY, not an attribution key -- hide it.
-// =====================================================================
-// ==> A WRONG NUMBER THAT LOOKS RIGHT. <== A node above a practice has no natural tenant, so
-// these rows carry MIN(Tenant_ID) of the practices beneath them purely so the blanket RLS rule
-// admits them for the right client. On the 'Skeleton Group' row that reads 21. Group these
-// targets by tenant and Skeleton Alpha is credited with the entire group's figure -- which is
-// worse than the -1 sentinel it replaced, because -1 is obviously not a practice and 21 is.
-//
-// Attribution is [Selection], always. RLS reads a hidden column perfectly well, so hiding it
-// costs nothing and removes the only way the mistake gets made.
-foreach (var tn in new[] { "_Node Targets", "Aggregate Period Targets" })
-{
-    var tt = Model.Tables.FirstOrDefault(x => x.Name == tn);
-    if (tt == null) { Info("WARNING " + tn + ": not in the model -- import it before publishing."); continue; }
-    var tc = tt.Columns.FirstOrDefault(c => c.Name == "Tenant ID");
-    if (tc == null) { Info("WARNING " + tn + ": no [Tenant ID] column -- RLS cannot filter it."); continue; }
-    if (!tc.IsHidden) { tc.IsHidden = true; Info(tn + ": [Tenant ID] HIDDEN (access key, not attribution)."); }
-}
-
 
 // =====================================================================
 // '_Measures': anything the run did not rebuild has lost its source.
