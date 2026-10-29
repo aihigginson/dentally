@@ -632,7 +632,7 @@
     <div class="filter-sep"></div>
     <div class="filter-field">
         <label for="f-site">Site</label>
-        <select class="filter-select" id="f-site"><option value="all">All sites</option></select>
+        <select class="filter-select" id="f-site"></select>
     </div>
     <div class="filter-sep"></div>
     <div class="filter-field">
@@ -4618,11 +4618,24 @@
                     // Fall back to the plain site list if the client has no hierarchy mapped --
                     // better a working site filter than an empty control.
                     if (!_hierNodes.length) {
+                        // No hierarchy mapped: fall back to a plain site list, and that list DOES
+                        // need an "all" entry because no node stands for everything.
+                        const o = document.createElement('option');
+                        o.value = 'all'; o.textContent = 'All sites';
+                        selSite.appendChild(o);
                         data.sites.forEach(s => {
-                            const o = document.createElement('option');
-                            o.value = s.id; o.textContent = s.name;
-                            selSite.appendChild(o);
+                            const el = document.createElement('option');
+                            el.value = s.id; el.textContent = s.name;
+                            selSite.appendChild(el);
                         });
+                    }
+                    // ==> THE CLIENT NODE IS THE DEFAULT, AND REPLACES "ALL SITES". <== It already
+                    // resolves to every site the client has, so a separate "All sites" entry was
+                    // the same selection under a vaguer name -- two ways to say one thing, and the
+                    // reader left wondering how they differ. The selector now opens on the client.
+                    if (_hierNodes.length && filterState.site === 'all') {
+                        selSite.value = 'h:' + _hierNodes[0].id;
+                        filterState.site = selSite.value;
                     }
                     // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
                     // control can only ever be a no-op, so hiding it costs nothing.
@@ -4641,18 +4654,28 @@
                     // selection narrows the transactional pages correctly while the scorecard
                     // metrics built on that table cannot follow it. That is the thing to fix
                     // before claiming site-level KPIs; it is not a reason to hide the filter.
-                    // Hide only when the control cannot offer a choice: one node (or one site,
-                    // on the fallback path) means picking it changes nothing.
-                    const oneSite = _hierNodes.length
-                        ? _hierNodes.length <= 1
-                        : (data.sites || []).length <= 1;
+                    // ==> HIDE IT WHEN EVERY NODE RESOLVES TO THE SAME THING. <== The test is the
+                    // number of SITES, not the number of nodes. A single-site practice still gets
+                    // a root node and a site node -- two entries, both meaning the one site -- so
+                    // counting nodes left the control on screen offering a choice that was not a
+                    // choice. Maple showed exactly that.
+                    const siteCount = _hierNodes.length
+                        ? (_hierNodes[0].sites || []).length
+                        : (data.sites || []).length;
+                    const oneSite = siteCount <= 1;
                     const siteField = selSite.closest('.filter-field');
                     if (siteField) {
                         siteField.hidden = oneSite;
                         const sep = siteField.nextElementSibling;
                         if (sep && sep.classList.contains('filter-sep')) sep.hidden = oneSite;
                     }
-                    if (oneSite) { selSite.value = 'all'; filterState.site = 'all'; }
+                    if (oneSite) {
+                        // Hidden, so whatever it holds is never seen -- but it must still be a
+                        // value that EXISTS, or the control reads blank and applyFilters looks up
+                        // a node that is not there.
+                        selSite.value = _hierNodes.length ? 'h:' + _hierNodes[0].id : 'all';
+                        filterState.site = selSite.value;
+                    }
                     // Seed the Role dropdown from the tenant's curated Custom_Role values
                     // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
                     (data.roles || []).forEach(role => {

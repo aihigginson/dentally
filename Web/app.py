@@ -683,8 +683,15 @@ def filters():
                 return {'id': '%d:%s' % (depth, label), 'depth': depth, 'label': label,
                         'sites': sorted({m['pk'] for m in members})}
 
+            # ==> THE ROOT NODE IS THE CLIENT, SO IT CARRIES THE CLIENT'S NAME. <== "Group" is a
+            # label the reader has to decode into "which group?"; their own name needs no
+            # decoding, and it is also what the header beside it already says.
+            cur.execute("SELECT Client_Name FROM Security.Clients WHERE Client_ID = ?", client_id)
+            crow = cur.fetchone()
+            root_label = (crow[0] if crow and crow[0] else 'All practices')
+
             if rows:
-                hierarchy.append(node(0, 'Group', rows))
+                hierarchy.append(node(0, root_label, rows))
                 seen = set()
                 for row in rows:
                     path = []
