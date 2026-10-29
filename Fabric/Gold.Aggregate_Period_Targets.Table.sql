@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Aggregate_Period_Targets]    Script Date: 29/10/2026 ******/
+﻿/****** Object:  Table [Gold].[Aggregate_Period_Targets]    Script Date: 29/10/2026 ******/
 --------------------------------------------------------------------
 --  Table  :  Gold.Aggregate_Period_Targets
 --  Author :  AIH
@@ -16,12 +16,21 @@
 --  filter is an equality against the value the user chose, with nothing to resolve or join.
 --  See the header of Gold.Fact_Node_Targets for why there is no level column.
 --
---  ==> THERE IS NO TENANT_ID, AND THAT CLOSES A LEAK. <== A target above a practice spans
---  tenants, so the old column held -1 for every Group, Region and Area row -- 1,632 of them. The
---  shared RLS rule ends "|| [Tenant ID] = -1", so every one of those would have been visible to
---  every other client. With no tenant column the rule cannot be copied from a tenant-filtered
---  donor at all: this table needs its own rule on 'Application Users'[Client ID], and the csx
---  will now say so loudly instead of applying a leaky one.
+--  ==> TENANT_ID IS AN ACCESS KEY HERE, NOT AN ATTRIBUTION KEY. <== Read that again before
+--  joining it to anything. A row for 'Skeleton Group' or '- North' covers several practices and
+--  has no natural tenant, so it carries MIN(Tenant_ID) of the practices beneath it purely so the
+--  blanket RLS rule -- [Tenant ID] IN (the caller's tenants) -- admits it for that client and
+--  nobody else.
+--
+--  It is therefore a LIE about attribution, and a more dangerous one than the -1 sentinel it
+--  replaces: -1 is self-evidently not a practice, whereas 21 is. Group or GROUP BY these targets
+--  on Tenant_ID and Skeleton Alpha is credited with the whole group's figure -- a plausible wrong
+--  number, which is the kind that survives review. Attribution is [Selection], always. The column
+--  is hidden in the model for the same reason.
+--
+--  Safe only because the table is a full DELETE + INSERT rebuild that runs after the AppDB sync
+--  (META_SYNC_INPUT -> GOLD_FACT_NODE_TARGETS), so the stamp cannot outlive the membership it
+--  was derived from. A guard at the end of the loader asserts exactly that.
 --
 --  ==> THE PERIOD IS ALWAYS A NAMED GROUPING, NEVER AN ARBITRARY RANGE. <== The app filters
 --  'List Date Grouping'[Date Grouping] to exactly one value -- 'Last 3 Months', 'Last 12 Months'
@@ -65,6 +74,7 @@ GO
 CREATE TABLE [Gold].[Aggregate_Period_Targets](
     [pk_Period_Target]   [bigint]        NOT NULL,
     [Client_ID]          [int]           NOT NULL,
+    [Tenant_ID]          [int]           NOT NULL,   -- ACCESS KEY ONLY -- see the header
     [Selection]          [varchar](200)  NOT NULL,   -- the hierarchy drop-down text
     [Role]               [varchar](50)   NOT NULL,   -- 'All Roles', or the Custom Role
     [Metric]             [varchar](100)  NOT NULL,   -- the key the measures filter on

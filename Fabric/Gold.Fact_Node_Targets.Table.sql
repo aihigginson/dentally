@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Fact_Node_Targets]    Script Date: 29/10/2026 ******/
+﻿/****** Object:  Table [Gold].[Fact_Node_Targets]    Script Date: 29/10/2026 ******/
 --------------------------------------------------------------------
 --  Gold.Fact_Node_Targets -- the target grid, keyed on WHAT THE USER PICKED.
 --
@@ -34,12 +34,22 @@
 --  ('Principal', 'Hygienist', ...). It was called Target_Level and the practice-wide value was
 --  spelt 'Practice', which read as a hierarchy level in a column that is nothing of the kind.
 --
---  ==> CLIENT-KEYED, AND DELIBERATELY SO. <== A target above a practice spans tenants. Giving it
---  a Tenant_ID would mean duplicating the row per tenant -- inviting a SUM that double counts --
---  or parking it on the -1 sentinel, which the RLS escape would then show to every other client.
---  So this is the first fact keyed on the client, and it needs its own RLS rule reading
---  'Application Users'[Client ID] rather than the shared [Tenant ID] one.
---  Check_RLS_Expression.ps1 will report it as the odd one out; that is correct, not a fault.
+--
+--  ==> TENANT_ID IS AN ACCESS KEY HERE, NOT AN ATTRIBUTION KEY. <== Read that again before
+--  joining it to anything. A row for 'Skeleton Group' or '- North' covers several practices and
+--  has no natural tenant, so it carries MIN(Tenant_ID) of the practices beneath it purely so the
+--  blanket RLS rule -- [Tenant ID] IN (the caller's tenants) -- admits it for that client and
+--  nobody else.
+--
+--  It is therefore a LIE about attribution, and a more dangerous one than the -1 sentinel it
+--  replaces: -1 is self-evidently not a practice, whereas 21 is. Group or GROUP BY these targets
+--  on Tenant_ID and Skeleton Alpha is credited with the whole group's figure -- a plausible wrong
+--  number, which is the kind that survives review. Attribution is [Selection], always. The column
+--  is hidden in the model for the same reason.
+--
+--  Safe only because the table is a full DELETE + INSERT rebuild that runs after the AppDB sync
+--  (META_SYNC_INPUT -> GOLD_FACT_NODE_TARGETS), so the stamp cannot outlive the membership it
+--  was derived from. A guard at the end of the loader asserts exactly that.
 --
 --  Is_Entered: 1 = somebody typed this figure, 0 = derived. The targets screen greys the derived
 --  ones, and it is also the only way to tell a deliberate zero from an absent one after the fact.
@@ -54,6 +64,7 @@ GO
 CREATE TABLE [Gold].[Fact_Node_Targets] (
     [pk_Node_Target]  BIGINT          NOT NULL,
     [Client_ID]       INT             NOT NULL,
+    [Tenant_ID]       INT             NOT NULL,   -- ACCESS KEY ONLY -- see the header
     [Selection]       VARCHAR(200)    NOT NULL,   -- the drop-down text, indent included
     [Role]            VARCHAR(50)     NOT NULL,   -- 'All Roles', or the Custom Role
     [Metric]          VARCHAR(100)    NOT NULL,   -- the key the measures filter on

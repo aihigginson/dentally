@@ -3584,7 +3584,17 @@ in
     // practice's number to a total -- it lists another practice's patients by name. It is an
     // established table and should already be filtered; re-asserting it is a no-op and costs
     // nothing, which is the point.
-    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Lapsed Patients" };
+    // '_Node Targets' and 'Aggregate Period Targets' are the target grid, keyed on the
+    // hierarchy drop-down's own text. Both carry a real Tenant_ID -- MIN of the practices under
+    // the node -- so the blanket rule copies onto them unchanged. They held no tenant at all for
+    // a few hours on 29/10/2026, which made the donor copy produce invalid DAX; the stamp is what
+    // lets them rejoin this list instead of needing a rule of their own.
+    //
+    // 'List Hierarchy Node' is the selection -> sites bridge and is naturally tenant-grained (one
+    // row per site), so it needs nothing special either -- but it DOES need to be here, because a
+    // table nobody filters is a table that leaks the whole estate's structure.
+    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Node Targets",
+                             "List Hierarchy Node", "_Lapsed Patients" };
 
     foreach (var aptName in RLS_TABLES)
     {
@@ -3629,6 +3639,26 @@ in
         }
     }
     }
+}
+
+// =====================================================================
+// The target tables' [Tenant ID] is an ACCESS KEY, not an attribution key -- hide it.
+// =====================================================================
+// ==> A WRONG NUMBER THAT LOOKS RIGHT. <== A node above a practice has no natural tenant, so
+// these rows carry MIN(Tenant_ID) of the practices beneath them purely so the blanket RLS rule
+// admits them for the right client. On the 'Skeleton Group' row that reads 21. Group these
+// targets by tenant and Skeleton Alpha is credited with the entire group's figure -- which is
+// worse than the -1 sentinel it replaced, because -1 is obviously not a practice and 21 is.
+//
+// Attribution is [Selection], always. RLS reads a hidden column perfectly well, so hiding it
+// costs nothing and removes the only way the mistake gets made.
+foreach (var tn in new[] { "_Node Targets", "Aggregate Period Targets" })
+{
+    var tt = Model.Tables.FirstOrDefault(x => x.Name == tn);
+    if (tt == null) { Info("WARNING " + tn + ": not in the model -- import it before publishing."); continue; }
+    var tc = tt.Columns.FirstOrDefault(c => c.Name == "Tenant ID");
+    if (tc == null) { Info("WARNING " + tn + ": no [Tenant ID] column -- RLS cannot filter it."); continue; }
+    if (!tc.IsHidden) { tc.IsHidden = true; Info(tn + ": [Tenant ID] HIDDEN (access key, not attribution)."); }
 }
 
 

@@ -128,13 +128,13 @@ BEGIN
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Aggregate_Period_Targets]
-            (pk_Period_Target, Client_ID, [Selection], [Role], Metric, Metric_Name,
+            (pk_Period_Target, Client_ID, Tenant_ID, [Selection], [Role], Metric, Metric_Name,
              Date_Grouping, Target_Type, Target_Value, Variance, Working_Days, Is_Entered,
              DW_Created_At, DW_Updated_At)
         SELECT
             ROW_NUMBER() OVER (ORDER BY x.Client_ID, x.[Selection], x.Date_Grouping,
                                         x.Metric, x.[Role]),
-            x.Client_ID, x.[Selection], x.[Role], x.Metric, x.Metric_Name,
+            x.Client_ID, x.Tenant_ID, x.[Selection], x.[Role], x.Metric, x.Metric_Name,
             x.Date_Grouping, x.Target_Type, x.Target_Value, x.Variance, x.Working_Days,
             x.Is_Entered, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM (
@@ -144,6 +144,8 @@ BEGIN
             -- end. Measures use MAX on some metrics and SUM on others; emitting a row per year
             -- would quietly halve the MAX ones.
             SELECT nt.Client_ID, nt.[Selection], nt.[Role], nt.Metric,
+                   -- the access stamp travels with the row; it is already MIN per selection
+                   MIN(nt.Tenant_ID) AS Tenant_ID,
                    MAX(nt.Metric_Name) AS Metric_Name,
                    p.Date_Grouping,
                    ISNULL(cmd.Target_Type, 'cumulative') AS Target_Type,
@@ -258,13 +260,14 @@ BEGIN
         GROUP BY n.Tenant_ID, n.Start_Date, g.Date_Grouping;
 
         INSERT INTO [Gold].[Aggregate_Period_Targets]
-            (pk_Period_Target, Client_ID, [Selection], [Role], Metric, Metric_Name,
+            (pk_Period_Target, Client_ID, Tenant_ID, [Selection], [Role], Metric, Metric_Name,
              Date_Grouping, Target_Type, Target_Value, Variance, Working_Days, Is_Entered,
              DW_Created_At, DW_Updated_At)
         SELECT
             (SELECT ISNULL(MAX(pk_Period_Target), 0) FROM [Gold].[Aggregate_Period_Targets])
                 + ROW_NUMBER() OVER (ORDER BY x.Client_ID, x.[Selection], x.Date_Grouping, x.Metric),
             x.Client_ID,
+            x.Tenant_ID,                      -- the contract's own practice: a real tenant
             x.[Selection],
             'All Roles',                      -- a contract is the practice's, not a role's
             x.Metric,
@@ -279,7 +282,7 @@ BEGIN
         FROM (
             -- A practice holding two contracts that both touch a period contributes both shares,
             -- which is what summing the explosion did.
-            SELECT pn.Client_ID, pn.[Selection], u.Date_Grouping, u.Metric,
+            SELECT pn.Client_ID, pn.Tenant_ID, pn.[Selection], u.Date_Grouping, u.Metric,
                    CAST(SUM(u.Total * (CAST(u.Shared_Days AS DECIMAL(18,6))
                                        / NULLIF(u.Contract_Days, 0))) AS DECIMAL(18,4)) AS Target_Value,
                    SUM(u.Shared_Days) AS Shared_Days
@@ -299,7 +302,7 @@ BEGIN
                 WHERE  nn.Tenant_ID = n.Tenant_ID AND nn.Start_Date = n.Start_Date
                   AND  n.UOA_Target > 0
             ) u
-            GROUP BY pn.Client_ID, pn.[Selection], u.Date_Grouping, u.Metric
+            GROUP BY pn.Client_ID, pn.Tenant_ID, pn.[Selection], u.Date_Grouping, u.Metric
         ) x
         LEFT  JOIN [Input].[Metric_Variance] mv ON mv.Client_ID = x.Client_ID AND mv.Metric = x.Metric
         -- An entered target always wins, exactly as the retired loader's priority rule had it.

@@ -235,16 +235,36 @@ BEGIN
         END
 
         ---------------------------------------------------------------- 7. publish
+        -- ==> THE RLS STAMP. <== A node above a practice has no natural tenant, so it takes
+        -- MIN(Tenant_ID) of the practices beneath it. That is enough for the blanket rule to
+        -- admit it for its own client and no other, which is the only boundary RLS has to carry
+        -- here -- the app always pushes a [Selection], so narrowing BETWEEN nodes is a report
+        -- concern. See the table header: this is an access key and nothing else.
+        DROP TABLE IF EXISTS #stamp;
+        SELECT b.Client_ID, b.[Selection], MIN(b.Tenant_ID) AS RLS_Tenant_ID
+        INTO   #stamp
+        FROM (
+            SELECT DISTINCT nd.Client_ID, nd.[Selection], h.Tenant_ID
+            FROM   #nd nd
+            JOIN   #h h ON h.Client_ID = nd.Client_ID
+                       AND nd.Node_Key = CASE nd.Ord
+                                              WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                                              WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
+                                              WHEN 3 THEN h.Practice_Key ELSE h.Site_Key END
+        ) b
+        GROUP BY b.Client_ID, b.[Selection];
+
         DELETE FROM [Gold].[Fact_Node_Targets];
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Fact_Node_Targets]
-            (pk_Node_Target, Client_ID, [Selection], [Role], Metric, Metric_Name, FY,
+            (pk_Node_Target, Client_ID, Tenant_ID, [Selection], [Role], Metric, Metric_Name, FY,
              Target_Value, Is_Entered, DW_Created_At)
         SELECT ROW_NUMBER() OVER (ORDER BY r.Client_ID, r.[Selection], r.Metric, r.[Role], r.FY),
-               r.Client_ID, r.[Selection], r.[Role], r.Metric, md.Display_Name, r.FY,
-               r.Target_Value, r.Is_Entered, SYSUTCDATETIME()
+               r.Client_ID, st.RLS_Tenant_ID, r.[Selection], r.[Role], r.Metric, md.Display_Name,
+               r.FY, r.Target_Value, r.Is_Entered, SYSUTCDATETIME()
         FROM   #res r
+        JOIN   #stamp st ON st.Client_ID = r.Client_ID AND st.[Selection] = r.[Selection]
         LEFT   JOIN [Config].[Metric_Definitions] md ON md.Metric_Key = r.Metric;
         SET @My_Inserts = @@ROWCOUNT;
 
@@ -275,6 +295,26 @@ BEGIN
                                               WHEN 3 THEN h.Practice_Key ELSE h.Site_Key END
         ) b;
 
+        ---------------------------------------------------------------- 9. assert the stamp
+        -- ==> THE STAMP IS ONLY SAFE IF IT CANNOT GO STALE. <== It is derived from client
+        -- membership, so a practice moving client would make it wrong -- and a wrong RLS key
+        -- fails OPEN, silently. The table is a full rebuild running after the AppDB sync, so this
+        -- cannot happen; this proves it rather than trusting it. A failure here means the rebuild
+        -- is no longer downstream of the membership it reads.
+        DECLARE @bad INT, @err VARCHAR(400);
+        SELECT @bad = COUNT(*)
+        FROM   [Gold].[Fact_Node_Targets] nt
+        WHERE  NOT EXISTS (SELECT 1 FROM [Input].[Client_Tenant] ct
+                           WHERE ct.Client_ID = nt.Client_ID AND ct.Tenant_ID = nt.Tenant_ID);
+        IF @bad <> 0
+        BEGIN
+            SET @err = 'Fact_Node_Targets: ' + CAST(@bad AS VARCHAR(12))
+                     + ' row(s) stamped with a tenant that is not a member of their client. '
+                     + 'The RLS stamp is stale -- do NOT publish the model.';
+            THROW 51010, @err, 1;
+        END
+
+        DROP TABLE IF EXISTS #stamp;
         DROP TABLE IF EXISTS #h;    DROP TABLE IF EXISTS #surv; DROP TABLE IF EXISTS #lvl;
         DROP TABLE IF EXISTS #node; DROP TABLE IF EXISTS #nd;   DROP TABLE IF EXISTS #edge;
         DROP TABLE IF EXISTS #ent;  DROP TABLE IF EXISTS #res;
