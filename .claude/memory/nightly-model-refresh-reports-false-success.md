@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 421e1bb0-9c87-4cc3-8b8f-dd6c97f09bdd
-  modified: 2026-10-28T08:01:14.398Z
+  modified: 2026-10-28T12:01:24.261Z
 ---
 
 **CAUSE FOUND 2026-10-28: `fabric.refresh_dataset()` defaults to `refresh_type="automatic"`.**
@@ -23,8 +23,11 @@ Proven from the PROD refresh history for a single day, same model, same API:
 ```
 
 **Fix:** `fabric.refresh_dataset(dataset=..., workspace=..., refresh_type="full")` in
-`Orchestrate_Build` cell 13. Applied to DEV and promoted 2026-10-28. ==> UNPROVEN IN PROD AS OF
-WRITING. <== It had not yet run a night.
+`Orchestrate_Build` cell 13. Applied to DEV and promoted 2026-10-28.
+
+**CONFIRMED ON DEV 2026-10-28**, a full manual Orchestrate_Build run:
+`11:57:22 ViaEnhancedApi Completed 43s type=Full` — the right type and a real duration. Still
+unproven on PROD overnight as of writing, but the mechanism now has end-to-end evidence.
 
 **The duration tell still works and is still the fastest check.** A real refresh of PROD
 `PBI Dentally` takes 30-45s; 6-15s published nothing. Get it from the refresh history, and for a

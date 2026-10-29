@@ -42,7 +42,8 @@
 - [Heredocs eat backslashes, write a script file](heredocs-eat-backslashes-write-a-script-file.md) — cost a csx compile error; use Write + run by path, and lint generated code.
 - [A new model table has no RLS](a-new-model-table-has-no-rls.md) — rules are per table; dev's two tenants cannot reveal a missing one, so check rather than assume.
 - [Verify aggregation changes on two tenants](verify-aggregation-changes-on-two-tenants.md) — SUM and MAX agree on one row; a group's board is where they diverge.
-- [Group target aggregation is unresolved](group-target-aggregation-is-unresolved.md) — rates and point-in-time take the max across practices; deferred until a real group exists.
+- [Group target aggregation is RESOLVED](group-target-aggregation-is-unresolved.md) — Rolls_Up on Metric_Definitions; quantities up the tree, rates down.
+- [A rolling window straddles two financial years](a-rolling-window-straddles-two-financial-years.md) — sum each FY’s share; collapsing to one drops metrics targeted in the other.
 - [DEV targets are dummy, PROD's are real](dev-targets-are-dummy-prod-targets-are-real.md) — they have never matched by design; the gap is not evidence of a reset.
 - [NHS income is the UDA value](nhs-income-is-the-uda-value.md) — the patient's band charge is a slice of it, never income on top; V197 fixed a 3%-of-actual measure.
 - [Prefer temp tables over CTEs](prefer-temp-tables-over-ctes.md) — the owner writes none; in Fabric a re-referenced CTE re-evaluates its source and loses statistics.
@@ -113,3 +114,4 @@
 - [A short action button needs container padding](a-short-action-button-needs-container-padding.md) — default padding eats a 28px button; it renders as a clickable line of its fill colour.
 - [A parameterised batch cannot create a temp table](a-parameterised-batch-cannot-create-a-temp-table.md) — pyodbc routes params via sp_executesql; the #temp dies with the call, and the error names the reader.
 - [Demo screens are poked for the marketing page](demo-screens-are-poked-for-the-marketing-page.md) — blind-spot.html needs DEV diary data reshaped; diary_fill lives in two tables and a rebuild undoes it.
+- [Generator column set is the DEV Stage schema](generator-column-set-is-the-dev-stage-schema.md) — a column it omits ceases to exist; SELECT * views and Bronze break together.

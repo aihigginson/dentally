@@ -1,26 +1,36 @@
 ---
 name: group-target-aggregation-is-unresolved
-description: How targets combine across practices is only settled for cumulative metrics; rates and point-in-time take the max, which is deferred until a real multi-practice client exists.
-metadata:
+description: "RESOLVED 2026-10-29 — how targets combine across the hierarchy is now a Rolls_Up column on Config.Metric_Definitions, resolved in the node loader, not in DAX."
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: 421e1bb0-9c87-4cc3-8b8f-dd6c97f09bdd
+  modified: 2026-10-29T12:42:35.651Z
 ---
 
-A login that sees more than one practice combines each target family differently, and only one of
-the three is deliberate:
+**RESOLVED.** Kept because the shape it predicted turned out to be the shape built, and because
+the superseded behaviour explains old numbers.
 
-- **cumulative** — SUM across practices. Correct: two practices' revenue targets add.
-- **rate** — MAX across practices. Questionable: a group's diary-fill target should be a
-  weighted average, not whichever practice aims highest.
-- **point_in_time** — MAX across practices. Probably wrong: a group's active-patient target
-  should be the sum.
+How a target combines across the hierarchy is now `Config.Metric_Definitions.Rolls_Up` (BIT, 27
+metrics down / 17 up), resolved in `Gold.usp_Load_Fact_Node_Targets`: quantities roll **up** the
+tree child-to-parent in four passes, rates roll **down** parent-to-child in four. An entered
+figure at any level is never overwritten, so it stops the roll and becomes the truth for
+everything above (or below) it. That is the "`Group_Aggregation` column beside `Target_Type`,
+resolved in the loader, not more DAX" this note guessed at — so the guess is worth trusting next
+time the same question comes up elsewhere.
 
-**Why:** deferred deliberately on 2026-09-28. No customer is affected — every customer login sees
-a single practice, where all three collapse to the same number. The only two-practice login is the
-owner's own (Maple + the demo tenant), which is not a real group. The rate and point-in-time
-behaviour predates V196; V196 only restored SUM for cumulative after briefly making it MAX too.
+**What it used to do** (and why an archived figure may not reconstruct): cumulative SUMmed across
+practices, while **rate** and **point_in_time** took MAX — whichever practice aimed highest. The
+rate/point-in-time behaviour predates V196; V196 only restored SUM for cumulative after briefly
+making it MAX too.
 
-**How to apply:** do not re-raise this until there is a genuine multi-practice client. When there
-is, the likely shape is a `Group_Aggregation` column beside `Target_Type` in
-`Config.Metric_Definitions`, resolved in `Gold.usp_Load_Aggregate_Period_Targets` or in the
-lookup — not more DAX. Related: [[verify-aggregation-changes-on-two-tenants]],
-[[dont-re-raise-settled-decisions]].
+**Still deliberately unresolved:** a rate rolling *down* means every child inherits the parent's
+figure unchanged. A group setting 85% diary fill gives all its practices 85%, not a weighted
+split. That is intended — a rate cannot be derived upward from children, so the only honest
+direction is down — but it does mean a parent rate is an instruction, not a summary.
+
+**Partial children are wrong, and that is accepted:** if A+B+C should equal D, entering only A+B
+gives a smaller D. The owner's call on 2026-10-29: fine and visible, not a bug to guard.
+
+Related: [[verify-aggregation-changes-on-two-tenants]],
+[[a-rolling-window-straddles-two-financial-years]], [[financial-years-differ-per-tenant]].
