@@ -1528,23 +1528,26 @@
         // were being added up and shown under ONE PRACTICE'S NAME, and the name was the lie, not
         // the addition. So the merge is now the default and it SAYS SO: the picker offers
         // "All practices" and the header label says it too, rather than naming one of them.
+        // ==> THE PRACTICE PICKER IS GONE; THE HIERARCHY SELECTOR REPLACES IT. <== It was a second
+        // control doing a worse version of the same job: it could only ever pick ONE practice or
+        // all of them, while the site selector now offers Group, Region, Area, Practice and Site
+        // in one list and resolves any of them to a set of practice-site records. Two controls
+        // that both narrow "which practices" is how they end up disagreeing.
+        //
+        // It also had no way to reach the reports any more. Its only channel was the embed
+        // token's customData, which went when the scope became a filter -- so it moved the app's
+        // own screens while every tile sat still, which is worse than not offering it.
+        //
+        // The acting TENANT is still honoured server-side (_acting_tenant_id, and the authz cache
+        // is still keyed on it) because a stale header from an open tab must keep resolving the
+        // same way. Nothing in the UI sets it now.
         const tsel = document.getElementById('practice-tenant');
-        const cps  = data.client_practices || [];
-        if (tsel && cps.length > 1) {
-            const current = String(actingTenant() || '');
-            tsel.innerHTML = '<option value=""' + (current === '' ? ' selected' : '') + '>All practices</option>'
-                + cps.map(pr =>
-                    '<option value="' + escHtml(pr.tenant_id) + '"'
-                    + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
-                    + escHtml(pr.name) + '</option>').join('');
-            tsel.style.display = '';
-            tsel.onchange = () => { setActingTenant(tsel.value); location.reload(); };
-            // The header must never name a single practice while the reports show several.
-            if (current === '' && o) o.textContent = cps.length + ' practices';
-        } else if (tsel) {
+        if (tsel) {
             tsel.style.display = 'none';
             if (actingTenant()) setActingTenant('');
         }
+        const practiceCount = (data.client_practices || []).length;
+        if (practiceCount > 1 && o) o.textContent = practiceCount + ' practices';
 
         if (data.is_staff && (data.practices || []).length) {
             const sel = document.getElementById('staff-practice');
