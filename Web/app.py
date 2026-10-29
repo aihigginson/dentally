@@ -657,7 +657,8 @@ def filters():
         if tids:
             cur.execute(
                 f"SELECT r.Region_Name, r.Sort_Order, a.Area_Name, a.Sort_Order, "
-                f"       t.Tenant_Name, s.pk_Practice_Site, s.Site_Name "
+                f"       t.Tenant_Name, s.pk_Practice_Site, s.Site_Name, "
+                f"       r.Region_ID, a.Area_ID, sa.Tenant_ID "
                 f"FROM   Input.Client_Region r "
                 f"JOIN   Input.Client_Area   a  ON a.Region_ID = r.Region_ID "
                 f"JOIN   Input.Site_Area     sa ON sa.Area_ID  = a.Area_ID "
@@ -669,7 +670,9 @@ def filters():
                 [client_id] + list(tids),
             )
             rows = [{'region': r[0], 'area': r[2], 'practice': r[4],
-                     'pk': int(r[5]), 'site': r[6]} for r in cur.fetchall()]
+                     'pk': int(r[5]), 'site': r[6],
+                     'Region': str(r[7]), 'Area': str(r[8]), 'Practice': str(r[9]),
+                     'Site': str(int(r[5]))} for r in cur.fetchall()]
 
             # ==> A LEVEL THAT OFFERS NO CHOICE IS NOT SHOWN. <== A single-practice customer has
             # one region and one area, both usually called "All", and listing them is three lines
@@ -678,6 +681,26 @@ def filters():
             # narrow anything, so it is omitted.
             levels = [lv for lv in ('region', 'area', 'practice')
                       if len({r[lv] for r in rows}) > 1]
+            # ==> THE SITE LEAF EARNS ITS PLACE THE SAME WAY THE OTHERS DO. <== It used to be
+            # unconditional, which gave a single-site client TWO entries for one thing -- the
+            # client and its only site, identical in everything but indent. It also has to agree
+            # with Gold.usp_Load_Fact_Node_Targets, which applies exactly this test: a node the
+            # warehouse does not build is a target lookup that silently finds nothing.
+            show_sites = len({r['pk'] for r in rows}) > 1
+
+            # ==> DEPTHS COME FROM THE WHOLE CLIENT, NEVER FROM THE VISIBLE SUBSET. <== The indent
+            # is part of the key the targets are stored against, so a North-only user must see
+            # '<4 figure spaces>- Manchester' exactly as everyone else does. Deriving the collapse
+            # from their own narrowed rows would re-base it to 2 and every target lookup would
+            # miss, silently, because Fabric's collation is binary.
+            tn_level, tn_key = _top_node(cur, upn)
+            visible = rows
+            if tn_level and tn_level != 'Client':
+                visible = [r for r in rows if r.get(tn_level) == tn_key]
+                if not visible:
+                    # the node was deleted or re-keyed under them: fail OPEN to the client root
+                    # rather than showing an empty selector with no way back
+                    visible, tn_level = rows, 'Client'
 
             def node(depth, label, members):
                 return {'id': '%d:%s' % (depth, label), 'depth': depth, 'label': label,
@@ -690,10 +713,14 @@ def filters():
             crow = cur.fetchone()
             root_label = (crow[0] if crow and crow[0] else 'All practices')
 
-            if rows:
-                hierarchy.append(node(0, root_label, rows))
+            if visible:
+                # The client node is only offered to someone whose ceiling IS the client. For a
+                # North-only user the list simply starts at North -- the front end defaults to the
+                # first entry, so their top node becomes their default with no change there.
+                if not tn_level or tn_level == 'Client':
+                    hierarchy.append(node(0, root_label, rows))
                 seen = set()
-                for row in rows:
+                for row in visible:
                     path = []
                     for lv in levels:
                         path.append(lv)
@@ -704,8 +731,14 @@ def filters():
                         members = [m for m in rows
                                    if all(m[p] == row[p] for p in path)]
                         hierarchy.append(node(len(path), row[lv], members))
-                    # the site itself is always selectable, and is the only leaf
-                    hierarchy.append(node(len(levels) + 1, row['site'], [row]))
+                    if show_sites:
+                        hierarchy.append(node(len(levels) + 1, row['site'], [row]))
+                # A node above the ceiling can still appear via `levels` -- a Region user whose
+                # region is not itself a surviving level, say -- so drop anything shallower than
+                # the ceiling after the fact. Cheap, and it cannot be got wrong by omission.
+                if tn_level and tn_level != 'Client':
+                    floor = min((n['depth'] for n in hierarchy), default=0)
+                    hierarchy = [n for n in hierarchy if n['depth'] >= floor]
 
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
@@ -2346,6 +2379,28 @@ def _acting_tenant_id(upn):
     return (request.headers.get('X-Acting-Tenant') or '').strip() or None
 
 
+def _top_node(cur, upn):
+    """The user's top node as (level, key), or (None, None) for the client root.
+
+    ==> THIS IS NOT A PERMISSION. <== It is where the hierarchy drop-down starts and the ceiling
+    on what it offers. RLS still grants the whole client, deliberately: a report comparing an area
+    against the GROUP mean cannot compute that mean from rows RLS has removed. The boundary that
+    carries commercial weight is cross-client, and that is RLS's job, not this one.
+
+    Stored as a stable (level, key) rather than the drop-down text, because that text contains the
+    node's NAME -- a rename would leave it matching nothing and silently revoke access.
+    """
+    try:
+        cur.execute("SELECT Top_Node_Level, Top_Node_Key FROM Security.Application_Users "
+                    "WHERE LOWER(User_UPN) = LOWER(?)", upn)
+        r = cur.fetchone()
+    except Exception:
+        return None, None          # column not deployed yet: behave as the root
+    if not r or not r[0]:
+        return None, None
+    return r[0], (r[1] or '')
+
+
 def _get_user_info(cur, upn):
     """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
 
@@ -2863,12 +2918,14 @@ def get_team():
             # latest edits, which may not have synced to the warehouse auth copy yet).
             ac = _appdb_conn(); acur = ac.cursor()
             acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                         + ", Profile_Key, Maintain_Targets FROM Input.Application_Users")
+                         + ", Profile_Key, Maintain_Targets, Top_Node_Level, Top_Node_Key "
+                         + "FROM Input.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n])}
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n]),
+                            'top_level': r[3 + n], 'top_key': r[4 + n]}
             bph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
             bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
@@ -2881,11 +2938,34 @@ def get_team():
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
                 m['is_admin'] = True if m['is_self'] else (a['admin'] if a else False)
+                # '' is the client root, which is what everyone has until somebody narrows them.
+                m['top_node'] = ('%s:%s' % (a['top_level'], a['top_key'] or '')) if (a and a.get('top_level')) else ''
                 people.append(m)
         else:
             conn.close()
+        # ==> THE PICKER'S OPTIONS COME FROM THE WAREHOUSE, NOT FROM A SECOND TREE WALK. <==
+        # Gold.Dim_Hierarchy_Node is built by the targets loader and holds the canonical selection
+        # text. Reading it here means the subscriptions screen, the hierarchy drop-down and the
+        # targets grid cannot disagree about what a node is called or whether it exists.
+        #
+        # [Level] + the node's own key is what gets STORED -- never the text, which carries the
+        # name and would stop matching the moment somebody renames an area.
+        top_nodes = []
+        try:
+            conn2 = _fabric_conn(); c2 = conn2.cursor()
+            c2.execute(
+                "SELECT hn.[Level], hn.[Selection], MIN(hn.Depth) AS Depth, hn.Node_Key "
+                "FROM Gold.Dim_Hierarchy_Node hn WHERE hn.Client_ID = ? "
+                "GROUP BY hn.[Level], hn.[Selection], hn.Node_Key "
+                "ORDER BY MIN(hn.Depth), hn.[Selection]",
+                client_id)
+            top_nodes = [{'level': r[0], 'label': r[1], 'depth': int(r[2]),
+                          'key': (r[3] or '')} for r in c2.fetchall()]
+            conn2.close()
+        except Exception:
+            top_nodes = []   # bridge not built yet: the picker simply offers nothing but the root
         return jsonify({'people': people, 'profiles': profiles, 'billing': billing,
-                        'lead_price': lead_price})
+                        'lead_price': lead_price, 'top_nodes': top_nodes})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -3476,12 +3556,24 @@ def save_team():
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
             prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
             admin   = 1 if r.get('admin') else 0   # Admin (Settings tab) is a per-user flag now, decoupled from the profile
+            # ==> THE TOP NODE MUST BE RE-STATED ON EVERY SAVE. <== This is a DELETE + INSERT,
+            # so a column left out of the INSERT is not "unchanged", it is ERASED. Omitting it
+            # would quietly restore a narrowed user to the whole client the next time anyone
+            # touched the team screen -- and nothing would report it.
+            tn = (r.get('top_node') or '').strip()
+            tn_level, tn_key = (tn.split(':', 1) + [''])[:2] if tn else (None, None)
+            if tn_level not in ('Client', 'Region', 'Area', 'Practice', 'Site'):
+                tn_level, tn_key = None, None      # unknown level: the root, which is the default
+            if tn_level == 'Client':
+                tn_level, tn_key = None, None      # the root IS NULL; do not store a second spelling
             acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             acur.execute(
                 "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
-                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
-                + ", ".join(['?'] * n) + ", ?, ?, ?)",
-                [email, cid, (r.get('name') or email), admin] + flags + [prac, profile, upn])
+                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By, "
+                + "Top_Node_Level, Top_Node_Key) VALUES (?, ?, ?, ?, "
+                + ", ".join(['?'] * n) + ", ?, ?, ?, ?, ?)",
+                [email, cid, (r.get('name') or email), admin] + flags
+                + [prac, profile, upn, tn_level, tn_key])
             if cur_profile.get(email.lower()) != profile:
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",

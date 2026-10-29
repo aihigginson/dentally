@@ -19,9 +19,15 @@
 --  "the shallowest node covering one tenant" picks the region -- and an NHS contract target
 --  attached there is invisible when the practice itself is selected.
 --
---  ==> THE LEVEL LIVES HERE AND NOWHERE DOWNSTREAM. <== Gold.Fact_Node_Targets and
---  Gold.Aggregate_Period_Targets carry no level: they match the selection text, and the indent
---  makes it unique. This is the one table whose job IS to describe the hierarchy.
+--  [Node_Key] is the node's own stable id -- Client_ID, Region_ID, Area_ID, Tenant_ID or
+--  pk_Practice_Site by level. It exists so a user's TOP NODE can be recorded as something a
+--  rename cannot break: store the selection text instead and renaming an area silently revokes
+--  that user's access, failing closed with no error raised anywhere.
+--
+--  ==> LEVEL AND KEY LIVE HERE AND NOWHERE DOWNSTREAM. <== Gold.Fact_Node_Targets and
+--  Gold.Aggregate_Period_Targets carry neither: they match the selection text, and the indent
+--  makes it unique. This is the one table whose job IS to describe the hierarchy, so it is the
+--  one place an abstract key earns its keep.
 --
 --  Client-keyed, like the targets it exists to serve, so it needs an RLS rule on
 --  'Application Users'[Client ID] rather than the shared [Tenant ID] one.
@@ -39,6 +45,7 @@ CREATE TABLE [Gold].[Dim_Hierarchy_Node] (
     [Selection]          VARCHAR(200)  NOT NULL,   -- the drop-down text, indent included
     [Depth]              INT           NOT NULL,   -- 0 = the client; for sorting only
     [Level]              VARCHAR(10)   NOT NULL,   -- Client|Region|Area|Practice|Site
+    [Node_Key]           VARCHAR(64)   NOT NULL,   -- the node's own stable id; survives a rename
     [fk_Practice_Site]   BIGINT        NOT NULL,   -- a site this selection resolves to
     [Tenant_ID]          INT           NOT NULL,   -- that site's practice
     [DW_Created_At]      DATETIME2(6)  NOT NULL

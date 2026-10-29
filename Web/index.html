@@ -2844,13 +2844,30 @@
         if (profile !== 'clinician') return '';
         return prac ? 'My Data: ' + escHtml(prac) : 'no practitioner linked';
     }
+    let _teamNodes = [];
+    // The labels already carry their indent, built by Gold.usp_Load_Fact_Node_Targets and read
+    // straight off Gold.Dim_Hierarchy_Node -- NOT rendered again here. One definition of the
+    // text, so this picker, the hierarchy drop-down and the targets grid cannot disagree.
+    // The VALUE is level:key, a stable id: storing the label would break on a rename.
+    function topOpts(selected) {
+        return _teamNodes.map(n =>
+            '<option value="' + escHtml(n.level + ':' + (n.key || '')) + '"'
+            + ((n.level + ':' + (n.key || '')) === selected || (!selected && n.depth === 0) ? ' selected' : '')
+            + '>' + escHtml(n.label) + '</option>').join('');
+    }
+
     async function loadTeam() {
         const list = document.getElementById('team-list'), saveBtn = document.getElementById('team-save');
         list.textContent = 'Loading…'; saveBtn.style.display = 'none';
         try {
             const res = await authFetch('/api/team');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { people, profiles, billing, lead_price } = await res.json();
+            const { people, profiles, billing, lead_price, top_nodes } = await res.json();
+            // ==> THE TOP NODE IS NOT A PERMISSION. <== It is where this person's hierarchy
+            // drop-down starts, and the highest thing it will offer them. They still have the
+            // whole client's data behind RLS -- deliberately, because an area-vs-group-mean
+            // report cannot work out the group mean from rows RLS has taken away.
+            _teamNodes = top_nodes || [];
             _teamProfiles = profiles || [];
             _teamLead = Number(lead_price) || 0;
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
@@ -2905,6 +2922,12 @@
                     ? '<span style="color:#999;font-size:12px;white-space:nowrap">You &mdash; All reports</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>')
                 + '<span class="team-price">£' + _priceOf(p.profile, p.is_primary).toFixed(2) + '</span>'
+                // Only worth showing when there is more than one node to choose between: a
+                // single-practice client has exactly one, and a control with one option is furniture.
+                + (_teamNodes.length > 1 && !p.is_self
+                    ? '<select class="team-topnode" title="The highest level of the hierarchy this person can look at. They still see the whole client\'s data; this sets where their selector starts and stops.">'
+                      + topOpts(p.top_node) + '</select>'
+                    : '')
                 + (p.is_self
                     ? '<span class="team-tick" style="color:#999">Admin</span>'
                     : '<label class="team-tick" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
@@ -2942,6 +2965,7 @@
                 _recalcCharges();
                 markDirty();
             }));
+            list.querySelectorAll('.team-topnode').forEach(r => r.addEventListener('change', markDirty));
             list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
             list.querySelectorAll('.team-admin').forEach(r => r.addEventListener('change', markDirty));
             const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
@@ -2959,6 +2983,9 @@
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
                          profile: r.querySelector('.team-profile').value,
+                         // Always sent, even when the picker is hidden: the server saves with
+                         // DELETE + INSERT, so a field left out is erased rather than preserved.
+                         top_node: (r.querySelector('.team-topnode') || {}).value || '',
                          admin: !!(r.querySelector('.team-admin') && r.querySelector('.team-admin').checked) }));
         const _primEl = document.querySelector('#team-list .team-primary:checked');
         const primary_email = _primEl ? _primEl.value : '';

@@ -277,13 +277,13 @@ BEGIN
         DELETE FROM [Gold].[Dim_Hierarchy_Node];
 
         INSERT INTO [Gold].[Dim_Hierarchy_Node]
-            (pk_Hierarchy_Node, Client_ID, [Selection], Depth, [Level],
+            (pk_Hierarchy_Node, Client_ID, [Selection], Depth, [Level], Node_Key,
              fk_Practice_Site, Tenant_ID, DW_Created_At)
         SELECT ROW_NUMBER() OVER (ORDER BY b.Client_ID, b.Depth, b.[Selection], b.pk_Practice_Site),
-               b.Client_ID, b.[Selection], b.Depth, b.[Level],
+               b.Client_ID, b.[Selection], b.Depth, b.[Level], b.Node_Key,
                b.pk_Practice_Site, b.Tenant_ID, SYSUTCDATETIME()
         FROM (
-            SELECT DISTINCT nd.Client_ID, nd.[Selection], nd.Depth,
+            SELECT DISTINCT nd.Client_ID, nd.[Selection], nd.Depth, nd.Node_Key,
                    CAST(CASE nd.Ord WHEN 0 THEN 'Client' WHEN 1 THEN 'Region' WHEN 2 THEN 'Area'
                                     WHEN 3 THEN 'Practice' ELSE 'Site' END AS VARCHAR(10)) AS [Level],
                    h.pk_Practice_Site, h.Tenant_ID

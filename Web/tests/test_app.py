@@ -864,6 +864,68 @@ def _team_env(appmod, monkeypatch, previous_primary):
     return ap, sent
 
 
+def _topnode_save(appmod, monkeypatch, row):
+    """Post one roster row through save_team and hand back the AppDB cursor that recorded it."""
+    wh = _RecCursor({
+        'SELECT Tenant_ID, Client_ID': [(11, 711)],
+        'Dim_Practitioners': [],
+    })
+    ap = _RecCursor({
+        'SELECT Primary_Email': [],
+        'SELECT LOWER(User_UPN)': [],
+    })
+    monkeypatch.setattr(appmod, '_auth', lambda: ('boss@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Boss', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    return ap
+
+
+def _ins_params(ap):
+    for sql, params in ap.sql:
+        if 'INSERT INTO Input.Application_Users' in sql:
+            return sql, list(params or [])
+    raise AssertionError('save_team never inserted the user')
+
+
+def test_save_team_persists_the_top_node(client, appmod, monkeypatch):
+    # ==> THE SAVE IS DELETE + INSERT, SO AN OMITTED COLUMN IS ERASED, NOT PRESERVED. <== If the
+    # top node ever falls out of this INSERT, every narrowed user is silently returned to the
+    # whole client the next time anybody edits the team -- and nothing reports it.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'rm@practice.co.uk', 'name': 'Regional Manager',
+         'profile': 'no_access', 'top_node': 'Region:7'}]})
+    assert r.status_code == 200
+    sql, params = _ins_params(ap)
+    assert 'Top_Node_Level' in sql and 'Top_Node_Key' in sql
+    assert params[-2:] == ['Region', '7']
+
+
+def test_save_team_stores_the_client_root_as_null(client, appmod, monkeypatch):
+    # The root has ONE spelling, and it is NULL. Storing 'Client:20' as well would mean two values
+    # meaning "everything", and every reader would have to know both.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'gm@practice.co.uk', 'name': 'Group Manager',
+         'profile': 'no_access', 'top_node': 'Client:20'}]})
+    assert r.status_code == 200
+    _, params = _ins_params(ap)
+    assert params[-2:] == [None, None]
+
+
+def test_save_team_rejects_an_unknown_top_node_level(client, appmod, monkeypatch):
+    # A level the hierarchy does not have must fall back to the root rather than being stored and
+    # then matching nothing -- which would fail CLOSED and leave the user with an empty selector.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'x@practice.co.uk', 'name': 'X',
+         'profile': 'no_access', 'top_node': 'Continent:3'}]})
+    assert r.status_code == 200
+    _, params = _ins_params(ap)
+    assert params[-2:] == [None, None]
+
+
 def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatch):
     # Any admin may take the primary over -- that is the continuity path when the primary is off
     # sick or has left. It must never be SILENT: the person losing it and Sales@ are both told.
