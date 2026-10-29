@@ -4640,6 +4640,12 @@
                         const o = document.createElement('option');
                         o.value = 'h:' + n.id;
                         o.textContent = (n.depth ? '\u2007'.repeat(n.depth * 2) + '\u2013 ' : '') + n.label;
+                        // ==> THE OPTION'S OWN TEXT *IS* THE TARGET KEY. <== Gold.Fact_Node_Targets
+                        // stores this exact string -- figure-space indent and en dash included --
+                        // so the filter below sends what the user literally read. Re-deriving it
+                        // anywhere else risks one different byte, and Fabric's collation is binary:
+                        // the lookup would quietly return nothing rather than fail.
+                        n.selection = o.textContent;
                         selSite.appendChild(o);
                     });
                     // Fall back to the plain site list if the client has no hierarchy mapped --
@@ -4785,6 +4791,20 @@
             const node = _hierNodes.find(n => ('h:' + n.id) === filterState.site);
             if (node) {
                 filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'pk Practice Site' }, operator: 'In', values: node.sites, filterType: 1 });
+                // ==> AND THE SAME CHOICE, PUSHED AT THE TARGETS BY NAME. <== A target is not a
+                // transaction: it does not live at a site and cannot be reached through site keys.
+                // Gold.Aggregate_Period_Targets holds one row per NODE, keyed on this very string,
+                // so the node is sent as itself.
+                //
+                // This is what makes "all" mean THE CLIENT'S OWN ROW -- a single figure already
+                // rolled up -- instead of "every row in the list, added together". Without it the
+                // grid is visible at five levels at once and the SUM builders return Practice +
+                // Area + Region + Client, roughly four times the real target, which reads as a
+                // plausible number rather than an error. It also costs no DAX: the measures get
+                // one row to look at and MAX and SUM agree on it.
+                if (node.selection) {
+                    filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Aggregate Period Targets', column: 'Selection' }, operator: 'In', values: [node.selection], filterType: 1 });
+                }
             } else {
                 filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
             }

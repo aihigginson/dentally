@@ -134,7 +134,7 @@ Action<string,string,string> add = (name, dax, fmt) => {
 // ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
 // lvl: practitioner in context -> their Custom Role; role selected -> that role; else Practice.
 // FTE-scaled metrics multiply the per-FTE role target by SUM(FTE) of practitioners in context.
-Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
+Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""All Roles"", 1, SUM('List Practitioners'[FTE]))" : "";
 
 // ==> NO BUILDER FILTERS BY DATE BY HAND. <== Every target and variance builder used to pass
 //     TREATAS(VALUES('List Date'[pk Date]), '_Daily Targets'[fk Date])
@@ -157,20 +157,20 @@ Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||k
 // REMOVEFILTERS('List Date') uses elsewhere are in value measures, not around the target. The
 // _Metric Actuals TREATAS calls are NOT removed -- that table relates to 'List Date
 // Unconstrained', so for it the TREATAS is the only thing applying the period at all.
-Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
-Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -213,9 +213,9 @@ RETURN IF(
 
 // ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -225,9 +225,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -238,9 +238,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -250,9 +250,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -263,9 +263,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -276,9 +276,9 @@ RETURN SWITCH(TRUE(),
 
 // "within": deviation from target — being close is good (Exam Ratio)
 Func<string,string,string> bgWithinPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR dev      = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -826,7 +826,7 @@ add("NHS UDAs Target",
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_udas"",
-    'Aggregate Period Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Role] = ""All Roles"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
@@ -846,7 +846,7 @@ add("NHS UOAs Target",
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_uoas"",
-    'Aggregate Period Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Role] = ""All Roles"")
 RETURN IF(ISBLANK(full_target), BLANK(), full_target)",
     "#,##0.00");
 
@@ -876,7 +876,7 @@ add("NHS UDA Completion Rate Target",
         REMOVEFILTERS('List Practice Sites'),
         REMOVEFILTERS('List Practitioners'),
         'Aggregate Period Targets'[Metric]           = ""nhs_uda_completion_rate"",
-        'Aggregate Period Targets'[Target Level] = ""Practice""),
+        'Aggregate Period Targets'[Role] = ""All Roles""),
     100)",
     "#,##0.0%");
 
@@ -1058,7 +1058,7 @@ VAR band       = CALCULATE(
     MAX('Aggregate Period Targets'[Variance]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_udas"",
-    'Aggregate Period Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Role] = ""All Roles"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -1075,7 +1075,7 @@ VAR band       = CALCULATE(
     MAX('Aggregate Period Targets'[Variance]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
     'Aggregate Period Targets'[Metric]       = ""nhs_uoas"",
-    'Aggregate Period Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Role] = ""All Roles"")
 VAR pct        = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),   ""#FFFFFF"",
@@ -1099,7 +1099,7 @@ VAR band   = CALCULATE(
     REMOVEFILTERS('List Practice Sites'),
     REMOVEFILTERS('List Practitioners'),
     'Aggregate Period Targets'[Metric]           = ""nhs_uda_completion_rate"",
-    'Aggregate Period Targets'[Target Level] = ""Practice"")
+    'Aggregate Period Targets'[Role] = ""All Roles"")
 VAR dev    = ABS((actual - target) * 100)
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1235,46 +1235,57 @@ add("Patients Booked",
     '_Appointments'[Is Cancelled] = FALSE())",
     "#,##0");
 
-// ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
-// lvl: practitioner in context -> Custom Role; role -> that role; else Practice. RunRate/tDaily
-// variants sum the daily-apportioned fact over the selected period (proration is inherent).
-Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
+// ── Target builders (Aggregate Period Targets: role resolution + FTE) ──
+// lvl: practitioner in context -> their Custom Role; a role selected -> that role; else
+// 'All Roles', the practice-wide figure. (The VAR keeps its old name; the COLUMN it reads was
+// what misled -- [Target Level] held 'Hygienist', which is no kind of level.)
+//
+// ==> THE NODE IS NOT RESOLVED HERE, AND THAT IS THE POINT. <== The app pushes
+// 'Aggregate Period Targets'[Selection] -- the hierarchy drop-down's own text -- so exactly one
+// row is in scope and the builder simply reads it. "All" is the client's OWN row, already rolled
+// up by the warehouse, not every row in the list added together.
+//
+// A consequence worth knowing: with one row in scope, MAX and SUM return the same number, so the
+// RunRate / non-RunRate split below no longer distinguishes anything. They are left as separate
+// builders deliberately, to keep this sweep separable from that cleanup -- if a tile moves, it
+// should be obvious which change moved it.
+Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""All Roles"", 1, SUM('List Practitioners'[FTE]))" : "";
 
-Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
-Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEffRunRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
-Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
-Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEffRunRateAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
-Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tDaily = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -1338,9 +1349,9 @@ RETURN IF(
 
 // ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherEff = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1350,9 +1361,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1363,9 +1374,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerEffGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
@@ -1376,9 +1387,9 @@ RETURN SWITCH(TRUE(),
                      ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1388,9 +1399,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgHigherPpGrey = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1401,9 +1412,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -1652,10 +1663,10 @@ RETURN IF(
 // not shrink under a practitioner selection. No base means no judgement: white, exactly as a
 // missing target already gives.
 Func<string,string,string> bgHigherBase = (b, key) => (@"VAR actual = [{b}]
-VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target = [{b} Target]
 VAR base_n = [Active Patients]
-VAR band   = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band   = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pp     = DIVIDE(actual - target, base_n) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target) || ISBLANK(base_n) || base_n = 0, ""#FFFFFF"",
@@ -1718,35 +1729,35 @@ Action<string,string,string> add = (name, dax, fmt) => {
 Func<string,string> band = key => (@"CALCULATE(
     MAX('Aggregate Period Targets'[Variance]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)").Replace("{key}", key);
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)").Replace("{key}", key);
 
-Func<string,string> tCum = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tCum = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t)").Replace("{key}", key);
 
-Func<string,string> tCumFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tCumFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     SUM('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
-VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
+VAR fte = IF(lvl = ""All Roles"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
 
-Func<string,string> tRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tRate = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 RETURN CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)").Replace("{key}", key);
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)").Replace("{key}", key);
 
-Func<string,string> tRateFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tRateFTE = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
-VAR fte = IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
+VAR fte = IF(lvl = ""All Roles"", 1, SUM('List Practitioners'[FTE]))
 RETURN IF(ISBLANK(base_t), BLANK(), base_t * fte)").Replace("{key}", key);
 
 Func<string,string> tRate100 = key => tRate(key) + " / 100";
@@ -1781,7 +1792,7 @@ RETURN IF(
 
 // ── BG colour DAX builders (band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherRefF = (b, key) => (@"VAR actual = [{b}]
-VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target = [{b} Target]
 VAR band   = {band}
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
@@ -1800,7 +1811,7 @@ Func<string,string,bool,string> bgLowerEffF = (b, key, grey) => {
     var greyRow = grey ? @"
     ISBLANK(actual), ""#E0E0E0""," : "";
     return (@"VAR actual = [{b}]
-VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl    = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target = [{b} Target]
 VAR band   = {band}
 VAR pct    = DIVIDE(actual - target, ABS(target)) * 100
@@ -1813,7 +1824,7 @@ RETURN SWITCH(TRUE(),
 };
 
 Func<string,string,string> bgHigherPpF = (b, key) => (@"VAR actual = [{b}]
-VAR lvl     = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl     = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target  = [{b} Target]
 VAR band    = {band}
 VAR diff_pp = (actual - target) * 100
@@ -1825,7 +1836,7 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{band}", band(key)).Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerPpF = (b, key) => (@"VAR actual = [{b}]
-VAR lvl     = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl     = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target  = [{b} Target]
 VAR band    = {band}
 VAR diff_pp = (actual - target) * 100
@@ -2245,22 +2256,22 @@ Action<string,string,string> add = (name, dax, fmt) => {
 };
 
 // ── Target builders (target model: Fact_Daily_Targets, Target_Level resolution + FTE) ──
-Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""Practice"", 1, SUM('List Practitioners'[FTE]))" : "";
+Func<string,string> fteMul = key => (key=="total_revenue"||key=="nhs_revenue"||key=="private_revenue"||key=="open_courses"||key=="open_courses_without_appt"||key=="open_courses_without_appt_value"||key=="open_courses_value") ? @" * IF(lvl = ""All Roles"", 1, SUM('List Practitioners'[FTE]))" : "";
 
-Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEff = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 Func<string,string> tEff100 = key => tEff(key) + " / 100";
 
-Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+Func<string,string> tEffAdd = key => (@"VAR lvl = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR base_t = CALCULATE(
     MAX('Aggregate Period Targets'[Target Value]),
     'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]),
-    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+    'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 RETURN IF(ISBLANK(base_t), BLANK(), base_t{FTE})").Replace("{FTE}", fteMul(key)).Replace("{key}", key);
 
 // ── vs-Target builders ───────────────────────────────────────────────────────
@@ -2284,9 +2295,9 @@ RETURN IF(
 
 // ── BG builders (target from [b Target]; band from Aggregate Period Targets[Variance] at the resolved level) ──
 Func<string,string,string> bgHigherPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -2296,9 +2307,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerPp = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR diff_pp  = (actual - target) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target),  ""#FFFFFF"",
@@ -2308,9 +2319,9 @@ RETURN SWITCH(TRUE(),
                       ""#c0392b"")").Replace("{b}", b).Replace("{key}", key);
 
 Func<string,string,string> bgLowerEff = (b, key) => (@"VAR actual   = [{b}]
-VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""Practice"")
+VAR lvl      = COALESCE(SELECTEDVALUE('List Practitioners'[Custom Role]), ""All Roles"")
 VAR target   = [{b} Target]
-VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Target Level] = lvl)
+VAR band     = CALCULATE(MAX('Aggregate Period Targets'[Variance]), 'Aggregate Period Targets'[Date Grouping] = SELECTEDVALUE('List Date Grouping'[Date Grouping]), 'Aggregate Period Targets'[Metric] = ""{key}"", 'Aggregate Period Targets'[Role] = lvl)
 VAR pct      = DIVIDE(actual - target, ABS(target)) * 100
 RETURN SWITCH(TRUE(),
     ISBLANK(target), ""#FFFFFF"",
