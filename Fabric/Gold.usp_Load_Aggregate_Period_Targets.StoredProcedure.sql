@@ -2,11 +2,12 @@
 --  Stored Procedure : Gold.usp_Load_Aggregate_Period_Targets
 --  Author           : AIH
 --  History          :
---    *01  ..  AIH  Precompute the target for each (Date_Grouping, Metric, Target_Level).
+--    *01  ..          AIH  Precompute the target for each (Date_Grouping, Metric, Target_Level).
 --    *02  29/10/2026  AIH  Node-aware, and built straight from Gold.Fact_Node_Targets.
 --                          Fact_Daily_Targets is no longer in the chain.
+--    *03  29/10/2026  AIH  Keyed on the DROP-DOWN TEXT. Tenant_ID/Level_Type/Level_Key gone.
 --
---  THE TARGET FOR EVERY (NODE, LIVE PERIOD, METRIC, ROLE), PRECOMPUTED.
+--  THE TARGET FOR EVERY (SELECTION, LIVE PERIOD, METRIC, ROLE), PRECOMPUTED.
 --
 --  ==> THE DAILY EXPLOSION IS GONE, AND IT WAS NEVER NEEDED. <== This used to read
 --  Gold.Fact_Daily_Targets: an annual target spread over every working day of its financial year,
@@ -14,30 +15,31 @@
 --  here. But apportioning a target to a period is a RATIO, not an explosion --
 --
 --      cumulative      period target = SUM over each FY the period touches of
---                                        annual[FY] x (working days of the period in that FY
---                                                      / working days in that FY)
+--                                      annual[FY] x (working days of the period in that FY
+--                                                    / working days in that FY)
 --      rate | stock    period target = the strictest annual across those years
 --                                      (a threshold does not accumulate)
---
---  The sum matters: a rolling window reaches across the client's year end, and the two years can
---  carry different targets -- or target the metric in only one of them.
 --
 --  -- so it is one multiplication against a COUNT of dates. The daily table was a million rows
 --  computed nightly to answer a question arithmetic answers directly, and nothing else read it:
 --  zero measures in the model, one unused relationship.
+--
+--  The sum over years matters: a rolling window reaches across the client's year end, and the two
+--  years can carry different targets -- or target the metric in only one of them. Collapsing a
+--  grouping to MAX(Financial_Year) applied the later year's figure to the whole window and
+--  silently dropped any metric targeted only in the earlier one. That was caught by diffing
+--  against the explosion this replaced, and every wrong row was in Last 12 Months.
 --
 --  ==> ONLY THE PERIODS THAT REACH TODAY ARE BUILT. <== Dim_Date_Grouping still carries FY21
 --  onwards, but the app offers only the groupings whose dates run up to the latest date -- the
 --  owner removed the historical ones because too many metrics lose their meaning when the current
 --  month is missing. The same test is applied HERE, derived rather than listed, so the two cannot
 --  drift: a grouping the app stops offering stops being built, and one it starts offering starts.
---  In practice that is Last 3 Months, Last 12 Months and the client's current financial year --
---  which year that is depends on the client's FY start, so it is not hard-coded either.
 --
---  ==> THE CALENDAR IS THE CLIENT'S, NOT THE TENANT'S. <== A Group or Region target spans
+--  ==> THE CALENDAR IS THE CLIENT'S, NOT THE TENANT'S. <== A selection above a practice spans
 --  tenants, so "which practice's financial year" has no answer. The financial year is a client
 --  setting (Input.Practice_Config is client-keyed), so one representative tenant supplies the
---  calendar for all of that client's nodes.
+--  calendar for all of that client's selections.
 --
 --  ==> NHS CONTRACT TARGETS GET THEIR OWN BRANCH. <== nhs_udas and nhs_uoas are not typed by
 --  anyone -- they are read off the practice's NHS contract -- so they never enter the target grid
@@ -100,14 +102,8 @@ BEGIN
         GROUP BY c.Client_ID, g.Date_Grouping
         HAVING MAX(d.Full_Date) = MAX(l.Latest);
 
-        -- ==> A ROLLING WINDOW STRADDLES TWO FINANCIAL YEARS, SO IT IS SPLIT BY YEAR. <== This is
-        -- the one place the arithmetic is genuinely not a single ratio. Last 12 Months reaches back
-        -- across the client's FY boundary, and the two years it touches can carry DIFFERENT annual
-        -- targets -- or the metric may be targeted in only one of them. Counting the window's
-        -- working days per FY, rather than collapsing it to one year, is what makes the sum below
-        -- reproduce the daily explosion it replaced: taking MAX(Financial_Year) instead applied the
-        -- later year's target across the whole window, and dropped any metric targeted only in the
-        -- earlier one -- which is exactly how this was first found to be wrong.
+        -- Working days of each live grouping PER FINANCIAL YEAR, and per FY to divide by. Both
+        -- count the SAME kind of day, so the ratio holds even if the definition changes later.
         DROP TABLE IF EXISTS #wd_pf;
         SELECT c.Client_ID, g.Date_Grouping, d.Financial_Year AS FY, COUNT(*) AS Working_Days
         INTO   #wd_pf
@@ -132,43 +128,37 @@ BEGIN
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Aggregate_Period_Targets]
-            (pk_Period_Target, Tenant_ID, Date_Grouping, Metric, Target_Level, Target_Type,
-             Target_Value, Variance, Working_Days, DW_Created_At, DW_Updated_At,
-             Client_ID, Level_Type, Level_Key)
+            (pk_Period_Target, Client_ID, [Selection], [Role], Metric, Metric_Name,
+             Date_Grouping, Target_Type, Target_Value, Variance, Working_Days, Is_Entered,
+             DW_Created_At, DW_Updated_At)
         SELECT
-            ROW_NUMBER() OVER (ORDER BY x.Client_ID, x.Level_Type, x.Level_Key,
-                                        x.Date_Grouping, x.Metric, x.Target_Level),
-            x.Tenant_ID,
-            x.Date_Grouping,
-            x.Metric,
-            x.Target_Level,
-            x.Target_Type,
-            x.Target_Value,
-            x.Variance,
-            x.Working_Days,
-            SYSUTCDATETIME(), SYSUTCDATETIME(),
-            x.Client_ID, x.Level_Type, x.Level_Key
+            ROW_NUMBER() OVER (ORDER BY x.Client_ID, x.[Selection], x.Date_Grouping,
+                                        x.Metric, x.[Role]),
+            x.Client_ID, x.[Selection], x.[Role], x.Metric, x.Metric_Name,
+            x.Date_Grouping, x.Target_Type, x.Target_Value, x.Variance, x.Working_Days,
+            x.Is_Entered, SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM (
-            -- ==> ONE ROW PER (NODE, PERIOD, METRIC, ROLE), WHATEVER THE PERIOD SPANS. <== The
-            -- years are summed HERE rather than left as separate rows, so the grain the model
+            -- ==> ONE ROW PER (SELECTION, PERIOD, METRIC, ROLE), WHATEVER THE PERIOD SPANS. <==
+            -- The years are summed HERE rather than left as separate rows, so the grain the model
             -- reads is unchanged and no measure has to care whether its window straddles a year
             -- end. Measures use MAX on some metrics and SUM on others; emitting a row per year
             -- would quietly halve the MAX ones.
-            SELECT nt.Client_ID, nt.Level_Type, nt.Level_Key,
-                   MAX(ISNULL(nt.Tenant_ID, -1)) AS Tenant_ID,   -- -1 above a practice: no tenant
-                   p.Date_Grouping, nt.Metric, nt.Target_Level,
+            SELECT nt.Client_ID, nt.[Selection], nt.[Role], nt.Metric,
+                   MAX(nt.Metric_Name) AS Metric_Name,
+                   p.Date_Grouping,
                    ISNULL(cmd.Target_Type, 'cumulative') AS Target_Type,
-                   -- A cumulative target earns the share of each financial year the window covers,
-                   -- summed. Anything else is a threshold: it reads the same through any window,
-                   -- and across a year end the stricter of the two stands -- which is what the
-                   -- retired loader's MAX(Annual_Target_Value) did.
+                   -- A cumulative target earns the share of each financial year the window
+                   -- covers, summed. Anything else is a threshold: it reads the same through any
+                   -- window, and across a year end the stricter of the two stands.
                    CAST(CASE WHEN ISNULL(cmd.Target_Type, 'cumulative') = 'cumulative'
                              THEN SUM(nt.Target_Value * (CAST(p.Working_Days AS DECIMAL(18,6))
                                                          / NULLIF(f.Working_Days, 0)))
                              ELSE MAX(nt.Target_Value)
                         END AS DECIMAL(18,4)) AS Target_Value,
                    MAX(mv.Variance) AS Variance,
-                   SUM(p.Working_Days) AS Working_Days
+                   SUM(p.Working_Days) AS Working_Days,
+                   -- entered at EITHER year counts as entered: the figure is partly committed
+                   CAST(MAX(CAST(nt.Is_Entered AS INT)) AS BIT) AS Is_Entered
             FROM   [Gold].[Fact_Node_Targets] nt
             JOIN   #wd_pf p  ON p.Client_ID = nt.Client_ID AND p.FY = nt.FY
             JOIN   #wd_fy  f ON f.Client_ID = nt.Client_ID AND f.FY = nt.FY
@@ -177,8 +167,8 @@ BEGIN
             LEFT  JOIN [Input].[Metric_Variance] mv ON mv.Client_ID = nt.Client_ID
                                                    AND mv.Metric = nt.Metric
             WHERE  nt.Target_Value IS NOT NULL
-            GROUP BY nt.Client_ID, nt.Level_Type, nt.Level_Key, p.Date_Grouping,
-                     nt.Metric, nt.Target_Level, ISNULL(cmd.Target_Type, 'cumulative')
+            GROUP BY nt.Client_ID, nt.[Selection], nt.[Role], nt.Metric, p.Date_Grouping,
+                     ISNULL(cmd.Target_Type, 'cumulative')
         ) x;
         SET @My_Inserts = @@ROWCOUNT;
 
@@ -188,7 +178,7 @@ BEGIN
         -- contract. So they are absent from Input.Targets, absent from Config.Metric_Definitions,
         -- and therefore absent from Gold.Fact_Node_Targets, which is built from what was entered.
         -- Six live measures read them -- NHS UDAs Target / vs Target / BG and the UOA three --
-        -- every one filtering Target Level = 'Practice'. Without this branch all six read blank.
+        -- every one filtering the practice-wide figure. Without this branch all six read blank.
         --
         -- ==> THE CONTRACT CARRIES ITS OWN YEAR, SO IT IS ITS OWN DENOMINATOR. <== An NHS
         -- contract year is April-March whatever the client's financial year is, and a contract can
@@ -217,6 +207,33 @@ BEGIN
         JOIN   [Input].[Client_Tenant] ct ON ct.Tenant_ID = fc.Tenant_ID
         WHERE  fc.UDA_Target > 0 OR fc.UOA_Target > 0;
 
+        -- ==> WHICH SELECTION IS "THIS PRACTICE"? <== Gold.Dim_Hierarchy_Node[Level] says so
+        -- outright. It has to: the site sets cannot answer it, because a region holding a single
+        -- practice covers exactly that one tenant, so "the shallowest node covering one tenant"
+        -- returns the REGION -- and a contract target parked there is invisible the moment the
+        -- practice itself is selected. That was a real bug in the first cut of this branch.
+        --
+        -- A single-practice client has no Practice node at all (the level offers no choice and is
+        -- not built), so the figure belongs to the deepest node that exists at or above where the
+        -- practice would have been. COALESCE over descending levels does it.
+        --
+        -- The string is READ from the bridge, never re-rendered here: a binary collation would not
+        -- forgive one different byte, and the indent is made of invisible figure spaces.
+        DROP TABLE IF EXISTS #pnode;
+        SELECT hn.Client_ID, hn.Tenant_ID,
+               MIN(CASE hn.[Level] WHEN 'Practice' THEN hn.[Selection] END) AS Practice_Sel,
+               MIN(CASE hn.[Level] WHEN 'Area'     THEN hn.[Selection] END) AS Area_Sel,
+               MIN(CASE hn.[Level] WHEN 'Region'   THEN hn.[Selection] END) AS Region_Sel,
+               MIN(CASE hn.[Level] WHEN 'Client'   THEN hn.[Selection] END) AS Client_Sel
+        INTO   #pnode_raw
+        FROM   [Gold].[Dim_Hierarchy_Node] hn
+        GROUP BY hn.Client_ID, hn.Tenant_ID;
+
+        SELECT Client_ID, Tenant_ID,
+               COALESCE(Practice_Sel, Area_Sel, Region_Sel, Client_Sel) AS [Selection]
+        INTO   #pnode
+        FROM   #pnode_raw;
+
         -- Working days inside the contract (the denominator), and inside each live period that
         -- the contract overlaps (the numerator). Both counted off the practice's own calendar.
         DROP TABLE IF EXISTS #nhs_den;
@@ -241,30 +258,33 @@ BEGIN
         GROUP BY n.Tenant_ID, n.Start_Date, g.Date_Grouping;
 
         INSERT INTO [Gold].[Aggregate_Period_Targets]
-            (pk_Period_Target, Tenant_ID, Date_Grouping, Metric, Target_Level, Target_Type,
-             Target_Value, Variance, Working_Days, DW_Created_At, DW_Updated_At,
-             Client_ID, Level_Type, Level_Key)
+            (pk_Period_Target, Client_ID, [Selection], [Role], Metric, Metric_Name,
+             Date_Grouping, Target_Type, Target_Value, Variance, Working_Days, Is_Entered,
+             DW_Created_At, DW_Updated_At)
         SELECT
             (SELECT ISNULL(MAX(pk_Period_Target), 0) FROM [Gold].[Aggregate_Period_Targets])
-                + ROW_NUMBER() OVER (ORDER BY x.Tenant_ID, x.Date_Grouping, x.Metric),
-            x.Tenant_ID,
-            x.Date_Grouping,
+                + ROW_NUMBER() OVER (ORDER BY x.Client_ID, x.[Selection], x.Date_Grouping, x.Metric),
+            x.Client_ID,
+            x.[Selection],
+            'All Roles',                      -- a contract is the practice's, not a role's
             x.Metric,
-            'Practice',                       -- a contract is a practice's; the measures filter on this
+            x.Metric,                         -- no Metric_Definitions row exists for these two
+            x.Date_Grouping,
             'cumulative',                     -- UDAs accumulate through the year
             x.Target_Value,
             mv.Variance,
             x.Shared_Days,
-            SYSUTCDATETIME(), SYSUTCDATETIME(),
-            x.Client_ID, 'Practice', CAST(x.Tenant_ID AS VARCHAR(64))
+            CAST(0 AS BIT),                   -- derived from the contract, not typed
+            SYSUTCDATETIME(), SYSUTCDATETIME()
         FROM (
             -- A practice holding two contracts that both touch a period contributes both shares,
             -- which is what summing the explosion did.
-            SELECT n.Tenant_ID, n.Client_ID, u.Date_Grouping, u.Metric,
+            SELECT pn.Client_ID, pn.[Selection], u.Date_Grouping, u.Metric,
                    CAST(SUM(u.Total * (CAST(u.Shared_Days AS DECIMAL(18,6))
                                        / NULLIF(u.Contract_Days, 0))) AS DECIMAL(18,4)) AS Target_Value,
                    SUM(u.Shared_Days) AS Shared_Days
             FROM   #nhs n
+            JOIN   #pnode pn ON pn.Client_ID = n.Client_ID AND pn.Tenant_ID = n.Tenant_ID
             CROSS  APPLY (
                 SELECT 'nhs_udas' AS Metric, n.UDA_Target AS Total, nn.Shared_Days,
                        dn.Contract_Days, nn.Date_Grouping
@@ -279,23 +299,22 @@ BEGIN
                 WHERE  nn.Tenant_ID = n.Tenant_ID AND nn.Start_Date = n.Start_Date
                   AND  n.UOA_Target > 0
             ) u
-            GROUP BY n.Tenant_ID, n.Client_ID, u.Date_Grouping, u.Metric
+            GROUP BY pn.Client_ID, pn.[Selection], u.Date_Grouping, u.Metric
         ) x
         LEFT  JOIN [Input].[Metric_Variance] mv ON mv.Client_ID = x.Client_ID AND mv.Metric = x.Metric
         -- An entered target always wins, exactly as the retired loader's priority rule had it.
         WHERE  NOT EXISTS (SELECT 1 FROM [Gold].[Aggregate_Period_Targets] a
                            WHERE a.Client_ID     = x.Client_ID
-                             AND a.Level_Type    = 'Practice'
-                             AND a.Level_Key     = CAST(x.Tenant_ID AS VARCHAR(64))
+                             AND a.[Selection]   = x.[Selection]
                              AND a.Date_Grouping = x.Date_Grouping
                              AND a.Metric        = x.Metric
-                             AND a.Target_Level  = 'Practice');
+                             AND a.[Role]        = 'All Roles');
         SET @My_Inserts = @My_Inserts + @@ROWCOUNT;
 
-        DROP TABLE IF EXISTS #nhs; DROP TABLE IF EXISTS #nhs_den; DROP TABLE IF EXISTS #nhs_num;
-
-        DROP TABLE IF EXISTS #cal; DROP TABLE IF EXISTS #latest;
-        DROP TABLE IF EXISTS #live; DROP TABLE IF EXISTS #wd_pf; DROP TABLE IF EXISTS #wd_fy;
+        DROP TABLE IF EXISTS #cal;  DROP TABLE IF EXISTS #latest; DROP TABLE IF EXISTS #live;
+        DROP TABLE IF EXISTS #wd_pf; DROP TABLE IF EXISTS #wd_fy;
+        DROP TABLE IF EXISTS #nhs;  DROP TABLE IF EXISTS #nhs_den; DROP TABLE IF EXISTS #nhs_num;
+        DROP TABLE IF EXISTS #pnode_raw; DROP TABLE IF EXISTS #pnode;
 
         SET @Run_Inserts = @My_Inserts; SET @Run_Updates = @My_Updates; SET @Run_Deletes = @My_Deletes;
 

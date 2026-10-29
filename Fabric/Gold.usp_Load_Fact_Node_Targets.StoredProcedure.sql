@@ -1,38 +1,52 @@
---------------------------------------------------------------------
+﻿--------------------------------------------------------------------
 --  Procedure : Gold.usp_Load_Fact_Node_Targets
 --  Author    : AIH
---  Date      : 29/10/2026
+--  History   :
+--    *01  29/10/2026  AIH  Explode the sparse grid across every node of the hierarchy.
+--    *02  29/10/2026  AIH  Keyed on the DROP-DOWN TEXT. Level_Type/Level_Key/Tenant_ID gone.
 --
---  EXPLODE THE SPARSE TARGET GRID ACROSS EVERY NODE OF EVERY CLIENT'S HIERARCHY.
+--  EXPLODE THE SPARSE TARGET GRID ACROSS THE HIERARCHY, KEYED ON WHAT THE USER PICKED.
 --
---  Input.Targets holds only what somebody TYPED -- one row per (node, FY, metric, role). This
---  produces the other thing: one row for every node that should have a target, whether it was
---  entered or derived. Downstream (daily apportionment, period aggregation, DAX) then never has
---  to know which it was, and the roll-up rules live HERE, in SQL, where a query can check them,
---  rather than in DAX where they cannot.
+--  Input.Targets holds only what somebody typed. This builds, for every selectable node, the
+--  target in force there -- entered, rolled up from children, or rolled down from a parent --
+--  and publishes it against the EXACT STRING the hierarchy drop-down shows.
 --
---  ==> IT IS KEYED ON THE CLIENT, NOT THE TENANT. <== A Region or Area target spans tenants and
---  has no single Tenant_ID to carry; forcing one would mean either duplicating the row per tenant
---  (and inviting a SUM that double counts) or parking it on the -1 sentinel (which the RLS escape
---  would then expose to every other client). Client_ID is what the node actually belongs to.
---  Tenant_ID is carried as well, but only where the node HAS one -- Practice and Site -- and is
---  NULL above that, which is the honest answer rather than a filled-in guess.
+--  ==> THE OUTPUT CARRIES NO HIERARCHY AT ALL. <== The tree is built here, used to roll values,
+--  and thrown away. The published row says "client 20, '<indent>- Skeleton Alpha', All Roles,
+--  total_revenue, FY2027, 1800000, entered" and nothing else, because that is all a reader or a
+--  filter needs: the app sets [Selection] = the value the user chose. No level, no key, no
+--  tenant, nothing to resolve or join. The previous revision stored Level_Type + Level_Key and
+--  it was both unreadable and wrong -- the keys collided across levels, and Site held the
+--  Dentally business key while every report filters the warehouse surrogate.
 --
---  ==> WHICH WAY A TARGET TRAVELS IS Config.Metric_Definitions.Rolls_Up, AND NOTHING ELSE. <==
---      1 = a QUANTITY. A node with no target of its own is the SUM of its children. Revenue,
---          patient counts, outstanding invoices.
---      0 = a RATE. A node with no target of its own inherits its PARENT'S. A DNA rate does not
---          get bigger because a group has more sites.
---  An entered target always wins over a derived one, at every level.
+--  ==> A LEVEL THAT OFFERS NO CHOICE IS NOT BUILT. <== Exactly the test /api/filters applies:
+--  a level with one distinct value across the client cannot narrow anything, so it is omitted
+--  and the ones below it move up. Maple has one region, one area, one practice and one site, so
+--  it gets ONE node -- its own name -- instead of five identical copies of every target. That
+--  was 925 unreachable rows, and they were not merely waste: no measure filters a node, so five
+--  copies of a target are summed or maxed into a figure five times too big.
 --
---  ==> A PARTIAL ROLL-UP IS SIMPLY WRONG, AND THAT IS ACCEPTED. <== If an area holds three
---  practices and only two have targets, the area reads the sum of those two. It is not scaled up,
---  not pro-rated, and not suppressed. The owner's rule: enter the third, or enter the area's own
---  figure. Inventing a number for the missing practice would be a guess wearing a target's
---  clothes, and nobody would know it had happened.
+--  ==> THE INDENT IS PART OF THE KEY, WHICH IS WHY IT IS BUILT FROM BYTES. <== The string must
+--  match index.html byte for byte -- ' '.repeat(depth*2) + '- ' + label, with U+2007 FIGURE
+--  SPACE and U+2013 EN DASH -- and Fabric's collation is binary, so a lookalike character would
+--  silently match nothing. CAST(0xE28087 ...) cannot be altered by this file's own encoding,
+--  which a literal character could be.
 --
---  Pattern: full DELETE + INSERT. The grid is small (nodes x metrics x roles x FY) and entirely
---  derived, so there is nothing to preserve and incremental logic would only add ways to be stale.
+--  It also makes the text unique without a level column: client 11 has a PRACTICE and a SITE
+--  both called "Demonstration Practice", and the client itself is called that too. They differ
+--  here by nothing except the indent -- none, six figure spaces, eight -- and that is enough.
+--
+--  ==> ROLES ROLL DOWN ONLY. <== A role target is per-FTE (the measures multiply it by the FTE
+--  in context), so it never sums upward: three practices each targeting 300k per dentist does
+--  not make 900k per dentist at the group. Owner's rule: no roll up, roll down only. The
+--  practice-wide figure ('All Roles') is the one that rolls up, and only when
+--  Config.Metric_Definitions.Rolls_Up says the metric is a quantity.
+--
+--  It also publishes Gold.Dim_Hierarchy_Node -- selection -> the sites it covers -- because the
+--  tree is in scope here and nothing else should rebuild it.
+--
+--  To Run: DECLARE @i BIGINT,@u BIGINT,@d BIGINT;
+--          EXEC Gold.usp_Load_Fact_Node_Targets @Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT
 --------------------------------------------------------------------
 SET ANSI_NULLS ON
 GO
@@ -52,129 +66,218 @@ CREATE PROCEDURE [Gold].[usp_Load_Fact_Node_Targets]
 )
 AS
 BEGIN
-    SET NOCOUNT ON;
     DECLARE @My_Inserts BIGINT = 0, @My_Updates BIGINT = 0, @My_Deletes BIGINT = 0;
-
+    SET NOCOUNT ON;
     BEGIN TRY
 
-        ---------------------------------------------------------------- 1. the tree
-        -- Every node, with its parent. Practice sits between Area and Site because a tenant's
-        -- sites all hang off one area today; a tenant that ever spans areas breaks this join
-        -- rather than silently mis-parenting, which is the failure mode to prefer.
-        DROP TABLE IF EXISTS #nodes;
-        SELECT Level_Type, Level_Key, Client_ID, Parent_Type, Parent_Key, Tenant_ID
-        INTO   #nodes
-        FROM (
-            SELECT CAST('Group' AS VARCHAR(10)) AS Level_Type,
-                   CAST(c.Client_ID AS VARCHAR(64)) AS Level_Key, c.Client_ID,
-                   CAST(NULL AS VARCHAR(10)) AS Parent_Type, CAST(NULL AS VARCHAR(64)) AS Parent_Key,
-                   CAST(NULL AS INT) AS Tenant_ID
-            FROM   [Input].[Client] c
-            UNION ALL
-            SELECT 'Region', CAST(r.Region_ID AS VARCHAR(64)), r.Client_ID,
-                   'Group', CAST(r.Client_ID AS VARCHAR(64)), NULL
-            FROM   [Input].[Client_Region] r
-            UNION ALL
-            SELECT 'Area', CAST(a.Area_ID AS VARCHAR(64)), r.Client_ID,
-                   'Region', CAST(a.Region_ID AS VARCHAR(64)), NULL
-            FROM   [Input].[Client_Area] a
-            JOIN   [Input].[Client_Region] r ON r.Region_ID = a.Region_ID
-            UNION ALL
-            SELECT DISTINCT 'Practice', CAST(sa.Tenant_ID AS VARCHAR(64)), r.Client_ID,
-                   'Area', CAST(sa.Area_ID AS VARCHAR(64)), sa.Tenant_ID
-            FROM   [Input].[Site_Area] sa
-            JOIN   [Input].[Client_Area] a ON a.Area_ID = sa.Area_ID
-            JOIN   [Input].[Client_Region] r ON r.Region_ID = a.Region_ID
-            UNION ALL
-            SELECT 'Site', CAST(sa.Site_ID AS VARCHAR(64)), r.Client_ID,
-                   'Practice', CAST(sa.Tenant_ID AS VARCHAR(64)), sa.Tenant_ID
-            FROM   [Input].[Site_Area] sa
-            JOIN   [Input].[Client_Area] a ON a.Area_ID = sa.Area_ID
-            JOIN   [Input].[Client_Region] r ON r.Region_ID = a.Region_ID
-        ) n;
+        -- U+2007 FIGURE SPACE and U+2013 EN DASH, from their UTF-8 bytes. See the header.
+        DECLARE @FIG VARCHAR(3) = CAST(0xE28087 AS VARCHAR(3));
+        DECLARE @DSH VARCHAR(3) = CAST(0xE28093 AS VARCHAR(3));
 
-        ---------------------------------------------------------------- 2. what was typed
-        -- Joined to the tree, so a target naming a node that no longer exists (an area deleted
-        -- after the target was set) drops out HERE rather than becoming an orphan row nothing
-        -- can ever select.
-        DROP TABLE IF EXISTS #res;
-        SELECT n.Client_ID, n.Level_Type, n.Level_Key, n.Tenant_ID,
-               t.FY, t.Metric, t.Target_Level,
+        ---------------------------------------------------------------- 1. the hierarchy, flat
+        -- One row per ACTIVE site with every ancestor it has. Same join /api/filters uses, minus
+        -- its restriction to the signed-in user's tenants: the grid is built for the whole client.
+        DROP TABLE IF EXISTS #h;
+        SELECT r.Client_ID,
+               CAST(r.Region_ID  AS VARCHAR(64)) AS Region_Key,
+               CAST(r.Region_Name AS VARCHAR(200)) AS Region_Name,
+               CAST(a.Area_ID    AS VARCHAR(64)) AS Area_Key,
+               CAST(a.Area_Name  AS VARCHAR(200)) AS Area_Name,
+               CAST(sa.Tenant_ID AS VARCHAR(64)) AS Practice_Key,
+               CAST(t.Tenant_Name AS VARCHAR(200)) AS Practice_Name,
+               CAST(s.pk_Practice_Site AS VARCHAR(64)) AS Site_Key,
+               CAST(s.Site_Name  AS VARCHAR(200)) AS Site_Name,
+               s.pk_Practice_Site, sa.Tenant_ID
+        INTO   #h
+        FROM   [Input].[Client_Region] r
+        JOIN   [Input].[Client_Area]   a  ON a.Region_ID = r.Region_ID
+        JOIN   [Input].[Site_Area]     sa ON sa.Area_ID  = a.Area_ID
+        JOIN   [Gold].[Dim_Practice_Sites] s ON s.Tenant_ID = sa.Tenant_ID AND s.Site_ID = sa.Site_ID
+        JOIN   [Audit].[Tenants] t ON t.Tenant_ID = sa.Tenant_ID
+        WHERE  s.Site_Active = 1;
+
+        ---------------------------------------------------------------- 2. which levels survive
+        -- Ordinals: 0 the client, 1 Region, 2 Area, 3 Practice, 4 Site. The client is always a
+        -- node (it is "everything"); the other four earn their place by offering a choice.
+        DROP TABLE IF EXISTS #surv;
+        SELECT DISTINCT Client_ID, 0 AS Ord INTO #surv FROM #h
+        UNION ALL SELECT Client_ID, 1 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Region_Name)   > 1
+        UNION ALL SELECT Client_ID, 2 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Area_Name)     > 1
+        UNION ALL SELECT Client_ID, 3 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Practice_Key)  > 1
+        UNION ALL SELECT Client_ID, 4 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Site_Key)      > 1;
+
+        -- Depth is the position among the SURVIVORS, not the ordinal -- that is what makes the
+        -- levels below a dropped one move up, and the indent match what the drop-down renders.
+        DROP TABLE IF EXISTS #lvl;
+        SELECT Client_ID, Ord,
+               ROW_NUMBER() OVER (PARTITION BY Client_ID ORDER BY Ord) - 1 AS Depth,
+               LAG(Ord) OVER (PARTITION BY Client_ID ORDER BY Ord)        AS Parent_Ord
+        INTO   #lvl
+        FROM   #surv;
+
+        ---------------------------------------------------------------- 3. the nodes
+        DROP TABLE IF EXISTS #node;
+        SELECT DISTINCT
+            h.Client_ID, l.Ord, l.Depth, l.Parent_Ord,
+            CAST(CASE l.Ord WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                            WHEN 1 THEN h.Region_Key   WHEN 2 THEN h.Area_Key
+                            WHEN 3 THEN h.Practice_Key ELSE h.Site_Key END AS VARCHAR(64)) AS Node_Key,
+            CAST(CASE l.Ord WHEN 0 THEN c.Client_Name
+                            WHEN 1 THEN h.Region_Name   WHEN 2 THEN h.Area_Name
+                            WHEN 3 THEN h.Practice_Name ELSE h.Site_Name END AS VARCHAR(200)) AS Node_Name,
+            CAST(CASE l.Parent_Ord WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                                   WHEN 1 THEN h.Region_Key   WHEN 2 THEN h.Area_Key
+                                   WHEN 3 THEN h.Practice_Key ELSE NULL END AS VARCHAR(64)) AS Parent_Key
+        INTO   #node
+        FROM   #h h
+        JOIN   #lvl l ON l.Client_ID = h.Client_ID
+        JOIN   [Security].[Clients] c ON c.Client_ID = h.Client_ID;
+
+        -- The drop-down string, and the parent's, so a roll knows where to send a value.
+        DROP TABLE IF EXISTS #nd;
+        SELECT n.Client_ID, n.Ord, n.Depth, n.Node_Key, n.Node_Name, n.Parent_Ord, n.Parent_Key,
+               CAST(CASE WHEN n.Depth = 0 THEN n.Node_Name
+                         ELSE REPLICATE(@FIG, n.Depth * 2) + @DSH + ' ' + n.Node_Name
+                    END AS VARCHAR(200)) AS Selection
+        INTO   #nd
+        FROM   #node n;
+
+        DROP TABLE IF EXISTS #edge;
+        SELECT c.Client_ID, c.Selection AS Child_Selection, c.Depth AS Child_Depth,
+               p.Selection AS Parent_Selection
+        INTO   #edge
+        FROM   #nd c
+        JOIN   #nd p ON p.Client_ID = c.Client_ID AND p.Ord = c.Parent_Ord
+                    AND p.Node_Key = c.Parent_Key
+        WHERE  c.Parent_Ord IS NOT NULL;
+
+        ---------------------------------------------------------------- 4. what was typed
+        -- ==> AN ENTERED FIGURE LANDS ON THE DEEPEST SURVIVING LEVEL AT OR ABOVE THE ONE IT NAMES.
+        -- <== Targets are entered per practice today, but a single-practice client HAS no practice
+        -- node (the level offers no choice), so the figure belongs to that client's only node. The
+        -- rule generalises: find the entered level's ordinal, take the deepest survivor not below
+        -- it, and attach there. Without this, Maple's 525 entered targets would all drop silently.
+        DROP TABLE IF EXISTS #ent;
+        SELECT t.Client_ID, t.FY, t.Metric,
+               CAST(CASE WHEN t.Target_Level = 'Practice' THEN 'All Roles'
+                         ELSE t.Target_Level END AS VARCHAR(50)) AS Role,
                CAST(t.Target_Value AS DECIMAL(18,4)) AS Target_Value,
+               CASE ISNULL(t.Level_Type,'Practice')
+                    WHEN 'Group' THEN 0 WHEN 'Region' THEN 1 WHEN 'Area' THEN 2
+                    WHEN 'Site'  THEN 4 ELSE 3 END AS Entered_Ord,
+               ISNULL(t.Level_Key, CAST(t.Tenant_ID AS VARCHAR(64))) AS Entered_Key
+        INTO   #ent
+        FROM   [Input].[Targets] t
+        WHERE  t.Target_Value IS NOT NULL AND t.Client_ID IS NOT NULL;
+
+        -- the site rows the entered figure covers, then the node it attaches to
+        DROP TABLE IF EXISTS #res;
+        SELECT DISTINCT e.Client_ID, nd.Selection, e.Role, e.Metric, e.FY, e.Target_Value,
                CAST(1 AS BIT) AS Is_Entered
         INTO   #res
-        FROM   [Input].[Targets] t
-        JOIN   #nodes n ON n.Level_Type = t.Level_Type AND n.Level_Key = t.Level_Key;
+        FROM   #ent e
+        JOIN   #h h ON h.Client_ID = e.Client_ID
+                   AND e.Entered_Key = CASE e.Entered_Ord
+                                             WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                                             WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
+                                             WHEN 4 THEN h.Site_Key   ELSE h.Practice_Key END
+        -- the deepest surviving level at or above the one the figure names
+        JOIN   #lvl l ON l.Client_ID = e.Client_ID AND l.Ord <= e.Entered_Ord
+                     AND l.Depth = (SELECT MAX(l2.Depth) FROM #lvl l2
+                                    WHERE l2.Client_ID = e.Client_ID AND l2.Ord <= e.Entered_Ord)
+        JOIN   #nd nd ON nd.Client_ID = e.Client_ID AND nd.Ord = l.Ord
+                     AND nd.Node_Key = CASE l.Ord
+                                            WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                                            WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
+                                            WHEN 4 THEN h.Site_Key   ELSE h.Practice_Key END;
 
-        ---------------------------------------------------------------- 3. quantities roll UP
-        -- Four passes, child level to parent. A node already holding a value -- entered, or
-        -- summed on an earlier pass -- is never overwritten, so an entered figure at any level
-        -- stops the roll there and becomes the truth for everything above it.
-        DECLARE @child VARCHAR(10), @i INT = 0;
-        WHILE @i < 4
+        ---------------------------------------------------------------- 5. quantities roll UP
+        -- Child to parent, deepest first. A node already holding a value -- entered, or summed on
+        -- an earlier pass -- is never overwritten, so an entered figure stops the roll and becomes
+        -- the truth for everything above it. 'All Roles' only: a per-FTE role target does not sum.
+        DECLARE @d INT = 4;
+        WHILE @d >= 1
         BEGIN
-            SET @child = CASE @i WHEN 0 THEN 'Site' WHEN 1 THEN 'Practice'
-                                 WHEN 2 THEN 'Area' ELSE 'Region' END;
-
-            INSERT INTO #res (Client_ID, Level_Type, Level_Key, Tenant_ID, FY, Metric, Target_Level,
-                              Target_Value, Is_Entered)
-            SELECT p.Client_ID, p.Level_Type, p.Level_Key, p.Tenant_ID,
-                   r.FY, r.Metric, r.Target_Level,
+            INSERT INTO #res (Client_ID, Selection, Role, Metric, FY, Target_Value, Is_Entered)
+            SELECT e.Client_ID, e.Parent_Selection, r.Role, r.Metric, r.FY,
                    CAST(SUM(r.Target_Value) AS DECIMAL(18,4)), 0
             FROM   #res r
-            JOIN   #nodes cn ON cn.Level_Type = r.Level_Type AND cn.Level_Key = r.Level_Key
-            JOIN   #nodes p  ON p.Level_Type  = cn.Parent_Type AND p.Level_Key = cn.Parent_Key
+            JOIN   #edge e ON e.Client_ID = r.Client_ID AND e.Child_Selection = r.Selection
             JOIN   [Config].[Metric_Definitions] md ON md.Metric_Key = r.Metric AND md.Rolls_Up = 1
-            WHERE  cn.Level_Type = @child
+            WHERE  e.Child_Depth = @d
+              AND  r.Role = 'All Roles'
               AND  NOT EXISTS (SELECT 1 FROM #res x
-                               WHERE x.Level_Type = p.Level_Type AND x.Level_Key = p.Level_Key
-                                 AND x.FY = r.FY AND x.Metric = r.Metric
-                                 AND x.Target_Level = r.Target_Level)
-            GROUP BY p.Client_ID, p.Level_Type, p.Level_Key, p.Tenant_ID,
-                     r.FY, r.Metric, r.Target_Level;
+                               WHERE x.Client_ID = e.Client_ID AND x.Selection = e.Parent_Selection
+                                 AND x.Role = r.Role AND x.Metric = r.Metric AND x.FY = r.FY)
+            GROUP BY e.Client_ID, e.Parent_Selection, r.Role, r.Metric, r.FY;
 
-            SET @i = @i + 1;
+            SET @d = @d - 1;
         END
 
-        ---------------------------------------------------------------- 4. rates roll DOWN
-        -- Four passes, parent to child, the other way along the same tree.
-        DECLARE @parent VARCHAR(10);
-        SET @i = 0;
-        WHILE @i < 4
+        ---------------------------------------------------------------- 6. the rest rolls DOWN
+        -- Parent to child, shallowest first: rates (a threshold cannot be derived upward from
+        -- children) and every role figure (per-FTE, so it applies as-is wherever you stand).
+        SET @d = 1;
+        WHILE @d <= 4
         BEGIN
-            SET @parent = CASE @i WHEN 0 THEN 'Group' WHEN 1 THEN 'Region'
-                                  WHEN 2 THEN 'Area' ELSE 'Practice' END;
-
-            INSERT INTO #res (Client_ID, Level_Type, Level_Key, Tenant_ID, FY, Metric, Target_Level,
-                              Target_Value, Is_Entered)
-            SELECT cn.Client_ID, cn.Level_Type, cn.Level_Key, cn.Tenant_ID,
-                   r.FY, r.Metric, r.Target_Level, r.Target_Value, 0
+            INSERT INTO #res (Client_ID, Selection, Role, Metric, FY, Target_Value, Is_Entered)
+            SELECT e.Client_ID, e.Child_Selection, r.Role, r.Metric, r.FY, r.Target_Value, 0
             FROM   #res r
-            JOIN   #nodes cn ON cn.Parent_Type = r.Level_Type AND cn.Parent_Key = r.Level_Key
-            JOIN   [Config].[Metric_Definitions] md ON md.Metric_Key = r.Metric AND md.Rolls_Up = 0
-            WHERE  r.Level_Type = @parent
+            JOIN   #edge e ON e.Client_ID = r.Client_ID AND e.Parent_Selection = r.Selection
+            LEFT   JOIN [Config].[Metric_Definitions] md ON md.Metric_Key = r.Metric
+            WHERE  e.Child_Depth = @d
+              AND  (r.Role <> 'All Roles' OR ISNULL(md.Rolls_Up, 0) = 0)
               AND  NOT EXISTS (SELECT 1 FROM #res x
-                               WHERE x.Level_Type = cn.Level_Type AND x.Level_Key = cn.Level_Key
-                                 AND x.FY = r.FY AND x.Metric = r.Metric
-                                 AND x.Target_Level = r.Target_Level);
+                               WHERE x.Client_ID = e.Client_ID AND x.Selection = e.Child_Selection
+                                 AND x.Role = r.Role AND x.Metric = r.Metric AND x.FY = r.FY);
 
-            SET @i = @i + 1;
+            SET @d = @d + 1;
         END
 
-        ---------------------------------------------------------------- 5. publish
+        ---------------------------------------------------------------- 7. publish
         DELETE FROM [Gold].[Fact_Node_Targets];
         SET @My_Deletes = @@ROWCOUNT;
 
         INSERT INTO [Gold].[Fact_Node_Targets]
-            (pk_Node_Target, Client_ID, Level_Type, Level_Key, Tenant_ID, FY, Metric,
-             Target_Level, Target_Value, Is_Entered, DW_Created_At)
-        SELECT ROW_NUMBER() OVER (ORDER BY Client_ID, Level_Type, Level_Key, FY, Metric, Target_Level),
-               Client_ID, Level_Type, Level_Key, Tenant_ID, FY, Metric, Target_Level,
-               Target_Value, Is_Entered, SYSUTCDATETIME()
-        FROM   #res;
+            (pk_Node_Target, Client_ID, [Selection], [Role], Metric, Metric_Name, FY,
+             Target_Value, Is_Entered, DW_Created_At)
+        SELECT ROW_NUMBER() OVER (ORDER BY r.Client_ID, r.[Selection], r.Metric, r.[Role], r.FY),
+               r.Client_ID, r.[Selection], r.[Role], r.Metric, md.Display_Name, r.FY,
+               r.Target_Value, r.Is_Entered, SYSUTCDATETIME()
+        FROM   #res r
+        LEFT   JOIN [Config].[Metric_Definitions] md ON md.Metric_Key = r.Metric;
         SET @My_Inserts = @@ROWCOUNT;
 
-        DROP TABLE IF EXISTS #nodes; DROP TABLE IF EXISTS #res;
+        ---------------------------------------------------------------- 8. the bridge
+        -- ==> WHAT EACH SELECTION COVERS, PUBLISHED ONCE. <== The period loader's NHS branch has
+        -- to turn a contract's tenant into a selection, the report has to turn a selection into a
+        -- set of sites, and /api/filters has to offer the list. All three need the same strings,
+        -- and re-rendering them anywhere else risks a byte difference that a binary collation
+        -- turns into a silent empty result. So the tree is resolved here, while it is in scope.
+        DELETE FROM [Gold].[Dim_Hierarchy_Node];
+
+        INSERT INTO [Gold].[Dim_Hierarchy_Node]
+            (pk_Hierarchy_Node, Client_ID, [Selection], Depth, [Level],
+             fk_Practice_Site, Tenant_ID, DW_Created_At)
+        SELECT ROW_NUMBER() OVER (ORDER BY b.Client_ID, b.Depth, b.[Selection], b.pk_Practice_Site),
+               b.Client_ID, b.[Selection], b.Depth, b.[Level],
+               b.pk_Practice_Site, b.Tenant_ID, SYSUTCDATETIME()
+        FROM (
+            SELECT DISTINCT nd.Client_ID, nd.[Selection], nd.Depth,
+                   CAST(CASE nd.Ord WHEN 0 THEN 'Client' WHEN 1 THEN 'Region' WHEN 2 THEN 'Area'
+                                    WHEN 3 THEN 'Practice' ELSE 'Site' END AS VARCHAR(10)) AS [Level],
+                   h.pk_Practice_Site, h.Tenant_ID
+            FROM   #nd nd
+            JOIN   #h h ON h.Client_ID = nd.Client_ID
+                       AND nd.Node_Key = CASE nd.Ord
+                                              WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
+                                              WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
+                                              WHEN 3 THEN h.Practice_Key ELSE h.Site_Key END
+        ) b;
+
+        DROP TABLE IF EXISTS #h;    DROP TABLE IF EXISTS #surv; DROP TABLE IF EXISTS #lvl;
+        DROP TABLE IF EXISTS #node; DROP TABLE IF EXISTS #nd;   DROP TABLE IF EXISTS #edge;
+        DROP TABLE IF EXISTS #ent;  DROP TABLE IF EXISTS #res;
 
         SET @Run_Inserts = @My_Inserts; SET @Run_Updates = @My_Updates; SET @Run_Deletes = @My_Deletes;
 
