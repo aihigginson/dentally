@@ -3590,22 +3590,21 @@ in
 // tracks the real rule -- including the CUSTOMDATA() scoping -- instead of drifting from a
 // hand-typed duplicate. Re-running is a no-op once the rule is present.
 // =====================================================================
+    // ==> THE OWNER MAINTAINS THE RLS RULES BY HAND. DO NOT ADD TABLES HERE. <== Owner,
+    // 2026-10-29. '_Node Targets' and 'List Hierarchy Node' were added to this list and taken
+    // straight back out: a rule appearing because a script decided it should is a rule nobody
+    // reviewed. If a new table needs protecting, say so and let it be set deliberately.
+    //
+    // Scripts/Find_Broken_RLS.csx is the right tool for that conversation -- it names any table
+    // carrying Tenant ID or Client ID with no rule in any role, which Desktop never reports,
+    // because an open door is not an error.
+    //
     // ==> EVERY TENANT-BEARING TABLE IMPORTED THROUGH GET DATA BELONGS ON THIS LIST. <==
     // '_Lapsed Patients' is PATIENT grain, so an unfiltered copy does not merely add another
     // practice's number to a total -- it lists another practice's patients by name. It is an
     // established table and should already be filtered; re-asserting it is a no-op and costs
     // nothing, which is the point.
-    // '_Node Targets' and 'Aggregate Period Targets' are the target grid, keyed on the
-    // hierarchy drop-down's own text. Both carry a real Tenant_ID -- MIN of the practices under
-    // the node -- so the blanket rule copies onto them unchanged. They held no tenant at all for
-    // a few hours on 29/10/2026, which made the donor copy produce invalid DAX; the stamp is what
-    // lets them rejoin this list instead of needing a rule of their own.
-    //
-    // 'List Hierarchy Node' is the selection -> sites bridge and is naturally tenant-grained (one
-    // row per site), so it needs nothing special either -- but it DOES need to be here, because a
-    // table nobody filters is a table that leaks the whole estate's structure.
-    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Node Targets",
-                             "List Hierarchy Node", "_Lapsed Patients" };
+    var RLS_TABLES = new[] { "Aggregate Period Targets", "_Lapsed Patients" };
 
     foreach (var aptName in RLS_TABLES)
     {
