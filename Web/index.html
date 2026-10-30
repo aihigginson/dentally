@@ -3837,13 +3837,18 @@
         _renderNodeGrid(page);
     }
 
+    // The tab already says which level this is, so the drop-down's indent marker is noise in a
+    // column header -- it read "- Skeleton Alpha". Display only; [Selection] is the key and is
+    // never touched.
+    const _nodeHead = s => String(s || '').replace(/^[ –\s]+/, '');
+
     // Rows are metrics, columns are the nodes at this level. A group with nine sites needs nine
     // columns, which is why the container scrolls horizontally.
     function _renderNodeGrid(page) {
         const nodes = page.nodes || [];
         const ncol = nodes.length + 2;
         let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
-            + nodes.map(n => '<th class="col-practice">' + escHtml((n.label || '').trim()) + '</th>').join('')
+            + nodes.map(n => '<th class="col-practice">' + escHtml(_nodeHead(n.label)) + '</th>').join('')
             + '</tr></thead><tbody>';
         for (const grp of _groupBySection(_tgtData.metrics)) {
             html += '<tr class="section-row"><td colspan="' + ncol + '">'
