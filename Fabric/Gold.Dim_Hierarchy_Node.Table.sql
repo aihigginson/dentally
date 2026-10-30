@@ -48,6 +48,17 @@ CREATE TABLE [Gold].[Dim_Hierarchy_Node] (
     [Node_Key]           VARCHAR(64)   NOT NULL,   -- the node's own stable id; survives a rename
     [fk_Practice_Site]   BIGINT        NOT NULL,   -- a site this selection resolves to
     [Tenant_ID]          INT           NOT NULL,   -- that site's practice
-    [DW_Created_At]      DATETIME2(6)  NOT NULL
+    [DW_Created_At]      DATETIME2(6)  NOT NULL,
+    -- ==> TWO STRINGS, AND ONLY ONE OF THEM IS A KEY. <== [Selection] is indented by the node's
+    -- LEVEL and never moves, so a target keyed on it survives a fold elsewhere in the client.
+    -- [Display_Selection] is indented by position in the FOLDED tree -- which is what reads
+    -- correctly in a drop-down, and would be a terrible thing to store a number against. The app
+    -- renders this one and filters on the other.
+    --
+    -- ==> IT WAS ALTERed INTO DEV AND NEVER FOLDED BACK INTO THIS FILE. <== So this DDL built a
+    -- table the loader could not write to, and prod failed with "Invalid column name
+    -- 'Display_Selection'" the first time the exploder ran. Declared LAST, matching the position
+    -- the ALTER gave it on dev, so the two environments stay identical.
+    [Display_Selection]  VARCHAR(200)  NOT NULL    -- the same node, indented for display
 )
 GO
