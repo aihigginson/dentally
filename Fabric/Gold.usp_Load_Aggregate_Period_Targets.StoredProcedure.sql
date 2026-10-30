@@ -321,15 +321,15 @@ BEGIN
 
         SET @Run_Inserts = @My_Inserts; SET @Run_Updates = @My_Updates; SET @Run_Deletes = @My_Deletes;
 
-        IF @Logging = 1
-            EXEC [Audit].[ETL_Log_Record_Counts] @Run_UUID = @Run_UUID,
-                 @Process_Name = 'Gold.usp_Load_Aggregate_Period_Targets',
-                 @Table_Name = 'Gold.Aggregate_Period_Targets',
-                 @Rows_Inserted = @My_Inserts, @Rows_Updated = @My_Updates, @Rows_Deleted = @My_Deletes;
+        -- ==> THE COUNTS GO BACK THROUGH THE OUT PARAMETERS, AND NOTHING ELSE. <== This
+        -- used to call Audit.ETL_Log_Record_Counts, which exists nowhere, and a CATCH that EXEC'd
+        -- Audit.ETL_Error_Handler -- a FUNCTION taking no parameters -- with two of them. So every
+        -- run threw at this tail AFTER the data had landed, and the CATCH threw again on top of
+        -- it: a clean run and a real failure both came back as "ETL_Error_Handler has no
+        -- parameters". Audit.ETL_Run_Process logs the counts, exactly as it does for every other
+        -- Gold loader, which is why they do none of this.
     END TRY
     BEGIN CATCH
-        EXEC [Audit].[ETL_Error_Handler] @Run_UUID = @Run_UUID,
-             @Process_Name = 'Gold.usp_Load_Aggregate_Period_Targets';
         THROW;
     END CATCH
 END

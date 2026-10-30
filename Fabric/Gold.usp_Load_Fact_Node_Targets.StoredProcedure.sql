@@ -4,6 +4,7 @@
 --  History   :
 --    *01  29/10/2026  AIH  Explode the sparse grid across every node of the hierarchy.
 --    *02  29/10/2026  AIH  Keyed on the DROP-DOWN TEXT. Level_Type/Level_Key/Tenant_ID gone.
+--    *03  30/10/2026  AIH  Read 'Client', the level the bridge publishes, not 'Group'.
 --
 --  EXPLODE THE SPARSE TARGET GRID ACROSS THE HIERARCHY, KEYED ON WHAT THE USER PICKED.
 --
@@ -203,13 +204,37 @@ BEGIN
                CAST(CASE WHEN t.Target_Level = 'Practice' THEN 'All Roles'
                          ELSE t.Target_Level END AS VARCHAR(50)) AS Role,
                CAST(t.Target_Value AS DECIMAL(18,4)) AS Target_Value,
+               -- ==> THE LEVEL VOCABULARY IS THE ONE Dim_Hierarchy_Node PUBLISHES. <== That
+               -- is 'Client', and it is what the screen sends back, because the screen's tabs ARE
+               -- those published levels. This read 'Group' -- a name nothing has written since
+               -- the bridge was published -- so a figure set on the "Whole client" tab fell to
+               -- the ELSE (Practice), looked for a practice keyed '20', found none, and vanished
+               -- with no row and no error. 'Group' stays recognised: it costs nothing.
                CASE ISNULL(t.Level_Type,'Practice')
-                    WHEN 'Group' THEN 0 WHEN 'Region' THEN 1 WHEN 'Area' THEN 2
-                    WHEN 'Site'  THEN 4 ELSE 3 END AS Entered_Ord,
+                    WHEN 'Client' THEN 0 WHEN 'Group'  THEN 0
+                    WHEN 'Region' THEN 1 WHEN 'Area'   THEN 2
+                    WHEN 'Site'   THEN 4 ELSE 3 END AS Entered_Ord,
                ISNULL(t.Level_Key, CAST(t.Tenant_ID AS VARCHAR(64))) AS Entered_Key
         INTO   #ent
         FROM   [Input].[Targets] t
         WHERE  t.Target_Value IS NOT NULL AND t.Client_ID IS NOT NULL;
+
+        -- ==> AN UNRECOGNISED LEVEL MUST NOT BECOME 'PRACTICE'. <== NULL legitimately means
+        -- Practice, because the original roles grid writes no level at all. But a SPELLING the
+        -- CASE above does not know became a practice key that matches nothing, and the rows then
+        -- disappeared without a trace. Name it rather than lose it.
+        DECLARE @unk VARCHAR(400);
+        SELECT TOP 1 @unk = t.Level_Type
+        FROM   [Input].[Targets] t
+        WHERE  t.Level_Type IS NOT NULL
+          AND  t.Level_Type NOT IN ('Client','Group','Region','Area','Practice','Site');
+        IF @unk IS NOT NULL
+        BEGIN
+            SET @unk = 'Input.Targets.Level_Type = ''' + @unk + ''' is not a level this loader '
+                     + 'knows (Client / Region / Area / Practice / Site). Those targets would '
+                     + 'attach to the wrong node, or to none at all.';
+            THROW 51011, @unk, 1;
+        END
 
         -- the site rows the entered figure covers, then the node it attaches to
         DROP TABLE IF EXISTS #res;
@@ -377,15 +402,15 @@ BEGIN
 
         SET @Run_Inserts = @My_Inserts; SET @Run_Updates = @My_Updates; SET @Run_Deletes = @My_Deletes;
 
-        IF @Logging = 1
-            EXEC [Audit].[ETL_Log_Record_Counts] @Run_UUID = @Run_UUID,
-                 @Process_Name = 'Gold.usp_Load_Fact_Node_Targets',
-                 @Table_Name = 'Gold.Fact_Node_Targets',
-                 @Rows_Inserted = @My_Inserts, @Rows_Updated = @My_Updates, @Rows_Deleted = @My_Deletes;
+        -- ==> THE COUNTS GO BACK THROUGH THE OUT PARAMETERS, AND NOTHING ELSE. <== This
+        -- used to call Audit.ETL_Log_Record_Counts, which exists nowhere, and a CATCH that EXEC'd
+        -- Audit.ETL_Error_Handler -- a FUNCTION taking no parameters -- with two of them. So every
+        -- run threw at this tail AFTER the data had landed, and the CATCH threw again on top of
+        -- it: a clean run and a real failure both came back as "ETL_Error_Handler has no
+        -- parameters". Audit.ETL_Run_Process logs the counts, exactly as it does for every other
+        -- Gold loader, which is why they do none of this.
     END TRY
     BEGIN CATCH
-        EXEC [Audit].[ETL_Error_Handler] @Run_UUID = @Run_UUID,
-             @Process_Name = 'Gold.usp_Load_Fact_Node_Targets';
         THROW;
     END CATCH
 END
