@@ -96,60 +96,101 @@ BEGIN
         JOIN   [Audit].[Tenants] t ON t.Tenant_ID = sa.Tenant_ID
         WHERE  s.Site_Active = 1;
 
-        ---------------------------------------------------------------- 2. which levels survive
-        -- Ordinals: 0 the client, 1 Region, 2 Area, 3 Practice, 4 Site. The client is always a
-        -- node (it is "everything"); the other four earn their place by offering a choice.
-        DROP TABLE IF EXISTS #surv;
-        SELECT DISTINCT Client_ID, 0 AS Ord INTO #surv FROM #h
-        UNION ALL SELECT Client_ID, 1 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Region_Name)   > 1
-        UNION ALL SELECT Client_ID, 2 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Area_Name)     > 1
-        UNION ALL SELECT Client_ID, 3 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Practice_Key)  > 1
-        UNION ALL SELECT Client_ID, 4 FROM #h GROUP BY Client_ID HAVING COUNT(DISTINCT Site_Key)      > 1;
-
-        -- Depth is the position among the SURVIVORS, not the ordinal -- that is what makes the
-        -- levels below a dropped one move up, and the indent match what the drop-down renders.
-        DROP TABLE IF EXISTS #lvl;
-        SELECT Client_ID, Ord,
-               ROW_NUMBER() OVER (PARTITION BY Client_ID ORDER BY Ord) - 1 AS Depth,
-               LAG(Ord) OVER (PARTITION BY Client_ID ORDER BY Ord)        AS Parent_Ord
-        INTO   #lvl
-        FROM   #surv;
-
-        ---------------------------------------------------------------- 3. the nodes
-        DROP TABLE IF EXISTS #node;
-        SELECT DISTINCT
-            h.Client_ID, l.Ord, l.Depth, l.Parent_Ord,
-            CAST(CASE l.Ord WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
-                            WHEN 1 THEN h.Region_Key   WHEN 2 THEN h.Area_Key
-                            WHEN 3 THEN h.Practice_Key ELSE h.Site_Key END AS VARCHAR(64)) AS Node_Key,
-            CAST(CASE l.Ord WHEN 0 THEN c.Client_Name
-                            WHEN 1 THEN h.Region_Name   WHEN 2 THEN h.Area_Name
-                            WHEN 3 THEN h.Practice_Name ELSE h.Site_Name END AS VARCHAR(200)) AS Node_Name,
-            CAST(CASE l.Parent_Ord WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
-                                   WHEN 1 THEN h.Region_Key   WHEN 2 THEN h.Area_Key
-                                   WHEN 3 THEN h.Practice_Key ELSE NULL END AS VARCHAR(64)) AS Parent_Key
-        INTO   #node
+        ---------------------------------------------------------------- 2. the fold
+        -- ==> A NODE FOLDS INTO ITS PARENT WHEN IT IS AN ONLY CHILD. <== A child's sites are a
+        -- subset of its parent's, so equal site COUNTS mean identical site sets, and an only
+        -- child is exactly a child whose count matches its parent. Counts are non-increasing down
+        -- a branch, so equal counts form a contiguous run and the entire decision is arithmetic.
+        --
+        -- Within a run, keep by rank -- Practice 0, Area 1, Region 2, Group 3, Site 4. That is
+        -- the owner's "Practice outwards": Practice beats Site, Practice beats Area, Area beats
+        -- Region, Region beats Group, and Practice beats Group by the same principle.
+        --
+        -- PER BRANCH, NOT PER LEVEL. One branch can keep Region and Practice while its sibling
+        -- keeps only Practice. The rule this replaces asked "does this LEVEL offer a choice
+        -- anywhere in the client", which left furniture on every branch that offered none.
+        DROP TABLE IF EXISTS #hc;
+        SELECT h.*,
+               COUNT(*) OVER (PARTITION BY h.Client_ID)                  AS c_client,
+               COUNT(*) OVER (PARTITION BY h.Client_ID, h.Region_Key)    AS c_region,
+               COUNT(*) OVER (PARTITION BY h.Client_ID, h.Area_Key)      AS c_area,
+               COUNT(*) OVER (PARTITION BY h.Client_ID, h.Practice_Key)  AS c_practice,
+               c.Client_Name
+        INTO   #hc
         FROM   #h h
-        JOIN   #lvl l ON l.Client_ID = h.Client_ID
         JOIN   [Security].[Clients] c ON c.Client_ID = h.Client_ID;
 
-        -- The drop-down string, and the parent's, so a roll knows where to send a value.
-        DROP TABLE IF EXISTS #nd;
-        SELECT n.Client_ID, n.Ord, n.Depth, n.Node_Key, n.Node_Name, n.Parent_Ord, n.Parent_Key,
-               CAST(CASE WHEN n.Depth = 0 THEN n.Node_Name
-                         ELSE REPLICATE(@FIG, n.Depth * 2) + @DSH + ' ' + n.Node_Name
-                    END AS VARCHAR(200)) AS Selection
-        INTO   #nd
-        FROM   #node n;
+        -- every candidate node, once per branch it appears on, with its site count and its rank
+        DROP TABLE IF EXISTS #cand;
+        SELECT h.Client_ID, h.pk_Practice_Site, h.Tenant_ID,
+               v.Ord, CAST(v.Node_Key AS VARCHAR(64)) AS Node_Key,
+               CAST(v.Node_Name AS VARCHAR(200)) AS Node_Name,
+               v.Site_Count,
+               CASE v.Ord WHEN 3 THEN 0 WHEN 2 THEN 1 WHEN 1 THEN 2 WHEN 0 THEN 3 ELSE 4 END AS Keep_Rank
+        INTO   #cand
+        FROM   #hc h
+        CROSS  APPLY (VALUES
+                   (0, CAST(h.Client_ID AS VARCHAR(64)), h.Client_Name,   h.c_client),
+                   (1, h.Region_Key,                     h.Region_Name,   h.c_region),
+                   (2, h.Area_Key,                       h.Area_Name,     h.c_area),
+                   (3, h.Practice_Key,                   h.Practice_Name, h.c_practice),
+                   (4, h.Site_Key,                       h.Site_Name,     1)
+               ) v (Ord, Node_Key, Node_Name, Site_Count);
 
+        -- a level survives its run if nothing in the run outranks it
+        DROP TABLE IF EXISTS #keep;
+        SELECT c.*,
+               MIN(c.Keep_Rank) OVER (PARTITION BY c.Client_ID, c.pk_Practice_Site, c.Site_Count)
+                   AS Best_Rank
+        INTO   #keep
+        FROM   #cand c;
+
+        ---------------------------------------------------------------- 3. the surviving nodes
+        -- Survival is a property of the NODE, not of the branch it was examined on: its own count
+        -- and its ancestors' are fixed, and a descendant can only share its count when it is an
+        -- only child, which is also fixed. So DISTINCT here cannot disagree with itself.
+        DROP TABLE IF EXISTS #nd;
+        SELECT DISTINCT
+               k.Client_ID, k.Ord, k.Node_Key, k.Node_Name,
+               -- ==> THE STORED INDENT IS THE LEVEL, NOT THE DISPLAY POSITION. <== So a fold on
+               -- one branch can never re-key a surviving node on another.
+               CAST(CASE WHEN k.Ord = 0 THEN k.Node_Name
+                         ELSE REPLICATE(@FIG, k.Ord * 2) + @DSH + ' ' + k.Node_Name
+                    END AS VARCHAR(200)) AS [Selection]
+        INTO   #nd
+        FROM   #keep k
+        WHERE  k.Keep_Rank = k.Best_Rank;
+
+        -- Display depth: how many surviving ancestors a node has, which is what the drop-down
+        -- should indent by. Counted on the branch, then DISTINCT -- a node's ancestor chain is
+        -- unique, so every branch agrees.
+        DROP TABLE IF EXISTS #disp;
+        SELECT DISTINCT k.Client_ID, k.Ord, k.Node_Key,
+               (SELECT COUNT(*) FROM #keep a
+                 WHERE a.Client_ID = k.Client_ID AND a.pk_Practice_Site = k.pk_Practice_Site
+                   AND a.Ord < k.Ord AND a.Keep_Rank = a.Best_Rank) AS Display_Depth
+        INTO   #disp
+        FROM   #keep k
+        WHERE  k.Keep_Rank = k.Best_Rank;
+
+        -- Parent = the nearest surviving ancestor, which is what the roll-up and roll-down walk.
         DROP TABLE IF EXISTS #edge;
-        SELECT c.Client_ID, c.Selection AS Child_Selection, c.Depth AS Child_Depth,
-               p.Selection AS Parent_Selection
+        SELECT DISTINCT
+               k.Client_ID,
+               cn.[Selection] AS Child_Selection,
+               d.Display_Depth AS Child_Depth,
+               pn.[Selection] AS Parent_Selection
         INTO   #edge
-        FROM   #nd c
-        JOIN   #nd p ON p.Client_ID = c.Client_ID AND p.Ord = c.Parent_Ord
-                    AND p.Node_Key = c.Parent_Key
-        WHERE  c.Parent_Ord IS NOT NULL;
+        FROM   #keep k
+        JOIN   #nd cn ON cn.Client_ID = k.Client_ID AND cn.Ord = k.Ord AND cn.Node_Key = k.Node_Key
+        JOIN   #disp d ON d.Client_ID = k.Client_ID AND d.Ord = k.Ord AND d.Node_Key = k.Node_Key
+        CROSS  APPLY (SELECT TOP 1 p.Ord, p.Node_Key
+                      FROM   #keep p
+                      WHERE  p.Client_ID = k.Client_ID AND p.pk_Practice_Site = k.pk_Practice_Site
+                        AND  p.Ord < k.Ord AND p.Keep_Rank = p.Best_Rank
+                      ORDER BY p.Ord DESC) par
+        JOIN   #nd pn ON pn.Client_ID = k.Client_ID AND pn.Ord = par.Ord AND pn.Node_Key = par.Node_Key
+        WHERE  k.Keep_Rank = k.Best_Rank;
 
         ---------------------------------------------------------------- 4. what was typed
         -- ==> AN ENTERED FIGURE LANDS ON THE DEEPEST SURVIVING LEVEL AT OR ABOVE THE ONE IT NAMES.
@@ -181,15 +222,20 @@ BEGIN
                                              WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
                                              WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
                                              WHEN 4 THEN h.Site_Key   ELSE h.Practice_Key END
-        -- the deepest surviving level at or above the one the figure names
-        JOIN   #lvl l ON l.Client_ID = e.Client_ID AND l.Ord <= e.Entered_Ord
-                     AND l.Depth = (SELECT MAX(l2.Depth) FROM #lvl l2
-                                    WHERE l2.Client_ID = e.Client_ID AND l2.Ord <= e.Entered_Ord)
-        JOIN   #nd nd ON nd.Client_ID = e.Client_ID AND nd.Ord = l.Ord
-                     AND nd.Node_Key = CASE l.Ord
-                                            WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
-                                            WHEN 1 THEN h.Region_Key WHEN 2 THEN h.Area_Key
-                                            WHEN 4 THEN h.Site_Key   ELSE h.Practice_Key END;
+        -- ==> THE DEEPEST SURVIVING LEVEL AT OR ABOVE THE ONE THE FIGURE NAMES, ON THIS BRANCH.
+        -- <== Folding is per branch now, so this cannot be asked of the client as a whole: a
+        -- target entered at Practice attaches to the practice on a branch that kept it, and to
+        -- whatever survives above it on a branch that folded it away. Asking per client would
+        -- send both to the same node and silently merge two practices' targets.
+        CROSS  APPLY (SELECT TOP 1 kp.Ord, kp.Node_Key
+                      FROM   #keep kp
+                      WHERE  kp.Client_ID        = e.Client_ID
+                        AND  kp.pk_Practice_Site = h.pk_Practice_Site
+                        AND  kp.Ord             <= e.Entered_Ord
+                        AND  kp.Keep_Rank        = kp.Best_Rank
+                      ORDER BY kp.Ord DESC) tgt
+        JOIN   #nd nd ON nd.Client_ID = e.Client_ID AND nd.Ord = tgt.Ord
+                     AND nd.Node_Key = tgt.Node_Key;
 
         ---------------------------------------------------------------- 5. quantities roll UP
         -- Child to parent, deepest first. A node already holding a value -- entered, or summed on
@@ -277,17 +323,26 @@ BEGIN
         DELETE FROM [Gold].[Dim_Hierarchy_Node];
 
         INSERT INTO [Gold].[Dim_Hierarchy_Node]
-            (pk_Hierarchy_Node, Client_ID, [Selection], Depth, [Level], Node_Key,
-             fk_Practice_Site, Tenant_ID, DW_Created_At)
+            (pk_Hierarchy_Node, Client_ID, [Selection], Display_Selection, Depth, [Level],
+             Node_Key, fk_Practice_Site, Tenant_ID, DW_Created_At)
         SELECT ROW_NUMBER() OVER (ORDER BY b.Client_ID, b.Depth, b.[Selection], b.pk_Practice_Site),
-               b.Client_ID, b.[Selection], b.Depth, b.[Level], b.Node_Key,
-               b.pk_Practice_Site, b.Tenant_ID, SYSUTCDATETIME()
+               b.Client_ID, b.[Selection], b.Display_Selection, b.Depth, b.[Level],
+               b.Node_Key, b.pk_Practice_Site, b.Tenant_ID, SYSUTCDATETIME()
         FROM (
-            SELECT DISTINCT nd.Client_ID, nd.[Selection], nd.Depth, nd.Node_Key,
+            -- ==> TWO STRINGS, AND ONLY ONE OF THEM IS A KEY. <== [Selection] is indented by the
+            -- node's LEVEL and never moves, so a target keyed on it survives a fold elsewhere in
+            -- the client. [Display_Selection] is indented by position in the FOLDED tree, which
+            -- is what reads correctly in a drop-down but would be a terrible thing to store a
+            -- number against. The app renders the second and filters on the first.
+            SELECT DISTINCT nd.Client_ID, nd.[Selection], nd.Node_Key, d.Display_Depth AS Depth,
+                   CAST(CASE WHEN d.Display_Depth = 0 THEN nd.Node_Name
+                             ELSE REPLICATE(@FIG, d.Display_Depth * 2) + @DSH + ' ' + nd.Node_Name
+                        END AS VARCHAR(200)) AS Display_Selection,
                    CAST(CASE nd.Ord WHEN 0 THEN 'Client' WHEN 1 THEN 'Region' WHEN 2 THEN 'Area'
                                     WHEN 3 THEN 'Practice' ELSE 'Site' END AS VARCHAR(10)) AS [Level],
                    h.pk_Practice_Site, h.Tenant_ID
             FROM   #nd nd
+            JOIN   #disp d ON d.Client_ID = nd.Client_ID AND d.Ord = nd.Ord AND d.Node_Key = nd.Node_Key
             JOIN   #h h ON h.Client_ID = nd.Client_ID
                        AND nd.Node_Key = CASE nd.Ord
                                               WHEN 0 THEN CAST(h.Client_ID AS VARCHAR(64))
@@ -315,8 +370,9 @@ BEGIN
         END
 
         DROP TABLE IF EXISTS #stamp;
-        DROP TABLE IF EXISTS #h;    DROP TABLE IF EXISTS #surv; DROP TABLE IF EXISTS #lvl;
-        DROP TABLE IF EXISTS #node; DROP TABLE IF EXISTS #nd;   DROP TABLE IF EXISTS #edge;
+        DROP TABLE IF EXISTS #h;    DROP TABLE IF EXISTS #hc;   DROP TABLE IF EXISTS #cand;
+        DROP TABLE IF EXISTS #keep; DROP TABLE IF EXISTS #nd;   DROP TABLE IF EXISTS #disp;
+        DROP TABLE IF EXISTS #edge;
         DROP TABLE IF EXISTS #ent;  DROP TABLE IF EXISTS #res;
 
         SET @Run_Inserts = @My_Inserts; SET @Run_Updates = @My_Updates; SET @Run_Deletes = @My_Deletes;
