@@ -168,8 +168,9 @@ hierarchy tables only from its admin screen.
 | 8a | **Additive**: `Dim_Hierarchy_Node`, `Fact_Node_Targets`, `usp_Load_Fact_Node_Targets`, `Meta.usp_Sync_Input_From_AppDB` | warehouse | objects exist; model untouched | **done** |
 | 9 | AppDB sync, then `usp_Load_Fact_Node_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node | **done** — 1 node, 334 rows, all entered, sum 21,435,541 |
 | — | Snapshot the old aggregate | warehouse | `Backup.Aggregate_Period_Targets__pre_8b` = 478 rows | **done** — makes 8b reversible |
-| 8b | **The switch**: `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | **next — breaks live reports until 11** |
-| 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | |
+| — | Merge `dev` → `main`, then `MAINTENANCE=1` on `ca-analytically-prod` | CI + Azure | `app.analytically.info` returns 503 "Down for maintenance"; `/health` still 200 | **done** |
+| 8b | **The switch**: `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | **done** — 366 rows; PBI views now 15 / 11 / 10 cols |
+| 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | **done** — 0 / 0 / 0, re-derived from `Fact_Daily_Targets` as of today |
 | 11 | Model: new tables, relationships, RLS, publish, refresh | Desktop | no security-filter errors — save before believing the list | **owner** |
 | 12 | Merge `dev` → `main` to deploy the app | CI | Targets screen renders; Home tiles carry targets | |
 | 13 | Only now drop `Gold.Fact_Daily_Targets` and its loader | warehouse | — | |
@@ -196,6 +197,25 @@ Deploy step 8 in two parts to shrink that window to nothing:
   node loader and step 10's reconcile can both run against the old chain still in place.
 - **8b — the switch.** `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views`,
   then the model publish — **in one sitting**. Do not start 8b without time to finish 11.
+
+### How the step 10 reconcile must be done — and how it was got wrong first
+
+==> DO NOT DIFF THE NEW AGGREGATE AGAINST THE OLD TABLE. <== The first attempt compared today's new
+`Aggregate_Period_Targets` against `Backup.Aggregate_Period_Targets__pre_8b`, which the last prod
+nightly had built **four working days earlier**. It reported 16 disagreements, all FY26 cumulative
+metrics, the new figure about 1.9% higher. None of them were real:
+
+    annual 2,000,000, FY2026 has 261 working days
+    new  =  2,000,000 x 216/261  =  1,655,172.4138     (216 = the YTD bucket TODAY)
+    old  =  2,000,000 x 212/261  =  1,624,521.0728     (212 = the bucket four working days ago)
+
+Identical arithmetic. The calendar had moved, nothing else. The correct comparison re-derives the
+old answer FROM `Gold.Fact_Daily_Targets` over each grouping's own dates, as of now — which is the
+entire reason that table is not dropped until step 13. Done that way: **0 cumulative values
+differing, 0 non-cumulative figures away from the entered annual, 0 live groupings missing.**
+
+The 112 rows present only in the old table are exactly FY21, FY22 and FY25 — historic buckets the
+new chain deliberately excludes and the app's three-period picker could never reach.
 
 ### Known, deliberate difference at step 10
 
