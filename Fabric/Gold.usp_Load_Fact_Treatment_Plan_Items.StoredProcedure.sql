@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Treatment_Plan_Items] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_Treatment_Plan_Items] @Mode='PROD', @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_Treatment_Plan_Items
 --  Author           :  AIH
@@ -58,6 +58,12 @@ BEGIN
             ISNULL(dp.pk_Treatment_Plan, -1)                                AS fk_Treatment_Plan,
             ISNULL(dpat.pk_Patient, -1)                                     AS fk_Patient,
             ISNULL(dpr.pk_Practitioner, -1)                                 AS fk_Practitioner,
+            -- ==> THE SITE COMES FROM THE PRACTITIONER, AS IT DOES ON THE PARENT PLAN. <==
+            -- Gold.usp_Load_Fact_Treatment_Plans resolves fk_Practice_Site from dpr.Site_ID for
+            -- one recorded reason: Silver.Treatment_Plans.Site_ID is empty at source. An item
+            -- inherits the same answer rather than inventing a second rule, so a plan and its
+            -- items can never disagree about where they happened.
+            ISNULL(dps.pk_Practice_Site, -1)                                AS fk_Practice_Site,
             ISNULL(dpp.pk_Payment_Plan, -1)                                 AS fk_Payment_Plan,
             ISNULL(dt.pk_Treatment, -1)                                     AS fk_Treatment,
             dd_c.pk_Date                                                    AS fk_Date_Created,
@@ -83,6 +89,7 @@ BEGIN
         LEFT JOIN Gold.Dim_Treatment_Plans dp   ON dp.Treatment_Plan_ID  = TRY_CAST(tpi.Treatment_Plan_ID AS INT) AND dp.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Patients dpat        ON dpat.Patient_ID       = TRY_CAST(tpi.Patient_ID AS INT)        AND dpat.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Practitioners dpr    ON dpr.Practitioner_ID   = TRY_CAST(tpi.Practitioner_ID AS INT)   AND dpr.Tenant_ID = tpi.Tenant_ID
+        LEFT JOIN Gold.Dim_Practice_Sites dps   ON dps.Site_ID           = dpr.Site_ID                 AND dps.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Payment_Plans dpp    ON dpp.Payment_Plan_ID   = TRY_CAST(tpi.Payment_Plan_ID AS INT)   AND dpp.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Treatments dt        ON dt.Treatment_ID       = TRY_CAST(tpi.Treatment_ID AS INT)      AND dt.Tenant_ID = tpi.Tenant_ID
         LEFT JOIN Gold.Dim_Date dd_c            ON dd_c.Full_Date        = TRY_CAST(NULLIF(TRIM(tpi.Created_At),'') AS DATE)
@@ -104,6 +111,7 @@ BEGIN
             fk_Treatment_Plan        = src.fk_Treatment_Plan,
             fk_Patient               = src.fk_Patient,
             fk_Practitioner          = src.fk_Practitioner,
+            fk_Practice_Site         = src.fk_Practice_Site,
             fk_Payment_Plan          = src.fk_Payment_Plan,
             fk_Treatment             = src.fk_Treatment,
             fk_Date_Created          = src.fk_Date_Created,
@@ -127,6 +135,7 @@ BEGIN
            ISNULL(CAST(tgt.[fk_Treatment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Patient] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Practitioner] AS VARCHAR(500)), ''),
+           ISNULL(CAST(tgt.[fk_Practice_Site] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Treatment] AS VARCHAR(500)), ''),
            ISNULL(CAST(tgt.[fk_Date_Created] AS VARCHAR(500)), ''),
@@ -148,6 +157,7 @@ BEGIN
            ISNULL(CAST(src.[fk_Treatment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Patient] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Practitioner] AS VARCHAR(500)), ''),
+           ISNULL(CAST(src.[fk_Practice_Site] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Payment_Plan] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Treatment] AS VARCHAR(500)), ''),
            ISNULL(CAST(src.[fk_Date_Created] AS VARCHAR(500)), ''),
@@ -171,7 +181,7 @@ BEGIN
         INSERT INTO Gold.Fact_Treatment_Plan_Items (
             Tenant_ID,
             bk_Treatment_Plan_Item_ID,
-            fk_Treatment_Plan, fk_Patient, fk_Practitioner, fk_Payment_Plan, fk_Treatment,
+            fk_Treatment_Plan, fk_Patient, fk_Practitioner, fk_Practice_Site, fk_Payment_Plan, fk_Treatment,
             fk_Date_Created, fk_Date_Completed, fk_Date_Updated,
             Treatment_Plan_ID, Invoice_ID, Treatment_Appointment_ID, Referrer_ID,
             Nomenclature, NHS_Treatment_Cat, UDA_Band, Region,
@@ -181,7 +191,7 @@ BEGIN
         SELECT
             src.Tenant_ID,
             src.bk_Treatment_Plan_Item_ID,
-            src.fk_Treatment_Plan, src.fk_Patient, src.fk_Practitioner, src.fk_Payment_Plan, src.fk_Treatment,
+            src.fk_Treatment_Plan, src.fk_Patient, src.fk_Practitioner, src.fk_Practice_Site, src.fk_Payment_Plan, src.fk_Treatment,
             src.fk_Date_Created, src.fk_Date_Completed, src.fk_Date_Updated,
             src.Treatment_Plan_ID, src.Invoice_ID, src.Treatment_Appointment_ID, src.Referrer_ID,
             src.Nomenclature, src.NHS_Treatment_Cat, src.UDA_Band, src.Region,
