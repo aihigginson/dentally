@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Aggregate_Site_Practitioner_Current]    Script Date: 07/05/2026 ******/
+﻿/****** Object:  Table [Gold].[Aggregate_Site_Practitioner_Current]    Script Date: 07/05/2026 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Gold].[Aggregate_Site_Practitioner_Current]
 GO
 CREATE TABLE [Gold].[Aggregate_Site_Practitioner_Current](
 	[pk_Site_Practitioner_Current]    [bigint]       NOT NULL,
-	[fk_Site]                         [bigint]        NULL,
+	[fk_Practice_Site]                         [bigint]        NULL,
 	[fk_Practitioner]                 [bigint]        NULL,
 	[Tenant_ID]                       [int]           NOT NULL,
 	[Days_Until_Next_30_Mins]         [int]           NULL,
@@ -15,7 +15,7 @@ CREATE TABLE [Gold].[Aggregate_Site_Practitioner_Current](
 	[Next_7_Days_Available_Mins]      [int]           NULL,
 	[Next_7_Days_Booked_Mins]         [int]           NULL,
 	-- Day Book action counts held as TEXT so they can sit in the diary matrix ROW area
-	-- (Stepped Layout = Off) and scroll WITH the heatmap. Split by site (fk_Site).
+	-- (Stepped Layout = Off) and scroll WITH the heatmap. Split by site (fk_Practice_Site).
 	[Open_Plans]                      [varchar](10)   NULL,  -- Course_Status IN (In Progress, Open - No Appointment)
 	[Cancellations_To_Rebook]         [varchar](10)   NULL,  -- Is_Cancelled + Rebooked_Status = Not Rebooked
 	[DNAs_To_Rebook]                  [varchar](10)   NULL,  -- Is_DNA + Rebooked_Status = Not Rebooked

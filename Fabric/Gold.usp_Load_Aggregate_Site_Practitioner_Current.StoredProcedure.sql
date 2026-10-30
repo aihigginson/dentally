@@ -172,7 +172,7 @@ BEGIN
         INTO #act
         FROM Gold.vw_Effectively_Active_Patients;
 
-        SELECT tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1) AS fk_Site, tp.fk_Practitioner, COUNT(1) AS cnt
+        SELECT tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1) AS fk_Practice_Site, tp.fk_Practitioner, COUNT(1) AS cnt
         INTO #op
         FROM Gold.Fact_Treatment_Plans tp
         JOIN #act ap ON ap.pk_Patient = tp.fk_Patient
@@ -187,21 +187,21 @@ BEGIN
         WHERE tp.Course_Status = 'Open - No Appointment'
         GROUP BY tp.Tenant_ID, ISNULL(tp.fk_Practice_Site,-1), tp.fk_Practitioner;
 
-        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Practice_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #cx
         FROM Gold.Fact_Appointments a
         JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_Cancelled = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
-        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Site, a.fk_Practitioner, COUNT(1) AS cnt
+        SELECT a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1) AS fk_Practice_Site, a.fk_Practitioner, COUNT(1) AS cnt
         INTO #dn
         FROM Gold.Fact_Appointments a
         JOIN #act ap ON ap.pk_Patient = a.fk_Patient
         WHERE a.Is_DNA = 1 AND a.Rebooked_Status = 'Not Rebooked'
         GROUP BY a.Tenant_ID, ISNULL(a.fk_Practice_Site,-1), a.fk_Practitioner;
 
-        SELECT r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1) AS fk_Site, r.fk_Practitioner, COUNT(1) AS cnt
+        SELECT r.Tenant_ID, ISNULL(r.fk_Practice_Site,-1) AS fk_Practice_Site, r.fk_Practitioner, COUNT(1) AS cnt
         INTO #rc
         FROM Gold.Fact_Recalls r
         JOIN #act ap ON ap.pk_Patient = r.fk_Patient
@@ -229,41 +229,41 @@ BEGIN
         -- Union of the home site (for availability) with any site where the
         -- practitioner has outstanding Day Book actions, so multi-site
         -- practitioners split correctly.
-        SELECT DISTINCT Tenant_ID, fk_Site, fk_Practitioner
+        SELECT DISTINCT Tenant_ID, fk_Practice_Site, fk_Practitioner
         INTO #spine
         FROM (
-            SELECT Tenant_ID, fk_Home_Site AS fk_Site, fk_Practitioner FROM #home
-            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #op
-            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #cx
-            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #dn
-            UNION SELECT Tenant_ID, fk_Site, fk_Practitioner FROM #rc
+            SELECT Tenant_ID, fk_Home_Site AS fk_Practice_Site, fk_Practitioner FROM #home
+            UNION SELECT Tenant_ID, fk_Practice_Site, fk_Practitioner FROM #op
+            UNION SELECT Tenant_ID, fk_Practice_Site, fk_Practitioner FROM #cx
+            UNION SELECT Tenant_ID, fk_Practice_Site, fk_Practitioner FROM #dn
+            UNION SELECT Tenant_ID, fk_Practice_Site, fk_Practitioner FROM #rc
         ) u
         WHERE fk_Practitioner > 0;
 
         SELECT
-            sp.fk_Site,
+            sp.fk_Practice_Site,
             sp.fk_Practitioner,
             sp.Tenant_ID,
             -- availability on the home-site row only (not double-counted across sites)
-            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN s.Days_Until_Next_30_Mins     END AS Days_Until_Next_30_Mins,
-            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN s.Days_Until_Next_1_Hour_Free END AS Days_Until_Next_1_Hour_Free,
-            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN w.Available_Mins_7d           END AS Next_7_Days_Available_Mins,
-            CASE WHEN sp.fk_Site = h.fk_Home_Site THEN w.Booked_Mins_7d              END AS Next_7_Days_Booked_Mins,
+            CASE WHEN sp.fk_Practice_Site = h.fk_Home_Site THEN s.Days_Until_Next_30_Mins     END AS Days_Until_Next_30_Mins,
+            CASE WHEN sp.fk_Practice_Site = h.fk_Home_Site THEN s.Days_Until_Next_1_Hour_Free END AS Days_Until_Next_1_Hour_Free,
+            CASE WHEN sp.fk_Practice_Site = h.fk_Home_Site THEN w.Available_Mins_7d           END AS Next_7_Days_Available_Mins,
+            CASE WHEN sp.fk_Practice_Site = h.fk_Home_Site THEN w.Booked_Mins_7d              END AS Next_7_Days_Booked_Mins,
             CAST(ISNULL(op.cnt, 0) AS VARCHAR(10))                                       AS Open_Plans,
             CAST(ISNULL(cx.cnt, 0) AS VARCHAR(10))                                       AS Cancellations_To_Rebook,
             CAST(ISNULL(dn.cnt, 0) AS VARCHAR(10))                                       AS DNAs_To_Rebook,
             CAST(ISNULL(rc.cnt, 0) AS VARCHAR(10))                                       AS Recalls_To_Action,
-            CASE WHEN sp.fk_Site = h.fk_Home_Site
+            CASE WHEN sp.fk_Practice_Site = h.fk_Home_Site
                  THEN CAST(s.Days_Until_Next_30_Mins AS VARCHAR(10)) END                 AS Days_Until_Next_30_Free
         INTO #src
         FROM #spine sp
         LEFT JOIN #home  h ON h.fk_Practitioner = sp.fk_Practitioner AND h.Tenant_ID = sp.Tenant_ID
         LEFT JOIN #slots s ON s.fk_Practitioner = sp.fk_Practitioner AND s.Tenant_ID = sp.Tenant_ID
         LEFT JOIN #week  w ON w.fk_Practitioner = sp.fk_Practitioner AND w.Tenant_ID = sp.Tenant_ID
-        LEFT JOIN #op op ON op.Tenant_ID=sp.Tenant_ID AND op.fk_Site=sp.fk_Site AND op.fk_Practitioner=sp.fk_Practitioner
-        LEFT JOIN #cx cx ON cx.Tenant_ID=sp.Tenant_ID AND cx.fk_Site=sp.fk_Site AND cx.fk_Practitioner=sp.fk_Practitioner
-        LEFT JOIN #dn dn ON dn.Tenant_ID=sp.Tenant_ID AND dn.fk_Site=sp.fk_Site AND dn.fk_Practitioner=sp.fk_Practitioner
-        LEFT JOIN #rc rc ON rc.Tenant_ID=sp.Tenant_ID AND rc.fk_Site=sp.fk_Site AND rc.fk_Practitioner=sp.fk_Practitioner;
+        LEFT JOIN #op op ON op.Tenant_ID=sp.Tenant_ID AND op.fk_Practice_Site=sp.fk_Practice_Site AND op.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #cx cx ON cx.Tenant_ID=sp.Tenant_ID AND cx.fk_Practice_Site=sp.fk_Practice_Site AND cx.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #dn dn ON dn.Tenant_ID=sp.Tenant_ID AND dn.fk_Practice_Site=sp.fk_Practice_Site AND dn.fk_Practitioner=sp.fk_Practitioner
+        LEFT JOIN #rc rc ON rc.Tenant_ID=sp.Tenant_ID AND rc.fk_Practice_Site=sp.fk_Practice_Site AND rc.fk_Practitioner=sp.fk_Practitioner;
 
         -- ── Full rebuild ─────────────────────────────────────────────────────
         DELETE FROM Gold.Aggregate_Site_Practitioner_Current;
@@ -271,7 +271,7 @@ BEGIN
 
         INSERT INTO Gold.Aggregate_Site_Practitioner_Current (
             pk_Site_Practitioner_Current,
-            fk_Site, fk_Practitioner, Tenant_ID,
+            fk_Practice_Site, fk_Practitioner, Tenant_ID,
             Days_Until_Next_30_Mins, Days_Until_Next_1_Hour_Free,
             Next_7_Days_Available_Mins, Next_7_Days_Booked_Mins,
             Open_Plans, Cancellations_To_Rebook, DNAs_To_Rebook,
@@ -279,9 +279,9 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
-            ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.fk_Site, s.fk_Practitioner)
+            ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.fk_Practice_Site, s.fk_Practitioner)
                                                         AS pk_Site_Practitioner_Current,
-            s.fk_Site,
+            s.fk_Practice_Site,
             s.fk_Practitioner,
             s.Tenant_ID,
             s.Days_Until_Next_30_Mins,

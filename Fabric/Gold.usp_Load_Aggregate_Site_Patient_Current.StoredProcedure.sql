@@ -63,9 +63,9 @@ BEGIN
 
         -- ── Patient × Site spine ─────────────────────────────────────────────
         -- Drive from Dim_Patients (Site_ID column links to Dim_Practice_Sites).
-        -- Patients without a site assignment are still included with fk_Site = NULL.
+        -- Patients without a site assignment are still included with fk_Practice_Site = NULL.
         SELECT
-            dps.pk_Practice_Site                        AS fk_Site,
+            dps.pk_Practice_Site                        AS fk_Practice_Site,
             dp.pk_Patient                               AS fk_Patient,
             dp.Tenant_ID,
             CAST(CASE WHEN dp.Last_Appointment_Date IS NOT NULL
@@ -117,7 +117,7 @@ BEGIN
 
         INSERT INTO Gold.Aggregate_Site_Patient_Current (
             pk_Site_Patient_Current,
-            fk_Site, fk_Patient, Tenant_ID,
+            fk_Practice_Site, fk_Patient, Tenant_ID,
             Retained_Patients, Active_Patients,
             Recall_Due, Recall_Sent, Future_Appointment,
             Value_Window_Months, Value_Window_From,
@@ -126,9 +126,9 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
-            ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.fk_Site, s.fk_Patient)
+            ROW_NUMBER() OVER (ORDER BY s.Tenant_ID, s.fk_Practice_Site, s.fk_Patient)
                                                         AS pk_Site_Patient_Current,
-            s.fk_Site,
+            s.fk_Practice_Site,
             s.fk_Patient,
             s.Tenant_ID,
             s.Retained_Patients,

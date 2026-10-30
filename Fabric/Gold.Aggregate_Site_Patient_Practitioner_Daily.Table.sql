@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Aggregate_Site_Patient_Practitioner_Daily]    Script Date: 07/05/2026 ******/
+﻿/****** Object:  Table [Gold].[Aggregate_Site_Patient_Practitioner_Daily]    Script Date: 07/05/2026 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Gold].[Aggregate_Site_Patient_Practitioner_Daily]
 GO
 CREATE TABLE [Gold].[Aggregate_Site_Patient_Practitioner_Daily](
 	[pk_Site_Patient_Practitioner_Daily]  [bigint]        NOT NULL,
-	[fk_Site]                             [bigint]        NULL,
+	[fk_Practice_Site]                             [bigint]        NULL,
 	[fk_Patient]                          [bigint]        NULL,
 	[fk_Practitioner]                     [bigint]        NULL,
 	[fk_Date]                             [bigint]        NULL,

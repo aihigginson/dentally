@@ -17,7 +17,8 @@
 //               before any relationship is possible.
 //
 // Watch for two traps the warehouse audit turned up:
-//   * the Aggregate_Site_* tables call it [fk Site], not [fk Practice Site];
+//   * [fk Site] is the LEGACY spelling, renamed to [fk Practice Site] on 2026-10-30. It is
+//     still in the list below so a model that has not been re-read yet still reports honestly;
 //   * Dim_Patients carries [Site ID] -- the DENTALLY BUSINESS KEY, a varchar -- which cannot
 //     relate to [pk Practice Site], an integer surrogate. It LOOKS like a site key and is not one.
 // ---------------------------------------------------------------------------

@@ -380,7 +380,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk Site Patient Current | bigint |
-| fk Site | bigint |
+| fk Practice Site | bigint |
 | fk Patient | bigint |
 | Tenant ID | int |
 | Retained Patients | bit |
@@ -396,7 +396,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk Site Patient Practitioner Daily | bigint |
-| fk Site | bigint |
+| fk Practice Site | bigint |
 | fk Patient | bigint |
 | fk Practitioner | bigint |
 | fk Date | bigint |
@@ -425,7 +425,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk Site Practitioner Current | bigint |
-| fk Site | bigint |
+| fk Practice Site | bigint |
 | fk Practitioner | bigint |
 | Tenant ID | int |
 | Days Until Next 30 Mins | int |
@@ -832,7 +832,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk_Site_Patient_Current | bigint |
-| fk_Site | bigint |
+| fk_Practice_Site | bigint |
 | fk_Patient | bigint |
 | Tenant_ID | int |
 | Retained_Patients | bit |
@@ -848,7 +848,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk_Site_Patient_Practitioner_Daily | bigint |
-| fk_Site | bigint |
+| fk_Practice_Site | bigint |
 | fk_Patient | bigint |
 | fk_Practitioner | bigint |
 | fk_Date | bigint |
@@ -877,7 +877,7 @@ Auto-generated from the live schema on 2026-06-18. Reflects the data-minimised m
 | Column | Type |
 |---|---|
 | pk_Site_Practitioner_Current | bigint |
-| fk_Site | bigint |
+| fk_Practice_Site | bigint |
 | fk_Practitioner | bigint |
 | Tenant_ID | int |
 | Days_Until_Next_30_Mins | int |

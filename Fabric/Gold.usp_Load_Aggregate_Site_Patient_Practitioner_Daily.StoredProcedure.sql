@@ -110,7 +110,7 @@ BEGIN
         -- straight off the fact (Fact_Appointments.Is_Short_Notice / Rebooked_Status),
         -- so each definition lives in exactly one place.
         SELECT
-            apt.fk_Practice_Site                                                AS fk_Site,
+            apt.fk_Practice_Site                                                AS fk_Practice_Site,
             apt.fk_Patient,
             apt.fk_Practitioner,
             apt.fk_Date_Start                                                   AS fk_Date,
@@ -132,7 +132,7 @@ BEGIN
         -- One row per (Site, Patient, Practitioner, Date, Tenant).
         -- Cancelled appointments excluded; DNA are included in Appointments count.
         SELECT
-            apt.fk_Practice_Site                                                AS fk_Site,
+            apt.fk_Practice_Site                                                AS fk_Practice_Site,
             apt.fk_Patient,
             apt.fk_Practitioner,
             apt.fk_Date_Start                                                   AS fk_Date,
@@ -175,7 +175,7 @@ BEGIN
 
         -- ── Revenue (invoice date matched to appointment date) ────────────────
         SELECT
-            ii.fk_Practice_Site                                AS fk_Site,
+            ii.fk_Practice_Site                                AS fk_Practice_Site,
             ii.fk_Patient,
             ii.fk_Practitioner,
             NULLIF(ii.fk_Date, -1)                                 AS fk_Date,
@@ -294,7 +294,7 @@ BEGIN
 
         DROP TABLE IF EXISTS #appt_chair;
         SELECT
-            apt.fk_Practice_Site                               AS fk_Site,
+            apt.fk_Practice_Site                               AS fk_Practice_Site,
             apt.fk_Patient,
             apt.fk_Practitioner,
             apt.fk_Date_Start                                  AS fk_Date,
@@ -311,12 +311,12 @@ BEGIN
 
         DROP TABLE IF EXISTS #chair_agg;
         SELECT
-            ac.fk_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID,
+            ac.fk_Practice_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID,
             CAST(SUM(CASE WHEN ac.cap_mins > 0 AND ac.chair_raw > ac.cap_mins THEN ac.cap_mins ELSE ac.chair_raw END) AS DECIMAL(10,2)) / 60.0 AS Chair_Hours,
             SUM(ac.tracked)                                    AS Tracked_Appointments
         INTO #chair_agg
         FROM #appt_chair ac
-        GROUP BY ac.fk_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID;
+        GROUP BY ac.fk_Practice_Site, ac.fk_Patient, ac.fk_Practitioner, ac.fk_Date, ac.Tenant_ID;
         DROP TABLE IF EXISTS #appt_chair;
         DROP TABLE IF EXISTS #day_end;
 
@@ -326,7 +326,7 @@ BEGIN
 
         INSERT INTO Gold.Aggregate_Site_Patient_Practitioner_Daily (
             pk_Site_Patient_Practitioner_Daily,
-            fk_Site, fk_Patient, fk_Practitioner, fk_Date, Tenant_ID,
+            fk_Practice_Site, fk_Patient, fk_Practitioner, fk_Date, Tenant_ID,
             NHS_UDAs, NHS_UOAs,
             Appointments, DNA_Appointments, BBYL_Appointments,
             NHS_Revenue, Private_Revenue,
@@ -338,9 +338,9 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
-            ROW_NUMBER() OVER (ORDER BY a.Tenant_ID, a.fk_Date, a.fk_Site, a.fk_Practitioner, a.fk_Patient)
+            ROW_NUMBER() OVER (ORDER BY a.Tenant_ID, a.fk_Date, a.fk_Practice_Site, a.fk_Practitioner, a.fk_Patient)
                                                                AS pk_Site_Patient_Practitioner_Daily,
-            a.fk_Site,
+            a.fk_Practice_Site,
             a.fk_Patient,
             a.fk_Practitioner,
             a.fk_Date,
@@ -367,7 +367,7 @@ BEGIN
             SYSUTCDATETIME(),
             SYSUTCDATETIME()
         FROM #apt_agg a
-        LEFT JOIN #rev_agg    r  ON  r.fk_Site         = a.fk_Site
+        LEFT JOIN #rev_agg    r  ON  r.fk_Practice_Site         = a.fk_Practice_Site
                                  AND r.fk_Patient       = a.fk_Patient
                                  AND r.fk_Practitioner  = a.fk_Practitioner
                                  AND r.fk_Date          = a.fk_Date
@@ -379,12 +379,12 @@ BEGIN
         LEFT JOIN #diary_agg  d  ON  d.fk_Practitioner = a.fk_Practitioner
                                  AND d.fk_Date          = a.fk_Date
                                  AND d.Tenant_ID        = a.Tenant_ID
-        LEFT JOIN #cancel_agg c  ON  c.fk_Site         = a.fk_Site
+        LEFT JOIN #cancel_agg c  ON  c.fk_Practice_Site         = a.fk_Practice_Site
                                  AND c.fk_Patient       = a.fk_Patient
                                  AND c.fk_Practitioner  = a.fk_Practitioner
                                  AND c.fk_Date          = a.fk_Date
                                  AND c.Tenant_ID        = a.Tenant_ID
-        LEFT JOIN #chair_agg  ch ON  ch.fk_Site         = a.fk_Site
+        LEFT JOIN #chair_agg  ch ON  ch.fk_Practice_Site         = a.fk_Practice_Site
                                  AND ch.fk_Patient      = a.fk_Patient
                                  AND ch.fk_Practitioner = a.fk_Practitioner
                                  AND ch.fk_Date         = a.fk_Date
@@ -400,7 +400,7 @@ BEGIN
 
         INSERT INTO Gold.Aggregate_Site_Patient_Practitioner_Daily (
             pk_Site_Patient_Practitioner_Daily,
-            fk_Site, fk_Patient, fk_Practitioner, fk_Date, Tenant_ID,
+            fk_Practice_Site, fk_Patient, fk_Practitioner, fk_Date, Tenant_ID,
             NHS_UDAs, NHS_UOAs,
             Appointments, DNA_Appointments, BBYL_Appointments,
             NHS_Revenue, Private_Revenue,
@@ -412,9 +412,9 @@ BEGIN
             DW_Created_At, DW_Updated_At
         )
         SELECT
-            @pk_cancel_base + ROW_NUMBER() OVER (ORDER BY c.Tenant_ID, c.fk_Date, c.fk_Site, c.fk_Practitioner, c.fk_Patient)
+            @pk_cancel_base + ROW_NUMBER() OVER (ORDER BY c.Tenant_ID, c.fk_Date, c.fk_Practice_Site, c.fk_Practitioner, c.fk_Patient)
                                                                AS pk_Site_Patient_Practitioner_Daily,
-            c.fk_Site, c.fk_Patient, c.fk_Practitioner, c.fk_Date, c.Tenant_ID,
+            c.fk_Practice_Site, c.fk_Patient, c.fk_Practitioner, c.fk_Date, c.Tenant_ID,
             NULL, NULL,              -- NHS_UDAs, NHS_UOAs
             0, 0, 0,                 -- Appointments, DNA_Appointments, BBYL_Appointments
             0, 0,                    -- NHS_Revenue, Private_Revenue
@@ -434,7 +434,7 @@ BEGIN
           AND NOT EXISTS (
             SELECT 1
             FROM #apt_agg a
-            WHERE a.fk_Site        = c.fk_Site
+            WHERE a.fk_Practice_Site        = c.fk_Practice_Site
               AND a.fk_Patient     = c.fk_Patient
               AND a.fk_Practitioner = c.fk_Practitioner
               AND a.fk_Date        = c.fk_Date

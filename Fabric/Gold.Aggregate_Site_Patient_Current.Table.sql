@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS [Gold].[Aggregate_Site_Patient_Current]
 GO
 CREATE TABLE [Gold].[Aggregate_Site_Patient_Current](
 	[pk_Site_Patient_Current]  [bigint]       NOT NULL,
-	[fk_Site]                  [bigint]        NULL,
+	[fk_Practice_Site]                  [bigint]        NULL,
 	[fk_Patient]               [bigint]        NULL,
 	[Tenant_ID]                [int]           NOT NULL,
 	[Retained_Patients]        [bit]           NULL,
