@@ -4329,8 +4329,18 @@ def get_target_grid():
             available_fys = [r[0] for r in acur.fetchall()]
             # Entered figures keyed by NODE, for the per-level pages. From the AppDB because that
             # is where they are written: the warehouse copy only catches up at the next sync.
+            #
+            # ==> THE FALLBACK IS THE TENANT, NOT AN EMPTY STRING. <== A row written before the
+            # node columns existed carries NULL in both, and it means "the practice named by
+            # Tenant_ID". Gold.usp_Load_Fact_Node_Targets and Meta.usp_Sync_Input_From_AppDB both
+            # resolve that as ISNULL(Level_Key, Tenant_ID); this read resolved it as '' instead --
+            # a THIRD spelling of one rule. So Maple's 106 un-addressed Practice rows keyed as
+            # ('Practice','') while the grid looked them up at ('Practice','100'), and every box on
+            # the Targets screen came up blank against targets the Home page was happily showing.
+            # Dev never saw it: its rows all carry an explicit Level_Key.
             acur.execute(
-                "SELECT ISNULL(Level_Type,'Practice'), ISNULL(Level_Key,''), Target_Level, "
+                "SELECT ISNULL(Level_Type,'Practice'), "
+                "       ISNULL(Level_Key, CAST(Tenant_ID AS VARCHAR(64))), Target_Level, "
                 "       Metric, Target_Value "
                 "FROM   Input.Targets WHERE Client_ID = ? AND FY = ?", (client_id, fy))
             for _r in acur.fetchall():
