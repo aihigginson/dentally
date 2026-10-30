@@ -92,12 +92,43 @@ instead of assuming prod was behind:
 | `V001` | `Fact_Invoice_Items.Is_Invoice_Outstanding` is absent on prod **and on dev**. V001 added it; a later `Table.sql` redeploy removed it. "The column V001 added still exists" was the wrong test — the right one is whether the environments agree. |
 | `V153` | `Input.Sync_State` is absent from the prod warehouse **and dev's**. The file sits in `Migrations/` but targets the **AppDB**, where both have it with 18 rows. I looked in the wrong database. |
 
-### 2. Fabric items still promote by pipeline
+### ~~2. Fabric items~~ — DONE by the owner, but it did NOT cover the build DAG
 
-Notebooks (9), data pipelines (3), the lakehouse and 12 reports all sit in the `DEV TO PROD`
-pipeline and are promoted there, not from this repo — `Fabric/Notebooks/*` are reference copies.
-`Stage.Appointments.site_id` is waiting on that.
+==> THE DAG IS WAREHOUSE METADATA, NOT A FABRIC ITEM. <== `Orchestrate_Build` names no stored
+procedure at all — it reads `Audit.Process_Config` and `Audit.Process_Dependency`, which are tables
+in `WH_Dentally`. The deployment pipeline does not promote tables. So promoting every notebook,
+pipeline and report left prod's DAG exactly as it was:
 
-### 3. Step 13 of the targets release
+| | prod, after "Fabric is up to date" |
+|---|---|
+| `GOLD_AGG_DAILY_TARGETS` → the retired loader | **still wired in, 2 live edges** |
+| `GOLD_FACT_NODE_TARGETS` | **absent** |
+| `GOLD_AGG_PERIOD_TARGETS` | **absent** |
 
-Drop `Gold.Fact_Daily_Targets` and its loader, once Maple's reports have been watched.
+Tonight's build would have run the retired loader and never built the new chain, so
+`Fact_Node_Targets` and `Aggregate_Period_Targets` would have gone stale from the moment the
+release finished — with nothing to say so, because the reports would have kept showing the figures
+from the last hand-run. **V157** copies dev's wiring (`GOLD_DIM_DATE` and `META_SYNC_INPUT` →
+node targets at level 5; `GOLD_AGG_DATE_GROUPING` and node targets → period targets at level 6) and
+unwires the retired one.
+
+### ~~3. Step 13~~ — DONE
+
+**V158** dropped `PBI.[_Daily Targets]`, `Gold.usp_Load_Fact_Daily_Targets` and
+`Gold.Fact_Daily_Targets`, in that order — the view first, because a view over a dropped table is
+not an error until something queries it. 87,435 rows snapshotted to
+`Backup.Fact_Daily_Targets__retired` first.
+
+It went last on purpose: this fact was the only thing that could re-derive the old figures, and the
+step 10 reconcile depended on it.
+
+---
+
+## One pre-existing thing this turned up, not fixed
+
+`Audit.Process_Dependency` carries a dangling edge on **both** environments:
+`GOLD_FACT_APPOINTMENTS → GOLD_AGG_APPOINTMENT_JOURNEY`, whose Next process is not in
+`Process_Config`. A leftover from the journey retirement (V008/V009) — the process was removed and
+its edge was not. Identical both sides, the build evidently tolerates it, and it has nothing to do
+with targets, so it was left rather than folded into a targets migration. Worth a one-line DELETE on
+both when something else touches the DAG.
