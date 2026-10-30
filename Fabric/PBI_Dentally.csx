@@ -1608,29 +1608,46 @@ add("Recalls Overdue Not Sent",
     "#,##0.0%");
 
 // Contactability is about the ACTIVE base (inactive patients have contact removed), so both
-// numerator and denominator are active-scoped -> % of ACTIVE patients contactable (~94%), not
-// diluted by the ~21k historical/inactive patients.
+// numerator and denominator are active-scoped -> % of ACTIVE patients contactable (~94% on the
+// live practice), not diluted by the ~21k historical/inactive patients.
+// ==> OFF THE PATIENT DIMENSION, ONTO THE SITE-GRAINED AGGREGATE. <== Both of these used to
+// aggregate SUM('List Patients'[Patient Count]). 'List Patients' is a DIMENSION, and the only
+// site column Dim_Patients carries is Site_ID -- the Dentally BUSINESS key, a varchar, which
+// cannot be the foreign end of a relationship to [pk Practice Site]. So neither measure could
+// follow the hierarchy selector, and both read 96.1% / 97.3% identically on Maple, Demonstration
+// Practice and Skeleton Group: the whole estate's blend, shown on every client.
+//
+// 'Aggregate Site Patient Current' is one row per patient with fk_Practice_Site resolved, so
+// COUNTROWS IS the patient count. Has Email / Has Phone are computed in the loader from
+// Email_Address / Mobile_Phone / Home_Phone being non-NULL -- deliberately NOT from
+// Dim_Patients.Is_Email_Missing, which claims 21,638 patients have an email when the column is
+// NULL and would have produced a confidently wrong rate.
+//
+// [Active Patients] is the same dp.Active the old denominator used, so this is a re-grain, not a
+// redefinition. Checked in SQL against a baseline taken before the columns existed: identical to
+// 0.1pp on all seven tenants (t11 94.0/99.2, t12 100.0/93.5, t100 94.0/99.3).
 add("Email Details Rate",
     @"DIVIDE(
     CALCULATE(
-        SUM('List Patients'[Patient Count]),
-        NOT ISBLANK('List Patients'[Email Address]),
-        'List Patients'[Active] = TRUE()),
+        COUNTROWS('Aggregate Site Patient Current'),
+        'Aggregate Site Patient Current'[Has Email]        = TRUE(),
+        'Aggregate Site Patient Current'[Active Patients]  = TRUE()),
     CALCULATE(
-        SUM('List Patients'[Patient Count]),
-        'List Patients'[Active] = TRUE()))",
+        COUNTROWS('Aggregate Site Patient Current'),
+        'Aggregate Site Patient Current'[Active Patients]  = TRUE()))",
     "#,##0.0%");
 
+// Mobile OR home, ORed in the loader rather than here -- one column instead of a two-column
+// predicate, and the OR is then stated once in SQL where it can be checked against the data.
 add("Phone Details Rate",
     @"DIVIDE(
     CALCULATE(
-        SUM('List Patients'[Patient Count]),
-        NOT ISBLANK('List Patients'[Mobile Phone])
-        || NOT ISBLANK('List Patients'[Home Phone]),
-        'List Patients'[Active] = TRUE()),
+        COUNTROWS('Aggregate Site Patient Current'),
+        'Aggregate Site Patient Current'[Has Phone]        = TRUE(),
+        'Aggregate Site Patient Current'[Active Patients]  = TRUE()),
     CALCULATE(
-        SUM('List Patients'[Patient Count]),
-        'List Patients'[Active] = TRUE()))",
+        COUNTROWS('Aggregate Site Patient Current'),
+        'Aggregate Site Patient Current'[Active Patients]  = TRUE()))",
     "#,##0.0%");
 
 // ── Net Patient Growth needs its own variance basis ──────────────────────────
