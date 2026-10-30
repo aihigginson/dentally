@@ -653,92 +653,56 @@ def filters():
         #
         # pk_Practice_Site, not Site_Name: two practices in a group can both have a "Central", and
         # filtering on a label would silently pull in the other one's.
+        # ==> THE HIERARCHY IS READ, NOT REBUILT. <== Gold.usp_Load_Fact_Node_Targets decides
+        # which nodes exist -- folding a node into its parent when it is an only child, per
+        # BRANCH, which ripples -- and publishes the result to Gold.Dim_Hierarchy_Node. Doing that
+        # again here in Python would mean two implementations of an intricate rule feeding a string
+        # that targets are KEYED on, under a binary collation. They would diverge eventually, and
+        # the symptom would be a target lookup quietly returning nothing instead of an error.
+        #
+        # [Selection] is the KEY: indented by the node's LEVEL, so it never moves when some other
+        # branch folds. [Display Selection] is indented by position in the folded tree and is what
+        # the drop-down shows. The front end no longer renders either.
+        #
+        # The cost: a hierarchy edit does not reach this list until the loader runs again. The
+        # admin save triggers it, so in practice that is immediate.
         hierarchy = []
         if tids:
             cur.execute(
-                f"SELECT r.Region_Name, r.Sort_Order, a.Area_Name, a.Sort_Order, "
-                f"       t.Tenant_Name, s.pk_Practice_Site, s.Site_Name, "
-                f"       r.Region_ID, a.Area_ID, sa.Tenant_ID "
-                f"FROM   Input.Client_Region r "
-                f"JOIN   Input.Client_Area   a  ON a.Region_ID = r.Region_ID "
-                f"JOIN   Input.Site_Area     sa ON sa.Area_ID  = a.Area_ID "
-                f"JOIN   Gold.Dim_Practice_Sites s ON s.Tenant_ID = sa.Tenant_ID AND s.Site_ID = sa.Site_ID "
-                f"JOIN   Audit.Tenants t ON t.Tenant_ID = sa.Tenant_ID "
-                f"WHERE  r.Client_ID = ? AND s.Tenant_ID IN ({placeholders}) AND s.Site_Active = 1 "
-                f"ORDER BY r.Sort_Order, r.Region_Name, a.Sort_Order, a.Area_Name, "
-                f"         t.Tenant_Name, s.Site_Name",
+                f"SELECT hn.[Selection], hn.Display_Selection, hn.Depth, hn.[Level], "
+                f"       hn.Node_Key, hn.fk_Practice_Site "
+                f"FROM   Gold.Dim_Hierarchy_Node hn "
+                f"WHERE  hn.Client_ID = ? AND hn.Tenant_ID IN ({placeholders})",
                 [client_id] + list(tids),
             )
-            rows = [{'region': r[0], 'area': r[2], 'practice': r[4],
-                     'pk': int(r[5]), 'site': r[6],
-                     'Region': str(r[7]), 'Area': str(r[8]), 'Practice': str(r[9]),
-                     'Site': str(int(r[5]))} for r in cur.fetchall()]
+            nodes = {}
+            for sel, disp, depth, lvl, key, pk in cur.fetchall():
+                n = nodes.setdefault(sel, {'selection': sel, 'label': disp, 'depth': int(depth),
+                                           'level': lvl, 'key': (key or ''), 'sites': set()})
+                n['sites'].add(int(pk))
 
-            # ==> A LEVEL THAT OFFERS NO CHOICE IS NOT SHOWN. <== A single-practice customer has
-            # one region and one area, both usually called "All", and listing them is three lines
-            # of furniture above the only thing worth picking. The test is observable rather than
-            # configured: if a level has exactly one distinct value across the client, it cannot
-            # narrow anything, so it is omitted.
-            levels = [lv for lv in ('region', 'area', 'practice')
-                      if len({r[lv] for r in rows}) > 1]
-            # ==> THE SITE LEAF EARNS ITS PLACE THE SAME WAY THE OTHERS DO. <== It used to be
-            # unconditional, which gave a single-site client TWO entries for one thing -- the
-            # client and its only site, identical in everything but indent. It also has to agree
-            # with Gold.usp_Load_Fact_Node_Targets, which applies exactly this test: a node the
-            # warehouse does not build is a target lookup that silently finds nothing.
-            show_sites = len({r['pk'] for r in rows}) > 1
-
-            # ==> DEPTHS COME FROM THE WHOLE CLIENT, NEVER FROM THE VISIBLE SUBSET. <== The indent
-            # is part of the key the targets are stored against, so a North-only user must see
-            # '<4 figure spaces>- Manchester' exactly as everyone else does. Deriving the collapse
-            # from their own narrowed rows would re-base it to 2 and every target lookup would
-            # miss, silently, because Fabric's collation is binary.
+            # ==> THE CEILING IS A SITE-SET TEST, NOT A TREE WALK. <== A user's top node is stored
+            # as (level, key); everything they may see is every node whose sites all fall inside
+            # that node's. That needs no knowledge of the tree's shape, which is the point -- the
+            # shape now varies by branch.
             tn_level, tn_key = _top_node(cur, upn)
-            visible = rows
             if tn_level and tn_level != 'Client':
-                visible = [r for r in rows if r.get(tn_level) == tn_key]
-                if not visible:
-                    # the node was deleted or re-keyed under them: fail OPEN to the client root
-                    # rather than showing an empty selector with no way back
-                    visible, tn_level = rows, 'Client'
+                top = next((n for n in nodes.values()
+                            if n['level'] == tn_level and n['key'] == tn_key), None)
+                if top:                       # absent = deleted or re-keyed under them: fail OPEN
+                    allowed = top['sites']
+                    nodes = {s: n for s, n in nodes.items() if n['sites'] <= allowed}
 
-            def node(depth, label, members):
-                return {'id': '%d:%s' % (depth, label), 'depth': depth, 'label': label,
-                        'sites': sorted({m['pk'] for m in members})}
+            # Tree order without a stored sort key: a parent's site set CONTAINS its children's, so
+            # ordering by (lowest site, widest first) walks the tree depth-first. Sibling order
+            # follows the site surrogate rather than the owner's Sort_Order -- worth a sort column
+            # on the bridge if that ever matters.
+            hierarchy = [{'id': '%d:%s' % (n['depth'], n['selection']),
+                          'depth': n['depth'], 'label': n['label'],
+                          'selection': n['selection'], 'sites': sorted(n['sites'])}
+                         for n in sorted(nodes.values(),
+                                         key=lambda x: (min(x['sites']), -len(x['sites'])))]
 
-            # ==> THE ROOT NODE IS THE CLIENT, SO IT CARRIES THE CLIENT'S NAME. <== "Group" is a
-            # label the reader has to decode into "which group?"; their own name needs no
-            # decoding, and it is also what the header beside it already says.
-            cur.execute("SELECT Client_Name FROM Security.Clients WHERE Client_ID = ?", client_id)
-            crow = cur.fetchone()
-            root_label = (crow[0] if crow and crow[0] else 'All practices')
-
-            if visible:
-                # The client node is only offered to someone whose ceiling IS the client. For a
-                # North-only user the list simply starts at North -- the front end defaults to the
-                # first entry, so their top node becomes their default with no change there.
-                if not tn_level or tn_level == 'Client':
-                    hierarchy.append(node(0, root_label, rows))
-                seen = set()
-                for row in visible:
-                    path = []
-                    for lv in levels:
-                        path.append(lv)
-                        key = tuple(row[p] for p in path)
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        members = [m for m in rows
-                                   if all(m[p] == row[p] for p in path)]
-                        hierarchy.append(node(len(path), row[lv], members))
-                    if show_sites:
-                        hierarchy.append(node(len(levels) + 1, row['site'], [row]))
-                # A node above the ceiling can still appear via `levels` -- a Region user whose
-                # region is not itself a surviving level, say -- so drop anything shallower than
-                # the ceiling after the fact. Cheap, and it cannot be got wrong by omission.
-                if tn_level and tn_level != 'Client':
-                    floor = min((n['depth'] for n in hierarchy), default=0)
-                    hierarchy = [n for n in hierarchy if n['depth'] >= floor]
 
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
