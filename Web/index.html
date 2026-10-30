@@ -394,6 +394,10 @@
         /* A derived figure is a placeholder, never a value: it reads grey and italic so nobody
            mistakes a rolled-up number for one somebody committed to. */
         #targets-grid input::placeholder { color: #b8c4cc; font-style: italic; }
+        /* The All roles column is shown for reference and edited on the Whole client tab, so it
+           must not read as an input somebody forgot to fill in. */
+        #targets-grid input.ref-cell { background: transparent; border-color: transparent;
+                        color: #5b6b78; cursor: default; }
         .tgrid { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
         .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 5px 8px; text-align: center; vertical-align: top; }
         .tgrid th { background: #f4f6f8; font-weight: 600; }
@@ -3825,8 +3829,10 @@
     function _renderActiveTargetPage() {
         const note = document.getElementById('targets-note');
         if (_tgtPage === 'Roles') {
-            note.textContent = 'Per-role targets. These are per FTE — a report multiplies by the '
-                + 'full-time equivalent of whoever is in view.';
+            note.textContent = 'Per-role targets, set once for the whole client — a role target '
+                + 'is per FTE, so it says what one person in that role should deliver and applies '
+                + 'at every practice and site. The All roles column is the whole-client figure; '
+                + 'edit it on the Whole client tab.';
             renderTargetGrid(_tgtData, _tgtT);
             return;
         }
@@ -3883,7 +3889,13 @@
     }
 
     function renderTargetGrid(data, t) {
-        const levels = t.levels || ['Practice'];
+        // ==> THE ROLE SET IS THE CLIENT'S, NOT THIS TENANT'S. <== This used to read t.levels off
+        // tenants[0], so a group saw one arbitrary practice's roles. client_roles is the union
+        // across the client; t is still passed because the orphan sweep and the FY copy read its
+        // target map.
+        const roles = (data.client_roles && data.client_roles.length)
+            ? data.client_roles : (t.levels || []).filter(l => l !== 'Practice');
+        const levels = ['Practice'].concat(roles);
         // Orphan levels: roles that still have targets for this FY but are no longer active roles.
         const activeSet = new Set(levels);
         const orphanSet = new Set();
@@ -3891,11 +3903,27 @@
             const lvl = k.slice(k.indexOf('|') + 1);
             if (lvl && lvl !== 'Practice' && !activeSet.has(lvl)) orphanSet.add(lvl);
         }
+        // Node-addressed role figures live in node_targets, keyed (level, key, role, metric), so a
+        // role that only has a client-level target still earns its column.
+        const cn = data.client_node;
+        if (cn) {
+            for (const k in (data.node_targets || {})) {
+                const p = k.split('\u0001');
+                if (p[0] === cn.level && p[1] === cn.key && p[2] && p[2] !== 'Practice'
+                    && !activeSet.has(p[2])) orphanSet.add(p[2]);
+            }
+        }
         const orphans = [...orphanSet].sort();
         const ncol = levels.length + orphans.length + 2;
         const colCls = l => (l === 'Practice' ? ' class="col-practice"' : ' class="col-role"');
+        // 'Practice' is the warehouse's name for the figure that applies regardless of role -- it
+        // publishes as 'All Roles'. On a client-wide screen the old label named the wrong thing.
+        const colLbl = l => (l === 'Practice' ? 'All roles' : l);
+        const colTip = l => (l === 'Practice'
+            ? ' title="The whole-client figure, shown for reference. Edit it on the Whole client tab."'
+            : ' title="Per FTE, set once for the whole client"');
         let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
-            + levels.map(l => '<th' + colCls(l) + '>' + escHtml(l) + '</th>').join('')
+            + levels.map(l => '<th' + colCls(l) + colTip(l) + '>' + escHtml(colLbl(l)) + '</th>').join('')
             + orphans.map(l => '<th class="col-role col-orphan" data-ocol="' + escHtml(l) + '" title="Removed role — click × to delete its targets">'
                 + escHtml(l) + '<button type="button" class="orphan-x" data-orphan="' + escHtml(l) + '" title="Delete this role&#39;s targets">&times;</button></th>').join('')
             + '</tr></thead><tbody>';
@@ -3912,19 +3940,43 @@
                     + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
                 for (const lvl of levels) {
                     const lvlCls = (lvl === 'Practice') ? ' col-practice' : ' col-role';
-                    const canEdit = (lvl === 'Practice') || m.splits_by_role;
-                    if (!canEdit) { html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue; }
-                    const tgt = t.targets[m.key + '|' + lvl];
+                    if (lvl !== 'Practice' && !m.splits_by_role) {
+                        html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue;
+                    }
+                    if (lvl === 'Practice') {
+                        // ==> READ ONLY, BECAUSE THE WHOLE CLIENT TAB OWNS THIS CELL. <== Both
+                        // would write (client, All Roles, metric) -- the same row -- so an
+                        // editable box here would silently fight the other tab.
+                        const wc = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + 'Practice'
+                                                     + _SEP + m.key] : null;
+                        html += '<td class="tcell na' + lvlCls + '">' + pre
+                            + '<input type="number" class="ref-cell" disabled'
+                            + ' value="' + (wc != null ? wc : '') + '">' + suf + '</td>';
+                        continue;
+                    }
+                    // A role figure is the client's: addressed to the client node, so it rolls
+                    // down to every practice and site rather than belonging to one of them.
+                    const tgt = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + lvl + _SEP + m.key]
+                                   : t.targets[m.key + '|' + lvl];
                     html += '<td class="tcell' + lvlCls + '">'
-                        + pre + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
+                        + pre + '<input type="number" step="any" data-tid="' + (cn ? cn.tenant_id : t.id)
+                        + '" data-metric="' + escHtml(m.key)
                         + '" data-level="' + escHtml(lvl) + '"' + (m.fte_scaled ? ' data-fte="1"' : '')
+                        + (cn ? ' data-ltype="' + escHtml(cn.level) + '" data-lkey="' + escHtml(cn.key) + '"' : '')
                         + ' value="' + (tgt != null ? tgt : '') + '">' + suf + '</td>';
                 }
                 for (const lvl of orphans) {   // only the cells that actually carry an orphaned target
-                    const otgt = t.targets[m.key + '|' + lvl];
+                    // Addressed to the client node, exactly as a live role is: an un-addressed
+                    // cell would write a NEW practice-level row rather than clear the
+                    // client-level one it is showing, so the x would look inert and duplicate.
+                    const otgt = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + lvl + _SEP + m.key]
+                                    : t.targets[m.key + '|' + lvl];
                     if (otgt == null) { html += '<td class="col-orphan" data-ocol="' + escHtml(lvl) + '"></td>'; continue; }
-                    html += '<td class="tcell col-orphan" data-ocol="' + escHtml(lvl) + '">' + pre + '<input type="number" step="any" data-tid="' + t.id
-                        + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '" value="' + otgt + '">' + suf + '</td>';
+                    html += '<td class="tcell col-orphan" data-ocol="' + escHtml(lvl) + '">' + pre
+                        + '<input type="number" step="any" data-tid="' + (cn ? cn.tenant_id : t.id)
+                        + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '"'
+                        + (cn ? ' data-ltype="' + escHtml(cn.level) + '" data-lkey="' + escHtml(cn.key) + '"' : '')
+                        + ' value="' + otgt + '">' + suf + '</td>';
                 }
                 html += '</tr>';
                 if (m.definition) html += '<tr class="def-row" data-def="' + escHtml(m.key) + '" hidden><td colspan="'

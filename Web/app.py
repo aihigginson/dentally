@@ -4254,6 +4254,18 @@ def get_target_grid():
                                              ('selection', 'label', 'key', 'tenant_id')}
                                             for n in _got]})
 
+        # ==> THE WHOLE-CLIENT ADDRESS IS NOT ALWAYS ('Client', client_id). <== Maple's tree
+        # folds to a single PRACTICE node, because the keep order is Practice outwards and Practice
+        # outranks Group -- so it has no Client node and its whole-client address is
+        # ('Practice','100'). Reading the shallowest published node gets that right for both
+        # shapes, instead of writing an address the loader cannot resolve.
+        client_node = None
+        if pages:
+            _top = pages[0]['nodes']
+            if _top:
+                client_node = {'level': pages[0]['level'], 'key': _top[0]['key'],
+                               'tenant_id': _top[0]['tenant_id']}
+
         # What the loader DERIVED, for greying. Entered figures are read from the AppDB below --
         # the source of truth -- so anything marked Is_Entered here is deliberately left out.
         derived = {}
@@ -4308,13 +4320,21 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
+        # ==> ROLES ARE THE CLIENT'S, SO THE ROLE SET IS THE UNION. <== The Roles tab used to
+        # render one arbitrary tenant -- tenants[0] -- so a group saw only its first practice's
+        # roles and wrote every figure against that practice. A role target is per-FTE and rolls
+        # down only, so it says what one dentist should deliver, which does not vary between a
+        # group's practices. One set, entered once.
+        client_roles = sorted({r for s in roles_by_tenant.values() for r in s})
+
         # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
         # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
         # one rule, and it still works for the next-year option that has no grouping row yet.
         return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
                         'fy_start_month': fy_start_month,
                         'metrics': metrics, 'tenants': list(tenants.values()),
-                        'pages': pages, 'node_targets': node_targets, 'derived': derived})
+                        'pages': pages, 'node_targets': node_targets, 'derived': derived,
+                        'client_roles': client_roles, 'client_node': client_node})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
 

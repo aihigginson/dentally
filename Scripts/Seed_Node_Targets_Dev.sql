@@ -1,4 +1,4 @@
-/* ============================================================================
+﻿/* ============================================================================
    DEV ONLY -- targets for Skeleton Group that exercise the roll-up and roll-down rules.
 
    ==> THIS IS TEST DATA AND IT GUARDS ITSELF. <== It refuses to run anywhere but AppDB-dev, and
@@ -51,12 +51,15 @@
          Manchester 17, Alpha, Bravo and their five sites 17.
          Group, North, Charlie, Delta: nothing at all. A rate does not climb.
 
-   E  total_revenue per ROLE -- ROLES ROLL DOWN ONLY, EVEN FOR A QUANTITY.
-         Hygienist 125,000 at the client -> 125,000 at every node. Not 9 x 125,000 anywhere.
-         Dentist 310,000 at Alpha and 460,000 at Charlie -> their own sites only. Manchester,
-         North and Group show NO Dentist figure: 770,000 would be the bug this proves against.
+   E  total_revenue per ROLE, ENTERED AT THE CLIENT -- ROLES NEVER ROLL UP.
+         A role target is per FTE, so it says what one person in that role should deliver, which
+         does not vary between a group's practices -- hence entered once for the client.
+         Hygienist 125,000 and Dentist 310,000 appear at ALL SIXTEEN nodes, unchanged. The bug
+         this proves against is any node showing a multiple: 16 x 125,000 at the group.
 
-   F  avg_plan_value per role -- A ROLE RATE, ENTERED MID-TREE.
+   F  avg_plan_value per role -- A CLIENT-WIDE ROLE FIGURE, OVERRIDDEN FURTHER DOWN.
+         The screen enters a role once for the client, but the loader resolves a role at ANY node,
+         so a region or site can still hold its own.
          Dentist 555 at North -> 555 everywhere under North, except Bravo West 188.
 
    After running: sync, then rebuild the node facts and the period aggregate --
@@ -106,12 +109,18 @@ seed(Level_Type, Level_Key, Tenant_ID, Target_Level, Metric, Target_Value) AS (
     /* ---- D. entered only at Area: a roll is one-way ---------------------------- */
     , ('Area',     '9',  21, 'Practice',  'dna_rate',                       17.00)
 
-    /* ---- E. roles roll DOWN only, even for a quantity -------------------------- */
+    /* ---- E. roles are the CLIENT's, and roll DOWN only even for a quantity ------ */
+    /*         A role target is per FTE, so it says what one person in that role should deliver --
+               which does not vary between a group's practices. Entered once for the client, it
+               reaches all sixteen nodes with the SAME figure; it is never summed on the way up,
+               which 16 x 125,000 appearing at the group would be. */
     , ('Client',   '20', 21, 'Hygienist', 'total_revenue',              125000.00)
-    , ('Practice', '21', 21, 'Dentist',   'total_revenue',              310000.00)
-    , ('Practice', '23', 23, 'Dentist',   'total_revenue',              460000.00)
+    , ('Client',   '20', 21, 'Dentist',   'total_revenue',              310000.00)
 
-    /* ---- F. a role rate, entered mid-tree -------------------------------------- */
+    /* ---- F. a client-wide role figure, overridden further down ------------------ */
+    /*         The Targets screen enters a role once for the client, but the loader resolves a role
+               at ANY node -- so a region or a site can still hold its own. These two prove that a
+               client-wide role figure rolls down and that a lower one stops it. */
     , ('Region',   '7',  21, 'Dentist',   'avg_plan_value',                555.00)
     , ('Site',     '14', 22, 'Dentist',   'avg_plan_value',                188.00)
     ) v (Level_Type, Level_Key, Tenant_ID, Target_Level, Metric, Target_Value)

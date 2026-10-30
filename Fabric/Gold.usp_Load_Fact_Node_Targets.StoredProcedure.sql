@@ -5,6 +5,7 @@
 --    *01  29/10/2026  AIH  Explode the sparse grid across every node of the hierarchy.
 --    *02  29/10/2026  AIH  Keyed on the DROP-DOWN TEXT. Level_Type/Level_Key/Tenant_ID gone.
 --    *03  30/10/2026  AIH  Read 'Client', the level the bridge publishes, not 'Group'.
+--    *04  30/10/2026  AIH  A figure entered above every survivor lands on the shallowest.
 --
 --  EXPLODE THE SPARSE TARGET GRID ACROSS THE HIERARCHY, KEYED ON WHAT THE USER PICKED.
 --
@@ -252,13 +253,24 @@ BEGIN
         -- target entered at Practice attaches to the practice on a branch that kept it, and to
         -- whatever survives above it on a branch that folded it away. Asking per client would
         -- send both to the same node and silently merge two practices' targets.
+        -- ==> AND IF THERE IS NOTHING AT OR ABOVE IT, THE SHALLOWEST SURVIVOR. <== Maple folds
+        -- to a single PRACTICE node -- Practice outranks Group in the keep order -- so it has no
+        -- Client node at all. A figure entered at Client is ordinal 0, its only survivor is
+        -- ordinal 3, and with a bare `Ord <= Entered_Ord` the CROSS APPLY matched nothing and the
+        -- target was dropped silently. Harmless while everything is entered at Practice; fatal the
+        -- moment role targets move to client level, and fatal for the live customer first.
+        --
+        -- Ordering by "is it at or above" FIRST and then by depth gives both answers from one
+        -- read: an at-or-above survivor still wins, and when there is none the shallowest survivor
+        -- takes it -- which on that branch IS the whole client.
         CROSS  APPLY (SELECT TOP 1 kp.Ord, kp.Node_Key
                       FROM   #keep kp
                       WHERE  kp.Client_ID        = e.Client_ID
                         AND  kp.pk_Practice_Site = h.pk_Practice_Site
-                        AND  kp.Ord             <= e.Entered_Ord
                         AND  kp.Keep_Rank        = kp.Best_Rank
-                      ORDER BY kp.Ord DESC) tgt
+                      ORDER BY CASE WHEN kp.Ord <= e.Entered_Ord THEN 0 ELSE 1 END,
+                               CASE WHEN kp.Ord <= e.Entered_Ord THEN kp.Ord END DESC,
+                               kp.Ord ASC) tgt
         JOIN   #nd nd ON nd.Client_ID = e.Client_ID AND nd.Ord = tgt.Ord
                      AND nd.Node_Key = tgt.Node_Key;
 
