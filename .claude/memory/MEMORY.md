@@ -118,3 +118,8 @@
 - [A parameterised batch cannot create a temp table](a-parameterised-batch-cannot-create-a-temp-table.md) — pyodbc routes params via sp_executesql; the #temp dies with the call, and the error names the reader.
 - [Demo screens are poked for the marketing page](demo-screens-are-poked-for-the-marketing-page.md) — blind-spot.html needs DEV diary data reshaped; diary_fill lives in two tables and a rebuild undoes it.
 - [Generator column set is the DEV Stage schema](generator-column-set-is-the-dev-stage-schema.md) — a column it omits ceases to exist; SELECT * views and Bronze break together.
+- [A rate has no group target unless entered there](a-rate-has-no-group-target-unless-entered-there.md) — rates roll down only; 14 blank group tiles is the rule working, not a bug.
+- [Skeleton tenants have no date spine](skeleton-tenants-have-no-date-spine.md) — client 20 can never render a report; <100 appointments means no Dim_Date_Grouping.
+- [Re-running part of the chain deletes the rolling windows](re-running-part-of-the-chain-deletes-rolling-windows.md) — two notions of today; Last 3/12 Months vanish with no error.
+- [The model is one artifact](the-model-is-one-artifact.md) — a proc-level dependency check cannot clear a release; diff every schema before promoting. _Node Targets is deliberately not a model table.
+- [The build DAG is not a Fabric item](the-build-dag-is-not-a-fabric-item.md) — promoting every notebook leaves Process_Config untouched; the nightly kept the retired loader.

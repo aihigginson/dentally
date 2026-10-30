@@ -48,3 +48,7 @@ Web/.venv/
 
 # Off-box AppDB exports. OneDrive backs them up; git must not -- they are customer data.
 /Backups/
+
+# Prospect lists. Personal data about named contacts, and git history is forever --
+# OneDrive holds them; the repo must not. See DPIA.md.
+/Sales Leads/
