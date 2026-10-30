@@ -148,7 +148,8 @@ against dev as a complete no-op.
 
 ## 4. Release order
 
-Steps 0–6 are **done on prod** (30 Oct 2026); it is paused at step 7. Everything up to the point of no return is additive —
+Steps 0–9 are **done on prod** (30 Oct 2026); it is paused before **8b**, the only step that
+touches what the live reports read. Everything up to the point of no return is additive —
 inserts and nullable `ALTER ... ADD` — and prod reporting is untouched throughout: the old
 `Fact_Daily_Targets` chain still feeds `Aggregate_Period_Targets`, and the live app reads the
 hierarchy tables only from its admin screen.
@@ -162,9 +163,12 @@ hierarchy tables only from its admin screen.
 | 4 | `AppDB.Migration.Top_Node.sql` | AppDB | `Top_Node_Level`/`Key` on `Application_Users` | **done** — 66 users, all at the root |
 | 5 | `AppDB.Migration.Target_Node_Key.sql` | AppDB | PK lists 6 key columns; rows = distinct addresses | **done** — 334 rows, 334 addresses |
 | 6 | `Migrations/V154__targets_rework_input_columns.sql` | warehouse | all 22 report `present` | **done** — schema diff now reports **0 gaps** |
-| 7 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | AppDB | roles at `('Practice','100')`; `All Roles` still 106 | **point of no return — stopped here** |
-| 8 | Warehouse objects: the two new tables, the loaders, the sync proc, then `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | |
-| 9 | AppDB sync, then `usp_Load_Fact_Node_Targets`, then `usp_Load_Aggregate_Period_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node; period rows > 0 | |
+| 7 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | AppDB | roles at `('Practice','100')`; `All Roles` still 106 | **done** — 228 role rows re-addressed, every count and sum byte-identical |
+| — | `Migrations/V155__metric_rolls_up_and_top_node.sql` | warehouse | 20 up / 28 down, nothing NULL | **done** — `Rolls_Up` was missing; the node loader cannot run without it |
+| 8a | **Additive**: `Dim_Hierarchy_Node`, `Fact_Node_Targets`, `usp_Load_Fact_Node_Targets`, `Meta.usp_Sync_Input_From_AppDB` | warehouse | objects exist; model untouched | **done** |
+| 9 | AppDB sync, then `usp_Load_Fact_Node_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node | **done** — 1 node, 334 rows, all entered, sum 21,435,541 |
+| — | Snapshot the old aggregate | warehouse | `Backup.Aggregate_Period_Targets__pre_8b` = 478 rows | **done** — makes 8b reversible |
+| 8b | **The switch**: `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | **next — breaks live reports until 11** |
 | 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | |
 | 11 | Model: new tables, relationships, RLS, publish, refresh | Desktop | no security-filter errors — save before believing the list | **owner** |
 | 12 | Merge `dev` → `main` to deploy the app | CI | Targets screen renders; Home tiles carry targets | |
