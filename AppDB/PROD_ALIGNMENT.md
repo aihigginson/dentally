@@ -73,22 +73,24 @@ Two procedures had **prod ahead of dev**, and deploying "dev to prod" would have
 
 ## Left to do
 
-### 1. The migration ledger is nine behind, and that is a live hazard
+### ~~1. The migration ledger~~ — DONE
 
-Prod's **schema** is aligned — proven by the column diff above. Prod's **`Migrate.Schema_Version`**
-is not: nine versions are unrecorded, and their effects are already present (spot-checked
-`Security.Clients.Client_Email`, `Gold.Load_Watermark`, the retired journey table, the hygienist
-value column — all present or already gone).
+Prod's ledger was nine versions behind its own schema, so `Migrate.ps1` pointed at prod would have
+attempted all nine. Now **45 applied against 45 files in the repo — nothing pending.**
 
-    V001 V002 V005 V007 V008 V009    folded into prod's baseline when it was built
-    V151 V152 V153                   applied by file deploy, never recorded
+Recorded by `Scripts/Backfill_Migration_Ledger.py`, which carries the evidence measured for each
+version and refuses to record one it has none for. Running the files was the alternative and the
+worse one: they are individually guarded, but V001 ADDS a column V005 later DROPS and V008/V009
+drop a Silver table, and replaying that against a live warehouse to discover it is fine is not a
+risk worth taking for bookkeeping.
 
-**Running `Migrate.ps1` against prod today would attempt all nine.** Some open with DROP. That is
-the hazard, and it is not hypothetical — it is one command away.
+**Two of the nine looked like real gaps and were not** — both my expectation, found by checking dev
+instead of assuming prod was behind:
 
-The fix is a **ledger backfill**: record the nine as applied without running them. That is a
-bookkeeping assertion rather than a verification of each file, so it wants the owner's sanction
-rather than a quiet script.
+| | |
+|---|---|
+| `V001` | `Fact_Invoice_Items.Is_Invoice_Outstanding` is absent on prod **and on dev**. V001 added it; a later `Table.sql` redeploy removed it. "The column V001 added still exists" was the wrong test — the right one is whether the environments agree. |
+| `V153` | `Input.Sync_State` is absent from the prod warehouse **and dev's**. The file sits in `Migrations/` but targets the **AppDB**, where both have it with 18 rows. I looked in the wrong database. |
 
 ### 2. Fabric items still promote by pipeline
 
