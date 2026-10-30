@@ -1,66 +1,56 @@
 ﻿/* ============================================================================
-   DEV ONLY -- targets for Skeleton Group that exercise the roll-up and roll-down rules.
+   DEV ONLY -- a COMPLETE target set for Skeleton Group, built to exercise both rolls.
 
    ==> THIS IS TEST DATA AND IT GUARDS ITSELF. <== It refuses to run anywhere but AppDB-dev, and
-   it only ever touches Client_ID = 20 (Skeleton Group). Maple is client 100 and its 525 targets
-   are the owner's own, hand-set; the demo is client 11. Neither is touched, and a run against
-   AppDB-prod stops at the first statement.
+   part 1 only ever touches Client_ID = 20. Maple is client 100 and its targets are the owner's
+   own, hand-set; neither it nor the demo's practice-level figures are touched.
 
-   WHY SKELETON GROUP. It is the only client with a RAGGED hierarchy -- one branch keeps Region,
-   Area and Practice, another folded its Area away, a third folded both -- and it had no targets at
-   all, so nothing here overwrites a decision anybody made.
+   ==> HOW IT IS BUILT, AND WHY THAT SHAPE. <== A quantity only rolls UP and a ratio only rolls
+   DOWN, so there is exactly one level at which each can be entered and still reach every node:
 
-        Skeleton Group (Client, key 20)                     9 sites
-        |-- North (Region, 7)                               7 sites
-        |   |-- Manchester (Area, 9)                        5 sites
-        |   |   |-- Skeleton Alpha (Practice, 21)           Alpha Central 10, Alpha North 11
-        |   |   \-- Skeleton Bravo (Practice, 22)           Bravo Central 12, East 13, West 14
-        |   \-- Skeleton Charlie (Practice, 23)             Charlie Central 15, South 16
-        \-- Skeleton Delta (Practice, 24)                   Delta Central 17, Delta West 18
+        ratios      at the GROUP, complete      -- 22 metrics, one value each
+        aggregations at the SITES, complete     -- 14 metrics x 9 sites
+        roles       at the GROUP, complete      -- per FTE, so one figure for the whole client
+        then the middle is overridden           -- one metric per level, read independently
 
-   ==> THE FIGURES ARE CHOSEN SO THAT A WRONG ONE IS OBVIOUS. <== Each entered value has its own
-   order of magnitude, so any total on screen can be read back to the leaves that made it. They are
-   not plausible dental numbers and are not meant to be.
+   Entered that way every node has a figure for every metric, and nothing is blank because of the
+   direction a roll happens to travel.
 
-   WHAT EACH BLOCK PROVES, AND THE ARITHMETIC IT SHOULD PRODUCE:
+   ==> SITE WEIGHTS ARE POWERS OF TWO. <== 1, 2, 4 ... 256 across the nine sites. Every subtotal is
+   then a distinct sum of distinct bits, so any roll-up on screen decodes uniquely back to the
+   leaves that produced it, and a wrong one cannot coincidentally look right:
 
-   A  total_revenue, All Roles, Rolls_Up = 1 -- QUANTITIES ROLL UP.
-      Entered at Site for Alpha, Bravo and Delta; at PRACTICE for Charlie, deliberately unequal to
-      its own sites, because an entered figure must STOP the roll rather than be overwritten by it.
-         Alpha      3,000,000  = 1,000,000 + 2,000,000
-         Bravo        435,000  =   400,000 +    30,000 + 5,000
-         Manchester 3,435,000  = Alpha + Bravo
-         Charlie    9,000,000  = ENTERED. Its sites sum to 770,000 -- that number must NOT appear.
-         North     12,435,000  = Manchester + Charlie
-         Delta         66,000  =    60,000 +     6,000
-         Group     12,501,000  = North + Delta
-      Note what is ABSENT: Charlie's practice figure does not apportion down, so Charlie Central
-      and Charlie South keep their own entered figures, and a quantity entered at a practice with
-      no site figures would leave its sites blank. That is the rule, not a gap.
+        Alpha      3   = 1 + 2                   Charlie    96  = 32 + 64
+        Bravo     28   = 4 + 8 + 16              North     127  = 31 + 96
+        Manchester 31  = 3 + 28                  Delta     384  = 128 + 256
+                                                 Group     511  = every site
 
-   B  diary_fill, All Roles, Rolls_Up = 0 -- RATES ROLL DOWN, AND AN OVERRIDE STOPS THEM.
-      61 at the client, 72 at Bravo, 83 at one site:
-         everything 61, except Bravo and its three sites 72, except Charlie South 83.
+   multiplied by each metric's base:
 
-   C  revenue_per_dentist_hour, All Roles -- THREE TIERS OF OVERRIDE DOWN ONE BRANCH.
-         Group 211, North 232, Manchester 243
-         -> Delta and its sites 211 (under the client), Charlie and its sites 232 (under North),
-            Alpha, Bravo and their sites 243 (under Manchester).
+--        total_revenue                      site base   1,000  ->  group 511,000
+--        private_revenue                    site base     700  ->  group 357,700
+--        plan_capitation_revenue            site base     300  ->  group 153,300
+--        outstanding_invoices               site base      50  ->  group 25,550
+--        open_courses_value                 site base     200  ->  group 102,200
+--        open_courses_without_appt_value    site base      80  ->  group 40,880
+--        active_patients                    site base      10  ->  group 5,110
+--        new_patients                       site base       4  ->  group 2,044
+--        net_patient_growth                 site base       1  ->  group 511
+--        lapsed_patients                    site base       2  ->  group 1,022
+--        overdue_recalls                    site base       3  ->  group 1,533
+--        open_courses                       site base       5  ->  group 2,555
+--        open_courses_without_appt          site base       2  ->  group 1,022
+--        recalls_overdue_not_sent           site base       1  ->  group 511
 
-   D  dna_rate, All Roles, entered ONLY at Area -- A ROLL IS ONE-WAY.
-         Manchester 17, Alpha, Bravo and their five sites 17.
-         Group, North, Charlie, Delta: nothing at all. A rate does not climb.
+   ==> THE FIGURES ARE NOT PLAUSIBLE DENTAL NUMBERS AND ARE NOT MEANT TO BE. <== Skeleton Group has
+   almost no actuals, so nothing here is comparable to anything; it exists so that the arithmetic of
+   the two rolls can be read off the screen.
 
-   E  total_revenue per ROLE, ENTERED AT THE CLIENT -- ROLES NEVER ROLL UP.
-         A role target is per FTE, so it says what one person in that role should deliver, which
-         does not vary between a group's practices -- hence entered once for the client.
-         Hygienist 125,000 and Dentist 310,000 appear at ALL SIXTEEN nodes, unchanged. The bug
-         this proves against is any node showing a multiple: 16 x 125,000 at the group.
-
-   F  avg_plan_value per role -- A CLIENT-WIDE ROLE FIGURE, OVERRIDDEN FURTHER DOWN.
-         The screen enters a role once for the client, but the loader resolves a role at ANY node,
-         so a region or site can still hold its own.
-         Dentist 555 at North -> 555 everywhere under North, except Bravo West 188.
+   ==> ONE THING THE HOME PAGE WILL NOT MATCH EXACTLY. <== A cumulative target is pro-rated per
+   WORKING DAY, and a rolling 12-month window does not align with a financial year on weekends and
+   bank holidays -- it holds 262 working days against the year's 261. So a 435,000 annual target
+   reads 436,667 on a Last 12 Months tile. That is the apportionment working, and it is the same
+   arithmetic that makes Last 3 Months come out at roughly a quarter.
 
    After running: sync, then rebuild the node facts and the period aggregate --
         Meta.usp_Sync_Input_From_AppDB, Gold.usp_Load_Fact_Node_Targets,
@@ -77,52 +67,224 @@ DELETE FROM Input.Targets WHERE Client_ID = 20;
 PRINT 'cleared Skeleton Group: ' + CAST(@@ROWCOUNT AS VARCHAR(12)) + ' row(s)';
 GO
 
-/* One row per (node, role, metric); the FY list is crossed on, so both years carry the same
-   figure. A rolling twelve-month window straddles two financial years and sums each year's share,
-   so equal years keep the window's total equal to the annual target -- otherwise every figure on
-   screen would depend on today's date. */
+/* Both financial years carry the same figure. A rolling twelve-month window straddles two of them
+   and sums each year's share, so equal years keep the window independent of today's date --
+   otherwise every number on screen would drift as the window moved. */
 WITH fy(FY) AS (SELECT 2026 UNION ALL SELECT 2027),
 seed(Level_Type, Level_Key, Tenant_ID, Target_Level, Metric, Target_Value) AS (
     SELECT * FROM (VALUES
-    /* ---- A. quantities roll UP ------------------------------------------------ */
-      ('Site',     '10', 21, 'Practice',  'total_revenue',             1000000.00)
-    , ('Site',     '11', 21, 'Practice',  'total_revenue',             2000000.00)
-    , ('Site',     '12', 22, 'Practice',  'total_revenue',              400000.00)
-    , ('Site',     '13', 22, 'Practice',  'total_revenue',               30000.00)
-    , ('Site',     '14', 22, 'Practice',  'total_revenue',                5000.00)
-    , ('Site',     '15', 23, 'Practice',  'total_revenue',              700000.00)
-    , ('Site',     '16', 23, 'Practice',  'total_revenue',               70000.00)
-    , ('Practice', '23', 23, 'Practice',  'total_revenue',             9000000.00)  -- stops the roll
-    , ('Site',     '17', 24, 'Practice',  'total_revenue',               60000.00)
-    , ('Site',     '18', 24, 'Practice',  'total_revenue',                6000.00)
 
-    /* ---- B. a rate rolls DOWN, and an override stops it ------------------------ */
-    , ('Client',   '20', 21, 'Practice',  'diary_fill',                     61.00)
-    , ('Practice', '22', 22, 'Practice',  'diary_fill',                     72.00)
-    , ('Site',     '16', 23, 'Practice',  'diary_fill',                     83.00)
+    /* ---- A. ratios complete at the GROUP -- they roll DOWN, so this is the only level that can
+            give every node a value
+       ------------------------------------------------------------- */
+      ('Client',  '20',  21, 'Practice', 'revenue_per_clinical_hour',               177.00)
+    , ('Client',  '20',  21, 'Practice', 'revenue_per_dentist_hour',                211.00)
+    , ('Client',  '20',  21, 'Practice', 'deposit_ratio',                            12.00)
+    , ('Client',  '20',  21, 'Practice', 'discounts',                                 7.00)
+    , ('Client',  '20',  21, 'Practice', 'dentist_retention_outlook',                82.00)
+    , ('Client',  '20',  21, 'Practice', 'hygiene_retention_outlook',                86.00)
+    , ('Client',  '20',  21, 'Practice', 'dentist_recall_conversion',                68.00)
+    , ('Client',  '20',  21, 'Practice', 'hygiene_recall_conversion',                64.00)
+    , ('Client',  '20',  21, 'Practice', 'email_details_rate',                       93.00)
+    , ('Client',  '20',  21, 'Practice', 'phone_details_rate',                       98.00)
+    , ('Client',  '20',  21, 'Practice', 'exam_ratio',                               66.00)
+    , ('Client',  '20',  21, 'Practice', 'avg_plan_value',                          143.00)
+    , ('Client',  '20',  21, 'Practice', 'diary_fill',                               61.00)
+    , ('Client',  '20',  21, 'Practice', 'chair_utilisation',                        58.00)
+    , ('Client',  '20',  21, 'Practice', 'dna_rate',                                  9.00)
+    , ('Client',  '20',  21, 'Practice', 'days_until_30min_free',                     3.00)
+    , ('Client',  '20',  21, 'Practice', 'book_before_you_leave',                    44.00)
+    , ('Client',  '20',  21, 'Practice', 'cancellation_frequency',                   22.00)
+    , ('Client',  '20',  21, 'Practice', 'short_notice_cancellation_rate',           13.00)
+    , ('Client',  '20',  21, 'Practice', 'patient_tracked_in_surgery',               91.00)
+    , ('Client',  '20',  21, 'Practice', 'cancellation_rebook',                      77.00)
+    , ('Client',  '20',  21, 'Practice', 'nhs_uda_completion_rate',                  97.00)
 
-    /* ---- C. three tiers of override down one branch ---------------------------- */
-    , ('Client',   '20', 21, 'Practice',  'revenue_per_dentist_hour',      211.00)
-    , ('Region',   '7',  21, 'Practice',  'revenue_per_dentist_hour',      232.00)
-    , ('Area',     '9',  21, 'Practice',  'revenue_per_dentist_hour',      243.00)
+    /* ---- B. aggregations complete at the SITES -- they roll UP, so the leaves are the only level
+            that can give every node above them a value. Weights are powers of two, so every
+            subtotal decodes uniquely to the sites that made it
+       ------------------------------------------------------------- */
+    , ('Site',    '10',  21, 'Practice', 'total_revenue',                          1000.00)
+    , ('Site',    '11',  21, 'Practice', 'total_revenue',                          2000.00)
+    , ('Site',    '12',  22, 'Practice', 'total_revenue',                          4000.00)
+    , ('Site',    '13',  22, 'Practice', 'total_revenue',                          8000.00)
+    , ('Site',    '14',  22, 'Practice', 'total_revenue',                         16000.00)
+    , ('Site',    '15',  23, 'Practice', 'total_revenue',                         32000.00)
+    , ('Site',    '16',  23, 'Practice', 'total_revenue',                         64000.00)
+    , ('Site',    '17',  24, 'Practice', 'total_revenue',                        128000.00)
+    , ('Site',    '18',  24, 'Practice', 'total_revenue',                        256000.00)
+    , ('Site',    '10',  21, 'Practice', 'private_revenue',                         700.00)
+    , ('Site',    '11',  21, 'Practice', 'private_revenue',                        1400.00)
+    , ('Site',    '12',  22, 'Practice', 'private_revenue',                        2800.00)
+    , ('Site',    '13',  22, 'Practice', 'private_revenue',                        5600.00)
+    , ('Site',    '14',  22, 'Practice', 'private_revenue',                       11200.00)
+    , ('Site',    '15',  23, 'Practice', 'private_revenue',                       22400.00)
+    , ('Site',    '16',  23, 'Practice', 'private_revenue',                       44800.00)
+    , ('Site',    '17',  24, 'Practice', 'private_revenue',                       89600.00)
+    , ('Site',    '18',  24, 'Practice', 'private_revenue',                      179200.00)
+    , ('Site',    '10',  21, 'Practice', 'plan_capitation_revenue',                 300.00)
+    , ('Site',    '11',  21, 'Practice', 'plan_capitation_revenue',                 600.00)
+    , ('Site',    '12',  22, 'Practice', 'plan_capitation_revenue',                1200.00)
+    , ('Site',    '13',  22, 'Practice', 'plan_capitation_revenue',                2400.00)
+    , ('Site',    '14',  22, 'Practice', 'plan_capitation_revenue',                4800.00)
+    , ('Site',    '15',  23, 'Practice', 'plan_capitation_revenue',                9600.00)
+    , ('Site',    '16',  23, 'Practice', 'plan_capitation_revenue',               19200.00)
+    , ('Site',    '17',  24, 'Practice', 'plan_capitation_revenue',               38400.00)
+    , ('Site',    '18',  24, 'Practice', 'plan_capitation_revenue',               76800.00)
+    , ('Site',    '10',  21, 'Practice', 'outstanding_invoices',                     50.00)
+    , ('Site',    '11',  21, 'Practice', 'outstanding_invoices',                    100.00)
+    , ('Site',    '12',  22, 'Practice', 'outstanding_invoices',                    200.00)
+    , ('Site',    '13',  22, 'Practice', 'outstanding_invoices',                    400.00)
+    , ('Site',    '14',  22, 'Practice', 'outstanding_invoices',                    800.00)
+    , ('Site',    '15',  23, 'Practice', 'outstanding_invoices',                   1600.00)
+    , ('Site',    '16',  23, 'Practice', 'outstanding_invoices',                   3200.00)
+    , ('Site',    '17',  24, 'Practice', 'outstanding_invoices',                   6400.00)
+    , ('Site',    '18',  24, 'Practice', 'outstanding_invoices',                  12800.00)
+    , ('Site',    '10',  21, 'Practice', 'open_courses_value',                      200.00)
+    , ('Site',    '11',  21, 'Practice', 'open_courses_value',                      400.00)
+    , ('Site',    '12',  22, 'Practice', 'open_courses_value',                      800.00)
+    , ('Site',    '13',  22, 'Practice', 'open_courses_value',                     1600.00)
+    , ('Site',    '14',  22, 'Practice', 'open_courses_value',                     3200.00)
+    , ('Site',    '15',  23, 'Practice', 'open_courses_value',                     6400.00)
+    , ('Site',    '16',  23, 'Practice', 'open_courses_value',                    12800.00)
+    , ('Site',    '17',  24, 'Practice', 'open_courses_value',                    25600.00)
+    , ('Site',    '18',  24, 'Practice', 'open_courses_value',                    51200.00)
+    , ('Site',    '10',  21, 'Practice', 'open_courses_without_appt_value',          80.00)
+    , ('Site',    '11',  21, 'Practice', 'open_courses_without_appt_value',         160.00)
+    , ('Site',    '12',  22, 'Practice', 'open_courses_without_appt_value',         320.00)
+    , ('Site',    '13',  22, 'Practice', 'open_courses_without_appt_value',         640.00)
+    , ('Site',    '14',  22, 'Practice', 'open_courses_without_appt_value',        1280.00)
+    , ('Site',    '15',  23, 'Practice', 'open_courses_without_appt_value',        2560.00)
+    , ('Site',    '16',  23, 'Practice', 'open_courses_without_appt_value',        5120.00)
+    , ('Site',    '17',  24, 'Practice', 'open_courses_without_appt_value',       10240.00)
+    , ('Site',    '18',  24, 'Practice', 'open_courses_without_appt_value',       20480.00)
+    , ('Site',    '10',  21, 'Practice', 'active_patients',                          10.00)
+    , ('Site',    '11',  21, 'Practice', 'active_patients',                          20.00)
+    , ('Site',    '12',  22, 'Practice', 'active_patients',                          40.00)
+    , ('Site',    '13',  22, 'Practice', 'active_patients',                          80.00)
+    , ('Site',    '14',  22, 'Practice', 'active_patients',                         160.00)
+    , ('Site',    '15',  23, 'Practice', 'active_patients',                         320.00)
+    , ('Site',    '16',  23, 'Practice', 'active_patients',                         640.00)
+    , ('Site',    '17',  24, 'Practice', 'active_patients',                        1280.00)
+    , ('Site',    '18',  24, 'Practice', 'active_patients',                        2560.00)
+    , ('Site',    '10',  21, 'Practice', 'new_patients',                              4.00)
+    , ('Site',    '11',  21, 'Practice', 'new_patients',                              8.00)
+    , ('Site',    '12',  22, 'Practice', 'new_patients',                             16.00)
+    , ('Site',    '13',  22, 'Practice', 'new_patients',                             32.00)
+    , ('Site',    '14',  22, 'Practice', 'new_patients',                             64.00)
+    , ('Site',    '15',  23, 'Practice', 'new_patients',                            128.00)
+    , ('Site',    '16',  23, 'Practice', 'new_patients',                            256.00)
+    , ('Site',    '17',  24, 'Practice', 'new_patients',                            512.00)
+    , ('Site',    '18',  24, 'Practice', 'new_patients',                           1024.00)
+    , ('Site',    '10',  21, 'Practice', 'net_patient_growth',                        1.00)
+    , ('Site',    '11',  21, 'Practice', 'net_patient_growth',                        2.00)
+    , ('Site',    '12',  22, 'Practice', 'net_patient_growth',                        4.00)
+    , ('Site',    '13',  22, 'Practice', 'net_patient_growth',                        8.00)
+    , ('Site',    '14',  22, 'Practice', 'net_patient_growth',                       16.00)
+    , ('Site',    '15',  23, 'Practice', 'net_patient_growth',                       32.00)
+    , ('Site',    '16',  23, 'Practice', 'net_patient_growth',                       64.00)
+    , ('Site',    '17',  24, 'Practice', 'net_patient_growth',                      128.00)
+    , ('Site',    '18',  24, 'Practice', 'net_patient_growth',                      256.00)
+    , ('Site',    '10',  21, 'Practice', 'lapsed_patients',                           2.00)
+    , ('Site',    '11',  21, 'Practice', 'lapsed_patients',                           4.00)
+    , ('Site',    '12',  22, 'Practice', 'lapsed_patients',                           8.00)
+    , ('Site',    '13',  22, 'Practice', 'lapsed_patients',                          16.00)
+    , ('Site',    '14',  22, 'Practice', 'lapsed_patients',                          32.00)
+    , ('Site',    '15',  23, 'Practice', 'lapsed_patients',                          64.00)
+    , ('Site',    '16',  23, 'Practice', 'lapsed_patients',                         128.00)
+    , ('Site',    '17',  24, 'Practice', 'lapsed_patients',                         256.00)
+    , ('Site',    '18',  24, 'Practice', 'lapsed_patients',                         512.00)
+    , ('Site',    '10',  21, 'Practice', 'overdue_recalls',                           3.00)
+    , ('Site',    '11',  21, 'Practice', 'overdue_recalls',                           6.00)
+    , ('Site',    '12',  22, 'Practice', 'overdue_recalls',                          12.00)
+    , ('Site',    '13',  22, 'Practice', 'overdue_recalls',                          24.00)
+    , ('Site',    '14',  22, 'Practice', 'overdue_recalls',                          48.00)
+    , ('Site',    '15',  23, 'Practice', 'overdue_recalls',                          96.00)
+    , ('Site',    '16',  23, 'Practice', 'overdue_recalls',                         192.00)
+    , ('Site',    '17',  24, 'Practice', 'overdue_recalls',                         384.00)
+    , ('Site',    '18',  24, 'Practice', 'overdue_recalls',                         768.00)
+    , ('Site',    '10',  21, 'Practice', 'open_courses',                              5.00)
+    , ('Site',    '11',  21, 'Practice', 'open_courses',                             10.00)
+    , ('Site',    '12',  22, 'Practice', 'open_courses',                             20.00)
+    , ('Site',    '13',  22, 'Practice', 'open_courses',                             40.00)
+    , ('Site',    '14',  22, 'Practice', 'open_courses',                             80.00)
+    , ('Site',    '15',  23, 'Practice', 'open_courses',                            160.00)
+    , ('Site',    '16',  23, 'Practice', 'open_courses',                            320.00)
+    , ('Site',    '17',  24, 'Practice', 'open_courses',                            640.00)
+    , ('Site',    '18',  24, 'Practice', 'open_courses',                           1280.00)
+    , ('Site',    '10',  21, 'Practice', 'open_courses_without_appt',                 2.00)
+    , ('Site',    '11',  21, 'Practice', 'open_courses_without_appt',                 4.00)
+    , ('Site',    '12',  22, 'Practice', 'open_courses_without_appt',                 8.00)
+    , ('Site',    '13',  22, 'Practice', 'open_courses_without_appt',                16.00)
+    , ('Site',    '14',  22, 'Practice', 'open_courses_without_appt',                32.00)
+    , ('Site',    '15',  23, 'Practice', 'open_courses_without_appt',                64.00)
+    , ('Site',    '16',  23, 'Practice', 'open_courses_without_appt',               128.00)
+    , ('Site',    '17',  24, 'Practice', 'open_courses_without_appt',               256.00)
+    , ('Site',    '18',  24, 'Practice', 'open_courses_without_appt',               512.00)
+    , ('Site',    '10',  21, 'Practice', 'recalls_overdue_not_sent',                  1.00)
+    , ('Site',    '11',  21, 'Practice', 'recalls_overdue_not_sent',                  2.00)
+    , ('Site',    '12',  22, 'Practice', 'recalls_overdue_not_sent',                  4.00)
+    , ('Site',    '13',  22, 'Practice', 'recalls_overdue_not_sent',                  8.00)
+    , ('Site',    '14',  22, 'Practice', 'recalls_overdue_not_sent',                 16.00)
+    , ('Site',    '15',  23, 'Practice', 'recalls_overdue_not_sent',                 32.00)
+    , ('Site',    '16',  23, 'Practice', 'recalls_overdue_not_sent',                 64.00)
+    , ('Site',    '17',  24, 'Practice', 'recalls_overdue_not_sent',                128.00)
+    , ('Site',    '18',  24, 'Practice', 'recalls_overdue_not_sent',                256.00)
 
-    /* ---- D. entered only at Area: a roll is one-way ---------------------------- */
-    , ('Area',     '9',  21, 'Practice',  'dna_rate',                       17.00)
+    /* ---- C. roles at the GROUP -- per FTE, so one figure for the whole client, and it must appear
+            UNCHANGED at every node rather than summed
+       ------------------------------------------------------------- */
+    , ('Client',  '20',  21, 'Dentist',  'avg_plan_value',                          148.00)
+    , ('Client',  '20',  21, 'Hygienist', 'avg_plan_value',                          145.00)
+    , ('Client',  '20',  21, 'Dentist',  'book_before_you_leave',                    49.00)
+    , ('Client',  '20',  21, 'Hygienist', 'book_before_you_leave',                    46.00)
+    , ('Client',  '20',  21, 'Dentist',  'chair_utilisation',                        63.00)
+    , ('Client',  '20',  21, 'Hygienist', 'chair_utilisation',                        60.00)
+    , ('Client',  '20',  21, 'Dentist',  'days_until_30min_free',                     8.00)
+    , ('Client',  '20',  21, 'Hygienist', 'days_until_30min_free',                     5.00)
+    , ('Client',  '20',  21, 'Dentist',  'deposit_ratio',                            17.00)
+    , ('Client',  '20',  21, 'Hygienist', 'deposit_ratio',                            14.00)
+    , ('Client',  '20',  21, 'Dentist',  'diary_fill',                               66.00)
+    , ('Client',  '20',  21, 'Hygienist', 'diary_fill',                               63.00)
+    , ('Client',  '20',  21, 'Dentist',  'discounts',                                12.00)
+    , ('Client',  '20',  21, 'Hygienist', 'discounts',                                 9.00)
+    , ('Client',  '20',  21, 'Dentist',  'exam_ratio',                               71.00)
+    , ('Client',  '20',  21, 'Hygienist', 'exam_ratio',                               68.00)
+    , ('Client',  '20',  21, 'Dentist',  'nhs_uda_completion_rate',                 102.00)
+    , ('Client',  '20',  21, 'Hygienist', 'nhs_uda_completion_rate',                  99.00)
+    , ('Client',  '20',  21, 'Dentist',  'open_courses',                           1500.00)
+    , ('Client',  '20',  21, 'Hygienist', 'open_courses',                            500.00)
+    , ('Client',  '20',  21, 'Dentist',  'open_courses_value',                    60000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'open_courses_value',                    20000.00)
+    , ('Client',  '20',  21, 'Dentist',  'open_courses_without_appt',               600.00)
+    , ('Client',  '20',  21, 'Hygienist', 'open_courses_without_appt',               200.00)
+    , ('Client',  '20',  21, 'Dentist',  'open_courses_without_appt_value',       24000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'open_courses_without_appt_value',        8000.00)
+    , ('Client',  '20',  21, 'Dentist',  'outstanding_invoices',                  15000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'outstanding_invoices',                   5000.00)
+    , ('Client',  '20',  21, 'Dentist',  'plan_capitation_revenue',               90000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'plan_capitation_revenue',               30000.00)
+    , ('Client',  '20',  21, 'Dentist',  'private_revenue',                      210000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'private_revenue',                       70000.00)
+    , ('Client',  '20',  21, 'Dentist',  'revenue_per_clinical_hour',               182.00)
+    , ('Client',  '20',  21, 'Hygienist', 'revenue_per_clinical_hour',               179.00)
+    , ('Client',  '20',  21, 'Dentist',  'revenue_per_dentist_hour',                216.00)
+    , ('Client',  '20',  21, 'Hygienist', 'revenue_per_dentist_hour',                213.00)
+    , ('Client',  '20',  21, 'Dentist',  'total_revenue',                        300000.00)
+    , ('Client',  '20',  21, 'Hygienist', 'total_revenue',                        100000.00)
 
-    /* ---- E. roles are the CLIENT's, and roll DOWN only even for a quantity ------ */
-    /*         A role target is per FTE, so it says what one person in that role should deliver --
-               which does not vary between a group's practices. Entered once for the client, it
-               reaches all sixteen nodes with the SAME figure; it is never summed on the way up,
-               which 16 x 125,000 appearing at the group would be. */
-    , ('Client',   '20', 21, 'Hygienist', 'total_revenue',              125000.00)
-    , ('Client',   '20', 21, 'Dentist',   'total_revenue',              310000.00)
-
-    /* ---- F. a client-wide role figure, overridden further down ------------------ */
-    /*         The Targets screen enters a role once for the client, but the loader resolves a role
-               at ANY node -- so a region or a site can still hold its own. These two prove that a
-               client-wide role figure rolls down and that a lower one stops it. */
-    , ('Region',   '7',  21, 'Dentist',   'avg_plan_value',                555.00)
-    , ('Site',     '14', 22, 'Dentist',   'avg_plan_value',                188.00)
+    /* ---- D. and then the middle is overridden, one metric per level so each override can be read
+            on its own
+       ------------------------------------------------------------- */
+    , ('Region',  '7',   21, 'Practice', 'revenue_per_dentist_hour',                232.00)  -- rate, one level below the group
+    , ('Area',    '9',   21, 'Practice', 'revenue_per_dentist_hour',                243.00)  -- and again below that -- three tiers on one branch
+    , ('Area',    '9',   21, 'Practice', 'dna_rate',                                 17.00)  -- a rate entered at Area and nowhere above it
+    , ('Practice', '22',  22, 'Practice', 'diary_fill',                               72.00)  -- rate override at a practice
+    , ('Site',    '16',  23, 'Practice', 'diary_fill',                               83.00)  -- and deeper still, at a single site
+    , ('Practice', '23',  23, 'Practice', 'total_revenue',                       9000000.00)  -- QUANTITY override: stops the roll-up. Its sites sum to 96,000, which must NOT appear
+    , ('Region',  '7',   21, 'Practice', 'active_patients',                        7777.00)  -- QUANTITY override mid-tree: blocks the 1,270 rolling up from below
+    , ('Region',  '7',   21, 'Dentist',  'avg_plan_value',                          555.00)  -- a ROLE figure overriding the client s, one level down
+    , ('Site',    '14',  22, 'Dentist',  'avg_plan_value',                          188.00)  -- and a role override at a single site
     ) v (Level_Type, Level_Key, Tenant_ID, Target_Level, Metric, Target_Value)
 )
 INSERT INTO Input.Targets
@@ -174,9 +336,16 @@ GO
       because an entered figure stops a roll-up. If either moves, the stop is broken.
    ============================================================================ */
 
-/* Only the rows this script owns. Client 11's practice-level targets are never in scope -- note
-   that a hand-entered Client or Site figure on the demo WOULD be replaced by a re-run. */
-DELETE FROM Input.Targets WHERE Client_ID = 11 AND Level_Type IN ('Client', 'Site');
+/* ==> DELETE BY WHAT THIS SCRIPT WROTE, NOT BY WHERE IT WROTE IT. <== This was scoped to
+   Level_Type IN ('Client','Site'), which was right while those levels held nothing but this
+   script's own rows. Then AppDB.Migration.Roles_Are_Client_Wide.sql moved client 11's six roles to
+   Client level, and the next run of this seed deleted 280 rows of the owner's demo role targets
+   along with its own -- recoverable only because the warehouse copy happened to be synced in
+   between. Updated_By is the honest scope: this script stamps 'seed:dev' and can now only remove
+   what it put there. (Part 1 keeps its whole-client DELETE: client 20 is entirely synthetic and
+   nobody else writes to it.) */
+DELETE FROM Input.Targets
+WHERE  Client_ID = 11 AND Level_Type IN ('Client', 'Site') AND Updated_By = 'seed:dev';
 PRINT 'cleared demo client/site rows: ' + CAST(@@ROWCOUNT AS VARCHAR(12)) + ' row(s)';
 GO
 
