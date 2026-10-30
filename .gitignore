@@ -45,3 +45,6 @@ Web/.venv/
 
 # Artifact build staging (screenshots + page source for the published walkthrough)
 .artifact-build/
+
+# Off-box AppDB exports. OneDrive backs them up; git must not -- they are customer data.
+/Backups/

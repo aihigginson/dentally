@@ -303,6 +303,37 @@ def _capacity_available():
     _cap_check['ok'] = ok
     return ok
 
+# ==> A PLANNED TAKEDOWN IS NOT A PAUSED CAPACITY. <== holding.html used to appear for exactly one
+# reason: the Fabric capacity suspended overnight to save cost. A release that reshapes the
+# warehouse under the model needs the same page for the opposite reason -- the capacity must stay
+# UP, because the migration work needs the warehouse reachable. Pausing it to get the holding page
+# would lock out the very work the page exists to cover.
+#
+# So the takedown is its own switch, set on the container app and flipped back to bring the site
+# home. No deploy needed either way, which matters when the thing you are recovering from is a
+# deploy.
+def _maintenance_mode():
+    return os.environ.get('MAINTENANCE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+@app.before_request
+def _hold_everything():
+    """The whole app, not just the front page.
+
+    A browser that already has index.html keeps calling /api/* regardless of what / returns, and
+    those calls would read a warehouse that is mid-migration. /health is the one exception: the
+    prod deploy smoke-tests it, so blocking it would make every release during a takedown look
+    like a failed deploy.
+    """
+    if not _maintenance_mode():
+        return None
+    if request.path in ('/health', '/favicon.ico') or request.path.startswith('/static/'):
+        return None
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Down for maintenance'}), 503
+    return send_from_directory('.', 'holding.html'), 503
+
+
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -364,12 +395,16 @@ def _authz_for(upn):
     # person with different practices picked resolve to different tenant sets, and the second was
     # being served the first one's answer for up to _AUTHZ_TTL.
     #
-    # It leaked through /api/embed-token, which is the one caller where tids decides RLS: with two
-    # permitted tenants and no single one in scope, customData is not set and the model adds the
-    # practices up. Observed on dev with a login granted tenants 11 and 100 -- Total Revenue
+    # It leaked through /api/embed-token, which is the one caller where a stale tids changes what
+    # a report shows. Observed on dev with a login granted tenants 11 and 100 -- Total Revenue
     # 785,899 against Maple's own 468,703, under Maple's name. Every other route resolves through
     # _get_user_info directly and was never affected, which is why the UI named one practice while
     # the reports showed two.
+    #
+    # The token no longer carries scope at all (the browser filters 'Application Users'[Client ID]
+    # instead), but the key stays exactly as it is: tids still decides the per-module access check
+    # below, and a cache keyed on the UPN alone would still answer one practice's question with
+    # another's.
     key = (upn, _acting_client_id(upn), _acting_tenant_id(upn))
     hit = _authz_cache.get(key)
     if hit and time.time() - hit[0] < _AUTHZ_TTL:
@@ -447,31 +482,29 @@ def embed_token():
             'roles':    REPORT_ROLES,
             'datasets': [dataset_id],
         }
-        # ==> AND IT MUST NAME THE PRACTICE, NOT JUST THE PERSON. <== RLS resolves the UPN to
-        # the set of tenants that user may see. That was the whole answer while every user
-        # could see exactly one -- but a support login on the Analytically client sees every
-        # practice, and a report given the whole set ADDS THEM UP. Two practices' revenue
-        # under one practice's name is the single worst thing this product could display.
+        # ==> THE SCOPE IS NOT IN THE TOKEN. IT IS A FILTER. <== The identity names the PERSON
+        # and nothing else; which practices they are LOOKING AT is pushed in from the browser
+        # as 'Application Users'[Client ID], alongside site, practitioner and period.
         #
-        # Site cannot do this job. 18 of the 42 active metrics have Supports_Site = 0, so a
-        # site slicer leaves those showing the combined total no matter what is selected --
-        # which is exactly how this was found.
+        # That works because 'Application Users' is the model's name for
+        # Security.vw_User_Tenant_Access, and every tenant-bearing table's rule resolves its
+        # tenants out of it. Filter it to the acting client and it holds only that client's
+        # tenants, so every fact table narrows with it -- upstream, once, for free.
         #
-        # customData carries the practice actually in scope, and the model narrows to it. Set
-        # only when the scope is UNAMBIGUOUS: one tenant means one practice. A staff login
-        # that has not picked one keeps the full permitted set, which is the deliberate
-        # "everything I can see" view rather than an accident.
+        # There used to be a customData carrying one tenant id, and an RLS clause
+        # ( ISBLANK(CUSTOMDATA()) || [Tenant ID] = VALUE(CUSTOMDATA()) ) reading it. Both are
+        # gone. It could only ever name ONE practice, so a client holding several had nothing
+        # to select, and the alternatives were all worse: widening it meant a per-row
+        # PATHCONTAINS on 49 fact tables, or a second lookup table in the model. The view
+        # carrying [Client ID] made the whole channel unnecessary.
         #
-        # It is an assertion of scope, never of permission. tids is what _get_user_info
-        # already resolved from the junction, so the token cannot name a practice the caller
-        # is not entitled to -- and the RLS rule keeps the set-membership test alongside this,
-        # so the model proves it again rather than trusting the token.
-        if len(tids) == 1:
-            identity['customData'] = str(tids[0])
+        # Don't reintroduce it as a convenience. Anything that narrows what is SHOWN belongs
+        # in setFilters; this identity is for what may be seen AT ALL, which is RLS's
+        # [User UPN] = USERPRINCIPALNAME() half and nothing else.
         token_body = {'accessLevel': 'View', 'identities': [identity]}
-        app.logger.info("embed-token issued: upn=%r roles=%r report=%s tenant=%s",
-                        upn, REPORT_ROLES, report_name,
-                        identity.get('customData') or 'all-permitted')
+        app.logger.info("embed-token issued: upn=%r roles=%r report=%s client=%s tenants=%s",
+                        upn, REPORT_ROLES, report_name, client_id,
+                        ','.join(str(t) for t in tids))
         r2 = requests.post(
             f'{PBI_BASE}/groups/{WORKSPACE_ID}/reports/{report_id}/GenerateToken',
             headers=headers, json=token_body, timeout=10,
@@ -638,6 +671,70 @@ def filters():
         )
         sites = [{'id': str(r[0]), 'name': r[1]} for r in cur.fetchall()]
 
+        # ==> THE SELECTOR IS THE WHOLE HIERARCHY, NOT JUST SITES. <== One flat, indented list --
+        # Group, then each Region, its Areas, their Practices and those practices' Sites -- where
+        # picking ANY node resolves to the SET of practice-site records beneath it. Group is
+        # everything; a Region is every site whose region is that one. The report then shows that
+        # level's figures, and comparison reports can be built on the same selection later.
+        #
+        # ==> IT RESOLVES TO SITE KEYS BECAUSE EVERY METRIC NOW CARRIES A SITE. <== Before the
+        # Fact_Metric_Actuals grain fix a site-based selector could not have worked: 17 metrics
+        # wrote fk_Practice_Site = -1 on every row and would have ignored it. That is why this
+        # could not be built first.
+        #
+        # pk_Practice_Site, not Site_Name: two practices in a group can both have a "Central", and
+        # filtering on a label would silently pull in the other one's.
+        # ==> THE HIERARCHY IS READ, NOT REBUILT. <== Gold.usp_Load_Fact_Node_Targets decides
+        # which nodes exist -- folding a node into its parent when it is an only child, per
+        # BRANCH, which ripples -- and publishes the result to Gold.Dim_Hierarchy_Node. Doing that
+        # again here in Python would mean two implementations of an intricate rule feeding a string
+        # that targets are KEYED on, under a binary collation. They would diverge eventually, and
+        # the symptom would be a target lookup quietly returning nothing instead of an error.
+        #
+        # [Selection] is the KEY: indented by the node's LEVEL, so it never moves when some other
+        # branch folds. [Display Selection] is indented by position in the folded tree and is what
+        # the drop-down shows. The front end no longer renders either.
+        #
+        # The cost: a hierarchy edit does not reach this list until the loader runs again. The
+        # admin save triggers it, so in practice that is immediate.
+        hierarchy = []
+        if tids:
+            cur.execute(
+                f"SELECT hn.[Selection], hn.Display_Selection, hn.Depth, hn.[Level], "
+                f"       hn.Node_Key, hn.fk_Practice_Site "
+                f"FROM   Gold.Dim_Hierarchy_Node hn "
+                f"WHERE  hn.Client_ID = ? AND hn.Tenant_ID IN ({placeholders})",
+                [client_id] + list(tids),
+            )
+            nodes = {}
+            for sel, disp, depth, lvl, key, pk in cur.fetchall():
+                n = nodes.setdefault(sel, {'selection': sel, 'label': disp, 'depth': int(depth),
+                                           'level': lvl, 'key': (key or ''), 'sites': set()})
+                n['sites'].add(int(pk))
+
+            # ==> THE CEILING IS A SITE-SET TEST, NOT A TREE WALK. <== A user's top node is stored
+            # as (level, key); everything they may see is every node whose sites all fall inside
+            # that node's. That needs no knowledge of the tree's shape, which is the point -- the
+            # shape now varies by branch.
+            tn_level, tn_key = _top_node(cur, upn)
+            if tn_level and tn_level != 'Client':
+                top = next((n for n in nodes.values()
+                            if n['level'] == tn_level and n['key'] == tn_key), None)
+                if top:                       # absent = deleted or re-keyed under them: fail OPEN
+                    allowed = top['sites']
+                    nodes = {s: n for s, n in nodes.items() if n['sites'] <= allowed}
+
+            # Tree order without a stored sort key: a parent's site set CONTAINS its children's, so
+            # ordering by (lowest site, widest first) walks the tree depth-first. Sibling order
+            # follows the site surrogate rather than the owner's Sort_Order -- worth a sort column
+            # on the bridge if that ever matters.
+            hierarchy = [{'id': '%d:%s' % (n['depth'], n['selection']),
+                          'depth': n['depth'], 'label': n['label'],
+                          'selection': n['selection'], 'sites': sorted(n['sites'])}
+                         for n in sorted(nodes.values(),
+                                         key=lambda x: (min(x['sites']), -len(x['sites'])))]
+
+
         active_clause = "AND Active = 1 " if active_only else ""
         # Non-clinical roles are never "practitioners" -- exclude always (even when showing inactive).
         excl_clause   = "AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager') "
@@ -714,7 +811,8 @@ def filters():
         except Exception:
             periods = []
         conn.close()
-        return jsonify({'sites': sites, 'practitioners': practitioners, 'roles': roles, 'periods': periods})
+        return jsonify({'sites': sites, 'hierarchy': hierarchy, 'practitioners': practitioners,
+                        'roles': roles, 'periods': periods})
 
     except Exception as e:
         # Preserve the 200 + empty-lists client contract; log detail server-side.
@@ -2276,6 +2374,28 @@ def _acting_tenant_id(upn):
     return (request.headers.get('X-Acting-Tenant') or '').strip() or None
 
 
+def _top_node(cur, upn):
+    """The user's top node as (level, key), or (None, None) for the client root.
+
+    ==> THIS IS NOT A PERMISSION. <== It is where the hierarchy drop-down starts and the ceiling
+    on what it offers. RLS still grants the whole client, deliberately: a report comparing an area
+    against the GROUP mean cannot compute that mean from rows RLS has removed. The boundary that
+    carries commercial weight is cross-client, and that is RLS's job, not this one.
+
+    Stored as a stable (level, key) rather than the drop-down text, because that text contains the
+    node's NAME -- a rename would leave it matching nothing and silently revoke access.
+    """
+    try:
+        cur.execute("SELECT Top_Node_Level, Top_Node_Key FROM Security.Application_Users "
+                    "WHERE LOWER(User_UPN) = LOWER(?)", upn)
+        r = cur.fetchone()
+    except Exception:
+        return None, None          # column not deployed yet: behave as the root
+    if not r or not r[0]:
+        return None, None
+    return r[0], (r[1] or '')
+
+
 def _get_user_info(cur, upn):
     """Returns (display_name, client_id, tenant_ids, maintain_targets) or (None, None, [], False).
 
@@ -2793,12 +2913,14 @@ def get_team():
             # latest edits, which may not have synced to the warehouse auth copy yet).
             ac = _appdb_conn(); acur = ac.cursor()
             acur.execute("SELECT LOWER(User_UPN), " + ", ".join(_ALL_MODULE_COLS)
-                         + ", Profile_Key, Maintain_Targets FROM Input.Application_Users")
+                         + ", Profile_Key, Maintain_Targets, Top_Node_Level, Top_Node_Key "
+                         + "FROM Input.Application_Users")
             n = len(_ALL_MODULE_COLS)
             au = {}
             for r in acur.fetchall():
                 enabled = {_ALL_MODULE_COLS[i] for i in range(n) if r[1 + i]}
-                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n])}
+                au[r[0]] = {'enabled': enabled, 'profile_key': r[1 + n], 'admin': bool(r[2 + n]),
+                            'top_level': r[3 + n], 'top_key': r[4 + n]}
             bph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Primary_Email, Invoice_Email FROM Input.Billing_Contact WHERE Tenant_ID IN ({bph})", tids)
             bc = {r[0]: {'primary': (r[1] or ''), 'invoice': (r[2] or '')} for r in acur.fetchall()}
@@ -2811,11 +2933,34 @@ def get_team():
                 m['is_self'] = (m['email'] or '').lower() == (upn or '').lower()
                 m['is_primary'] = (m['email'] or '').lower() == (b0['primary'] or '').lower()
                 m['is_admin'] = True if m['is_self'] else (a['admin'] if a else False)
+                # '' is the client root, which is what everyone has until somebody narrows them.
+                m['top_node'] = ('%s:%s' % (a['top_level'], a['top_key'] or '')) if (a and a.get('top_level')) else ''
                 people.append(m)
         else:
             conn.close()
+        # ==> THE PICKER'S OPTIONS COME FROM THE WAREHOUSE, NOT FROM A SECOND TREE WALK. <==
+        # Gold.Dim_Hierarchy_Node is built by the targets loader and holds the canonical selection
+        # text. Reading it here means the subscriptions screen, the hierarchy drop-down and the
+        # targets grid cannot disagree about what a node is called or whether it exists.
+        #
+        # [Level] + the node's own key is what gets STORED -- never the text, which carries the
+        # name and would stop matching the moment somebody renames an area.
+        top_nodes = []
+        try:
+            conn2 = _fabric_conn(); c2 = conn2.cursor()
+            c2.execute(
+                "SELECT hn.[Level], hn.[Selection], MIN(hn.Depth) AS Depth, hn.Node_Key "
+                "FROM Gold.Dim_Hierarchy_Node hn WHERE hn.Client_ID = ? "
+                "GROUP BY hn.[Level], hn.[Selection], hn.Node_Key "
+                "ORDER BY MIN(hn.Depth), hn.[Selection]",
+                client_id)
+            top_nodes = [{'level': r[0], 'label': r[1], 'depth': int(r[2]),
+                          'key': (r[3] or '')} for r in c2.fetchall()]
+            conn2.close()
+        except Exception:
+            top_nodes = []   # bridge not built yet: the picker simply offers nothing but the root
         return jsonify({'people': people, 'profiles': profiles, 'billing': billing,
-                        'lead_price': lead_price})
+                        'lead_price': lead_price, 'top_nodes': top_nodes})
     except Exception as e:
         return _server_error(e, 'get_team')
 
@@ -3406,12 +3551,24 @@ def save_team():
             flags   = [1 if col in preset['modules'] else 0 for col in _ALL_MODULE_COLS]
             prac    = deduced_prac.get(email.lower()) if 'Access_My_Data' in preset['modules'] else None
             admin   = 1 if r.get('admin') else 0   # Admin (Settings tab) is a per-user flag now, decoupled from the profile
+            # ==> THE TOP NODE MUST BE RE-STATED ON EVERY SAVE. <== This is a DELETE + INSERT,
+            # so a column left out of the INSERT is not "unchanged", it is ERASED. Omitting it
+            # would quietly restore a narrowed user to the whole client the next time anyone
+            # touched the team screen -- and nothing would report it.
+            tn = (r.get('top_node') or '').strip()
+            tn_level, tn_key = (tn.split(':', 1) + [''])[:2] if tn else (None, None)
+            if tn_level not in ('Client', 'Region', 'Area', 'Practice', 'Site'):
+                tn_level, tn_key = None, None      # unknown level: the root, which is the default
+            if tn_level == 'Client':
+                tn_level, tn_key = None, None      # the root IS NULL; do not store a second spelling
             acur.execute("DELETE FROM Input.Application_Users WHERE LOWER(User_UPN) = LOWER(?)", email)
             acur.execute(
                 "INSERT INTO Input.Application_Users (User_UPN, Client_ID, Display_Name, Maintain_Targets, "
-                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By) VALUES (?, ?, ?, ?, "
-                + ", ".join(['?'] * n) + ", ?, ?, ?)",
-                [email, cid, (r.get('name') or email), admin] + flags + [prac, profile, upn])
+                + ", ".join(_ALL_MODULE_COLS) + ", Practitioner_Full_Name, Profile_Key, Updated_By, "
+                + "Top_Node_Level, Top_Node_Key) VALUES (?, ?, ?, ?, "
+                + ", ".join(['?'] * n) + ", ?, ?, ?, ?, ?)",
+                [email, cid, (r.get('name') or email), admin] + flags
+                + [prac, profile, upn, tn_level, tn_key])
             if cur_profile.get(email.lower()) != profile:
                 acur.execute(
                     "INSERT INTO Input.Access_Log (Tenant_ID, User_UPN, Profile_Key, Changed_By) VALUES (?, ?, ?, ?)",
@@ -4076,6 +4233,7 @@ def get_target_grid():
                    for r in cur.fetchall()]
 
         tenants, roles_by_tenant, prac_roles = {}, {}, {}
+        node_targets = {}
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
@@ -4097,6 +4255,61 @@ def get_target_grid():
                 f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
                 f"AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager')", tids)
             prac_roles = {(r[0], r[1]): r[2] for r in cur.fetchall()}
+
+        # ==> A PAGE PER LEVEL THE CLIENT ACTUALLY USES. <== Read from the FOLDED tree, so the
+        # screen cannot offer a node the warehouse will not hold a target against. A level whose
+        # nodes all folded into their parents simply has no page, which is the owner's rule:
+        # "in real data where there is only 1, that organisation doesn't use that branch".
+        #
+        # Ordered the way /api/filters orders it -- a parent's site set contains its children's,
+        # so (lowest site, widest first) walks the tree depth-first.
+        pages = []
+        if tids:
+            _nph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT hn.[Level], hn.[Selection], hn.Display_Selection, hn.Node_Key, "
+                f"       MIN(hn.Tenant_ID), MIN(hn.fk_Practice_Site), COUNT(*) "
+                f"FROM   Gold.Dim_Hierarchy_Node hn "
+                f"WHERE  hn.Client_ID = ? AND hn.Tenant_ID IN ({_nph}) "
+                f"GROUP BY hn.[Level], hn.[Selection], hn.Display_Selection, hn.Node_Key",
+                [client_id] + list(tids))
+            _raw = [{'level': r[0], 'selection': r[1], 'label': r[2], 'key': r[3],
+                     'tenant_id': int(r[4]), '_m': int(r[5]), '_n': int(r[6])}
+                    for r in cur.fetchall()]
+            for _lvl in ('Client', 'Region', 'Area', 'Practice', 'Site'):
+                _got = sorted([n for n in _raw if n['level'] == _lvl],
+                              key=lambda x: (x['_m'], -x['_n']))
+                if _got:
+                    pages.append({'level': _lvl,
+                                  'nodes': [{k: n[k] for k in
+                                             ('selection', 'label', 'key', 'tenant_id')}
+                                            for n in _got]})
+
+        # ==> THE WHOLE-CLIENT ADDRESS IS NOT ALWAYS ('Client', client_id). <== Maple's tree
+        # folds to a single PRACTICE node, because the keep order is Practice outwards and Practice
+        # outranks Group -- so it has no Client node and its whole-client address is
+        # ('Practice','100'). Reading the shallowest published node gets that right for both
+        # shapes, instead of writing an address the loader cannot resolve.
+        client_node = None
+        if pages:
+            _top = pages[0]['nodes']
+            if _top:
+                client_node = {'level': pages[0]['level'], 'key': _top[0]['key'],
+                               'tenant_id': _top[0]['tenant_id']}
+
+        # What the loader DERIVED, for greying. Entered figures are read from the AppDB below --
+        # the source of truth -- so anything marked Is_Entered here is deliberately left out.
+        derived = {}
+        try:
+            cur.execute(
+                "SELECT [Selection], [Role], Metric, Target_Value FROM Gold.Fact_Node_Targets "
+                "WHERE Client_ID = ? AND FY = ? AND Is_Entered = 0", (client_id, fy))
+            for _s, _r, _m, _v in cur.fetchall():
+                if _v is not None:
+                    derived['%s\x01%s\x01%s' % (_s, _r, _m)] = float(_v)
+        except Exception:
+            derived = {}        # grid still works without the greying
+
         conn.close()
 
         available_fys = []
@@ -4114,6 +4327,14 @@ def get_target_grid():
                     tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
             acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
             available_fys = [r[0] for r in acur.fetchall()]
+            # Entered figures keyed by NODE, for the per-level pages. From the AppDB because that
+            # is where they are written: the warehouse copy only catches up at the next sync.
+            acur.execute(
+                "SELECT ISNULL(Level_Type,'Practice'), ISNULL(Level_Key,''), Target_Level, "
+                "       Metric, Target_Value "
+                "FROM   Input.Targets WHERE Client_ID = ? AND FY = ?", (client_id, fy))
+            for _r in acur.fetchall():
+                node_targets['%s\x01%s\x01%s\x01%s' % (_r[0], _r[1], _r[2], _r[3])] = float(_r[4])
             # Overlay the live per-practitioner role override, then the effective in-use roles become columns.
             acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
             for r in acur.fetchall():
@@ -4130,12 +4351,21 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
+        # ==> ROLES ARE THE CLIENT'S, SO THE ROLE SET IS THE UNION. <== The Roles tab used to
+        # render one arbitrary tenant -- tenants[0] -- so a group saw only its first practice's
+        # roles and wrote every figure against that practice. A role target is per-FTE and rolls
+        # down only, so it says what one dentist should deliver, which does not vary between a
+        # group's practices. One set, entered once.
+        client_roles = sorted({r for s in roles_by_tenant.values() for r in s})
+
         # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
         # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
         # one rule, and it still works for the next-year option that has no grouping row yet.
         return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
                         'fy_start_month': fy_start_month,
-                        'metrics': metrics, 'tenants': list(tenants.values())})
+                        'metrics': metrics, 'tenants': list(tenants.values()),
+                        'pages': pages, 'node_targets': node_targets, 'derived': derived,
+                        'client_roles': client_roles, 'client_node': client_node})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
 
@@ -4172,18 +4402,40 @@ def save_target_grid():
             level  = str(r.get('target_level') or '').strip()
             if tid not in allowed or not metric or not level:
                 continue
+            # ==> AN EXPLICIT NODE WHEN THE PAGE KNOWS ONE. <== The per-level pages send
+            # level_type/level_key; the original Practice-and-roles grid sends neither, and a row
+            # without them still lands on the practice exactly as it always has
+            # (Gold.usp_Load_Fact_Node_Targets falls back to the Tenant_ID). Keeping that path
+            # means the working screen cannot be broken by the new one.
+            lt = str(r.get('level_type') or '').strip() or None
+            lk = str(r.get('level_key')  or '').strip() or None
+            if (lt is None) != (lk is None):
+                continue                      # half a node address is not an address
             v = r.get('value')
-            valid.append((tid, metric, level, float(v) if v not in (None, '') else None))
+            valid.append((tid, metric, level, float(v) if v not in (None, '') else None, lt, lk))
         if valid:
-            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
-            acur.executemany(
-                "DELETE FROM Input.Targets WHERE Tenant_ID = ? AND FY = ? AND Metric = ? AND Target_Level = ?",
-                [(t, fy, m, l) for t, m, l, _ in valid])
-            inserts = [(t, fy, m, l, v, upn) for t, m, l, v in valid if v is not None]
-            if inserts:
-                acur.executemany(
-                    "INSERT INTO Input.Targets (Tenant_ID, FY, Metric, Target_Level, Target_Value, Updated_At, Updated_By) "
-                    "VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", inserts)
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+            for tid_, m_, l_, v_, lt_, lk_ in valid:
+                # Deleted by the SAME address it is written at, or a node-addressed save would
+                # leave the un-addressed row behind and the loader would see two figures for one
+                # cell -- with nothing to say which was meant.
+                if lt_ is None:
+                    acur.execute(
+                        "DELETE FROM Input.Targets WHERE Tenant_ID = ? AND FY = ? AND Metric = ? "
+                        "AND Target_Level = ? AND Level_Type IS NULL",
+                        (tid_, fy, m_, l_))
+                else:
+                    acur.execute(
+                        "DELETE FROM Input.Targets WHERE Client_ID = ? AND FY = ? AND Metric = ? "
+                        "AND Target_Level = ? AND Level_Type = ? AND Level_Key = ?",
+                        (client_id, fy, m_, l_, lt_, lk_))
+                if v_ is None:
+                    continue                  # blank CLEARS; a deliberate zero is not the same
+                acur.execute(
+                    "INSERT INTO Input.Targets (Tenant_ID, Client_ID, FY, Metric, Target_Level, "
+                    " Target_Value, Level_Type, Level_Key, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                    (tid_, client_id, fy, m_, l_, v_, lt_, lk_, upn))
             ac.close()
         return jsonify({'ok': True})
     except Exception as e:

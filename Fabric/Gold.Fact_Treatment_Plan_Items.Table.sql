@@ -1,4 +1,4 @@
-/****** Object:  Table [Gold].[Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
+﻿/****** Object:  Table [Gold].[Fact_Treatment_Plan_Items]    Script Date: 20/04/2026 10:15:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -12,6 +12,7 @@ CREATE TABLE [Gold].[Fact_Treatment_Plan_Items](
 	[fk_Treatment_Plan] [bigint] NULL,
 	[fk_Patient] [bigint] NULL,
 	[fk_Practitioner] [bigint] NULL,
+	[fk_Practice_Site]  [bigint] NULL,
 	[fk_Payment_Plan] [bigint] NULL,
 	[fk_Treatment] [bigint] NULL,
 	[fk_Date_Created] [bigint] NULL,

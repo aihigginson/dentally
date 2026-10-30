@@ -42,7 +42,10 @@
 - [Heredocs eat backslashes, write a script file](heredocs-eat-backslashes-write-a-script-file.md) — cost a csx compile error; use Write + run by path, and lint generated code.
 - [A new model table has no RLS](a-new-model-table-has-no-rls.md) — rules are per table; dev's two tenants cannot reveal a missing one, so check rather than assume.
 - [Verify aggregation changes on two tenants](verify-aggregation-changes-on-two-tenants.md) — SUM and MAX agree on one row; a group's board is where they diverge.
-- [Group target aggregation is unresolved](group-target-aggregation-is-unresolved.md) — rates and point-in-time take the max across practices; deferred until a real group exists.
+- [Group target aggregation is RESOLVED](group-target-aggregation-is-unresolved.md) — Rolls_Up on Metric_Definitions; quantities up the tree, rates down.
+- [HANDOVER: targets rework, 30 Oct](targets-rework-handover-30-oct.md) — what is deployed, what is committed but NOT deployed, and the ordered deploy sequence.
+- [Targets are keyed on the drop-down text](targets-are-keyed-on-the-dropdown-text.md) — [Selection] includes the indent; build it from bytes and never re-base it.
+- [A rolling window straddles two financial years](a-rolling-window-straddles-two-financial-years.md) — sum each FY’s share; collapsing to one drops metrics targeted in the other.
 - [DEV targets are dummy, PROD's are real](dev-targets-are-dummy-prod-targets-are-real.md) — they have never matched by design; the gap is not evidence of a reset.
 - [NHS income is the UDA value](nhs-income-is-the-uda-value.md) — the patient's band charge is a slice of it, never income on top; V197 fixed a 3%-of-actual measure.
 - [Prefer temp tables over CTEs](prefer-temp-tables-over-ctes.md) — the owner writes none; in Fabric a re-referenced CTE re-evaluates its source and loses statistics.
@@ -72,6 +75,7 @@
 - [The acting practice is part of the identity](the-acting-practice-is-part-of-the-identity.md) — a cache keyed on UPN alone made embed-token add two practices up under one name.
 - [Attribute by line, not by invoice header](attribute-by-line-not-by-invoice-header.md) — OPEN with Craig; revenue is already line-attributed and the discount line names its own practitioner.
 - [Who counts as a plan patient](who-counts-as-a-plan-patient.md) — Input.Plan_Capitation_Rate, not Fact_Plan_Spell; a never-attender has no spell.
+- [Desktop’s error list is stale until you save](desktop-error-list-is-stale-until-you-save.md) — 152 phantom errors after an external-tool fix; save before chasing them.
 - [A vw_ override silently drops new columns](a-vw-override-silently-drops-new-columns.md) — vw_Dim_Patients lists columns by hand; a new one reaches Gold and never PBI.
 - [A DQ rule built on an absence is wrong](a-dq-rule-built-on-an-absence-is-wrong.md) — a handover or a booking answers "X did not happen"; require positive evidence.
 - [Two "open, no appt" figures disagree](two-open-course-no-appt-figures-disagree.md) — tile counts courses (110), the metric counts patients (15); All practices doubles every tile.
@@ -113,3 +117,4 @@
 - [A short action button needs container padding](a-short-action-button-needs-container-padding.md) — default padding eats a 28px button; it renders as a clickable line of its fill colour.
 - [A parameterised batch cannot create a temp table](a-parameterised-batch-cannot-create-a-temp-table.md) — pyodbc routes params via sp_executesql; the #temp dies with the call, and the error names the reader.
 - [Demo screens are poked for the marketing page](demo-screens-are-poked-for-the-marketing-page.md) — blind-spot.html needs DEV diary data reshaped; diary_fill lives in two tables and a rebuild undoes it.
+- [Generator column set is the DEV Stage schema](generator-column-set-is-the-dev-stage-schema.md) — a column it omits ceases to exist; SELECT * views and Bronze break together.

@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0,@u BIGINT=0,@d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practice_Insights] @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0,@u BIGINT=0,@d BIGINT=0; EXEC [Gold].[usp_Load_Aggregate_Practice_Insights] @Mode='PROD',@Run_Inserts=@i OUT,@Run_Updates=@u OUT,@Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Aggregate_Practice_Insights
 --  Author           :  AIH
@@ -83,11 +83,6 @@ BEGIN
         FROM   [Gold].[Dim_Date]
         WHERE  Full_Date BETWEEN @Pre_From AND @Pre_To AND Is_Working_Day_England = 1;
 
-        -- ==> THE SAME FIGURE IS WRITTEN TWICE: ONCE AT SITE -1 AND ONCE AT THE REAL SITE. <==
-        -- fk_Practitioner = -1 alone is NOT the practice row. Filtering on the practitioner
-        -- only and summing doubled every count (a rate survived it, since numerator and
-        -- denominator doubled together, which is exactly why it went unnoticed). The practice
-        -- grain is BOTH keys at -1.
         DROP TABLE IF EXISTS #daily;
         SELECT a.Tenant_ID,
                a.Metric,
@@ -99,9 +94,14 @@ BEGIN
         INTO   #daily
         FROM   [Gold].[Fact_Metric_Actuals] a
         JOIN   [Gold].[Dim_Date] d ON d.pk_Date = a.fk_Date
-        WHERE  a.fk_Practitioner = -1
-          AND  a.fk_Practice_Site = -1
-          AND  d.Full_Date BETWEEN @Pre_From AND @Now_To
+        -- ==> EVERY METRIC IS NOW WRITTEN ONCE, SO EVERY METRIC IS SUMMED. <== Fact_Metric_Actuals
+        -- holds one row per (site, practitioner) and the practice figure is a SUM over it. The
+        -- old filter took the (-1,-1) 'practice total' slice, which no longer exists for anything;
+        -- leaving it in place would have read nothing at all.
+        --
+        -- active_patients was the last exception and is no longer one: it has a single source
+        -- again (the weekly snapshot, now carrying the dentist), so it sums like the rest.
+        WHERE  d.Full_Date BETWEEN @Pre_From AND @Now_To
         -- ==> ONE ROW PER DATE, GUARANTEED. <== #snap picks the row matching the window's
         -- last date, so two rows sharing that date silently double everything downstream --
         -- which is what the rank guard caught the moment the year-ago join multiplied them

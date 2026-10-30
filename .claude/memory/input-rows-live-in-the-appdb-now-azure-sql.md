@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 421e1bb0-9c87-4cc3-8b8f-dd6c97f09bdd
-  modified: 2026-10-14T14:55:43.622Z
+  modified: 2026-10-29T15:32:22.665Z
 ---
 
 **Write owner-curated `Input.*` rows to the AppDB, never to the warehouse.**
@@ -47,6 +47,27 @@ scope `https://database.windows.net/.default`), and the SP is already a user in 
 these rows can be set directly -- going through the app UI is one route, not the only one. Verify
 identity read-only first (`SELECT DB_NAME(), SUSER_SNAME()` plus a known tenant's rows) before any
 write, which is what caught the dead endpoint rather than a half-applied change.
+
+==> **DDL ON THE APPDB NEEDS NOBODY'S HELP. DO NOT HAND A MIGRATION BACK.** <== Measured
+2026-10-29 on `AppDB-dev`: `USER_NAME()` = `dbo`, `IS_MEMBER('db_owner')` = 1,
+`IS_MEMBER('db_ddladmin')` = 1. `ALTER TABLE` works.
+
+```
+python appdb_run.py dev <file.sql>     # GO-split; scratchpad helper
+```
+
+The confusion to avoid: **`appdb_run.py` authenticates with the OWNER'S DELEGATED token**
+(`az account get-access-token`), not with `FABRIC_SP_*`. The "data rights only, no DDL" limit is
+real but belongs to the **app's service principal** -- a different identity. Conflating the two
+cost the owner two hand-offs in one day (`AppDB.Migration.Client_Keying.sql`, then
+`AppDB.Migration.Top_Node.sql`) before they pushed back: *"you definitely have been doing DDL
+changes to AppDB"*. They were right. Same shape as
+[[prod-warehouse-deploy-from-the-laptop]] -- a delegated token, not a bypass.
+
+Ordering still matters, for a different reason: `appdb_sync` takes its column list from the
+**target** (`Input_Stage`), so add a column to the AppDB FIRST. Warehouse-first makes the source
+`SELECT` name a column the AppDB lacks, and that job reports SUCCEEDED while failing
+([[container-job-failures-are-unmonitored]]).
 
 **Demo capitation rates, set 2026-10-14:** tenant 12 now carries the group's eight tiers
 (plans 4-11, 8.00-65.00, Care Plan C default, hygienist visit 30.00), mirroring tenant 11. Tenant

@@ -32,6 +32,28 @@
 --
 --  UPN is lower-cased. DAX string comparison is case-insensitive so the rule is unaffected
 --  either way, but anything that later joins on this column is not.
+--
+--  ==> [Client ID] IS THE TENANT'S CLIENT, NOT THE USER'S. <== That is the whole trick, and
+--  the other way round the column is useless: a support login sits on the vendor client, so
+--  every row would carry that one id and narrowing to the client actually PICKED would match
+--  nothing and blank the report. It is read from Input.Client_Tenant -- "which client does
+--  this practice belong to" -- the same mapping the hierarchy screen maintains, so a practice
+--  moved between clients moves here too, in one place.
+--
+--  ==> IT MAKES THE CLIENT PICKER WORK WITHOUT TOUCHING ANY OTHER RULE. <== Every
+--  tenant-bearing table filters through SELECTCOLUMNS(FILTER('Application Users', ...)), and
+--  row-level security COMPOSES: cut this view to the acting client and all fifty-odd rules
+--  narrow with it. One comparison on a tiny lookup instead of a per-row test on every fact
+--  table -- which is the other reason it belongs here and not in the rules.
+--
+--  A client that owns no practice -- the vendor client -- therefore resolves to no rows, and
+--  its reports are empty. Correct and deliberate: "Analytically" is not a practice and has no
+--  figures of its own. Support reads a real client by picking one.
+--
+--  JOIN, not LEFT JOIN, to Input.Client_Tenant. A tenant missing from that mapping would
+--  otherwise carry a NULL client, match no selection, and vanish from every report while
+--  still counting as permitted -- a gap that is total and findable beats one that is
+--  intermittent and silent.
 --------------------------------------------------------------------
 SET ANSI_NULLS ON
 GO
@@ -40,10 +62,12 @@ GO
 CREATE OR ALTER VIEW [Security].[vw_User_Tenant_Access] AS
 SELECT DISTINCT
        LOWER(au.User_UPN)                       AS [User UPN],
-       cta.Tenant_ID                            AS [Tenant ID]
+       cta.Tenant_ID                            AS [Tenant ID],
+       ct.Client_ID                             AS [Client ID]
 FROM   [Security].[Application_Users]      au
 JOIN   [Security].[Client_Tenant_Access]   cta ON cta.Client_ID = au.Client_ID
 JOIN   [Audit].[Tenants]                   t   ON t.Tenant_ID   = cta.Tenant_ID
+JOIN   [Input].[Client_Tenant]             ct  ON ct.Tenant_ID  = cta.Tenant_ID
 WHERE  ISNULL(t.Is_Active, 1) = 1
   AND  (  au.Maintain_Targets = 1
        OR ISNULL(au.Access_Home, 0)     = 1 OR ISNULL(au.Access_Revenue, 0)  = 1

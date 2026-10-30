@@ -303,3 +303,26 @@ UPDATE Config.Metric_Definitions SET Supports_Practitioner = 0
     WHERE Metric_Key IN ('new_patients','lapsed_patients','dna_rate','cancellation_frequency',
                          'short_notice_cancellation_rate','patient_tracked_in_surgery','cancellation_rebook');
 GO
+
+-- ==> ROLL DIRECTION. <== Everything rolls UP (a node without its own target is the sum of its
+-- children) EXCEPT the rates listed here, which roll DOWN (a node without its own inherits its
+-- parent's). Default-then-except, so a metric added without a thought about this gets the
+-- additive behaviour, which is the one that is obviously wrong rather than quietly wrong.
+--
+-- The 'rate' Target_Type metrics are all here by definition. The point_in_time ones are here
+-- because they carry a Denominator in Fact_Metric_Actuals -- they are ratios wearing a snapshot's
+-- clothes. days_until_30min_free is the odd one out and is listed deliberately: it has no
+-- denominator, but it is an AVERAGE across practitioners, so its target is the same number at
+-- every level and summing it would be nonsense.
+UPDATE Config.Metric_Definitions SET Rolls_Up = 1;
+GO
+UPDATE Config.Metric_Definitions SET Rolls_Up = 0
+    WHERE Target_Type = 'rate'
+       OR Metric_Key IN (
+            -- point_in_time metrics that are really rates
+            'dentist_recall_conversion', 'hygiene_recall_conversion',
+            'dentist_retention_outlook', 'hygiene_retention_outlook',
+            'deposit_ratio', 'email_details_rate', 'phone_details_rate',
+            -- an average, not a quantity: see the column comment
+            'days_until_30min_free');
+GO

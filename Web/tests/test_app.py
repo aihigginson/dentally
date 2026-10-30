@@ -864,6 +864,68 @@ def _team_env(appmod, monkeypatch, previous_primary):
     return ap, sent
 
 
+def _topnode_save(appmod, monkeypatch, row):
+    """Post one roster row through save_team and hand back the AppDB cursor that recorded it."""
+    wh = _RecCursor({
+        'SELECT Tenant_ID, Client_ID': [(11, 711)],
+        'Dim_Practitioners': [],
+    })
+    ap = _RecCursor({
+        'SELECT Primary_Email': [],
+        'SELECT LOWER(User_UPN)': [],
+    })
+    monkeypatch.setattr(appmod, '_auth', lambda: ('boss@practice.co.uk', None))
+    monkeypatch.setattr(appmod, '_get_user_info', lambda c, u: ('Boss', 7, [11], True))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _RecConn(wh))
+    monkeypatch.setattr(appmod, '_appdb_conn', lambda *a, **k: _RecConn(ap))
+    return ap
+
+
+def _ins_params(ap):
+    for sql, params in ap.sql:
+        if 'INSERT INTO Input.Application_Users' in sql:
+            return sql, list(params or [])
+    raise AssertionError('save_team never inserted the user')
+
+
+def test_save_team_persists_the_top_node(client, appmod, monkeypatch):
+    # ==> THE SAVE IS DELETE + INSERT, SO AN OMITTED COLUMN IS ERASED, NOT PRESERVED. <== If the
+    # top node ever falls out of this INSERT, every narrowed user is silently returned to the
+    # whole client the next time anybody edits the team -- and nothing reports it.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'rm@practice.co.uk', 'name': 'Regional Manager',
+         'profile': 'no_access', 'top_node': 'Region:7'}]})
+    assert r.status_code == 200
+    sql, params = _ins_params(ap)
+    assert 'Top_Node_Level' in sql and 'Top_Node_Key' in sql
+    assert params[-2:] == ['Region', '7']
+
+
+def test_save_team_stores_the_client_root_as_null(client, appmod, monkeypatch):
+    # The root has ONE spelling, and it is NULL. Storing 'Client:20' as well would mean two values
+    # meaning "everything", and every reader would have to know both.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'gm@practice.co.uk', 'name': 'Group Manager',
+         'profile': 'no_access', 'top_node': 'Client:20'}]})
+    assert r.status_code == 200
+    _, params = _ins_params(ap)
+    assert params[-2:] == [None, None]
+
+
+def test_save_team_rejects_an_unknown_top_node_level(client, appmod, monkeypatch):
+    # A level the hierarchy does not have must fall back to the root rather than being stored and
+    # then matching nothing -- which would fail CLOSED and leave the user with an empty selector.
+    ap = _topnode_save(appmod, monkeypatch, None)
+    r = client.post('/api/team', json={'rows': [
+        {'tenant_id': 11, 'email': 'x@practice.co.uk', 'name': 'X',
+         'profile': 'no_access', 'top_node': 'Continent:3'}]})
+    assert r.status_code == 200
+    _, params = _ins_params(ap)
+    assert params[-2:] == [None, None]
+
+
 def test_primary_handover_notifies_outgoing_and_sales(client, appmod, monkeypatch):
     # Any admin may take the primary over -- that is the continuity path when the primary is off
     # sick or has left. It must never be SILENT: the person losing it and Sales@ are both told.
@@ -1917,9 +1979,10 @@ def test_the_authz_cache_does_not_serve_one_practice_answer_for_another(client, 
     looks at ONE practice. So the same person with a different practice picked was served the
     previous practice's tenant set for up to _AUTHZ_TTL.
 
-    It mattered at exactly one caller: /api/embed-token, where tids decides RLS. With two permitted
-    tenants and no single one in scope, customData is not attached and the model ADDS THE PRACTICES
-    UP -- observed on dev as Total Revenue 785,899 against Maple's own 468,703, under Maple's name.
+    It mattered at exactly one caller: /api/embed-token, where a stale tids changes what a report
+    shows -- observed on dev as Total Revenue 785,899 against Maple's own 468,703, under Maple's
+    name. The token no longer carries scope, but tids still decides the per-module access check,
+    so the cache key must still include the acting client and practice.
     """
     conns, gets = [], []
     _embed_stubs(appmod, monkeypatch, conns, gets)
@@ -2265,3 +2328,113 @@ def test_insights_hides_itself_across_several_practices(appmod, client, monkeypa
     monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: _Conn())
     body = client.get('/api/insights').get_json()
     assert body == {'week': None, 'insights': [], 'reason': 'multiple-practices'}
+
+
+# ── The embed identity names the PERSON, never the scope ─────────────────────
+# ==> THE GROUP TOTAL BUG, AND THE RULE THAT CAME OUT OF IT. <== The token used to carry a
+# customData naming one practice, and RLS read it. It could only ever name ONE, so a client
+# holding several had nothing to narrow the reports by: switching client moved the app's own
+# screens while the report kept the caller's whole permitted set and added it up.
+#
+# Scope is now a FILTER -- 'Application Users'[Client ID], pushed from the browser onto the
+# table every tenant-bearing rule resolves its tenants out of. The identity is back to naming
+# the person and the role, which is all it should ever have said.
+#
+# These tests pin that boundary: what may be seen AT ALL is the identity's job, what is being
+# LOOKED AT is a filter's. A customData reappearing here means the two have been confused again.
+
+def _capture_embed_identity(appmod, monkeypatch, user_info):
+    """Run one embed-token request with a given _get_user_info result; return the identity sent."""
+    posts = []
+    monkeypatch.setattr(appmod, '_auth', lambda: ('u@x.com', None))
+    monkeypatch.setattr(appmod, '_fabric_conn', lambda *a, **k: FakeConn())
+    monkeypatch.setattr(appmod, '_get_user_info', lambda cur, upn: user_info)
+    monkeypatch.setattr(appmod, '_get_user_access', lambda cur, upn: ({'revenue': True}, None))
+    monkeypatch.setattr(appmod, '_pbi_token', lambda: 'pbi-token')
+
+    class FakeResp:
+        def __init__(self, payload):
+            self._p = payload
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self._p
+
+    monkeypatch.setattr(appmod.requests, 'get',
+                        lambda *a, **k: FakeResp({'embedUrl': 'https://e', 'datasetId': 'ds1'}))
+
+    def _post(*a, **k):
+        posts.append(k['json'])
+        return FakeResp({'token': 'embed-token'})
+
+    monkeypatch.setattr(appmod.requests, 'post', _post)
+    return posts
+
+
+def test_embed_identity_carries_no_scope_for_one_practice(client, appmod, monkeypatch):
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    identity = posts[0]['identities'][0]
+    assert 'customData' not in identity
+    assert identity['username'] == 'u@x.com'
+
+
+def test_embed_identity_carries_no_scope_for_a_whole_client(client, appmod, monkeypatch):
+    """The case that was broken: four practices under one client.
+
+    One practice or four, the token says the same thing. Narrowing is the browser's filter on
+    'Application Users'[Client ID] -- a token naming one of the four would be wrong, and a
+    token naming all four was the version that put a PATHCONTAINS on every fact table.
+    """
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 20, [21, 22, 23, 24], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    assert 'customData' not in posts[0]['identities'][0]
+
+
+def test_embed_always_attaches_the_rls_role(client, appmod, monkeypatch):
+    """Row filtering is mandatory, whatever the scope mechanism happens to be."""
+    posts = _capture_embed_identity(appmod, monkeypatch, ('Alice', 11, [11, 12], False))
+    assert client.get('/api/embed-token?report=revenue').status_code == 200
+    identity = posts[0]['identities'][0]
+    assert identity['roles'] == appmod.REPORT_ROLES, 'RLS role must always be attached'
+
+
+# ── Maintenance mode ──────────────────────────────────────────────────────────
+# ==> THIS IS A KILL SWITCH FOR A LIVE CUSTOMER'S SITE. <== It is flipped on to cover a release
+# that reshapes the warehouse under the model, and flipped off to bring the site home. Both
+# directions are tested because a switch that only works one way is worse than none: the failure
+# mode is either a release performed in full view of the customer, or a site nobody can restore.
+
+def test_maintenance_off_by_default_serves_the_app(client, monkeypatch):
+    monkeypatch.delenv('MAINTENANCE', raising=False)
+    r = client.get('/api/auth-config')
+    assert r.status_code != 503
+
+
+def test_maintenance_holds_the_api(client, monkeypatch):
+    monkeypatch.setenv('MAINTENANCE', '1')
+    r = client.get('/api/auth-config')
+    assert r.status_code == 503
+    assert r.get_json()['error'] == 'Down for maintenance'
+
+
+def test_maintenance_holds_a_page(client, monkeypatch):
+    monkeypatch.setenv('MAINTENANCE', '1')
+    r = client.get('/')
+    assert r.status_code == 503
+    assert b'Down for maintenance' in r.data
+
+
+def test_maintenance_leaves_health_alone(client, monkeypatch):
+    """The prod deploy smoke-tests /health. Blocking it would make every release during a
+    takedown look like a failed deploy, which is how a takedown becomes a rollback."""
+    monkeypatch.setenv('MAINTENANCE', '1')
+    assert client.get('/health').status_code == 200
+
+
+def test_maintenance_comes_back_off(client, monkeypatch):
+    """Bringing the site home is the whole point, so prove the flag is not sticky."""
+    monkeypatch.setenv('MAINTENANCE', '1')
+    assert client.get('/').status_code == 503
+    monkeypatch.setenv('MAINTENANCE', '0')
+    assert client.get('/api/auth-config').status_code != 503

@@ -1,4 +1,4 @@
-/****** Seed data: [Test].[Comparison_Definition] ******/
+﻿/****** Seed data: [Test].[Comparison_Definition] ******/
 -- Cross-layer reconciliation rules. PASS when value(A) - value(B) = Expected.
 -- Almost all expect 0 (full, consistent record sets Bronze -> Silver -> Gold).
 -- The sentinel demo expects -1 (Gold dimension carries one extra -1 row).
@@ -82,12 +82,12 @@ VALUES
 ,('CMP_FKNULL_TPI_PATIENT','GOLD_FKNULL_TPI_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Fact_Treatment_Plan_Items must have no NULLs',1)
 ,('CMP_FKNULL_TPI_PRACTITIONER','GOLD_FKNULL_TPI_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Fact_Treatment_Plan_Items must have no NULLs',1)
 ,('CMP_FKNULL_CONTRACT_PRACTICE_SITE','GOLD_FKNULL_CONTRACT_PRACTICE_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Fact_Contracts must have no NULLs',1)
-,('CMP_FKNULL_AGGDAILY_SITE','GOLD_FKNULL_AGGDAILY_SITE_T11','GOLD_ZERO',0,'fk_Site in Gold.Aggregate_Site_Patient_Practitioner_Daily must have no NULLs',1)
+,('CMP_FKNULL_AGGDAILY_SITE','GOLD_FKNULL_AGGDAILY_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Aggregate_Site_Patient_Practitioner_Daily must have no NULLs',1)
 ,('CMP_FKNULL_AGGDAILY_PATIENT','GOLD_FKNULL_AGGDAILY_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Aggregate_Site_Patient_Practitioner_Daily must have no NULLs',1)
 ,('CMP_FKNULL_AGGDAILY_PRACTITIONER','GOLD_FKNULL_AGGDAILY_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Aggregate_Site_Patient_Practitioner_Daily must have no NULLs',1)
-,('CMP_FKNULL_AGGPATCUR_SITE','GOLD_FKNULL_AGGPATCUR_SITE_T11','GOLD_ZERO',0,'fk_Site in Gold.Aggregate_Site_Patient_Current must have no NULLs',1)
+,('CMP_FKNULL_AGGPATCUR_SITE','GOLD_FKNULL_AGGPATCUR_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Aggregate_Site_Patient_Current must have no NULLs',1)
 ,('CMP_FKNULL_AGGPATCUR_PATIENT','GOLD_FKNULL_AGGPATCUR_PATIENT_T11','GOLD_ZERO',0,'fk_Patient in Gold.Aggregate_Site_Patient_Current must have no NULLs',1)
-,('CMP_FKNULL_AGGPRACCUR_SITE','GOLD_FKNULL_AGGPRACCUR_SITE_T11','GOLD_ZERO',0,'fk_Site in Gold.Aggregate_Site_Practitioner_Current must have no NULLs',1)
+,('CMP_FKNULL_AGGPRACCUR_SITE','GOLD_FKNULL_AGGPRACCUR_SITE_T11','GOLD_ZERO',0,'fk_Practice_Site in Gold.Aggregate_Site_Practitioner_Current must have no NULLs',1)
 ,('CMP_FKNULL_AGGPRACCUR_PRACTITIONER','GOLD_FKNULL_AGGPRACCUR_PRACTITIONER_T11','GOLD_ZERO',0,'fk_Practitioner in Gold.Aggregate_Site_Practitioner_Current must have no NULLs',1)
 GO
 

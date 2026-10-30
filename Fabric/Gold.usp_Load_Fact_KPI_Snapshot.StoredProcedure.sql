@@ -1,4 +1,4 @@
---DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_KPI_Snapshot] @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
+﻿--DECLARE @i BIGINT=0, @u BIGINT=0, @d BIGINT=0; EXEC [Gold].[usp_Load_Fact_KPI_Snapshot] @Run_Inserts=@i OUT, @Run_Updates=@u OUT, @Run_Deletes=@d OUT;
 --------------------------------------------------------------------
 --  Stored Procedure :  Gold.usp_Load_Fact_KPI_Snapshot
 --  Author           :  AIH
@@ -410,14 +410,31 @@ BEGIN
         -- ── A6: active_patients — historical from Dim_Patients ───────────────
         -- Active at D = new cumulative (First_Appt <= D) minus lapsed at D.
         -- Single CROSS JOIN pass with conditional SUMs avoids a second temp table.
-        -- Grouped by Tenant x Site only (Supports_Practitioner = 0).
+        -- ==> GROUPED BY TENANT x SITE x DENTIST, AND THIS IS THE ONLY PLACE IT IS WRITTEN. <==
+        -- It used to be site-only, and Gold.usp_Load_Fact_Metric_Actuals bolted a second,
+        -- practitioner-level write on top of it, stamped at THIS metric's latest snapshot date so
+        -- the two would line up. They did not: they overlapped on that one date, so anything that
+        -- summed across the practitioner key counted it twice, and anything that did not lost the
+        -- practitioner detail on every other date. Reconciled by giving the history the grain --
+        -- the bolt-on is deleted.
+        --
+        -- ==> AN ACTIVE PATIENT WITH NO DENTIST LANDS ON THE SENTINEL, BY DESIGN. <== 115 of the
+        -- 19,288 active patients on dev have no assigned dentist. ISNULL(...,-1) keeps them, so
+        -- they still count at site, practice and group level and only drop out of a per-clinician
+        -- breakdown -- where they genuinely have no place. Losing them from the total instead
+        -- would be the real error.
+        --
+        -- Hygienist attribution is deliberately NOT carried. A patient has both a dentist and a
+        -- hygienist, so writing a row for each counts every patient twice the moment anything
+        -- sums across practitioners; the owner's rule is dentist-only, hygiene-only patients
+        -- being rare enough that doing better costs more than it is worth.
         INSERT INTO #results (fk_Date, Snapshot_Grain, Tenant_ID, fk_Practice_Site, fk_Practitioner, Metric, Value)
         SELECT
             DATEDIFF(d, '19991231', sd.Snapshot_Date)          AS fk_Date,
             sd.Snapshot_Grain,
             dp.[Tenant_ID],
             ISNULL(dps.[pk_Practice_Site], -1)                 AS fk_Practice_Site,
-            -1                                                  AS fk_Practitioner,
+            ISNULL(dpr.[pk_Practitioner], -1)                  AS fk_Practitioner,
             CAST('active_patients' AS VARCHAR(100))            AS Metric,
             CAST(
                 SUM(CASE WHEN dp.[First_Appointment_Date] <= sd.Snapshot_Date
@@ -432,12 +449,16 @@ BEGIN
         LEFT JOIN [Gold].[Dim_Practice_Sites] dps
             ON dps.[Site_ID]   = dp.[Site_ID]
            AND dps.[Tenant_ID] = dp.[Tenant_ID]
+        LEFT JOIN [Gold].[Dim_Practitioners] dpr
+            ON dpr.[Practitioner_ID] = dp.[Dentist_Practitioner_ID]
+           AND dpr.[Tenant_ID]       = dp.[Tenant_ID]
         WHERE dp.[First_Appointment_Date] IS NOT NULL
         GROUP BY
             sd.Snapshot_Date,
             sd.Snapshot_Grain,
             dp.[Tenant_ID],
-            dps.[pk_Practice_Site];
+            dps.[pk_Practice_Site],
+            dpr.[pk_Practitioner];
 
         -- ── Full reload (historical metrics only) ────────────────────────────
         -- Accumulating metrics are excluded: they cannot be reconstructed historically

@@ -3363,6 +3363,50 @@ def generate_tenant(tdef):
 
     _relabel_states(appointments)
 
+    # ==> THE GENERATOR'S COLUMN SET *IS* THE DEV STAGE SCHEMA, SO IT MUST COVER EVERY COLUMN
+    # BRONZE SELECTS -- INCLUDING THE ONES IT ONLY EVER READS AS NULL. <==
+    #
+    # seed_onelake.write_stage overwrites each Delta table with schema_mode="overwrite", taking
+    # the schema from the frame it is handed. Until now these five columns reached DEV Stage
+    # ONLY as a side effect of the real API ingest, which lands the full Dentally field set for
+    # the live-shaped tenant; synthetic rows simply read NULL in them, because Delta had unioned
+    # the columns in. Seed the synthetic tenants on their own and the columns cease to exist --
+    # at which point two separate things break, neither naming the cause:
+    #
+    #   * the Stage views are SELECT *, and SQL Server binds that column list at CREATE time, so
+    #     every read fails with "more column names specified than columns defined";
+    #   * every Bronze loader naming one fails on an invalid column name.
+    #
+    # A documented fallback in the loader does NOT save it. COALESCE([day],[date]) and
+    # COALESCE(NULLIF(TRIM(Practitioner_Site_ID),''), dpr.Site_ID) rescue a NULL value; neither
+    # rescues an absent column. So the column has to be present and NULL, which is exactly the
+    # state the real ingest used to provide by accident.
+    #
+    # NULL and not a derived value, deliberately: NULL is what these rows held before, so this
+    # restores the schema without quietly changing a single downstream number.
+    # Web/tests/test_generator_covers_bronze.py fails if a Bronze loader ever selects a column
+    # no tenant produces -- the check whose absence let this happen.
+    for a in appointments:
+        # Real Dentally fills this with the site GUID. Gold.usp_Load_Fact_Appointments resolves
+        # fk_Practice_Site via COALESCE(..., dpr.Site_ID), falling back to the practitioner's own
+        # site precisely for generated tenants, and that fallback is load-bearing for all of them.
+        a.setdefault("practitioner_site_id", None)
+        a.setdefault("updated_at", None)        # carried into Bronze.Appointments, read nowhere
+
+    for e in diary_entries:
+        # Real rota rows carry `day`; generated ones carry `date`, hence COALESCE([day],[date]).
+        e.setdefault("day", None)
+        # Real rota carries `unavailable` (bool). NULL/absent means available, which is what the
+        # generator models through work_days and diary_breaks instead.
+        e.setdefault("unavailable", None)
+
+    for r in recalls:
+        # The reminders JSON array, which Silver.usp_Load_Recall_Reminders decodes with OPENJSON
+        # as {type, id, date, template_name}. Synthetic recalls describe their reminders through
+        # the scalar first_/second_reminder_* fields only, so this is NULL and the Silver proc's
+        # own `LEN(Reminders) > 2` guard skips them -- as it did before.
+        r.setdefault("reminders", None)
+
     return {
         "practice":            tdef["practice"],
         "sites":               [{**{"email_address": None, "nickname": None, "address_line_2": None, "website": None, "logo_url": None, "default_payment_plan_id": None}, **s, "practice_id": tdef["practice"]["id"]} for s in tdef["sites"]],

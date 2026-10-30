@@ -81,13 +81,19 @@ BEGIN
             tgt.Access_Home=src.Access_Home, tgt.Access_Revenue=src.Access_Revenue, tgt.Access_Patient=src.Access_Patient,
             tgt.Access_Schedule=src.Access_Schedule, tgt.Access_Clinical=src.Access_Clinical, tgt.Access_NHS=src.Access_NHS,
             tgt.Access_Day_Book=src.Access_Day_Book, tgt.Access_Finance=src.Access_Finance, tgt.Access_My_Data=src.Access_My_Data,
-            tgt.Access_Marketing=src.Access_Marketing, tgt.Practitioner_Full_Name=src.Practitioner_Full_Name, tgt.Profile_Key=src.Profile_Key
+            tgt.Access_Marketing=src.Access_Marketing, tgt.Practitioner_Full_Name=src.Practitioner_Full_Name, tgt.Profile_Key=src.Profile_Key,
+            -- ==> THE TOP NODE IS NOT A PERMISSION, SO IT TRAVELS WITH THE PROFILE. <== It is the
+            -- default hierarchy selection and the ceiling on what the drop-down offers. RLS still
+            -- grants the whole client, deliberately: an area-vs-group-mean report cannot compute
+            -- the group mean from rows RLS has removed.
+            tgt.Top_Node_Level=src.Top_Node_Level, tgt.Top_Node_Key=src.Top_Node_Key
         FROM [Security].[Application_Users] tgt
         JOIN [Input_Stage].[Application_Users] src ON LOWER(tgt.User_UPN) = LOWER(src.User_UPN);
         SET @My_Updates = @My_Updates + @@ROWCOUNT;
 
-        INSERT INTO [Security].[Application_Users] (User_UPN, Client_ID, Display_Name, Maintain_Targets, Access_Home, Access_Revenue, Access_Patient, Access_Schedule, Access_Clinical, Access_NHS, Access_Day_Book, Access_Finance, Access_My_Data, Access_Marketing, Practitioner_Full_Name, Profile_Key)
-        SELECT src.User_UPN, src.Client_ID, src.Display_Name, src.Maintain_Targets, src.Access_Home, src.Access_Revenue, src.Access_Patient, src.Access_Schedule, src.Access_Clinical, src.Access_NHS, src.Access_Day_Book, src.Access_Finance, src.Access_My_Data, src.Access_Marketing, src.Practitioner_Full_Name, src.Profile_Key
+        INSERT INTO [Security].[Application_Users] (User_UPN, Client_ID, Display_Name, Maintain_Targets, Access_Home, Access_Revenue, Access_Patient, Access_Schedule, Access_Clinical, Access_NHS, Access_Day_Book, Access_Finance, Access_My_Data, Access_Marketing, Practitioner_Full_Name, Profile_Key, Top_Node_Level, Top_Node_Key)
+        SELECT src.User_UPN, src.Client_ID, src.Display_Name, src.Maintain_Targets, src.Access_Home, src.Access_Revenue, src.Access_Patient, src.Access_Schedule, src.Access_Clinical, src.Access_NHS, src.Access_Day_Book, src.Access_Finance, src.Access_My_Data, src.Access_Marketing, src.Practitioner_Full_Name, src.Profile_Key,
+               src.Top_Node_Level, src.Top_Node_Key
         FROM [Input_Stage].[Application_Users] src
         LEFT JOIN [Security].[Application_Users] tgt ON LOWER(tgt.User_UPN) = LOWER(src.User_UPN)
         WHERE tgt.User_UPN IS NULL

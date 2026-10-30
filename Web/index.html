@@ -383,6 +383,21 @@
         .targets-controls select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; margin-left: 4px; }
         .targets-copy { display: inline-flex; align-items: center; gap: 6px; }
         #targets-grid { overflow-x: auto; width: 100%; margin-top: 6px; }
+        .targets-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 10px;
+                        border-bottom: 1px solid #e3eaee; padding-bottom: 0; }
+        .targets-tabs button { border: 1px solid #e3eaee; border-bottom: none; background: #f7f9fa;
+                        padding: 6px 12px; font-size: 12px; cursor: pointer; color: #5b6b78;
+                        border-radius: 5px 5px 0 0; }
+        .targets-tabs button.on { background: #fff; color: #0b3d5c; font-weight: 600;
+                        box-shadow: inset 0 2px 0 #0b3d5c; }
+        .targets-note { font-size: 11px; color: #888; margin-top: 6px; }
+        /* A derived figure is a placeholder, never a value: it reads grey and italic so nobody
+           mistakes a rolled-up number for one somebody committed to. */
+        #targets-grid input::placeholder { color: #b8c4cc; font-style: italic; }
+        /* The All roles column is shown for reference and edited on the Whole client tab, so it
+           must not read as an input somebody forgot to fill in. */
+        #targets-grid input.ref-cell { background: transparent; border-color: transparent;
+                        color: #5b6b78; cursor: default; }
         .tgrid { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
         .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 5px 8px; text-align: center; vertical-align: top; }
         .tgrid th { background: #f4f6f8; font-weight: 600; }
@@ -632,7 +647,7 @@
     <div class="filter-sep"></div>
     <div class="filter-field">
         <label for="f-site">Site</label>
-        <select class="filter-select" id="f-site"><option value="all">All sites</option></select>
+        <select class="filter-select" id="f-site"></select>
     </div>
     <div class="filter-sep"></div>
     <div class="filter-field">
@@ -861,6 +876,8 @@
                         </span>
                         <button id="targets-clear-btn" class="settings-btn" style="margin-left:12px">Clear year</button>
                     </div>
+                    <div id="targets-tabs" class="targets-tabs"></div>
+                    <div id="targets-note" class="targets-note"></div>
                     <div id="targets-grid" style="overflow-x:auto;margin-top:6px">Loading&hellip;</div>
                     <button id="targets-save" class="settings-save" style="display:none">Save targets</button>
                     <span id="targets-msg" class="settings-msg"></span>
@@ -1486,6 +1503,11 @@
         if (!meRes || !meRes.ok) return;
 
         const data = await meRes.json();
+        // The client actually in force, as the server resolved it: the user's own, or the one a
+        // staff login picked. applyFilters pushes it into 'Application Users'[Client ID], which
+        // is the table row-level security resolves every fact table's tenants out of -- so
+        // filtering it to this client is what narrows the reports to that client's practices.
+        filterState.client = (data.client_id != null) ? data.client_id : null;
         const u = document.getElementById('header-user');
         const o = document.getElementById('header-org');
         if (u && data.display_name) {
@@ -1523,23 +1545,26 @@
         // were being added up and shown under ONE PRACTICE'S NAME, and the name was the lie, not
         // the addition. So the merge is now the default and it SAYS SO: the picker offers
         // "All practices" and the header label says it too, rather than naming one of them.
+        // ==> THE PRACTICE PICKER IS GONE; THE HIERARCHY SELECTOR REPLACES IT. <== It was a second
+        // control doing a worse version of the same job: it could only ever pick ONE practice or
+        // all of them, while the site selector now offers Group, Region, Area, Practice and Site
+        // in one list and resolves any of them to a set of practice-site records. Two controls
+        // that both narrow "which practices" is how they end up disagreeing.
+        //
+        // It also had no way to reach the reports any more. Its only channel was the embed
+        // token's customData, which went when the scope became a filter -- so it moved the app's
+        // own screens while every tile sat still, which is worse than not offering it.
+        //
+        // The acting TENANT is still honoured server-side (_acting_tenant_id, and the authz cache
+        // is still keyed on it) because a stale header from an open tab must keep resolving the
+        // same way. Nothing in the UI sets it now.
         const tsel = document.getElementById('practice-tenant');
-        const cps  = data.client_practices || [];
-        if (tsel && cps.length > 1) {
-            const current = String(actingTenant() || '');
-            tsel.innerHTML = '<option value=""' + (current === '' ? ' selected' : '') + '>All practices</option>'
-                + cps.map(pr =>
-                    '<option value="' + escHtml(pr.tenant_id) + '"'
-                    + (String(pr.tenant_id) === current ? ' selected' : '') + '>'
-                    + escHtml(pr.name) + '</option>').join('');
-            tsel.style.display = '';
-            tsel.onchange = () => { setActingTenant(tsel.value); location.reload(); };
-            // The header must never name a single practice while the reports show several.
-            if (current === '' && o) o.textContent = cps.length + ' practices';
-        } else if (tsel) {
+        if (tsel) {
             tsel.style.display = 'none';
             if (actingTenant()) setActingTenant('');
         }
+        const practiceCount = (data.client_practices || []).length;
+        if (practiceCount > 1 && o) o.textContent = practiceCount + ' practices';
 
         if (data.is_staff && (data.practices || []).length) {
             const sel = document.getElementById('staff-practice');
@@ -1633,10 +1658,10 @@
     //     after 4-5 switches  dev 20.36s  prod 20.42s     THROTTLED
     //
     // Both workspaces, in lockstep: one capacity, so a staff member switching practice in DEV took
-    // the LIVE CUSTOMER to a 20-second delay. Every practice switch is a location.reload() -- which
-    // is correct, because RLS scope is baked into the embed token as customData and the existing
-    // embeds hold tokens minted for the previous practice -- so each switch paid for ten renders,
-    // and 4-5 of them exhausted the five-minute interactive budget.
+    // the LIVE CUSTOMER to a 20-second delay. Every practice switch is a location.reload() -- the
+    // acting client and practice are server-resolved and reach the reports through /api/me and the
+    // filters built from it, so a reload is the honest way to pick them up -- and each switch paid
+    // for ten renders, 4-5 of which exhausted the five-minute interactive budget.
     //
     // Off costs: moving to a section you have not visited yet is a ~3s first render instead of
     // instant. That is the whole price, and it is paid per section per session.
@@ -2836,13 +2861,30 @@
         if (profile !== 'clinician') return '';
         return prac ? 'My Data: ' + escHtml(prac) : 'no practitioner linked';
     }
+    let _teamNodes = [];
+    // The labels already carry their indent, built by Gold.usp_Load_Fact_Node_Targets and read
+    // straight off Gold.Dim_Hierarchy_Node -- NOT rendered again here. One definition of the
+    // text, so this picker, the hierarchy drop-down and the targets grid cannot disagree.
+    // The VALUE is level:key, a stable id: storing the label would break on a rename.
+    function topOpts(selected) {
+        return _teamNodes.map(n =>
+            '<option value="' + escHtml(n.level + ':' + (n.key || '')) + '"'
+            + ((n.level + ':' + (n.key || '')) === selected || (!selected && n.depth === 0) ? ' selected' : '')
+            + '>' + escHtml(n.label) + '</option>').join('');
+    }
+
     async function loadTeam() {
         const list = document.getElementById('team-list'), saveBtn = document.getElementById('team-save');
         list.textContent = 'Loading…'; saveBtn.style.display = 'none';
         try {
             const res = await authFetch('/api/team');
             if (!res.ok) throw new Error('status ' + res.status);
-            const { people, profiles, billing, lead_price } = await res.json();
+            const { people, profiles, billing, lead_price, top_nodes } = await res.json();
+            // ==> THE TOP NODE IS NOT A PERMISSION. <== It is where this person's hierarchy
+            // drop-down starts, and the highest thing it will offer them. They still have the
+            // whole client's data behind RLS -- deliberately, because an area-vs-group-mean
+            // report cannot work out the group mean from rows RLS has taken away.
+            _teamNodes = top_nodes || [];
             _teamProfiles = profiles || [];
             _teamLead = Number(lead_price) || 0;
             _teamBilling = billing || { primary_email: '', invoice_email: '' };
@@ -2897,6 +2939,12 @@
                     ? '<span style="color:#999;font-size:12px;white-space:nowrap">You &mdash; All reports</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>')
                 + '<span class="team-price">£' + _priceOf(p.profile, p.is_primary).toFixed(2) + '</span>'
+                // Only worth showing when there is more than one node to choose between: a
+                // single-practice client has exactly one, and a control with one option is furniture.
+                + (_teamNodes.length > 1 && !p.is_self
+                    ? '<select class="team-topnode" title="The highest level of the hierarchy this person can look at. They still see the whole client\'s data; this sets where their selector starts and stops.">'
+                      + topOpts(p.top_node) + '</select>'
+                    : '')
                 + (p.is_self
                     ? '<span class="team-tick" style="color:#999">Admin</span>'
                     : '<label class="team-tick" title="Access to the Settings / admin tab"><input type="checkbox" class="team-admin"' + (p.is_admin ? ' checked' : '') + '> Admin</label>')
@@ -2934,6 +2982,7 @@
                 _recalcCharges();
                 markDirty();
             }));
+            list.querySelectorAll('.team-topnode').forEach(r => r.addEventListener('change', markDirty));
             list.querySelectorAll('.team-primary').forEach(r => r.addEventListener('change', markDirty));
             list.querySelectorAll('.team-admin').forEach(r => r.addEventListener('change', markDirty));
             const _inv = document.getElementById('team-invoice-email'); if (_inv) _inv.addEventListener('input', markDirty);
@@ -2951,6 +3000,9 @@
             .filter(r => r.querySelector('.team-profile'))
             .map(r => ({ tenant_id: +r.dataset.tid, email: r.dataset.email, name: r.dataset.name,
                          profile: r.querySelector('.team-profile').value,
+                         // Always sent, even when the picker is hidden: the server saves with
+                         // DELETE + INSERT, so a field left out is erased rather than preserved.
+                         top_node: (r.querySelector('.team-topnode') || {}).value || '',
                          admin: !!(r.querySelector('.team-admin') && r.querySelector('.team-admin').checked) }));
         const _primEl = document.querySelector('#team-list .team-primary:checked');
         const primary_email = _primEl ? _primEl.value : '';
@@ -3737,14 +3789,113 @@
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
             _tgtTid = t.id; _tgtFy = data.fy;
-            renderTargetGrid(data, t);
+            _tgtData = data; _tgtT = t;
+            _tgtPages = data.pages || [];
+            _tgtNodeVals = data.node_targets || {};
+            _tgtDerived = data.derived || {};
+            // Default to Practice -- that is where targets are actually entered, because that is
+            // the level a practice is onboarded at. Everything else is roll-up or roll-down.
+            if (!_tgtPages.some(p => p.level === _tgtPage) && _tgtPage !== 'Roles')
+                _tgtPage = _tgtPages.some(p => p.level === 'Practice') ? 'Practice'
+                         : (_tgtPages[0] ? _tgtPages[0].level : 'Roles');
+            _renderTargetTabs();
+            _renderActiveTargetPage();
             _refreshCopyEnabled();   // copy only onto a blank year (live: re-enables if all boxes cleared)
             _restoreDraft();         // bring back any unsaved edits stashed before a redirect/refresh
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
+    let _tgtPages = [], _tgtNodeVals = {}, _tgtDerived = {}, _tgtPage = 'Practice',
+        _tgtData = null, _tgtT = null;
+    const _SEP = '\u0001';
+
+    // ==> ONE TAB PER LEVEL THE CLIENT ACTUALLY USES, PLUS ROLES. <== The levels come from the
+    // FOLDED tree, so a client that does not use Regions has no Regions tab -- the warehouse
+    // decided that, not this screen.
+    function _renderTargetTabs() {
+        const strip = document.getElementById('targets-tabs');
+        const tabs = _tgtPages.map(p => p.level).concat(['Roles']);
+        strip.innerHTML = tabs.map(l =>
+            '<button type="button" data-tpage="' + escHtml(l) + '"'
+            + (l === _tgtPage ? ' class="on"' : '') + '>'
+            + escHtml(l === 'Client' ? 'Whole client' : l) + '</button>').join('');
+        strip.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+            _tgtPage = b.dataset.tpage;
+            _renderTargetTabs();
+            _renderActiveTargetPage();
+        }));
+    }
+
+    function _renderActiveTargetPage() {
+        const note = document.getElementById('targets-note');
+        if (_tgtPage === 'Roles') {
+            note.textContent = 'Per-role targets, set once for the whole client — a role target '
+                + 'is per FTE, so it says what one person in that role should deliver and applies '
+                + 'at every practice and site. The All roles column is the whole-client figure; '
+                + 'edit it on the Whole client tab.';
+            renderTargetGrid(_tgtData, _tgtT);
+            return;
+        }
+        const page = _tgtPages.find(p => p.level === _tgtPage);
+        if (!page) { document.getElementById('targets-grid').textContent = 'Nothing to set here.'; return; }
+        note.textContent = 'Type to set a target. A grey figure is derived — rolled up from below '
+            + 'or down from above — and refreshes with the overnight build, not on save.';
+        _renderNodeGrid(page);
+    }
+
+    // The tab already says which level this is, so the drop-down's indent marker is noise in a
+    // column header -- it read "- Skeleton Alpha". Display only; [Selection] is the key and is
+    // never touched.
+    const _nodeHead = s => String(s || '').replace(/^[ –\s]+/, '');
+
+    // Rows are metrics, columns are the nodes at this level. A group with nine sites needs nine
+    // columns, which is why the container scrolls horizontally.
+    function _renderNodeGrid(page) {
+        const nodes = page.nodes || [];
+        const ncol = nodes.length + 2;
+        let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
+            + nodes.map(n => '<th class="col-practice">' + escHtml(_nodeHead(n.label)) + '</th>').join('')
+            + '</tr></thead><tbody>';
+        for (const grp of _groupBySection(_tgtData.metrics)) {
+            html += '<tr class="section-row"><td colspan="' + ncol + '">'
+                  + escHtml(_secLabel(grp.section)) + '</td></tr>';
+            for (const m of grp.metrics) {
+                const fmt = (m.format_type || '').toLowerCase();
+                const pre = '<span class="unit pre">' + (fmt.includes('currency') ? '£' : '') + '</span>';
+                const suf = '<span class="unit suf">' + (fmt.includes('percent') ? '%' : '') + '</span>';
+                const badge = m.fte_scaled ? '<span class="fte-badge" title="Full-time-equivalent target">FTE</span>' : '';
+                html += '<tr><td class="metric">' + escHtml(m.display_name) + badge
+                      + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
+                for (const n of nodes) {
+                    const typed = _tgtNodeVals[page.level + _SEP + n.key + _SEP + 'Practice' + _SEP + m.key];
+                    // The derived figure is keyed on the node's STORED selection, not its label:
+                    // the label is re-indented for display and is not what the warehouse holds.
+                    const derived = _tgtDerived[n.selection + _SEP + 'All Roles' + _SEP + m.key];
+                    html += '<td class="tcell col-practice">' + pre
+                          + '<input type="number" step="any"'
+                          + ' data-tid="' + n.tenant_id + '"'
+                          + ' data-metric="' + escHtml(m.key) + '"'
+                          + ' data-level="Practice"'
+                          + ' data-ltype="' + escHtml(page.level) + '"'
+                          + ' data-lkey="' + escHtml(n.key) + '"'
+                          + ' value="' + (typed != null ? typed : '') + '"'
+                          + (derived != null ? ' placeholder="' + escHtml(String(Math.round(derived * 100) / 100)) + '"' : '')
+                          + '>' + suf + '</td>';
+                }
+                html += '</tr>';
+            }
+        }
+        document.getElementById('targets-grid').innerHTML = html + '</tbody></table>';
+    }
+
     function renderTargetGrid(data, t) {
-        const levels = t.levels || ['Practice'];
+        // ==> THE ROLE SET IS THE CLIENT'S, NOT THIS TENANT'S. <== This used to read t.levels off
+        // tenants[0], so a group saw one arbitrary practice's roles. client_roles is the union
+        // across the client; t is still passed because the orphan sweep and the FY copy read its
+        // target map.
+        const roles = (data.client_roles && data.client_roles.length)
+            ? data.client_roles : (t.levels || []).filter(l => l !== 'Practice');
+        const levels = ['Practice'].concat(roles);
         // Orphan levels: roles that still have targets for this FY but are no longer active roles.
         const activeSet = new Set(levels);
         const orphanSet = new Set();
@@ -3752,11 +3903,27 @@
             const lvl = k.slice(k.indexOf('|') + 1);
             if (lvl && lvl !== 'Practice' && !activeSet.has(lvl)) orphanSet.add(lvl);
         }
+        // Node-addressed role figures live in node_targets, keyed (level, key, role, metric), so a
+        // role that only has a client-level target still earns its column.
+        const cn = data.client_node;
+        if (cn) {
+            for (const k in (data.node_targets || {})) {
+                const p = k.split('\u0001');
+                if (p[0] === cn.level && p[1] === cn.key && p[2] && p[2] !== 'Practice'
+                    && !activeSet.has(p[2])) orphanSet.add(p[2]);
+            }
+        }
         const orphans = [...orphanSet].sort();
         const ncol = levels.length + orphans.length + 2;
         const colCls = l => (l === 'Practice' ? ' class="col-practice"' : ' class="col-role"');
+        // 'Practice' is the warehouse's name for the figure that applies regardless of role -- it
+        // publishes as 'All Roles'. On a client-wide screen the old label named the wrong thing.
+        const colLbl = l => (l === 'Practice' ? 'All roles' : l);
+        const colTip = l => (l === 'Practice'
+            ? ' title="The whole-client figure, shown for reference. Edit it on the Whole client tab."'
+            : ' title="Per FTE, set once for the whole client"');
         let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
-            + levels.map(l => '<th' + colCls(l) + '>' + escHtml(l) + '</th>').join('')
+            + levels.map(l => '<th' + colCls(l) + colTip(l) + '>' + escHtml(colLbl(l)) + '</th>').join('')
             + orphans.map(l => '<th class="col-role col-orphan" data-ocol="' + escHtml(l) + '" title="Removed role — click × to delete its targets">'
                 + escHtml(l) + '<button type="button" class="orphan-x" data-orphan="' + escHtml(l) + '" title="Delete this role&#39;s targets">&times;</button></th>').join('')
             + '</tr></thead><tbody>';
@@ -3773,19 +3940,43 @@
                     + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
                 for (const lvl of levels) {
                     const lvlCls = (lvl === 'Practice') ? ' col-practice' : ' col-role';
-                    const canEdit = (lvl === 'Practice') || m.splits_by_role;
-                    if (!canEdit) { html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue; }
-                    const tgt = t.targets[m.key + '|' + lvl];
+                    if (lvl !== 'Practice' && !m.splits_by_role) {
+                        html += '<td class="na' + lvlCls + '">&mdash;</td>'; continue;
+                    }
+                    if (lvl === 'Practice') {
+                        // ==> READ ONLY, BECAUSE THE WHOLE CLIENT TAB OWNS THIS CELL. <== Both
+                        // would write (client, All Roles, metric) -- the same row -- so an
+                        // editable box here would silently fight the other tab.
+                        const wc = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + 'Practice'
+                                                     + _SEP + m.key] : null;
+                        html += '<td class="tcell na' + lvlCls + '">' + pre
+                            + '<input type="number" class="ref-cell" disabled'
+                            + ' value="' + (wc != null ? wc : '') + '">' + suf + '</td>';
+                        continue;
+                    }
+                    // A role figure is the client's: addressed to the client node, so it rolls
+                    // down to every practice and site rather than belonging to one of them.
+                    const tgt = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + lvl + _SEP + m.key]
+                                   : t.targets[m.key + '|' + lvl];
                     html += '<td class="tcell' + lvlCls + '">'
-                        + pre + '<input type="number" step="any" data-tid="' + t.id + '" data-metric="' + escHtml(m.key)
+                        + pre + '<input type="number" step="any" data-tid="' + (cn ? cn.tenant_id : t.id)
+                        + '" data-metric="' + escHtml(m.key)
                         + '" data-level="' + escHtml(lvl) + '"' + (m.fte_scaled ? ' data-fte="1"' : '')
+                        + (cn ? ' data-ltype="' + escHtml(cn.level) + '" data-lkey="' + escHtml(cn.key) + '"' : '')
                         + ' value="' + (tgt != null ? tgt : '') + '">' + suf + '</td>';
                 }
                 for (const lvl of orphans) {   // only the cells that actually carry an orphaned target
-                    const otgt = t.targets[m.key + '|' + lvl];
+                    // Addressed to the client node, exactly as a live role is: an un-addressed
+                    // cell would write a NEW practice-level row rather than clear the
+                    // client-level one it is showing, so the x would look inert and duplicate.
+                    const otgt = cn ? _tgtNodeVals[cn.level + _SEP + cn.key + _SEP + lvl + _SEP + m.key]
+                                    : t.targets[m.key + '|' + lvl];
                     if (otgt == null) { html += '<td class="col-orphan" data-ocol="' + escHtml(lvl) + '"></td>'; continue; }
-                    html += '<td class="tcell col-orphan" data-ocol="' + escHtml(lvl) + '">' + pre + '<input type="number" step="any" data-tid="' + t.id
-                        + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '" value="' + otgt + '">' + suf + '</td>';
+                    html += '<td class="tcell col-orphan" data-ocol="' + escHtml(lvl) + '">' + pre
+                        + '<input type="number" step="any" data-tid="' + (cn ? cn.tenant_id : t.id)
+                        + '" data-metric="' + escHtml(m.key) + '" data-level="' + escHtml(lvl) + '"'
+                        + (cn ? ' data-ltype="' + escHtml(cn.level) + '" data-lkey="' + escHtml(cn.key) + '"' : '')
+                        + ' value="' + otgt + '">' + suf + '</td>';
                 }
                 html += '</tr>';
                 if (m.definition) html += '<tr class="def-row" data-def="' + escHtml(m.key) + '" hidden><td colspan="'
@@ -3812,7 +4003,8 @@
         document.getElementById('targets-clear-btn').disabled = !anyVal;   // nothing to clear on a blank year
     }
     function clearTargetGrid() {
-        const inputs = [...document.querySelectorAll('#targets-grid input')].filter(i => !(i.dataset.metric || '').startsWith('nhs'));
+        const inputs = [...document.querySelectorAll('#targets-grid input:not([data-ltype])')]
+            .filter(i => !(i.dataset.metric || '').startsWith('nhs'));
         if (!inputs.some(i => i.value !== '')) return;   // already blank (ignoring NHS, which lives on the Apr-Mar year)
         const fyLbl = _fyLabel(+document.getElementById('targets-fy').value);
         if (!confirm('Clear ALL targets for ' + fyLbl + '?\n\nThis empties every box for the year. '
@@ -3848,7 +4040,8 @@
         // apply; it is not an answer the user gave, and Save must not put words in their mouth.
         //
         // The placeholder still DISPLAYS, so the hint is unchanged. Only the write is.
-        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => {
+        const rows = [...document.querySelectorAll('#targets-grid input:not([data-ltype])')]
+            .filter(i => !i.disabled).map(i => {
             const raw = i.value;
             return {
                 tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
@@ -3857,6 +4050,15 @@
         });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
+            // A node-addressed cell sends level_type/level_key so the warehouse keys it to that
+            // node; the Roles grid sends neither and still lands on the practice, exactly as
+            // before. Both shapes are accepted, which is what lets the two grids coexist.
+            document.querySelectorAll('#targets-grid input[data-ltype]').forEach(i => {
+                rows.push({ tenant_id: +i.dataset.tid, metric: i.dataset.metric,
+                            target_level: i.dataset.level, level_type: i.dataset.ltype,
+                            level_key: i.dataset.lkey,
+                            value: i.value === '' ? null : i.value });
+            });
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
             if (!res.ok) throw new Error('status ' + res.status);
             _clearDraft(); clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
@@ -3874,7 +4076,7 @@
             const res = await authFetch('/api/target-grid?fy=' + src);
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json(); const t = (data.tenants || [])[0]; if (!t) return;
-            document.querySelectorAll('#targets-grid input').forEach(i => {
+            document.querySelectorAll('#targets-grid input:not([data-ltype])').forEach(i => {
                 if (i.disabled || (i.dataset.metric || '').startsWith('nhs')) return;   // don't copy NHS (Apr-Mar) targets across practice FYs
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';
@@ -4509,7 +4711,15 @@
     }
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all' };
+    // client: the client whose practices the reports should show. Taken from /api/me rather than
+    // read off the picker, because the SERVER decides which client is actually in force -- the
+    // user's own, a staff override from the Analytically picker, or the demo pin -- and the
+    // header must never name one client while the reports show another.
+    const filterState = { period: 'Last 12 Months', site: 'all', role: 'all', pract: 'all', client: null };
+    // The hierarchy nodes behind the site selector: [{id, depth, label, sites:[pk,...]}].
+    // filterState.site holds 'h:<id>' for a hierarchy pick, so applyFilters can look the node up
+    // and push its site set.
+    let _hierNodes = [];
     const selPeriod   = document.getElementById('f-period');
     const selSite     = document.getElementById('f-site');
     const selRole     = document.getElementById('f-role');
@@ -4521,9 +4731,13 @@
     };
 
     function refreshBadge() {
+        // The hierarchy options are indented with figure-spaces and a dash so the dropdown reads
+        // as a tree; the badge wants the bare label, so strip the drawing characters back off.
+        const siteText = selSite.options[selSite.selectedIndex].text
+                             .replace(/^[\u2007\u2013\s]+/, '');
         const parts = [
             selPeriod.options[selPeriod.selectedIndex].text,
-            selSite.options[selSite.selectedIndex].text,
+            siteText,
         ];
         if (filterState.role !== 'all') parts.push(selRole.options[selRole.selectedIndex].text);
         parts.push(selPract.options[selPract.selectedIndex].text);
@@ -4579,11 +4793,54 @@
             .then(r => r.json())
             .then(data => {
                 if (!sitesAlreadyLoaded) {
-                    data.sites.forEach(s => {
+                    // ==> ONE SELECTOR FOR EVERY LEVEL. <== Group, Region, Area, Practice, Site
+                    // in a single flat list, indented so the shape reads as a tree. Picking any
+                    // node resolves to the SET of practice-site records beneath it, so "North"
+                    // is every site in North and "Group" is all of them.
+                    //
+                    // A <select> cannot nest, and optgroups are not selectable -- which is the
+                    // whole point here, since a Region must be pickable. So the indent is drawn
+                    // with figure-spaces and a dash. Non-breaking by necessity: a normal space
+                    // is collapsed in an <option> by every browser.
+                    _hierNodes = data.hierarchy || [];
+                    _hierNodes.forEach(n => {
                         const o = document.createElement('option');
-                        o.value = s.id; o.textContent = s.name;
+                        o.value = 'h:' + n.id;
+                        // ==> THE LABEL IS RENDERED BY THE LOADER, NOT HERE. <== This used to
+                        // build the indent itself, which made three places that construct the
+                        // same string -- here, /api/filters and Gold.usp_Load_Fact_Node_Targets --
+                        // for a string that targets are KEYED on, under a binary collation. One
+                        // different byte in any of them is an empty lookup, not an error.
+                        //
+                        // n.label is [Display Selection]: indented by position in the FOLDED tree,
+                        // which is what reads correctly here. n.selection is [Selection]: indented
+                        // by LEVEL, which never moves when another branch folds, and is what
+                        // applyFilters pushes. Two strings, and only one of them is a key.
+                        o.textContent = n.label;
                         selSite.appendChild(o);
                     });
+                    // Fall back to the plain site list if the client has no hierarchy mapped --
+                    // better a working site filter than an empty control.
+                    if (!_hierNodes.length) {
+                        // No hierarchy mapped: fall back to a plain site list, and that list DOES
+                        // need an "all" entry because no node stands for everything.
+                        const o = document.createElement('option');
+                        o.value = 'all'; o.textContent = 'All sites';
+                        selSite.appendChild(o);
+                        data.sites.forEach(s => {
+                            const el = document.createElement('option');
+                            el.value = s.id; el.textContent = s.name;
+                            selSite.appendChild(el);
+                        });
+                    }
+                    // ==> THE CLIENT NODE IS THE DEFAULT, AND REPLACES "ALL SITES". <== It already
+                    // resolves to every site the client has, so a separate "All sites" entry was
+                    // the same selection under a vaguer name -- two ways to say one thing, and the
+                    // reader left wondering how they differ. The selector now opens on the client.
+                    if (_hierNodes.length && filterState.site === 'all') {
+                        selSite.value = 'h:' + _hierNodes[0].id;
+                        filterState.site = selSite.value;
+                    }
                     // ==> A SINGLE-SITE PRACTICE HAS NO SITE FILTER. <== With one site the
                     // control can only ever be a no-op, so hiding it costs nothing.
                     //
@@ -4601,14 +4858,28 @@
                     // selection narrows the transactional pages correctly while the scorecard
                     // metrics built on that table cannot follow it. That is the thing to fix
                     // before claiming site-level KPIs; it is not a reason to hide the filter.
-                    const oneSite = (data.sites || []).length <= 1;
+                    // ==> HIDE IT WHEN EVERY NODE RESOLVES TO THE SAME THING. <== The test is the
+                    // number of SITES, not the number of nodes. A single-site practice still gets
+                    // a root node and a site node -- two entries, both meaning the one site -- so
+                    // counting nodes left the control on screen offering a choice that was not a
+                    // choice. Maple showed exactly that.
+                    const siteCount = _hierNodes.length
+                        ? (_hierNodes[0].sites || []).length
+                        : (data.sites || []).length;
+                    const oneSite = siteCount <= 1;
                     const siteField = selSite.closest('.filter-field');
                     if (siteField) {
                         siteField.hidden = oneSite;
                         const sep = siteField.nextElementSibling;
                         if (sep && sep.classList.contains('filter-sep')) sep.hidden = oneSite;
                     }
-                    if (oneSite) { selSite.value = 'all'; filterState.site = 'all'; }
+                    if (oneSite) {
+                        // Hidden, so whatever it holds is never seen -- but it must still be a
+                        // value that EXISTS, or the control reads blank and applyFilters looks up
+                        // a node that is not there.
+                        selSite.value = _hierNodes.length ? 'h:' + _hierNodes[0].id : 'all';
+                        filterState.site = selSite.value;
+                    }
                     // Seed the Role dropdown from the tenant's curated Custom_Role values
                     // (owner-assigned in Settings -> Roles), not the fixed Dentally roles.
                     (data.roles || []).forEach(role => {
@@ -4661,8 +4932,66 @@
     //                          — symptom: NHS ignored the date filter until changed).
     function applyFilters(report) {
         const filters = [];
+        // ==> THE CLIENT IN SCOPE, PUSHED IN LIKE EVERY OTHER FILTER. <== 'Application Users' is
+        // what row-level security reads: every tenant-bearing table's rule resolves its tenants
+        // out of it. Filtering it to the acting client therefore narrows the reports to that
+        // client's practices without a word of DAX, and without the per-row work that doing the
+        // same job inside 50 rules would cost.
+        //
+        // [Client ID] is the TENANT'S client (Security.vw_User_Tenant_Access reads
+        // Input.Client_Tenant), not the signed-in user's -- a support login sits on the vendor
+        // client, so a user-derived column would carry that one id on every row and narrowing to
+        // the client actually picked would match nothing.
+        //
+        // Scope, not permission: the rule's [User UPN] = USERPRINCIPALNAME() half still decides
+        // what may be seen at all, so this can only ever show less, never more.
+        if (filterState.client) {
+            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Application Users', column: 'Client ID' }, operator: 'In', values: [Number(filterState.client)], filterType: 1 });
+        }
+        // ==> THE SELECTION IS A SET OF SITE KEYS, WHATEVER LEVEL IT CAME FROM. <== A Region and
+        // a Site are the same kind of filter here: both resolve to the practice-site records
+        // underneath, so one code path serves every level and a new level costs nothing.
+        //
+        // pk Practice Site, not Site Name -- two practices in a group can each have a "Central",
+        // and filtering on the label would quietly pull in the other one's.
+        //
+        // This only reaches the scorecard metrics because Fact_Metric_Actuals now carries a site
+        // on every row. While 17 of them wrote -1 the selector would have moved the transactional
+        // pages and left the tiles sitting still.
         if (filterState.site !== 'all') {
-            filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
+            const node = _hierNodes.find(n => ('h:' + n.id) === filterState.site);
+            if (node) {
+                filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'pk Practice Site' }, operator: 'In', values: node.sites, filterType: 1 });
+                // ==> AND THE SAME CHOICE, PUSHED AT THE TARGETS BY NAME. <== A target is not a
+                // transaction: it does not live at a site and cannot be reached through site keys.
+                // Gold.Aggregate_Period_Targets holds one row per NODE, keyed on this very string,
+                // so the node is sent as itself.
+                //
+                // This is what makes "all" mean THE CLIENT'S OWN ROW -- a single figure already
+                // rolled up -- instead of "every row in the list, added together". Without it the
+                // grid is visible at five levels at once and the SUM builders return Practice +
+                // Area + Region + Client, roughly four times the real target, which reads as a
+                // plausible number rather than an error. It also costs no DAX: the measures get
+                // one row to look at and MAX and SUM agree on it.
+                if (node.selection) {
+                    filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Aggregate Period Targets', column: 'Selection' }, operator: 'In', values: [node.selection], filterType: 1 });
+                    // ==> AND THE CLIENT, BECAUSE A NODE NAME IS NOT UNIQUE. <== The table is keyed
+                    // on (Client ID, Selection) and pushing only half of it is how Skeleton Group's
+                    // 'North' came back showing Demonstration Practice's targets -- both clients
+                    // have a North, a South, a London and a Manchester, and the text matched the
+                    // wrong one. It read as plausible because the ACTUALS were right: those are
+                    // scoped by [pk Practice Site], a different filter entirely.
+                    //
+                    // The RLS tenant stamp does not cover this. Filtering 'Application Users'
+                    // narrows what RLS resolves for the tenant-bearing facts, but a report filter
+                    // does not reach inside an RLS expression's own FILTER over that table.
+                    if (filterState.client) {
+                        filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'Aggregate Period Targets', column: 'Client ID' }, operator: 'In', values: [Number(filterState.client)], filterType: 1 });
+                    }
+                }
+            } else {
+                filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practice Sites', column: 'Site Name' }, operator: 'In', values: [selSite.options[selSite.selectedIndex].text], filterType: 1 });
+            }
         }
         if (filterState.role !== 'all') {
             filters.push({ $schema: 'http://powerbi.com/product/schema#basic', target: { table: 'List Practitioners', column: 'Custom Role' }, operator: 'In', values: [filterState.role], filterType: 1 });

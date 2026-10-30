@@ -1,4 +1,4 @@
-/****** Object:  Table [Input].[Practitioner_Pay]  ******/
+﻿/****** Object:  Table [Input].[Practitioner_Pay]  ******/
 -- Per-practitioner associate pay share (% of their production), captured in the app's
 -- admin Settings screen. Feeds practitioner contribution (production - associate pay).
 -- One row per (Tenant_ID, Practitioner_ID); upserted (DELETE+INSERT) by /api/practitioner-pay.
@@ -11,6 +11,7 @@ GO
 DROP TABLE IF EXISTS [Input].[Practitioner_Pay]
 GO
 CREATE TABLE [Input].[Practitioner_Pay] (
+    [Client_ID]               INT            NULL,   -- the OWNER; Tenant_ID stays only where it identifies the row
     [pk_practitioner_pay] BIGINT        IDENTITY NOT NULL,
     [Tenant_ID]           INT           NOT NULL,
     [Practitioner_ID]     INT           NOT NULL,
