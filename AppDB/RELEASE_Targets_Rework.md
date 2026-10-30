@@ -148,7 +148,7 @@ against dev as a complete no-op.
 
 ## 4. Release order
 
-Steps 0–2 are **done on prod** (30 Oct 2026). Everything up to the point of no return is additive —
+Steps 0–6 are **done on prod** (30 Oct 2026); it is paused at step 7. Everything up to the point of no return is additive —
 inserts and nullable `ALTER ... ADD` — and prod reporting is untouched throughout: the old
 `Fact_Daily_Targets` chain still feeds `Aggregate_Period_Targets`, and the live app reads the
 hierarchy tables only from its admin screen.
@@ -158,11 +158,11 @@ hierarchy tables only from its admin screen.
 | 0 | `Backup_AppDB.py AppDB-prod`, then `AppDB.Backup_Input_Snapshot.sql` | AppDB | manifest verified; snapshot counts match | **done** — files `20261030_143700Z`, snapshot `20261030_1447` |
 | 1 | `AppDB/Seed_Hierarchy_Prod.sql` | AppDB | site → area → region → client resolves | **done** |
 | 2 | `AppDB.Migration.Client_Keying.sql` | AppDB | 0 unmapped on every table | **done** — 334 targets on client 100 |
-| 3 | `AppDB.Migration.Target_Level_Columns.sql` | AppDB | both columns present, nothing backfilled | next |
-| 4 | `AppDB.Migration.Top_Node.sql` | AppDB | `Top_Node_Level`/`Key` on `Application_Users` | |
-| 5 | `AppDB.Migration.Target_Node_Key.sql` | AppDB | PK lists 6 key columns; rows = distinct addresses | |
-| 6 | `Migrations/V154__targets_rework_input_columns.sql` | warehouse | all 22 report `present` | |
-| 7 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | AppDB | roles at `('Practice','100')`; `All Roles` still 106 | **point of no return** |
+| 3 | `AppDB.Migration.Target_Level_Columns.sql` | AppDB | both columns present, nothing backfilled | **done** — all 334 rows still read as their own practice |
+| 4 | `AppDB.Migration.Top_Node.sql` | AppDB | `Top_Node_Level`/`Key` on `Application_Users` | **done** — 66 users, all at the root |
+| 5 | `AppDB.Migration.Target_Node_Key.sql` | AppDB | PK lists 6 key columns; rows = distinct addresses | **done** — 334 rows, 334 addresses |
+| 6 | `Migrations/V154__targets_rework_input_columns.sql` | warehouse | all 22 report `present` | **done** — schema diff now reports **0 gaps** |
+| 7 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | AppDB | roles at `('Practice','100')`; `All Roles` still 106 | **point of no return — stopped here** |
 | 8 | Warehouse objects: the two new tables, the loaders, the sync proc, then `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | |
 | 9 | AppDB sync, then `usp_Load_Fact_Node_Targets`, then `usp_Load_Aggregate_Period_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node; period rows > 0 | |
 | 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | |
