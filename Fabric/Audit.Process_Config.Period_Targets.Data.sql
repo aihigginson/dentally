@@ -5,7 +5,7 @@
 -- build's orchestration and a release must never duplicate a row into them.
 --
 -- ==> DEPENDENCY_LEVEL 6, NOT 5, AND THAT IS THE POINT. <== This aggregate reads two OTHER
--- aggregates -- Fact_Daily_Targets and Dim_Date_Grouping -- both of which are themselves level
+-- aggregates -- Fact_Node_Targets and Dim_Date_Grouping -- both of which are themselves level
 -- 5. A node's level is the MAX of its dependency levels, so registering these edges at 5 would
 -- leave it level 5 too: the same level as the things it consumes, with nothing guaranteeing it
 -- runs after them. It would then aggregate the PREVIOUS run's targets, which is wrong in a way
@@ -21,7 +21,7 @@ INSERT INTO [Audit].[Process_Config]
 VALUES
     ('GOLD_AGG_PERIOD_TARGETS',
      'Gold.usp_Load_Aggregate_Period_Targets',
-     'Rebuild Gold.Aggregate_Period_Targets -- the target for each (Date_Grouping, Metric, Target_Level), precomputed so the model stops re-aggregating 243k daily rows per tile on every render. The period is always one named grouping, so 1,296 rows answer what the daily fact was being scanned for ~84 times a page. GOLD_AGG: reads Gold.Fact_Daily_Targets + Dim_Date_Grouping + Config.Metric_Definitions.',
+     'Rebuild Gold.Aggregate_Period_Targets -- the target for each (Date_Grouping, Metric, Target_Level), precomputed so the model stops re-aggregating 243k daily rows per tile on every render. The period is always one named grouping, so 1,296 rows answer what the daily fact was being scanned for ~84 times a page. GOLD_AGG: reads Gold.Fact_Node_Targets + Dim_Date_Grouping + Config.Metric_Definitions.',
      '@Mode = ''LIVE'', @Logging = 1',
      'GOLD_AGG', 'PROCEDURE');
 GO

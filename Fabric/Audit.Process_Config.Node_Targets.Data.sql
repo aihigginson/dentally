@@ -4,7 +4,7 @@
 -- Re-runnable: every statement is NOT EXISTS guarded, because these two tables carry the whole
 -- build's orchestration and a release must never duplicate a row into them.
 --
--- ==> IT HAS TO RUN BEFORE THE DAILY TARGETS, NOT ALONGSIDE THEM. <== Fact_Daily_Targets reads
+-- ==> AND NOTHING READS IT BUT THE PERIOD TARGETS. <== It used to feed Fact_Daily_Targets,
 -- the EXPLODED grid now, not Input.Targets, so an un-run explosion means the daily apportionment
 -- silently works from the previous night's nodes -- or, the first time, from nothing at all.
 -- Registered at dependency level 5 against the same predecessors the daily targets already wait

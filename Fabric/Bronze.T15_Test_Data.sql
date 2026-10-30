@@ -1,4 +1,4 @@
--- =============================================================================
+﻿-- =============================================================================
 -- Bronze.T15_Test_Data.sql
 -- Tenant 15: "Dev Test Practice"  — minimal Bronze seed for pipeline testing
 -- =============================================================================
@@ -470,7 +470,7 @@ GO
 --   Targets/T15_2025-26.xlsx
 --   Targets/T15_2026-27.xlsx
 -- NHS UDA / UOA targets are derived automatically from Bronze.Contracts
--- by Gold.usp_Load_Fact_Daily_Targets (no manual entry required).
+-- by Gold.usp_Load_Fact_Node_Targets (no manual entry required).
 -- =============================================================================
 GO
 
