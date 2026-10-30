@@ -2397,3 +2397,44 @@ def test_embed_always_attaches_the_rls_role(client, appmod, monkeypatch):
     assert client.get('/api/embed-token?report=revenue').status_code == 200
     identity = posts[0]['identities'][0]
     assert identity['roles'] == appmod.REPORT_ROLES, 'RLS role must always be attached'
+
+
+# ── Maintenance mode ──────────────────────────────────────────────────────────
+# ==> THIS IS A KILL SWITCH FOR A LIVE CUSTOMER'S SITE. <== It is flipped on to cover a release
+# that reshapes the warehouse under the model, and flipped off to bring the site home. Both
+# directions are tested because a switch that only works one way is worse than none: the failure
+# mode is either a release performed in full view of the customer, or a site nobody can restore.
+
+def test_maintenance_off_by_default_serves_the_app(client, monkeypatch):
+    monkeypatch.delenv('MAINTENANCE', raising=False)
+    r = client.get('/api/auth-config')
+    assert r.status_code != 503
+
+
+def test_maintenance_holds_the_api(client, monkeypatch):
+    monkeypatch.setenv('MAINTENANCE', '1')
+    r = client.get('/api/auth-config')
+    assert r.status_code == 503
+    assert r.get_json()['error'] == 'Down for maintenance'
+
+
+def test_maintenance_holds_a_page(client, monkeypatch):
+    monkeypatch.setenv('MAINTENANCE', '1')
+    r = client.get('/')
+    assert r.status_code == 503
+    assert b'Down for maintenance' in r.data
+
+
+def test_maintenance_leaves_health_alone(client, monkeypatch):
+    """The prod deploy smoke-tests /health. Blocking it would make every release during a
+    takedown look like a failed deploy, which is how a takedown becomes a rollback."""
+    monkeypatch.setenv('MAINTENANCE', '1')
+    assert client.get('/health').status_code == 200
+
+
+def test_maintenance_comes_back_off(client, monkeypatch):
+    """Bringing the site home is the whole point, so prove the flag is not sticky."""
+    monkeypatch.setenv('MAINTENANCE', '1')
+    assert client.get('/').status_code == 503
+    monkeypatch.setenv('MAINTENANCE', '0')
+    assert client.get('/api/auth-config').status_code != 503

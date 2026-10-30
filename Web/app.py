@@ -303,6 +303,37 @@ def _capacity_available():
     _cap_check['ok'] = ok
     return ok
 
+# ==> A PLANNED TAKEDOWN IS NOT A PAUSED CAPACITY. <== holding.html used to appear for exactly one
+# reason: the Fabric capacity suspended overnight to save cost. A release that reshapes the
+# warehouse under the model needs the same page for the opposite reason -- the capacity must stay
+# UP, because the migration work needs the warehouse reachable. Pausing it to get the holding page
+# would lock out the very work the page exists to cover.
+#
+# So the takedown is its own switch, set on the container app and flipped back to bring the site
+# home. No deploy needed either way, which matters when the thing you are recovering from is a
+# deploy.
+def _maintenance_mode():
+    return os.environ.get('MAINTENANCE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+@app.before_request
+def _hold_everything():
+    """The whole app, not just the front page.
+
+    A browser that already has index.html keeps calling /api/* regardless of what / returns, and
+    those calls would read a warehouse that is mid-migration. /health is the one exception: the
+    prod deploy smoke-tests it, so blocking it would make every release during a takedown look
+    like a failed deploy.
+    """
+    if not _maintenance_mode():
+        return None
+    if request.path in ('/health', '/favicon.ico') or request.path.startswith('/static/'):
+        return None
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Down for maintenance'}), 503
+    return send_from_directory('.', 'holding.html'), 503
+
+
 # ── Public routes ─────────────────────────────────────────────────────────────
 
 @app.route('/')
