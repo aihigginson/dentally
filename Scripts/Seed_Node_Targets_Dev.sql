@@ -174,19 +174,46 @@ GO
 WITH fy(FY) AS (SELECT 2026 UNION ALL SELECT 2027),
 seed(Level_Type, Level_Key, Tenant_ID, Target_Level, Metric, Target_Value) AS (
     SELECT * FROM (VALUES
-    /* ---- A. rates at the client: the group view's missing targets ------------- */
+    /* ---- A. EVERY rate at the client: the group view's missing targets --------- */
+    /*         One entry per metric whose client tile was blank. A quantity reaches the client by
+               rolling up from the practices; a rate cannot, so if nobody enters it at the client
+               there is simply no group target -- which is what the demo's Diary Fill, DNA Rate,
+               Exam Ratio and a dozen others showed. Each value is distinct, and distinct from the
+               practice figures underneath, so any tile can be read back to the level it came from. */
       ('Client', '11', 11, 'Practice', 'diary_fill',                    55.00)
     , ('Client', '11', 11, 'Practice', 'revenue_per_dentist_hour',     199.00)
     , ('Client', '11', 11, 'Practice', 'dna_rate',                       9.00)
     , ('Client', '11', 11, 'Practice', 'exam_ratio',                    66.00)
     , ('Client', '11', 11, 'Practice', 'discounts',                      7.00)
     , ('Client', '11', 11, 'Practice', 'deposit_ratio',                 11.00)
+    , ('Client', '11', 11, 'Practice', 'avg_plan_value',               111.00)
+    , ('Client', '11', 11, 'Practice', 'revenue_per_clinical_hour',    177.00)
+    , ('Client', '11', 11, 'Practice', 'chair_utilisation',             58.00)
+    , ('Client', '11', 11, 'Practice', 'book_before_you_leave',         44.00)
+    , ('Client', '11', 11, 'Practice', 'cancellation_frequency',        22.00)
+    , ('Client', '11', 11, 'Practice', 'cancellation_rebook',           77.00)
+    , ('Client', '11', 11, 'Practice', 'short_notice_cancellation_rate',12.00)
+    , ('Client', '11', 11, 'Practice', 'patient_tracked_in_surgery',    91.00)
+    , ('Client', '11', 11, 'Practice', 'days_until_30min_free',          3.00)
+    , ('Client', '11', 11, 'Practice', 'dentist_recall_conversion',     68.00)
+    , ('Client', '11', 11, 'Practice', 'hygiene_recall_conversion',     64.00)
+    , ('Client', '11', 11, 'Practice', 'dentist_retention_outlook',     82.00)
+    , ('Client', '11', 11, 'Practice', 'hygiene_retention_outlook',     86.00)
+    , ('Client', '11', 11, 'Practice', 'email_details_rate',            93.00)
+    , ('Client', '11', 11, 'Practice', 'phone_details_rate',            98.00)
+    , ('Client', '11', 11, 'Practice', 'nhs_uda_completion_rate',       97.00)
 
     /* ---- B. one site diverges, the other inherits ----------------------------- */
-    /*         Demo Practice 2 holds diary_fill 42.65 and rev/dentist hr 158.43.
-               George Street takes its own; Stockbridge is deliberately left out. */
+    /*         Demo Practice 2 holds diary_fill 42.65, rev/dentist hr 158.43, exam ratio 73.84,
+               email details 95 and rebooked 90. George Street takes its own figure for each;
+               Stockbridge is deliberately left out, so the two sites sit side by side -- same
+               parent, one overridden and one inheriting. That contrast is the clearest read of
+               the roll-down rule there is. */
     , ('Site',  '8',  12, 'Practice', 'diary_fill',                     88.00)
     , ('Site',  '8',  12, 'Practice', 'revenue_per_dentist_hour',      333.00)
+    , ('Site',  '8',  12, 'Practice', 'exam_ratio',                    95.00)
+    , ('Site',  '8',  12, 'Practice', 'email_details_rate',            60.00)
+    , ('Site',  '8',  12, 'Practice', 'cancellation_rebook',           40.00)
 
     /* ---- C. a site quantity that must not climb ------------------------------- */
     , ('Site',  '8',  12, 'Practice', 'total_revenue',              123456.00)
