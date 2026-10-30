@@ -4202,6 +4202,7 @@ def get_target_grid():
                    for r in cur.fetchall()]
 
         tenants, roles_by_tenant, prac_roles = {}, {}, {}
+        node_targets = {}
         if tids:
             ph = ','.join(['?'] * len(tids))
             cur.execute(f"SELECT Tenant_ID, Tenant_Name FROM Audit.Tenants WHERE Tenant_ID IN ({ph}) AND Is_Active = 1", tids)
@@ -4240,6 +4241,14 @@ def get_target_grid():
                     tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
             acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
             available_fys = [r[0] for r in acur.fetchall()]
+            # Entered figures keyed by NODE, for the per-level pages. From the AppDB because that
+            # is where they are written: the warehouse copy only catches up at the next sync.
+            acur.execute(
+                "SELECT ISNULL(Level_Type,'Practice'), ISNULL(Level_Key,''), Target_Level, "
+                "       Metric, Target_Value "
+                "FROM   Input.Targets WHERE Client_ID = ? AND FY = ?", (client_id, fy))
+            for _r in acur.fetchall():
+                node_targets['%s\x01%s\x01%s\x01%s' % (_r[0], _r[1], _r[2], _r[3])] = float(_r[4])
             # Overlay the live per-practitioner role override, then the effective in-use roles become columns.
             acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
             for r in acur.fetchall():
@@ -4256,12 +4265,55 @@ def get_target_grid():
         for tid, t in tenants.items():
             t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
+        # ==> A PAGE PER LEVEL THE CLIENT ACTUALLY USES. <== Read from the FOLDED tree, so the
+        # screen cannot offer a node the warehouse will not hold a target against. A level whose
+        # nodes all folded into their parents simply has no page, which is the owner's rule:
+        # "in real data where there is only 1, that organisation doesn't use that branch".
+        #
+        # Ordered the way /api/filters orders it -- a parent's site set contains its children's,
+        # so (lowest site, widest first) walks the tree depth-first.
+        pages = []
+        if tids:
+            _nph = ','.join(['?'] * len(tids))
+            cur.execute(
+                f"SELECT hn.[Level], hn.[Selection], hn.Display_Selection, hn.Node_Key, "
+                f"       MIN(hn.Tenant_ID), MIN(hn.fk_Practice_Site), COUNT(*) "
+                f"FROM   Gold.Dim_Hierarchy_Node hn "
+                f"WHERE  hn.Client_ID = ? AND hn.Tenant_ID IN ({_nph}) "
+                f"GROUP BY hn.[Level], hn.[Selection], hn.Display_Selection, hn.Node_Key",
+                [client_id] + list(tids))
+            _raw = [{'level': r[0], 'selection': r[1], 'label': r[2], 'key': r[3],
+                     'tenant_id': int(r[4]), '_m': int(r[5]), '_n': int(r[6])}
+                    for r in cur.fetchall()]
+            for _lvl in ('Client', 'Region', 'Area', 'Practice', 'Site'):
+                _got = sorted([n for n in _raw if n['level'] == _lvl],
+                              key=lambda x: (x['_m'], -x['_n']))
+                if _got:
+                    pages.append({'level': _lvl,
+                                  'nodes': [{k: n[k] for k in
+                                             ('selection', 'label', 'key', 'tenant_id')}
+                                            for n in _got]})
+
+        # What the loader DERIVED, for greying. Entered figures are read from the AppDB below --
+        # the source of truth -- so anything marked Is_Entered here is deliberately left out.
+        derived = {}
+        try:
+            cur.execute(
+                "SELECT [Selection], [Role], Metric, Target_Value FROM Gold.Fact_Node_Targets "
+                "WHERE Client_ID = ? AND FY = ? AND Is_Entered = 0", (client_id, fy))
+            for _s, _r, _m, _v in cur.fetchall():
+                if _v is not None:
+                    derived['%s\x01%s\x01%s' % (_s, _r, _m)] = float(_v)
+        except Exception:
+            derived = {}        # grid still works without the greying
+
         # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
         # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
         # one rule, and it still works for the next-year option that has no grouping row yet.
         return jsonify({'fy': fy, 'available_fys': available_fys, 'fy_options': fy_options,
                         'fy_start_month': fy_start_month,
-                        'metrics': metrics, 'tenants': list(tenants.values())})
+                        'metrics': metrics, 'tenants': list(tenants.values()),
+                        'pages': pages, 'node_targets': node_targets, 'derived': derived})
     except Exception as e:
         return _server_error(e, 'get_target_grid')
 
@@ -4298,18 +4350,40 @@ def save_target_grid():
             level  = str(r.get('target_level') or '').strip()
             if tid not in allowed or not metric or not level:
                 continue
+            # ==> AN EXPLICIT NODE WHEN THE PAGE KNOWS ONE. <== The per-level pages send
+            # level_type/level_key; the original Practice-and-roles grid sends neither, and a row
+            # without them still lands on the practice exactly as it always has
+            # (Gold.usp_Load_Fact_Node_Targets falls back to the Tenant_ID). Keeping that path
+            # means the working screen cannot be broken by the new one.
+            lt = str(r.get('level_type') or '').strip() or None
+            lk = str(r.get('level_key')  or '').strip() or None
+            if (lt is None) != (lk is None):
+                continue                      # half a node address is not an address
             v = r.get('value')
-            valid.append((tid, metric, level, float(v) if v not in (None, '') else None))
+            valid.append((tid, metric, level, float(v) if v not in (None, '') else None, lt, lk))
         if valid:
-            ac = _appdb_conn(autocommit=True); acur = ac.cursor(); acur.fast_executemany = True
-            acur.executemany(
-                "DELETE FROM Input.Targets WHERE Tenant_ID = ? AND FY = ? AND Metric = ? AND Target_Level = ?",
-                [(t, fy, m, l) for t, m, l, _ in valid])
-            inserts = [(t, fy, m, l, v, upn) for t, m, l, v in valid if v is not None]
-            if inserts:
-                acur.executemany(
-                    "INSERT INTO Input.Targets (Tenant_ID, FY, Metric, Target_Level, Target_Value, Updated_At, Updated_By) "
-                    "VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)", inserts)
+            ac = _appdb_conn(autocommit=True); acur = ac.cursor()
+            for tid_, m_, l_, v_, lt_, lk_ in valid:
+                # Deleted by the SAME address it is written at, or a node-addressed save would
+                # leave the un-addressed row behind and the loader would see two figures for one
+                # cell -- with nothing to say which was meant.
+                if lt_ is None:
+                    acur.execute(
+                        "DELETE FROM Input.Targets WHERE Tenant_ID = ? AND FY = ? AND Metric = ? "
+                        "AND Target_Level = ? AND Level_Type IS NULL",
+                        (tid_, fy, m_, l_))
+                else:
+                    acur.execute(
+                        "DELETE FROM Input.Targets WHERE Client_ID = ? AND FY = ? AND Metric = ? "
+                        "AND Target_Level = ? AND Level_Type = ? AND Level_Key = ?",
+                        (client_id, fy, m_, l_, lt_, lk_))
+                if v_ is None:
+                    continue                  # blank CLEARS; a deliberate zero is not the same
+                acur.execute(
+                    "INSERT INTO Input.Targets (Tenant_ID, Client_ID, FY, Metric, Target_Level, "
+                    " Target_Value, Level_Type, Level_Key, Updated_At, Updated_By) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                    (tid_, client_id, fy, m_, l_, v_, lt_, lk_, upn))
             ac.close()
         return jsonify({'ok': True})
     except Exception as e:

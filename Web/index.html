@@ -383,6 +383,17 @@
         .targets-controls select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; margin-left: 4px; }
         .targets-copy { display: inline-flex; align-items: center; gap: 6px; }
         #targets-grid { overflow-x: auto; width: 100%; margin-top: 6px; }
+        .targets-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 10px;
+                        border-bottom: 1px solid #e3eaee; padding-bottom: 0; }
+        .targets-tabs button { border: 1px solid #e3eaee; border-bottom: none; background: #f7f9fa;
+                        padding: 6px 12px; font-size: 12px; cursor: pointer; color: #5b6b78;
+                        border-radius: 5px 5px 0 0; }
+        .targets-tabs button.on { background: #fff; color: #0b3d5c; font-weight: 600;
+                        box-shadow: inset 0 2px 0 #0b3d5c; }
+        .targets-note { font-size: 11px; color: #888; margin-top: 6px; }
+        /* A derived figure is a placeholder, never a value: it reads grey and italic so nobody
+           mistakes a rolled-up number for one somebody committed to. */
+        #targets-grid input::placeholder { color: #b8c4cc; font-style: italic; }
         .tgrid { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
         .tgrid th, .tgrid td { border: 1px solid var(--border); padding: 5px 8px; text-align: center; vertical-align: top; }
         .tgrid th { background: #f4f6f8; font-weight: 600; }
@@ -861,6 +872,8 @@
                         </span>
                         <button id="targets-clear-btn" class="settings-btn" style="margin-left:12px">Clear year</button>
                     </div>
+                    <div id="targets-tabs" class="targets-tabs"></div>
+                    <div id="targets-note" class="targets-note"></div>
                     <div id="targets-grid" style="overflow-x:auto;margin-top:6px">Loading&hellip;</div>
                     <button id="targets-save" class="settings-save" style="display:none">Save targets</button>
                     <span id="targets-msg" class="settings-msg"></span>
@@ -3772,12 +3785,98 @@
             const t = (data.tenants || [])[0];
             if (!t) { grid.textContent = 'No practice found.'; return; }
             _tgtTid = t.id; _tgtFy = data.fy;
-            renderTargetGrid(data, t);
+            _tgtData = data; _tgtT = t;
+            _tgtPages = data.pages || [];
+            _tgtNodeVals = data.node_targets || {};
+            _tgtDerived = data.derived || {};
+            // Default to Practice -- that is where targets are actually entered, because that is
+            // the level a practice is onboarded at. Everything else is roll-up or roll-down.
+            if (!_tgtPages.some(p => p.level === _tgtPage) && _tgtPage !== 'Roles')
+                _tgtPage = _tgtPages.some(p => p.level === 'Practice') ? 'Practice'
+                         : (_tgtPages[0] ? _tgtPages[0].level : 'Roles');
+            _renderTargetTabs();
+            _renderActiveTargetPage();
             _refreshCopyEnabled();   // copy only onto a blank year (live: re-enables if all boxes cleared)
             _restoreDraft();         // bring back any unsaved edits stashed before a redirect/refresh
             saveBtn.style.display = '';
         } catch (e) { grid.textContent = 'Could not load targets.'; }
     }
+    let _tgtPages = [], _tgtNodeVals = {}, _tgtDerived = {}, _tgtPage = 'Practice',
+        _tgtData = null, _tgtT = null;
+    const _SEP = '\u0001';
+
+    // ==> ONE TAB PER LEVEL THE CLIENT ACTUALLY USES, PLUS ROLES. <== The levels come from the
+    // FOLDED tree, so a client that does not use Regions has no Regions tab -- the warehouse
+    // decided that, not this screen.
+    function _renderTargetTabs() {
+        const strip = document.getElementById('targets-tabs');
+        const tabs = _tgtPages.map(p => p.level).concat(['Roles']);
+        strip.innerHTML = tabs.map(l =>
+            '<button type="button" data-tpage="' + escHtml(l) + '"'
+            + (l === _tgtPage ? ' class="on"' : '') + '>'
+            + escHtml(l === 'Client' ? 'Whole client' : l) + '</button>').join('');
+        strip.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+            _tgtPage = b.dataset.tpage;
+            _renderTargetTabs();
+            _renderActiveTargetPage();
+        }));
+    }
+
+    function _renderActiveTargetPage() {
+        const note = document.getElementById('targets-note');
+        if (_tgtPage === 'Roles') {
+            note.textContent = 'Per-role targets. These are per FTE — a report multiplies by the '
+                + 'full-time equivalent of whoever is in view.';
+            renderTargetGrid(_tgtData, _tgtT);
+            return;
+        }
+        const page = _tgtPages.find(p => p.level === _tgtPage);
+        if (!page) { document.getElementById('targets-grid').textContent = 'Nothing to set here.'; return; }
+        note.textContent = 'Type to set a target. A grey figure is derived — rolled up from below '
+            + 'or down from above — and refreshes with the overnight build, not on save.';
+        _renderNodeGrid(page);
+    }
+
+    // Rows are metrics, columns are the nodes at this level. A group with nine sites needs nine
+    // columns, which is why the container scrolls horizontally.
+    function _renderNodeGrid(page) {
+        const nodes = page.nodes || [];
+        const ncol = nodes.length + 2;
+        let html = '<table class="tgrid"><thead><tr><th>Metric</th><th>Sample</th>'
+            + nodes.map(n => '<th class="col-practice">' + escHtml((n.label || '').trim()) + '</th>').join('')
+            + '</tr></thead><tbody>';
+        for (const grp of _groupBySection(_tgtData.metrics)) {
+            html += '<tr class="section-row"><td colspan="' + ncol + '">'
+                  + escHtml(_secLabel(grp.section)) + '</td></tr>';
+            for (const m of grp.metrics) {
+                const fmt = (m.format_type || '').toLowerCase();
+                const pre = '<span class="unit pre">' + (fmt.includes('currency') ? '£' : '') + '</span>';
+                const suf = '<span class="unit suf">' + (fmt.includes('percent') ? '%' : '') + '</span>';
+                const badge = m.fte_scaled ? '<span class="fte-badge" title="Full-time-equivalent target">FTE</span>' : '';
+                html += '<tr><td class="metric">' + escHtml(m.display_name) + badge
+                      + '</td><td class="sample">' + escHtml(_sampleVal(m)) + '</td>';
+                for (const n of nodes) {
+                    const typed = _tgtNodeVals[page.level + _SEP + n.key + _SEP + 'Practice' + _SEP + m.key];
+                    // The derived figure is keyed on the node's STORED selection, not its label:
+                    // the label is re-indented for display and is not what the warehouse holds.
+                    const derived = _tgtDerived[n.selection + _SEP + 'All Roles' + _SEP + m.key];
+                    html += '<td class="tcell col-practice">' + pre
+                          + '<input type="number" step="any"'
+                          + ' data-tid="' + n.tenant_id + '"'
+                          + ' data-metric="' + escHtml(m.key) + '"'
+                          + ' data-level="Practice"'
+                          + ' data-ltype="' + escHtml(page.level) + '"'
+                          + ' data-lkey="' + escHtml(n.key) + '"'
+                          + ' value="' + (typed != null ? typed : '') + '"'
+                          + (derived != null ? ' placeholder="' + escHtml(String(Math.round(derived * 100) / 100)) + '"' : '')
+                          + '>' + suf + '</td>';
+                }
+                html += '</tr>';
+            }
+        }
+        document.getElementById('targets-grid').innerHTML = html + '</tbody></table>';
+    }
+
     function renderTargetGrid(data, t) {
         const levels = t.levels || ['Practice'];
         // Orphan levels: roles that still have targets for this FY but are no longer active roles.
@@ -3892,6 +3991,15 @@
         });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
+            // A node-addressed cell sends level_type/level_key so the warehouse keys it to that
+            // node; the Roles grid sends neither and still lands on the practice, exactly as
+            // before. Both shapes are accepted, which is what lets the two grids coexist.
+            document.querySelectorAll('#targets-grid input[data-ltype]').forEach(i => {
+                rows.push({ tenant_id: +i.dataset.tid, metric: i.dataset.metric,
+                            target_level: i.dataset.level, level_type: i.dataset.ltype,
+                            level_key: i.dataset.lkey,
+                            value: i.value === '' ? null : i.value });
+            });
             const res = await authFetch('/api/target-grid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fy, rows }) });
             if (!res.ok) throw new Error('status ' + res.status);
             _clearDraft(); clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
