@@ -3946,7 +3946,8 @@
         document.getElementById('targets-clear-btn').disabled = !anyVal;   // nothing to clear on a blank year
     }
     function clearTargetGrid() {
-        const inputs = [...document.querySelectorAll('#targets-grid input')].filter(i => !(i.dataset.metric || '').startsWith('nhs'));
+        const inputs = [...document.querySelectorAll('#targets-grid input:not([data-ltype])')]
+            .filter(i => !(i.dataset.metric || '').startsWith('nhs'));
         if (!inputs.some(i => i.value !== '')) return;   // already blank (ignoring NHS, which lives on the Apr-Mar year)
         const fyLbl = _fyLabel(+document.getElementById('targets-fy').value);
         if (!confirm('Clear ALL targets for ' + fyLbl + '?\n\nThis empties every box for the year. '
@@ -3982,7 +3983,8 @@
         // apply; it is not an answer the user gave, and Save must not put words in their mouth.
         //
         // The placeholder still DISPLAYS, so the hint is unchanged. Only the write is.
-        const rows = [...document.querySelectorAll('#targets-grid input')].filter(i => !i.disabled).map(i => {
+        const rows = [...document.querySelectorAll('#targets-grid input:not([data-ltype])')]
+            .filter(i => !i.disabled).map(i => {
             const raw = i.value;
             return {
                 tenant_id: +i.dataset.tid, metric: i.dataset.metric, target_level: i.dataset.level,
@@ -4017,7 +4019,7 @@
             const res = await authFetch('/api/target-grid?fy=' + src);
             if (!res.ok) throw new Error('status ' + res.status);
             const data = await res.json(); const t = (data.tenants || [])[0]; if (!t) return;
-            document.querySelectorAll('#targets-grid input').forEach(i => {
+            document.querySelectorAll('#targets-grid input:not([data-ltype])').forEach(i => {
                 if (i.disabled || (i.dataset.metric || '').startsWith('nhs')) return;   // don't copy NHS (Apr-Mar) targets across practice FYs
                 const v = t.targets[i.dataset.metric + '|' + i.dataset.level];
                 i.value = (v != null) ? v : '';

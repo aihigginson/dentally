@@ -4224,46 +4224,6 @@ def get_target_grid():
                 f"WHERE Tenant_ID IN ({ph}) AND Active = 1 AND pk_Practitioner > 0 "
                 f"AND LOWER(ISNULL(Role,'')) NOT IN ('administrator','receptionist','practice manager')", tids)
             prac_roles = {(r[0], r[1]): r[2] for r in cur.fetchall()}
-        conn.close()
-
-        available_fys = []
-        if tids:
-            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
-            acur.execute(
-                f"SELECT Tenant_ID, Metric, Target_Level, Target_Value FROM Input.Targets "
-                f"WHERE Tenant_ID IN ({ph}) AND FY = ?", tids + [fy])
-            for r in acur.fetchall():
-                if r[0] in tenants:
-                    tenants[r[0]]['targets'][f"{r[1]}|{r[2]}"] = float(r[3])
-            acur.execute(f"SELECT Tenant_ID, Metric, Variance FROM Input.Metric_Variance WHERE Tenant_ID IN ({ph})", tids)
-            for r in acur.fetchall():
-                if r[0] in tenants:
-                    tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
-            acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
-            available_fys = [r[0] for r in acur.fetchall()]
-            # Entered figures keyed by NODE, for the per-level pages. From the AppDB because that
-            # is where they are written: the warehouse copy only catches up at the next sync.
-            acur.execute(
-                "SELECT ISNULL(Level_Type,'Practice'), ISNULL(Level_Key,''), Target_Level, "
-                "       Metric, Target_Value "
-                "FROM   Input.Targets WHERE Client_ID = ? AND FY = ?", (client_id, fy))
-            for _r in acur.fetchall():
-                node_targets['%s\x01%s\x01%s\x01%s' % (_r[0], _r[1], _r[2], _r[3])] = float(_r[4])
-            # Overlay the live per-practitioner role override, then the effective in-use roles become columns.
-            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
-            for r in acur.fetchall():
-                if (r[0], r[1]) in prac_roles and r[2]:
-                    prac_roles[(r[0], r[1])] = r[2]
-            for (tid_, pid_), role_ in prac_roles.items():
-                if role_:
-                    roles_by_tenant.setdefault(tid_, set()).add(role_)
-            acur.execute(f"SELECT Tenant_ID, Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
-            for r in acur.fetchall():
-                roles_by_tenant.setdefault(r[0], set()).add(r[1])
-            ac.close()
-
-        for tid, t in tenants.items():
-            t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
         # ==> A PAGE PER LEVEL THE CLIENT ACTUALLY USES. <== Read from the FOLDED tree, so the
         # screen cannot offer a node the warehouse will not hold a target against. A level whose
@@ -4306,6 +4266,47 @@ def get_target_grid():
                     derived['%s\x01%s\x01%s' % (_s, _r, _m)] = float(_v)
         except Exception:
             derived = {}        # grid still works without the greying
+
+        conn.close()
+
+        available_fys = []
+        if tids:
+            ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
+            acur.execute(
+                f"SELECT Tenant_ID, Metric, Target_Level, Target_Value FROM Input.Targets "
+                f"WHERE Tenant_ID IN ({ph}) AND FY = ?", tids + [fy])
+            for r in acur.fetchall():
+                if r[0] in tenants:
+                    tenants[r[0]]['targets'][f"{r[1]}|{r[2]}"] = float(r[3])
+            acur.execute(f"SELECT Tenant_ID, Metric, Variance FROM Input.Metric_Variance WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                if r[0] in tenants:
+                    tenants[r[0]]['variances'][r[1]] = float(r[2]) if r[2] is not None else None
+            acur.execute(f"SELECT DISTINCT FY FROM Input.Targets WHERE Tenant_ID IN ({ph}) ORDER BY FY", tids)
+            available_fys = [r[0] for r in acur.fetchall()]
+            # Entered figures keyed by NODE, for the per-level pages. From the AppDB because that
+            # is where they are written: the warehouse copy only catches up at the next sync.
+            acur.execute(
+                "SELECT ISNULL(Level_Type,'Practice'), ISNULL(Level_Key,''), Target_Level, "
+                "       Metric, Target_Value "
+                "FROM   Input.Targets WHERE Client_ID = ? AND FY = ?", (client_id, fy))
+            for _r in acur.fetchall():
+                node_targets['%s\x01%s\x01%s\x01%s' % (_r[0], _r[1], _r[2], _r[3])] = float(_r[4])
+            # Overlay the live per-practitioner role override, then the effective in-use roles become columns.
+            acur.execute(f"SELECT Tenant_ID, Practitioner_ID, Custom_Role FROM Input.Practitioner_Role WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                if (r[0], r[1]) in prac_roles and r[2]:
+                    prac_roles[(r[0], r[1])] = r[2]
+            for (tid_, pid_), role_ in prac_roles.items():
+                if role_:
+                    roles_by_tenant.setdefault(tid_, set()).add(role_)
+            acur.execute(f"SELECT Tenant_ID, Role_Name FROM Input.Roles WHERE Tenant_ID IN ({ph})", tids)
+            for r in acur.fetchall():
+                roles_by_tenant.setdefault(r[0], set()).add(r[1])
+            ac.close()
+
+        for tid, t in tenants.items():
+            t['levels'] = ['Practice'] + sorted(roles_by_tenant.get(tid, set()))
 
         # The client needs the start month to LABEL a year: 2027 is "FY27" for a January
         # practice and "FY26-27" for an April one. Sending the month rather than the labels keeps
