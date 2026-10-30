@@ -168,11 +168,42 @@ hierarchy tables only from its admin screen.
 | 8a | **Additive**: `Dim_Hierarchy_Node`, `Fact_Node_Targets`, `usp_Load_Fact_Node_Targets`, `Meta.usp_Sync_Input_From_AppDB` | warehouse | objects exist; model untouched | **done** |
 | 9 | AppDB sync, then `usp_Load_Fact_Node_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node | **done** — 1 node, 334 rows, all entered, sum 21,435,541 |
 | — | Snapshot the old aggregate | warehouse | `Backup.Aggregate_Period_Targets__pre_8b` = 478 rows | **done** — makes 8b reversible |
-| 8b | **The switch**: `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | **next — breaks live reports until 11** |
-| 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | |
-| 11 | Model: new tables, relationships, RLS, publish, refresh | Desktop | no security-filter errors — save before believing the list | **owner** |
-| 12 | Merge `dev` → `main` to deploy the app | CI | Targets screen renders; Home tiles carry targets | |
-| 13 | Only now drop `Gold.Fact_Daily_Targets` and its loader | warehouse | — | |
+| — | Merge `dev` → `main`, then `MAINTENANCE=1` on `ca-analytically-prod` | CI + Azure | `app.analytically.info` returns 503 "Down for maintenance"; `/health` still 200 | **done** |
+| 8b | **The switch**: `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | **done** — 366 rows; PBI views now 15 / 11 / 10 cols |
+| 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | **done** — 0 / 0 / 0, re-derived from `Fact_Daily_Targets` as of today |
+| — | **fk_Practice_Site, forced onto this release** (V156 + 4 loaders + the RLS view) | warehouse | fact 265,299 resolved; access view still returns rows | **done** — see below |
+| 11 | Model: promoted via the **Fabric `DEV TO PROD` pipeline**, selective | pipeline | dev and prod model table lists identical | **done** — 56 tables each, 0 differences |
+| 12 | `dev` → `main`, app deployed, `MAINTENANCE=0` | CI + Azure | `app.analytically.info` serving; `/api` 200 | **done** |
+| 13 | Only now drop `Gold.Fact_Daily_Targets` and its loader | warehouse | — | **held deliberately** — the last fallback |
+
+### `_Node Targets` is NOT in the model, by choice
+
+It is absent from **both** dev and prod, deliberately. The reports read `Aggregate Period Targets`;
+`Gold.Fact_Node_Targets` exists as that aggregate's source and for the app's Targets screens, and is
+never imported. Dev was tested that way throughout. A release check that looks for it in the model
+will "find a gap" that is not one.
+
+### The model is ONE artifact — a proc-level dependency check cannot clear it
+
+The targets stored procedures genuinely have no `fk_Practice_Site` dependency; that was checked and
+is true. It does not follow that the release stands alone. Promoting `PBI Dentally` carries **every**
+table's column expectations, so prod's refresh failed on
+
+    The 'fk Practice Site' column does not exist in the rowset.
+
+from `_Treatment Plan Items` and three site-grained aggregates — tables with nothing to do with
+targets. The rename was on the critical path regardless. What it took:
+
+  * **V156** — `ALTER Gold.Fact_Treatment_Plan_Items ADD fk_Practice_Site`. An ALTER, because the
+    repo's `Table.sql` opens with `DROP TABLE` and would have deleted 265,299 rows.
+  * **`@Full_Reload = 1`** — a hash-gated MERGE skips unchanged rows, so every existing row would
+    have kept a NULL site forever. 265,299 updated, 265,299 resolved.
+  * The three site-grained aggregates rebuilt (DROP/CREATE is their pattern).
+  * **`Security.vw_User_Tenant_Access`** redeployed for its `Client ID` column — the view every RLS
+    rule reads. Verified it still returns rows afterwards: an empty access view locks everybody out.
+
+One warehouse gap remains and is deliberate: `Stage.Appointments.site_id`, which belongs with the
+notebook promotion and is not in the model's path.
 
 ### Where the point of no return is
 
@@ -196,6 +227,25 @@ Deploy step 8 in two parts to shrink that window to nothing:
   node loader and step 10's reconcile can both run against the old chain still in place.
 - **8b — the switch.** `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views`,
   then the model publish — **in one sitting**. Do not start 8b without time to finish 11.
+
+### How the step 10 reconcile must be done — and how it was got wrong first
+
+==> DO NOT DIFF THE NEW AGGREGATE AGAINST THE OLD TABLE. <== The first attempt compared today's new
+`Aggregate_Period_Targets` against `Backup.Aggregate_Period_Targets__pre_8b`, which the last prod
+nightly had built **four working days earlier**. It reported 16 disagreements, all FY26 cumulative
+metrics, the new figure about 1.9% higher. None of them were real:
+
+    annual 2,000,000, FY2026 has 261 working days
+    new  =  2,000,000 x 216/261  =  1,655,172.4138     (216 = the YTD bucket TODAY)
+    old  =  2,000,000 x 212/261  =  1,624,521.0728     (212 = the bucket four working days ago)
+
+Identical arithmetic. The calendar had moved, nothing else. The correct comparison re-derives the
+old answer FROM `Gold.Fact_Daily_Targets` over each grouping's own dates, as of now — which is the
+entire reason that table is not dropped until step 13. Done that way: **0 cumulative values
+differing, 0 non-cumulative figures away from the entered annual, 0 live groupings missing.**
+
+The 112 rows present only in the old table are exactly FY21, FY22 and FY25 — historic buckets the
+new chain deliberately excludes and the app's three-period picker could never reach.
 
 ### Known, deliberate difference at step 10
 
