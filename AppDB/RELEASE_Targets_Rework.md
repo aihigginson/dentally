@@ -101,75 +101,99 @@ refused to touch anything `@tables` did not name.
 
 ---
 
-## 3. A blocker that is not about backups
+## 3. What running this against prod actually found
 
-**The prod hierarchy is empty, and the new chain produces nothing without it.**
+Two things, both of the same kind: **state that only ever existed on dev**.
 
-Measured on prod:
+### a. The hierarchy was empty (fixed, step 1 below)
 
-- `Input.Targets` has **none** of `Client_ID`, `Level_Type`, `Level_Key` — `AppDB.Migration.Client_Keying.sql`
-  has never run there.
-- `Input.Client`, `Client_Tenant`, `Client_Region`, `Client_Area`, `Site_Area` are **all empty**, in
-  both the AppDB and the warehouse copy.
-- `Security.Clients` *does* have Maple — client **100** `Maple Dental` (also 1 `Analytically` and
-  1000 `Maple Dentalcare Ltd`; the tenant maps to **100**, not 1000).
-- `Gold.Dim_Hierarchy_Node` and `Gold.Fact_Node_Targets` do not exist on prod; `Gold.Fact_Daily_Targets`
-  still does; `Gold.Aggregate_Period_Targets` holds 478 rows from the old chain.
+`Input.Client`, `Client_Tenant`, `Client_Region`, `Client_Area` and `Site_Area` held nothing on
+prod. `Gold.usp_Load_Fact_Node_Targets` builds its tree from those, and `Client_Keying` backfills
+`Client_ID` *from* `Client_Tenant` — so against an empty map every target keeps a NULL `Client_ID`
+and the loader skips it. Maple's 334 targets would have been invisible on every report.
 
-`Gold.usp_Load_Fact_Node_Targets` builds its tree from
-`Input.Client_Region → Client_Area → Site_Area → Dim_Practice_Sites`. With those empty it produces
-**zero nodes and zero targets**, and because `Client_Keying` backfills `Client_ID` *from*
-`Input.Client_Tenant`, running it against an empty map leaves every target's `Client_ID` NULL — and
-the loader skips `Client_ID IS NULL`.
+`AppDB/Seed_Hierarchy_Prod.sql` fills it: client 100 → tenant 100, one region, one area, Maple's
+site (`027ed563-acef-4734-bdc9-40e4330347f3`) into it. The region and area names never appear —
+Maple has one site, so the fold keeps only its Practice node. Client **100**, not 1000: 1000 is the
+legal entity invoices are raised to; the tenant belongs to 100.
 
-So Maple's 334 targets would vanish from every report. Not lost — still in `Input.Targets` — but
-invisible until the bridge is populated.
+### b. Twenty-two columns that only existed on dev
 
-**What prod needs seeding with**, before anything else: client 100 → tenant 100 in `Input.Client_Tenant`,
-one region, one area under it, and Maple's site mapped to that area. The region and area *names* never
-appear anywhere: Maple has one site, so the fold keeps only its Practice node and discards Region,
-Area and Client. It is mechanical, but it is the owner's data — **I have not written it.** `AppDB/Seed_Hierarchy_Dev.sql`
-is the dev equivalent to model it on.
+Diffed, rather than discovered one failure at a time:
+
+| | missing on prod |
+|---|---|
+| `Input.Targets` | `Level_Type`, `Level_Key`, `Client_ID` |
+| `Input_Stage.Targets` | `Level_Type`, `Level_Key`, `Client_ID` |
+| `Input_Stage.Application_Users` | `Top_Node_Level`, `Top_Node_Key` |
+| six tables, both schemas | `Client_ID` |
+| `Plan_Capitation_Rate`, both schemas | `Plan_Name` |
+
+**Nothing in the repo ever created `Input.Targets.Level_Type` or `Level_Key`.** They reached
+AppDB-dev by hand and were never written down, so `Target_Node_Key` — which builds computed columns
+over them — would have failed on its second batch against prod. `Fabric/AppDB.Migration.Target_Level_Columns.sql`
+now adds them.
+
+And `Input_Stage.Targets.Table.sql` *does* declare them, but it is guarded by `IF OBJECT_ID IS NULL`
+— so re-deploying it against an existing table is a silent no-op and the column never arrives.
+`Migrations/V154__targets_rework_input_columns.sql` adds all 22 with guarded ALTERs; validated
+against dev as a complete no-op.
+
+> The ordering trap: `Web/appdb_sync.py` takes its column list from the **target** (`Input_Stage`),
+> so a column AppDB has and staging does not is dropped in transit, silently. And the new
+> `Meta.usp_Sync_Input_From_AppDB` names those columns in its INSERT lists, so deploying it before
+> V154 makes every sync fail on an invalid column name.
 
 ---
 
 ## 4. Release order
 
-Each step says what proves it worked. **Stop at the first gate that fails** — everything before the
-point of no return is cheap to undo.
+Steps 0–2 are **done on prod** (30 Oct 2026). Everything up to the point of no return is additive —
+inserts and nullable `ALTER ... ADD` — and prod reporting is untouched throughout: the old
+`Fact_Daily_Targets` chain still feeds `Aggregate_Period_Targets`, and the live app reads the
+hierarchy tables only from its admin screen.
 
-| # | Step | Gate |
-|---|---|---|
-| 0 | `Backup_AppDB.py AppDB-prod`, then `AppDB.Backup_Input_Snapshot.sql` | manifest verified; snapshot counts match live |
-| 1 | Seed the prod hierarchy (§3) | `Input.Client_Tenant` maps 100→100; `Site_Area` has Maple's site |
-| 2 | `AppDB.Migration.Client_Keying.sql` | its own check: 0 unmapped rows on every table |
-| 3 | `AppDB.Migration.Target_Node_Key.sql` | PK lists 6 key columns; rows = distinct addresses |
-| 4 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | role rows at `('Practice','100')`; `All Roles` count unchanged at 179 |
-| 5 | Warehouse: deploy the new tables and loaders, run `Meta.usp_Create_Gold_Views` | views expose the new columns |
-| 6 | Run the AppDB sync, then `usp_Load_Fact_Node_Targets`, then `usp_Load_Aggregate_Period_Targets` | `Dim_Hierarchy_Node` has Maple's one node; period rows > 0 for client 100 |
-| 7 | Reconcile against the old chain **before dropping it** | every old `Aggregate_Period_Targets` figure reproduced |
-| 8 | Model: the new tables, relationships, RLS, then publish and refresh | no "security filter expressions have errors"; save before believing the error list |
-| 9 | App deploy | Targets screen renders; Home tiles carry targets |
-| 10 | Only now drop `Gold.Fact_Daily_Targets` and its loader | — |
+| # | Step | Where | Gate | State |
+|---|---|---|---|---|
+| 0 | `Backup_AppDB.py AppDB-prod`, then `AppDB.Backup_Input_Snapshot.sql` | AppDB | manifest verified; snapshot counts match | **done** — files `20261030_143700Z`, snapshot `20261030_1447` |
+| 1 | `AppDB/Seed_Hierarchy_Prod.sql` | AppDB | site → area → region → client resolves | **done** |
+| 2 | `AppDB.Migration.Client_Keying.sql` | AppDB | 0 unmapped on every table | **done** — 334 targets on client 100 |
+| 3 | `AppDB.Migration.Target_Level_Columns.sql` | AppDB | both columns present, nothing backfilled | next |
+| 4 | `AppDB.Migration.Top_Node.sql` | AppDB | `Top_Node_Level`/`Key` on `Application_Users` | |
+| 5 | `AppDB.Migration.Target_Node_Key.sql` | AppDB | PK lists 6 key columns; rows = distinct addresses | |
+| 6 | `Migrations/V154__targets_rework_input_columns.sql` | warehouse | all 22 report `present` | |
+| 7 | **`AppDB.Migration.Roles_Are_Client_Wide.sql`** | AppDB | roles at `('Practice','100')`; `All Roles` still 106 | **point of no return** |
+| 8 | Warehouse objects: the two new tables, the loaders, the sync proc, then `Meta.usp_Create_Gold_Views` | warehouse | views expose the new columns | |
+| 9 | AppDB sync, then `usp_Load_Fact_Node_Targets`, then `usp_Load_Aggregate_Period_Targets` | warehouse | `Dim_Hierarchy_Node` has Maple's one node; period rows > 0 | |
+| 10 | **Reconcile against the old chain, before dropping it** | warehouse | every old figure reproduced | |
+| 11 | Model: new tables, relationships, RLS, publish, refresh | Desktop | no security-filter errors — save before believing the list | **owner** |
+| 12 | Merge `dev` → `main` to deploy the app | CI | Targets screen renders; Home tiles carry targets | |
+| 13 | Only now drop `Gold.Fact_Daily_Targets` and its loader | warehouse | — | |
 
 ### Where the point of no return is
 
-**Step 4.** `Roles_Are_Client_Wide` collapses role targets held per practice down to one per client,
-keeping `MIN(Tenant_ID)`'s value where two practices disagree. The losing rows are **deleted**, and
-nothing in the new schema records what they were. Maple has one practice so there is nothing to
-collapse there *today* — but the step is still the one that cannot be reversed from the new state
-alone. Past it, rollback means §2.
+**Step 7.** `Roles_Are_Client_Wide` collapses role targets held per practice to one per client,
+keeping `MIN(Tenant_ID)`'s value where two disagree, and **deletes the losing rows**. Maple has one
+practice so there is nothing to collapse there today — 228 role rows all belong to tenant 100 — but
+it is still the step that cannot be reversed from the new state alone. Past it, rollback means §2.
 
-Steps 2 and 3 are additive (`ALTER ... ADD`, a widened key) and reverse cleanly. Step 1 is insert-only.
+Steps 3–6 are nullable `ALTER ... ADD` and reverse cleanly. Steps 0–2 are insert-only.
 
-### A caution on step 7
+### Prod is also unbroken between steps 8 and 11 — but only if 8 is split
 
-Reconcile *before* step 10, not after. `Fact_Daily_Targets` is the only thing that can prove the new
-figures match the old ones, and once it is dropped the comparison is gone. On dev this reconciled
-exactly: 0 rows only in old, 0 only in new, 0 values differing — one NHS row at 1828.7356 vs
-1828.7357, which is rounding.
+Step 8 replaces `Gold.Aggregate_Period_Targets` with rev *03, which has different columns. The PBI
+views pin their column list at CREATE time and the model's queries name the old ones, so from that
+moment until the model is republished at step 11 **the live reports are broken**.
 
-### Known, deliberate difference
+Deploy step 8 in two parts to shrink that window to nothing:
+
+- **8a — additive.** Create `Gold.Dim_Hierarchy_Node` and `Gold.Fact_Node_Targets`, their loader,
+  and the new sync proc. Neither table is read by the model, so prod is unaffected, and step 9's
+  node loader and step 10's reconcile can both run against the old chain still in place.
+- **8b — the switch.** `Aggregate_Period_Targets` rev *03, its loader, `Meta.usp_Create_Gold_Views`,
+  then the model publish — **in one sitting**. Do not start 8b without time to finish 11.
+
+### Known, deliberate difference at step 10
 
 A rolling 12-month window carries **262** working days against a financial year's **261**, so a
 cumulative target reads about 0.4% above its annual figure on a Last 12 Months tile — £435,000 shows
