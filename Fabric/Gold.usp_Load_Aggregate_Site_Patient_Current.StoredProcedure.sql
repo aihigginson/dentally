@@ -75,6 +75,13 @@ BEGIN
             CAST(ISNULL(rc.Recall_Sent, 0) AS BIT)      AS Recall_Sent,
             CAST(CASE WHEN dp.Next_Appointment_Date > @Today
                       THEN 1 ELSE 0 END AS BIT)         AS Future_Appointment,
+            -- Mirrors the DAX these replace: NOT ISBLANK([Email Address]), and the phone pair
+            -- ORed. The data holds no empty strings in either column, so IS NOT NULL and
+            -- NOT ISBLANK agree; if empties ever appear, this is the line to revisit.
+            CAST(CASE WHEN dp.Email_Address IS NOT NULL
+                      THEN 1 ELSE 0 END AS BIT)         AS Has_Email,
+            CAST(CASE WHEN dp.Mobile_Phone IS NOT NULL OR dp.Home_Phone IS NOT NULL
+                      THEN 1 ELSE 0 END AS BIT)         AS Has_Phone,
             dp.First_Appointment_Date
         INTO #src
         FROM Gold.Dim_Patients dp
@@ -120,6 +127,7 @@ BEGIN
             fk_Practice_Site, fk_Patient, Tenant_ID,
             Retained_Patients, Active_Patients,
             Recall_Due, Recall_Sent, Future_Appointment,
+            Has_Email, Has_Phone,
             Value_Window_Months, Value_Window_From,
             Value_Invoiced, Value_Capitation, Value_Total,
             Appointments_Attended, Last_Attended_Date, Value_Per_Year,
@@ -136,6 +144,8 @@ BEGIN
             s.Recall_Due,
             s.Recall_Sent,
             s.Future_Appointment,
+            s.Has_Email,
+            s.Has_Phone,
             @Value_Months,
             @Value_From,
             CAST(ISNULL(r.inv, 0) AS DECIMAL(18,4)),

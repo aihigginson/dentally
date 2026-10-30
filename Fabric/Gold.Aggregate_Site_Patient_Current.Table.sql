@@ -15,6 +15,17 @@ CREATE TABLE [Gold].[Aggregate_Site_Patient_Current](
 	[Recall_Due]               [bit]           NULL,
 	[Recall_Sent]              [bit]           NULL,
 	[Future_Appointment]       [bit]           NULL,
+	-- ==> CONTACT DETAILS LIVE HERE SO THEY CAN BE FILTERED BY SITE. <== Email Details Rate and
+	-- Phone Details Rate used to aggregate off List Patients, a DIMENSION whose only site column
+	-- is the Dentally business key -- so they could never follow the hierarchy selector and read
+	-- the same on every client in the estate. This table already carries the site surrogate and
+	-- the same Active flag the rates divide by, so moving the numerators here costs two columns.
+	--
+	-- Derived from Dim_Patients.Email_Address / Mobile_Phone / Home_Phone being non-NULL, NOT
+	-- from Is_Email_Missing: that flag claims 21,638 patients have an email when the column is
+	-- NULL, and would have produced a confidently wrong rate.
+	[Has_Email]                [bit]           NULL,
+	[Has_Phone]                [bit]           NULL,
 	-- ==> WHAT THE PATIENT IS WORTH, ON THE TABLE THAT ALREADY DESCRIBES THE PATIENT. <==
 	-- These arrived in V187 as a separate Gold.Aggregate_Patient_Value, which was one row per
 	-- patient with a site and a tenant on it -- the same grain, the same load category and the
