@@ -347,5 +347,6 @@
         "type": "Advanced"
       }
     ]
-  }
+  },
+  "isHidden": true
 }

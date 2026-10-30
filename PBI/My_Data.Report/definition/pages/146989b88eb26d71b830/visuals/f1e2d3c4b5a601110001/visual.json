@@ -328,5 +328,6 @@
         "type": "Advanced"
       }
     ]
-  }
+  },
+  "isHidden": true
 }
