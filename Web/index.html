@@ -165,10 +165,18 @@
         .filter-toggle.active { border-color: var(--navy); color: var(--navy); background: #EBF3F9; }
 
         /* ── Filter bar ── */
+        /* ==> EMPTY AND FILLED MUST BE THE SAME HEIGHT. <== The bar renders empty until the
+           report names its first page, and anything main (flex: 1) gains in the meantime it
+           has to give back a second later -- which resizes the report slot and walks the
+           loading logo across the page. So the height is pinned from both ends and the two
+           agree by construction: border-box, so 1px border + 6+6 padding + a 16px line box
+           is exactly the 29px min-height. line-height is stated rather than left at
+           `normal`, which resolves off the font and so would drift with whichever face
+           actually loads. */
         .crumb-bar {
             background: var(--bg-subtle); border-top: 1px solid var(--border);
             padding: 6px 24px; display: flex; align-items: center; gap: 7px;
-            flex-shrink: 0; font-size: 12px; min-height: 17px;
+            flex-shrink: 0; font-size: 12px; line-height: 16px; min-height: 29px;
         }
         .crumb {
             background: none; border: 0; padding: 0; margin: 0; font: inherit;
