@@ -165,10 +165,18 @@
         .filter-toggle.active { border-color: var(--navy); color: var(--navy); background: #EBF3F9; }
 
         /* ── Filter bar ── */
+        /* ==> EMPTY AND FILLED MUST BE THE SAME HEIGHT. <== The bar renders empty until the
+           report names its first page, and anything main (flex: 1) gains in the meantime it
+           has to give back a second later -- which resizes the report slot and walks the
+           loading logo across the page. So the height is pinned from both ends and the two
+           agree by construction: border-box, so 1px border + 6+6 padding + a 16px line box
+           is exactly the 29px min-height. line-height is stated rather than left at
+           `normal`, which resolves off the font and so would drift with whichever face
+           actually loads. */
         .crumb-bar {
             background: var(--bg-subtle); border-top: 1px solid var(--border);
             padding: 6px 24px; display: flex; align-items: center; gap: 7px;
-            flex-shrink: 0; font-size: 12px; min-height: 17px;
+            flex-shrink: 0; font-size: 12px; line-height: 16px; min-height: 29px;
         }
         .crumb {
             background: none; border: 0; padding: 0; margin: 0; font: inherit;
@@ -1979,8 +1987,20 @@
         const d = sectionSubnavData[key];
         const tab = document.querySelector('.nav-tab[data-section="' + key + '"]');
         const trail = (d && d.trail) || [];
-        if (!d || !tab || key === 'targets' || !trail.length) { bar.hidden = true; return; }
+        // ==> AN EMPTY BAR STILL HAS TO HOLD ITS SPACE. <== The trail does not exist until
+        // the embedded report names its first page, about a second after the section opens.
+        // Hiding the bar until then handed its 29px to `main` (flex: 1), and giving them
+        // back on arrival shrank the report slot -- and because .embed-full derives its
+        // WIDTH from its height through aspect-ratio, that one height change moved the
+        // loading logo both down the page and across it. So the box is reserved from first
+        // paint for any section that will get a breadcrumb, and only collapsed where one
+        // can never appear. An empty nav is hidden from the accessibility tree rather than
+        // announced as an empty landmark.
+        if (!d || !tab || key === 'targets') { bar.hidden = true; bar.innerHTML = ''; return; }
+        bar.hidden = false;
         bar.innerHTML = '';
+        if (!trail.length) { bar.setAttribute('aria-hidden', 'true'); return; }
+        bar.removeAttribute('aria-hidden');
         const add = (label, onClick, isLast) => {
             if (bar.childNodes.length) {
                 const sep = document.createElement('span');
