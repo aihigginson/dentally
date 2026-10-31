@@ -4515,11 +4515,39 @@
         });
     });
 
-    function attachEmbedOverlay(slot, report) {
-        const ov = document.createElement('div');
+    // ==> THE SPINNER DOES NOT LIVE IN THE SLOT: THE SLOT'S WIDTH IS DERIVED FROM ITS HEIGHT. <==
+    // .embed-full is flex:1 with aspect-ratio 1280/600 and width:auto, so its width is SOLVED from
+    // whatever height the row resolves. The report area changes height by about 29px roughly a
+    // second into loading, and the ratio turns that into a ~31px change in WIDTH -- so a logo
+    // centred in the slot visibly slides sideways. Measured on dev: 1237x580 at t+10.9s, 1175x551
+    // at t+12.0s, the brand moving 31px left and 14px up.
+    //
+    // The height wobble is not new. It was invisible while the slot was width:100%, because a
+    // height change could only ever move a centred child VERTICALLY. Sizing the container to the
+    // canvas ratio is what turned it into a horizontal jump.
+    //
+    // The parent section is a plain block: full width, and its width does not depend on its
+    // height. Hanging the overlay there keeps the logo still whatever the ratio box does.
+    //
+    // ==> AND IT MUST BE EXACTLY ONE. <== There are two call sites -- the immediate spinner before
+    // the token round-trip, and the one attached to the embed. The first used to be cleared by
+    // powerbi.reset(slot) because it lived IN the slot; on the parent it survives, so a second
+    // call would stack a duplicate. This returns the existing one instead.
+    function ensureEmbedOverlay(slot) {
+        const host = slot.parentElement || slot;
+        let ov = host.querySelector(':scope > .pbi-loading');
+        if (ov) return ov;
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+        ov = document.createElement('div');
         ov.className = 'pbi-loading';
         ov.innerHTML = '<div class="pbi-loading-brand">Analytic<span>ally</span></div><div class="pbi-loading-spinner"></div>';
-        slot.appendChild(ov);
+        host.appendChild(ov);
+        return ov;
+    }
+
+    function attachEmbedOverlay(slot, report) {
+        const ov = ensureEmbedOverlay(slot);
+        ov.style.opacity = '';
         function remove() { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 260); }
         report.on('rendered', remove);
         report.on('error', remove);
@@ -4664,15 +4692,12 @@
 
         // Show the branded spinner IMMEDIATELY -- before the async token fetch below -- so the slot
         // never flashes a static placeholder ("Coming soon") or a blank gap while the token
-        // round-trips. doEmbed's powerbi.reset() clears this and attachEmbedOverlay re-adds an
-        // identical spinner, so the hand-off is seamless (no flicker).
-        if (!slot.querySelector('.pbi-loading')) {
-            slot.textContent = '';
-            const ov = document.createElement('div');
-            ov.className = 'pbi-loading';
-            ov.innerHTML = '<div class="pbi-loading-brand">Analytic<span>ally</span></div><div class="pbi-loading-spinner"></div>';
-            slot.appendChild(ov);
-        }
+        // round-trips. It now hangs on the parent rather than the slot (see ensureEmbedOverlay),
+        // which also means powerbi.reset(slot) no longer clears it: the SAME element carries
+        // through to attachEmbedOverlay, so the hand-off is seamless by construction instead of by
+        // two identical spinners happening to replace one another.
+        slot.textContent = '';
+        ensureEmbedOverlay(slot);
 
         let config;
         try {
