@@ -2909,6 +2909,35 @@ def get_team():
             roster = [{'tenant_id': r[0], 'email': r[1], 'name': r[2], 'dentally_role': r[3],
                        'site_id': r[4], 'practitioner': r[5]} for r in cur.fetchall()]
             conn.close()
+
+            # ==> ONE ROW PER PERSON, AND THE PERSON IS THE EMAIL. <== Dentally issues a user
+            # account per PRACTICE, so somebody working across a group has one account at each and
+            # appeared here once per practice -- several rows offering to sell the same person
+            # several seats. What is actually being bought is one login: Input.Application_Users is
+            # keyed on User_UPN, and the save path already resolves the practitioner with
+            # GROUP BY LOWER(u.Email). The roster was the only part still counting practices.
+            #
+            # Tenant_ID survives as the LOWEST the person appears under, and is only ever used to
+            # resolve which CLIENT they belong to -- every practice in a group maps to the same
+            # one, so which is kept cannot change the answer. `practices` is carried so the screen
+            # can say why one row covers several.
+            merged = {}
+            for m in roster:
+                k = (m['email'] or '').lower()
+                cur_row = merged.get(k)
+                if cur_row is None:
+                    m['practices'] = 1
+                    merged[k] = m
+                    continue
+                cur_row['practices'] += 1
+                cur_row['tenant_id'] = min(cur_row['tenant_id'], m['tenant_id'])
+                # Keep the first non-empty of each -- a front-office account at one practice and a
+                # clinician record at another should read as the clinician, not as whichever
+                # practice sorted first.
+                for f in ('name', 'dentally_role', 'site_id', 'practitioner'):
+                    if not cur_row.get(f) and m.get(f):
+                        cur_row[f] = m[f]
+            roster = list(merged.values())
             # Current subscription state comes from AppDB (source of truth -- reflects the owner's
             # latest edits, which may not have synced to the warehouse auth copy yet).
             ac = _appdb_conn(); acur = ac.cursor()

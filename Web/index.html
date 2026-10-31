@@ -2930,7 +2930,12 @@
                 + people.map(p =>
                 '<div class="roles-row team-row" data-email="' + escHtml(p.email) + '" data-tid="' + p.tenant_id + '" data-name="' + escHtml(p.name) + '" data-prac="' + escHtml(p.practitioner || '') + '" data-profile="' + escHtml(p.profile) + '">'
                 + '<span style="font-size:13px">' + escHtml(p.name)
-                + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email) + '</span></span>'
+                + ' <span style="color:#aaa;font-size:11px">' + escHtml(p.dentally_role || '') + ' &middot; ' + escHtml(p.email)
+                // One login, however many practices they hold a Dentally account at -- said out
+                // loud so a group owner can see why their 40 accounts are 31 people, rather than
+                // wondering who is missing.
+                + ((p.practices > 1) ? ' &middot; <span title="This person has a Dentally account at ' + p.practices + ' of your practices. It is one login, and one seat.">' + p.practices + ' practices</span>' : '')
+                + '</span></span>'
                 + (p.is_self
                     ? '<span style="color:#999;font-size:12px;white-space:nowrap">You &mdash; All reports</span>'
                     : '<select class="team-profile">' + profOpts(p.profile) + '</select>')
