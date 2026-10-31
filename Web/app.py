@@ -4061,9 +4061,31 @@ def get_plan_capitation():
                 f"  AND NULLIF(LTRIM(RTRIM(pp.Payment_Plan_Name)),'') IS NOT NULL "
                 f"  AND ISNULL(ac.cnt, 0) > 0 "
                 f"ORDER BY pp.Payment_Plan_Name", tids)
-            plans = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
-                      'current_patients': r[4], 'is_default': False, 'rates': []} for r in cur.fetchall()]
+            raw = [{'tenant_id': r[0], 'payment_plan_id': r[1], 'name': r[2], 'standard_plan': r[3],
+                    'current_patients': r[4]} for r in cur.fetchall()]
         conn.close()
+
+        # ==> A RATE IS COMMERCIAL, SO IT BELONGS TO THE PLAN'S NAME, NOT ITS ID. <== Dentally issues
+        # a Payment_Plan_ID per PRACTICE, so a group selling "Private" in four practices has four
+        # ids for one commercial rate -- and the screen listed it four times, inviting four answers
+        # to one question. Grouped by name, the owner is asked once.
+        #
+        # ==> MERGED FOR DISPLAY, FANNED OUT ON SAVE. <== Storage stays keyed on
+        # (Tenant_ID, Payment_Plan_ID), because FIVE Gold loaders join on it -- Fact_Revenue,
+        # Fact_Treatment_Plans, Fact_Lapsed_Patients and the two data-quality builds. Re-keying the
+        # table would mean changing all five to resolve a name, for a grouping only the screen
+        # needs. The save writes one row per member instead.
+        groups = {}
+        for p in raw:
+            g = groups.setdefault(p['name'], {
+                'name': p['name'], 'standard_plan': p['standard_plan'],
+                'current_patients': 0, 'members': [], 'is_default': False,
+                'rates': [], 'conflict': False})
+            g['current_patients'] += p['current_patients']
+            g['members'].append({'tenant_id': p['tenant_id'],
+                                 'payment_plan_id': p['payment_plan_id']})
+        plans = sorted(groups.values(), key=lambda g: g['name'])
+
         if tids and plans:
             ac = _appdb_conn(); acur = ac.cursor(); ph = ','.join(['?'] * len(tids))
             acur.execute(f"SELECT Tenant_ID, Payment_Plan_ID, Monthly_Value, Effective_From_Date, Is_Default, "
@@ -4080,10 +4102,23 @@ def get_plan_capitation():
                 if r[4]:
                     defaults.add((r[0], r[1]))
             ac.close()
-            for p in plans:
-                key = (p['tenant_id'], p['payment_plan_id'])
-                p['rates']      = by_plan.get(key, [])
-                p['is_default'] = key in defaults
+            for g in plans:
+                keys = [(m['tenant_id'], m['payment_plan_id']) for m in g['members']]
+                g['is_default'] = any(k in defaults for k in keys)
+                # ==> WHERE THE MEMBERS DISAGREE, SAY SO RATHER THAN PICK SILENTLY. <== These rates
+                # were entered per practice, so a group can arrive holding two different figures for
+                # one plan -- the demo does: Care Plan A is 25.00 at one practice and 24.00 at the
+                # other. Showing one of them with no comment would quietly discard a number somebody
+                # typed. The lowest Tenant_ID's history is shown, the same rule the period loader
+                # uses to pick a client's calendar tenant, and `conflict` tells the screen to say
+                # that saving will apply it to every practice.
+                histories = [by_plan.get(k, []) for k in sorted(keys)]
+                shown = next((h for h in histories if h), [])
+                g['rates'] = shown
+                distinct = {tuple(sorted((r['effective_from'], r['monthly_value'],
+                                          r['hygienist_visit_value']) for r in h))
+                            for h in histories if h}
+                g['conflict'] = len(distinct) > 1
         return jsonify({'plans': plans})
     except Exception as e:
         return _server_error(e, 'get_plan_capitation')
@@ -4110,13 +4145,43 @@ def save_plan_capitation():
         body    = request.get_json(force=True) or {}
         allowed = set(tids)
         rows    = body.get('rates') or []
+        default_name = str(body.get('default_plan_name') or '').strip()
         try:
             default_pid = int(body.get('default_plan_id'))
         except (TypeError, ValueError):
             default_pid = None
-        seen         = {}   # (tid, pid, eff) -> (tid, pid, eff, value, is_default)  [de-dupe by date]
+
+        # ==> THE SCREEN SENDS ONE ANSWER PER PLAN NAME; THIS FANS IT OUT. <== Dentally issues a
+        # Payment_Plan_ID per practice, so "Private" is a different id in every practice of a group
+        # and the rate has to land on each of them. Resolving the name HERE rather than in the
+        # browser means the fan-out is done against the warehouse's current plan list, so a plan
+        # added since the page loaded is still covered.
+        name_members = {}
+        if tids:
+            c2 = _fabric_conn(); cc = c2.cursor()
+            _nph = ','.join(['?'] * len(tids))
+            cc.execute(
+                f"SELECT Payment_Plan_Name, Tenant_ID, Payment_Plan_ID FROM Gold.Dim_Payment_Plans "
+                f"WHERE Tenant_ID IN ({_nph}) "
+                f"  AND NULLIF(LTRIM(RTRIM(Payment_Plan_Name)),'') IS NOT NULL", tids)
+            for nm, t, p in cc.fetchall():
+                name_members.setdefault(nm, []).append((int(t), int(p)))
+            c2.close()
+        default_keys = set(name_members.get(default_name, [])) if default_name else set()
+
+        seen         = {}   # (tid, pid, eff) -> row  [de-dupe by date]
         payload_tids = set()
+        expanded     = []
         for r in rows:
+            nm = str(r.get('name') or '').strip()
+            if nm:
+                for t, p in name_members.get(nm, []):
+                    expanded.append(dict(r, tenant_id=t, payment_plan_id=p))
+            else:
+                # A page loaded before this change still posts tenant_id/payment_plan_id. Honour it
+                # rather than silently dropping a save somebody watched succeed.
+                expanded.append(r)
+        for r in expanded:
             try:
                 tid = int(r['tenant_id']); pid = int(r['payment_plan_id'])
             except (KeyError, TypeError, ValueError):
@@ -4148,7 +4213,14 @@ def save_plan_capitation():
             # opposite of the whole feature; treat it as not entered rather than silently inverting.
             if hvf is not None and hvf <= 0:
                 hvf = None
-            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, 1 if pid == default_pid else 0, hvf)
+            # The default flag follows the NAME, so every practice's copy of the chosen plan is
+            # flagged -- each tenant then has exactly one default, which is what the loaders read.
+            # default_plan_id is the pre-merge fallback for a stale page.
+            is_def = 1 if ((tid, pid) in default_keys or (not default_keys and pid == default_pid)) else 0
+            # Plan_Name is stamped alongside: the column was added for exactly this, so a row
+            # records WHICH plan name the figure was given for, not just which id it landed on.
+            seen[(tid, pid, eff)] = (tid, pid, eff, mvf, is_def, hvf,
+                                     str(r.get('name') or '').strip() or None)
         valid = list(seen.values())
         ac = _appdb_conn(autocommit=True); acur = ac.cursor()
         for t in payload_tids:
@@ -4160,9 +4232,10 @@ def save_plan_capitation():
             # Hygienist_Visit_Value cannot narrow a buffer the way a short leading string would.
             acur.executemany(
                 "INSERT INTO Input.Plan_Capitation_Rate (Tenant_ID, Payment_Plan_ID, Effective_From_Date, "
-                "Monthly_Value, Is_Default, Hygienist_Visit_Value, Updated_At, Updated_By) "
-                "VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
-                [(t, p, e, m, d, h, upn) for t, p, e, m, d, h in valid])
+                "Monthly_Value, Is_Default, Hygienist_Visit_Value, Plan_Name, Client_ID, "
+                "Updated_At, Updated_By) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), ?)",
+                [(t, p, e, m, d, h, n, client_id, upn) for t, p, e, m, d, h, n in valid])
         ac.close()
         return jsonify({'ok': True})
     except Exception as e:

@@ -3641,11 +3641,18 @@
             let html = '';
             for (const p of plans) {
                 const rates = (p.rates && p.rates.length) ? p.rates : [{ effective_from: '', monthly_value: '', hygienist_visit_value: '' }];
-                html += '<div class="plan-block" data-tid="' + p.tenant_id + '" data-pid="' + p.payment_plan_id + '" style="padding:10px 0;border-bottom:1px solid #eee">'
+                // ==> ONE BLOCK PER PLAN NAME. <== Dentally issues a Payment_Plan_ID per
+                // practice, so a group's "Private" used to appear once per practice and ask the
+                // same commercial question several times. The block carries the NAME; the server
+                // fans the answer out to every practice's copy.
+                const covers = (p.members || []).length;
+                html += '<div class="plan-block" data-name="' + escHtml(p.name) + '" style="padding:10px 0;border-bottom:1px solid #eee">'
                     + '<div style="display:flex;align-items:center;gap:14px">'
                     + '<span style="font-size:13px;font-weight:600">' + escHtml(p.name) + '</span>'
-                    + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + p.payment_plan_id + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
+                    + '<label style="font-size:11px;color:#666" title="Values lapsed members whose original plan is no longer recorded"><input type="radio" name="plan-default" class="plan-def" value="' + escHtml(p.name) + '"' + (p.is_default ? ' checked' : '') + '> default</label>'
                     + '<span style="color:#aaa;font-size:11px">' + p.current_patients + ' active</span>'
+                    + (covers > 1 ? '<span style="color:#aaa;font-size:11px" title="This plan exists at ' + covers + ' practices with a different Dentally id at each. One rate covers them all.">' + covers + ' practices</span>' : '')
+                    + (p.conflict ? '<span style="color:#b3261e;font-size:11px" title="These practices currently hold different figures for this plan. The one shown is from the lowest-numbered practice; saving applies it to all of them.">practices differ \u2014 saving will align them</span>' : '')
                     + '</div>'
                     + '<div class="plan-rates" style="margin-top:4px">' + rates.map(rt => _planRateRowHtml(rt.effective_from, rt.monthly_value, rt.hygienist_visit_value)).join('') + '</div>'
                     + '<button type="button" class="plan-add-rate" style="margin-top:2px;border:none;background:none;color:#0b3d5c;cursor:pointer;font-size:12px;padding:0">+ add a rate change</button>'
@@ -3659,9 +3666,9 @@
         const saveBtn = document.getElementById('plans-save'), msg = document.getElementById('plans-msg');
         const rates = [];
         const def = document.querySelector('#plans-list .plan-def:checked');
-        const default_plan_id = def ? +def.value : null;
+        const default_plan_name = def ? def.value : null;
         document.querySelectorAll('#plans-list .plan-block').forEach(block => {
-            const tid = +block.dataset.tid, pid = +block.dataset.pid;
+            const name = block.dataset.name;
             block.querySelectorAll('.plan-rate-row').forEach(row => {
                 // Unreadable dates convert to '' and the row is skipped below, which is
                 // visible on screen. A guessed date would not be.
@@ -3670,14 +3677,14 @@
                 const hyg = row.querySelector('.plan-hyg').value;
                 // A blank visit value is sent as null, not 0: "not decided yet" and "decided it is
                 // nil" are different answers and the server keeps them apart.
-                if (eff && val !== '') rates.push({ tenant_id: tid, payment_plan_id: pid, effective_from: eff,
+                if (eff && val !== '') rates.push({ name: name, effective_from: eff,
                                                     monthly_value: +val,
                                                     hygienist_visit_value: (hyg === '' ? null : +hyg) });
             });
         });
         saveBtn.disabled = true; msg.style.color = '#999'; msg.textContent = 'Saving…';
         try {
-            const res = await authFetch('/api/plan-capitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates, default_plan_id }) });
+            const res = await authFetch('/api/plan-capitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates, default_plan_name }) });
             if (!res.ok) throw new Error('status ' + res.status);
             clearDirty(); msg.style.color = '#1a7f4b'; msg.textContent = 'Saved.';
         } catch (e) { msg.style.color = '#b3261e'; msg.textContent = 'Save failed.'; }
